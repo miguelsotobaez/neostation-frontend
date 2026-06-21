@@ -29,6 +29,7 @@ import '../../providers/sqlite_config_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
+import '../../utils/rom_tree.dart';
 import 'game_details_card/game_details_card_list.dart';
 import 'game_details_card/random_game_dialog.dart';
 import 'my_games_grid.dart';
@@ -135,6 +136,119 @@ class _SystemGamesListState extends State<SystemGamesList> {
   List<GameModel> _games = [];
   Map<GameModel, int> _gameIndexMap = {};
   GameModel? _selectedGame;
+
+  // Subfolder navigation (per-system "Show Subfolders" setting).
+  //
+  // When enabled, [_games] holds the entries for the current folder level:
+  // folder placeholders first (one per immediate subfolder), then that level's
+  // games. The placeholders let the existing index-based navigation, selection
+  // and scrolling machinery treat folders uniformly without special-casing
+  // every call site — only launch (descend), Back (ascend), preview and the row
+  // rendering branch on whether the current entry is a folder.
+  bool _subfolderViewEnabled = false;
+  String _currentRelPath = '';
+  // Absolute ROM root paths for this system (configured ROM folders joined with
+  // the system's folder name + aliases). buildRomLevel derives the folder tree
+  // by making each game's romPath relative to one of these roots.
+  List<String> _subfolderRoots = const [];
+  List<GameModel> _allGames = []; // Full flat list; source for the folder tree.
+  List<RomFolderEntry> _currentFolderEntries = []; // Folders at this level.
+  final Set<GameModel> _folderPlaceholders =
+      {}; // Identity set for folder rows.
+
+  int get _folderCount => _currentFolderEntries.length;
+  bool _isFolderEntry(GameModel? g) =>
+      g != null && _folderPlaceholders.contains(g);
+
+  /// Identity for the grid/carousel views: changes only when the folder
+  /// structure changes (a folder added/removed, or a different level), so those
+  /// cache-heavy views remount and rebuild fresh after a ROM refresh — but not
+  /// on same-structure reorders (favorite toggles, post-scrape re-sorts).
+  String get _viewStructureSignature =>
+      '$_currentRelPath|$_folderCount|${_games.length}';
+
+  /// Deterministic placeholder occupying a folder's slot in [_games]. The
+  /// `romname` is derived from the folder path so selection survives reloads.
+  GameModel _folderPlaceholder(RomFolderEntry e) => GameModel(
+    romname: 'dir:${e.relPath}',
+    realname: e.name,
+    name: e.name,
+    year: '',
+    developer: '',
+    publisher: '',
+    genre: '',
+    players: '',
+    rating: 0.0,
+    romPath: e.relPath,
+  );
+
+  /// Rebuilds the visible list for [_currentRelPath]. Folders (as placeholders)
+  /// come first, then the level's games — matching [buildRomLevel]'s ordering.
+  /// When subfolder view is off this is just the flat [_allGames].
+  List<GameModel> _buildDisplayList() {
+    if (!_subfolderViewEnabled) {
+      _currentFolderEntries = const [];
+      _folderPlaceholders.clear();
+      return _allGames;
+    }
+
+    final entries = buildRomLevel(
+      games: _allGames,
+      rootFolders: _subfolderRoots,
+      currentRelPath: _currentRelPath,
+    );
+
+    final folders = <RomFolderEntry>[];
+    final placeholders = <GameModel>[];
+    final games = <GameModel>[];
+    for (final e in entries) {
+      if (e is RomFolderEntry) {
+        folders.add(e);
+        placeholders.add(_folderPlaceholder(e));
+      } else if (e is RomGameEntry) {
+        games.add(e.game);
+      }
+    }
+
+    _currentFolderEntries = folders;
+    _folderPlaceholders
+      ..clear()
+      ..addAll(placeholders);
+    return [...placeholders, ...games];
+  }
+
+  /// Rebuilds [_games] for [_currentRelPath] and anchors focus at the top.
+  void _navigateToFolderLevel(String relPath) {
+    SfxService().playNavSound();
+    _resetVideoState();
+    setState(() {
+      _currentRelPath = relPath;
+      _games = _buildDisplayList();
+      _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
+      _selectedGameIndex = 0;
+      _selectedGame = _games.isNotEmpty ? _games.first : null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToSelectedItem();
+    });
+    _performBackgroundOperationsForSelectedGame();
+  }
+
+  /// Descends into the folder shown at [index] in the current level.
+  void _descendToFolderIndex(int index) {
+    if (index >= 0 && index < _currentFolderEntries.length) {
+      _navigateToFolderLevel(_currentFolderEntries[index].relPath);
+    }
+  }
+
+  /// Ascends one folder level (to the parent, or the system root).
+  void _ascendFolder() {
+    final rel = _currentRelPath;
+    final parent = rel.contains('/')
+        ? rel.substring(0, rel.lastIndexOf('/'))
+        : '';
+    _navigateToFolderLevel(parent);
+  }
 
   // Navigation & State orchestration.
   bool _isLoading = true;
@@ -334,6 +448,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _onScrapeCurrentGame() async {
     final game = _selectedGame;
     if (game == null) return;
+    if (_isFolderEntry(game)) return;
     final romname = game.romname;
     final romPath = game.romPath;
     if (romPath == null) return;
@@ -766,6 +881,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _performBackgroundOperationsForSelectedGame({bool force = false}) {
     if (_selectedGame == null || !mounted) return;
 
+    // Folder rows have no media/preview to resolve.
+    if (_isFolderEntry(_selectedGame)) {
+      _resetVideoState();
+      return;
+    }
+
     // Suppress expensive operations (video, isolates) during rapid scrolling.
     if (_isNavigatingFast && !force) {
       _updateBackground(_selectedGame!);
@@ -1117,6 +1238,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Orchestrates a graceful exit from the game list, synchronizing state with previous screens.
   Future<void> _goBack() async {
+    // Subfolder navigation: Back ascends one level before leaving the system.
+    if (_subfolderViewEnabled && _currentRelPath.isNotEmpty) {
+      _ascendFolder();
+      return;
+    }
+
     if (_isNavigatingBack) {
       return;
     }
@@ -1306,6 +1433,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// Toggles the 'favorite' status for the selected game and re-sorts the list.
   Future<void> _toggleFavorite() async {
     if (_selectedGame == null) return;
+    if (_isFolderEntry(_selectedGame)) return;
 
     if (widget.system.folderName == 'music') {
       try {
@@ -1386,6 +1514,27 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _reorderGamesListKeepingVisualPosition() {
     if (_selectedGame == null) return;
 
+    // In subfolder view the level (folders-first, favorites-pinned) is rebuilt
+    // wholesale rather than re-sorted in place, to preserve folder ordering.
+    if (_subfolderViewEnabled) {
+      final oldIndex = _selectedGameIndex;
+      setState(() {
+        _games = _buildDisplayList();
+        _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
+        if (oldIndex >= 0 && oldIndex < _games.length) {
+          _selectedGameIndex = oldIndex;
+          _selectedGame = _games[oldIndex];
+        } else if (_games.isNotEmpty) {
+          _selectedGameIndex = 0;
+          _selectedGame = _games.first;
+        }
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToSelectedItem();
+      });
+      return;
+    }
+
     final oldIndex = _selectedGameIndex;
 
     setState(() {
@@ -1419,6 +1568,25 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// Sorts the list and re-anchors focus to a specific ROM.
   /// Primarily used after scraping to follow a game to its new alphabetical position.
   void _reorderGamesListFollowingGame(String romname) {
+    if (_subfolderViewEnabled) {
+      setState(() {
+        _games = _buildDisplayList();
+        _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
+        final newIndex = _games.indexWhere((g) => g.romname == romname);
+        if (newIndex != -1) {
+          _selectedGameIndex = newIndex;
+          _selectedGame = _games[newIndex];
+        } else if (_games.isNotEmpty) {
+          _selectedGameIndex = 0;
+          _selectedGame = _games.first;
+        }
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToSelectedItem();
+      });
+      return;
+    }
+
     setState(() {
       final sortedGames = List<GameModel>.from(_games);
       sortedGames.sort((a, b) {
@@ -1447,6 +1615,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// Orchestrates the complex sequence for launching a game through an external emulator.
   Future<void> _selectCurrentGame() async {
     if (_selectedGame == null) return;
+
+    // Subfolder navigation: activating a folder row descends into it.
+    if (_subfolderViewEnabled && _selectedGameIndex < _folderCount) {
+      _descendToFolderIndex(_selectedGameIndex);
+      return;
+    }
 
     // Special handling for the Integrated Music Player.
     if (widget.system.folderName == 'music') {
@@ -1835,7 +2009,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return RandomGameDialog(
-          games: _games,
+          games: _subfolderViewEnabled
+              ? _games.where((g) => !_isFolderEntry(g)).toList()
+              : _games,
           systemFolderName: widget.system.primaryFolderName,
           systemRealName: widget.system.realName,
           fileProvider: _fileProvider,
@@ -1884,6 +2060,54 @@ class _SystemGamesListState extends State<SystemGamesList> {
       final games = await GameService.loadGamesForSystem(widget.system);
       if (!mounted) return;
 
+      // Resolve the per-system "Show Subfolders" setting (fresh source of truth).
+      bool subfolderView = false;
+      final sysId = widget.system.id;
+      final folderName = widget.system.folderName;
+      if (sysId != null &&
+          folderName != 'music' &&
+          folderName != 'all' &&
+          folderName != SystemFolderNames.favorites &&
+          folderName != 'android') {
+        final settings = await SystemRepository.getSystemSettings(sysId);
+        subfolderView = (settings['subfolder_view'] ?? 0) == 1;
+      }
+      if (!mounted) return;
+
+      // Resolve the system's absolute ROM roots so the folder tree can make each
+      // game's path relative. system.folders holds folder *names* (incl. ES-DE
+      // aliases), not paths, so derive each game's root straight from its own
+      // romPath: the root is the path up to and including the segment that
+      // matches one of the system's folder names. This is self-contained (no
+      // dependency on the configured ROM folders, which can be momentarily
+      // empty) and yields exact-case roots.
+      final subfolderRoots = <String>[];
+      if (subfolderView) {
+        final namesLower = <String>{
+          widget.system.folderName,
+          ...widget.system.folders,
+        }.where((n) => n.isNotEmpty).map((n) => n.toLowerCase()).toSet();
+        final seen = <String>{};
+
+        // Iterate the freshly loaded list, not the stale [_allGames] field
+        // (which is only assigned below, in setState).
+        for (final game in games) {
+          final rp = game.romPath;
+          if (rp == null || rp.isEmpty) continue;
+          // Use the same normalization as the tree builder so Android SAF
+          // content URIs are decoded to plain paths before matching.
+          final segs = normalizeRomPath(rp).split('/');
+          // Find the system-folder segment, ignoring the filename at the end.
+          for (var i = 0; i < segs.length - 1; i++) {
+            if (namesLower.contains(segs[i].toLowerCase())) {
+              final root = segs.sublist(0, i + 1).join('/');
+              if (seen.add(root)) subfolderRoots.add(root);
+              break;
+            }
+          }
+        }
+      }
+
       _log.i(
         'SystemGamesList: Loaded ${games.length} games for ${widget.system.folderName}',
       );
@@ -1893,21 +2117,26 @@ class _SystemGamesListState extends State<SystemGamesList> {
         );
       }
       setState(() {
-        _games = games;
-        _gameIndexMap = {for (int i = 0; i < games.length; i++) games[i]: i};
+        _subfolderViewEnabled = subfolderView;
+        _subfolderRoots = subfolderRoots;
+        _allGames = games;
+        // Folders comingle with games only when subfolder view is off; otherwise
+        // [_games] is the current folder level (folders first, then games).
+        _games = _buildDisplayList();
+        _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
 
         // Music system specialization: Anchor initial focus to the currently active track.
         if (widget.system.folderName == 'music') {
           final musicService = MusicPlayerService();
           if (musicService.isStarted && musicService.currentTrack != null) {
             final playingTrackPath = musicService.currentTrack?.romPath;
-            final playingIndex = games.indexWhere(
+            final playingIndex = _games.indexWhere(
               (g) => g.romPath == playingTrackPath,
             );
 
             if (playingIndex != -1) {
               _selectedGameIndex = playingIndex;
-              _selectedGame = games[playingIndex];
+              _selectedGame = _games[playingIndex];
               _log.i(
                 'SystemGamesList: Initial focus set to playing track at index $playingIndex',
               );
@@ -1917,19 +2146,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
         // Persistent Selection Logic: Retain current index if the game still exists post-reload.
         if (_selectedGame != null && widget.system.folderName != 'music') {
-          final selectedIndex = games.indexWhere(
+          final selectedIndex = _games.indexWhere(
             (game) => game.romname == _selectedGame!.romname,
           );
           if (selectedIndex != -1) {
             _selectedGameIndex = selectedIndex;
-            _selectedGame = games[selectedIndex];
+            _selectedGame = _games[selectedIndex];
           } else {
             _selectedGameIndex = 0;
-            _selectedGame = games.isNotEmpty ? games.first : null;
+            _selectedGame = _games.isNotEmpty ? _games.first : null;
           }
         } else if (_selectedGame == null) {
           _selectedGameIndex = 0;
-          _selectedGame = games.isNotEmpty ? games.first : null;
+          _selectedGame = _games.isNotEmpty ? _games.first : null;
         }
         _isLoading = false;
       });
@@ -2626,6 +2855,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// Builds the game carousel view with letter-based navigation.
   Widget _buildGamesCarousel() {
     return GamesCarousel(
+      key: ValueKey('carousel_$_viewStructureSignature'),
       system: widget.system,
       games: _games,
       selectedIndex: _selectedGameIndex,
@@ -2645,12 +2875,16 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onScrape: _onScrapeCurrentGame,
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
+      folderCount: _folderCount,
+      folderEntries: _currentFolderEntries,
+      onFolderActivated: _descendToFolderIndex,
     );
   }
 
   /// Builds the game grid view with box-2d images.
   Widget _buildGamesGrid() {
     return GamesGrid(
+      key: ValueKey('grid_$_viewStructureSignature'),
       system: widget.system,
       games: _games,
       selectedIndex: _selectedGameIndex,
@@ -2670,6 +2904,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onScrape: _onScrapeCurrentGame,
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
+      folderCount: _folderCount,
+      folderEntries: _currentFolderEntries,
+      onFolderActivated: _descendToFolderIndex,
     );
   }
 
@@ -2737,9 +2974,57 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   onGamepadReactivated: _reactivateGamepadNavigation,
                   onBack: _goBack,
                   onRandom: _showRandomGameDialog,
+                  folderCount: _folderCount,
+                  folderEntries: _currentFolderEntries,
+                  onFolderActivated: _descendToFolderIndex,
                 ),
         ),
       ],
+    );
+  }
+
+  /// Right-hand panel shown while a folder row is highlighted.
+  Widget _buildFolderDetailsPanel(GameModel folder) {
+    final entry = _currentFolderEntries.firstWhere(
+      (e) => e.relPath == folder.romPath,
+      orElse: () => RomFolderEntry(
+        name: folder.name,
+        relPath: folder.romPath ?? folder.name,
+        gameCount: 0,
+      ),
+    );
+    final color = Colors.white.withValues(alpha: 0.8);
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Symbols.folder_rounded,
+            size: 64.r,
+            color: widget.system.colorAsColor,
+            fill: 1,
+          ),
+          SizedBox(height: 16.r),
+          Text(
+            entry.name,
+            style: TextStyle(
+              fontSize: 18.r,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 8.r),
+          Text(
+            '${entry.gameCount}',
+            style: TextStyle(
+              fontSize: 14.r,
+              color: Colors.white.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2795,6 +3080,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ],
         ),
       );
+    }
+
+    if (_isFolderEntry(_selectedGame)) {
+      return _buildFolderDetailsPanel(_selectedGame!);
     }
 
     if (widget.system.folderName == 'music') {
@@ -2984,6 +3273,13 @@ class GameListView extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onRandom;
 
+  /// Subfolder navigation: the first [folderCount] entries of [games] are folder
+  /// placeholders rendered from [folderEntries]; tapping one calls
+  /// [onFolderActivated] with its index to descend.
+  final int folderCount;
+  final List<RomFolderEntry> folderEntries;
+  final void Function(int folderIndex)? onFolderActivated;
+
   const GameListView({
     super.key,
     required this.system,
@@ -2996,6 +3292,9 @@ class GameListView extends StatefulWidget {
     this.onGamepadReactivated,
     required this.onBack,
     required this.onRandom,
+    this.folderCount = 0,
+    this.folderEntries = const [],
+    this.onFolderActivated,
   });
 
   @override
@@ -3054,6 +3353,11 @@ class _GameListViewState extends State<GameListView>
           initialIndex: widget.selectedIndex,
           totalItems: widget.games.length,
         );
+        // Force the highlight layer to rebuild now that the scroll controller
+        // has clients. Without this, a short list that needs no scrolling never
+        // fires a scroll notification, so the selected row stays un-highlighted
+        // (its on-primary text/icon then looks dimmed) after a view-mode switch.
+        setState(() {});
       }
     });
   }
@@ -3204,8 +3508,20 @@ class _GameListViewState extends State<GameListView>
                     ),
                     itemCount: widget.games.length,
                     itemBuilder: (context, index) {
-                      final game = widget.games[index];
                       final isSelected = index == widget.selectedIndex;
+
+                      // Folder rows occupy the first [folderCount] slots.
+                      if (index < widget.folderCount) {
+                        return _buildFolderRow(
+                          theme,
+                          widget.folderEntries[index],
+                          index,
+                          isSelected,
+                          totalItemHeight,
+                        );
+                      }
+
+                      final game = widget.games[index];
 
                       return GestureDetector(
                         onTap: () {
@@ -3278,6 +3594,73 @@ class _GameListViewState extends State<GameListView>
           ),
         ),
       ],
+    );
+  }
+
+  /// Renders a navigable subfolder row (icon + name + recursive game count).
+  Widget _buildFolderRow(
+    ThemeData theme,
+    RomFolderEntry folder,
+    int index,
+    bool isSelected,
+    double totalItemHeight,
+  ) {
+    final fg = isSelected
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onSurface;
+
+    return GestureDetector(
+      onTap: () {
+        SfxService().playNavSound();
+        widget.onFolderActivated?.call(index);
+      },
+      child: Container(
+        height: totalItemHeight,
+        color: Colors.transparent,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 2.r),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Container(
+                margin: EdgeInsets.only(right: 4.r),
+                child: Icon(
+                  Symbols.folder_rounded,
+                  size: 12.r,
+                  fill: 1,
+                  color: isSelected ? fg : theme.colorScheme.secondary,
+                ),
+              ),
+              Expanded(
+                child: RepaintBoundary(
+                  child: Text(
+                    folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                      fontSize: 11.r,
+                      color: fg,
+                      fontFamily: theme.textTheme.bodyMedium?.fontFamily,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 4.r),
+              Text(
+                '${folder.gameCount}',
+                style: TextStyle(
+                  fontSize: 9.r,
+                  color: fg.withValues(alpha: 0.7),
+                  fontFamily: theme.textTheme.bodyMedium?.fontFamily,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

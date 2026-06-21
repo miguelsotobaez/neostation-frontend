@@ -81,6 +81,11 @@ const Map<String, dynamic> appLocaleId = {
       'Pemindaian rekursif diaktifkan. Memindai {name}...',
   AppLocale.recursiveScanDisabled:
       'Pemindaian rekursif dinonaktifkan. Memindai {name}...',
+  AppLocale.subfolderView: 'Tampilkan Subfolder',
+  AppLocale.subfolderViewSubtitle:
+      'Kelompokkan ROM dalam subfolder menjadi folder yang dapat dijelajahi alih-alih mencampurnya dengan game',
+  AppLocale.subfolderViewEnabled: 'Subfolder ditampilkan sebagai folder',
+  AppLocale.subfolderViewDisabled: 'Subfolder dicampur dengan game',
   AppLocale.errorScanningSystem: 'Kesalahan saat memindai sistem: {error}',
   AppLocale.scrapedTitlesUsed:
       'Judul hasil scraping akan digunakan jika tersedia',

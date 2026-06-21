@@ -82,6 +82,11 @@ const Map<String, dynamic> appLocaleIt = {
       'Scansione ricorsiva abilitata. Scansione di {name}...',
   AppLocale.recursiveScanDisabled:
       'Scansione ricorsiva disabilitata. Scansione di {name}...',
+  AppLocale.subfolderView: 'Mostra sottocartelle',
+  AppLocale.subfolderViewSubtitle:
+      'Raggruppa le ROM nelle sottocartelle in cartelle navigabili invece di mescolarle con i giochi',
+  AppLocale.subfolderViewEnabled: 'Sottocartelle mostrate come cartelle',
+  AppLocale.subfolderViewDisabled: 'Sottocartelle mescolate ai giochi',
   AppLocale.errorScanningSystem:
       'Errore durante la scansione del sistema: {error}',
   AppLocale.scrapedTitlesUsed: 'I titoli cercati verranno usati se disponibili',

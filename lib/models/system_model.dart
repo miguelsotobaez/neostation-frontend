@@ -87,6 +87,10 @@ class SystemModel {
   /// When true, game lists prioritize the raw filename over metadata titles.
   final bool preferFileName;
 
+  /// When true, ROMs in subfolders are presented as navigable folders in the
+  /// game list instead of being flattened in with top-level games.
+  final bool subfolderView;
+
   /// List of file extensions supported by this system's emulators.
   final List<String> extensions;
 
@@ -127,6 +131,7 @@ class SystemModel {
     this.customLogoPath,
     this.hideLogo = false,
     this.preferFileName = false,
+    this.subfolderView = false,
     this.extensions = const [],
     this.folders = const [],
     this.neosync = NeoSyncConfig.empty,
@@ -301,6 +306,10 @@ class SystemModel {
           (int.tryParse((json['prefer_file_name'] ?? '0').toString()) ?? 0) ==
               1 ||
           json['prefer_file_name']?.toString() == 'true',
+      subfolderView:
+          (int.tryParse((json['subfolder_view'] ?? '0').toString()) ?? 0) ==
+              1 ||
+          json['subfolder_view']?.toString() == 'true',
       extensions:
           (json['extensions'] as List?)?.map((e) => e.toString()).toList() ??
           [],
@@ -342,6 +351,7 @@ class SystemModel {
       'custom_logo_path': customLogoPath,
       'hide_logo': hideLogo ? 1 : 0,
       'prefer_file_name': preferFileName ? 1 : 0,
+      'subfolder_view': subfolderView ? 1 : 0,
       'extensions': extensions,
       'folders': folders,
       'neosync': neosync.toJson(),
@@ -377,6 +387,7 @@ class SystemModel {
     String? customLogoPath,
     bool? hideLogo,
     bool? preferFileName,
+    bool? subfolderView,
     List<String>? extensions,
     List<String>? folders,
     NeoSyncConfig? neosync,
@@ -410,6 +421,7 @@ class SystemModel {
       customLogoPath: customLogoPath ?? this.customLogoPath,
       hideLogo: hideLogo ?? this.hideLogo,
       preferFileName: preferFileName ?? this.preferFileName,
+      subfolderView: subfolderView ?? this.subfolderView,
       extensions: extensions ?? this.extensions,
       folders: folders ?? this.folders,
       neosync: neosync ?? this.neosync,

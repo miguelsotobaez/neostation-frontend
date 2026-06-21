@@ -88,6 +88,9 @@ class SystemRepository {
   static Future<void> setPreferFileName(String systemId, bool value) =>
       SqliteService.setSystemPreferFileName(systemId, value);
 
+  static Future<void> setSubfolderView(String systemId, bool value) =>
+      SqliteService.setSystemSubfolderView(systemId, value);
+
   static Future<void> setHideExtension(String systemId, bool value) =>
       SqliteService.setSystemHideExtension(systemId, value);
 

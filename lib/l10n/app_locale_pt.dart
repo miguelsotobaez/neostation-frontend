@@ -83,6 +83,11 @@ const Map<String, dynamic> appLocalePt = {
       'Varredura recursiva ativada. Varrendo {name}...',
   AppLocale.recursiveScanDisabled:
       'Varredura recursiva desativada. Varrendo {name}...',
+  AppLocale.subfolderView: 'Mostrar subpastas',
+  AppLocale.subfolderViewSubtitle:
+      'Agrupar ROMs em subpastas em pastas navegáveis em vez de misturá-las com os jogos',
+  AppLocale.subfolderViewEnabled: 'Subpastas mostradas como pastas',
+  AppLocale.subfolderViewDisabled: 'Subpastas misturadas com os jogos',
   AppLocale.errorScanningSystem: 'Erro ao varrer o sistema: {error}',
   AppLocale.scrapedTitlesUsed: 'Títulos buscados serão usados se disponíveis',
   AppLocale.gameExtensionsHidden: 'Extensões de jogo serão ocultadas',

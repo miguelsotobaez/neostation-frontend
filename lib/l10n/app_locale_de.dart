@@ -82,6 +82,11 @@ const Map<String, dynamic> appLocaleDe = {
       'Rekursive Suche aktiviert. Suche in {name}...',
   AppLocale.recursiveScanDisabled:
       'Rekursive Suche deaktiviert. Suche in {name}...',
+  AppLocale.subfolderView: 'Unterordner anzeigen',
+  AppLocale.subfolderViewSubtitle:
+      'ROMs in Unterordnern als durchsuchbare Ordner gruppieren, statt sie mit Spielen zu vermischen',
+  AppLocale.subfolderViewEnabled: 'Unterordner werden als Ordner angezeigt',
+  AppLocale.subfolderViewDisabled: 'Unterordner mit Spielen vermischt',
   AppLocale.errorScanningSystem: 'Fehler beim Scannen des Systems: {error}',
   AppLocale.scrapedTitlesUsed:
       'Scraper-Titel werden verwendet, falls verfügbar',

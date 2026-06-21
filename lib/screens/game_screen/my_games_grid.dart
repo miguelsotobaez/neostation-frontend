@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/utils/rom_tree.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
@@ -35,6 +36,13 @@ class GamesGrid extends StatefulWidget {
   final Set<String> scrapingGameRomnames;
   final Map<String, double> scrapeProgress;
 
+  /// Subfolder navigation: the first [folderCount] entries of [games] are folder
+  /// placeholders rendered from [folderEntries]; tapping one calls
+  /// [onFolderActivated] with its index to descend.
+  final int folderCount;
+  final List<RomFolderEntry> folderEntries;
+  final void Function(int folderIndex)? onFolderActivated;
+
   const GamesGrid({
     super.key,
     required this.system,
@@ -50,6 +58,9 @@ class GamesGrid extends StatefulWidget {
     this.onScrape,
     this.scrapingGameRomnames = const {},
     this.scrapeProgress = const {},
+    this.folderCount = 0,
+    this.folderEntries = const [],
+    this.onFolderActivated,
   });
 
   @override
@@ -198,6 +209,9 @@ class _GamesGridState extends State<GamesGrid> {
 
   double _cardHeightFor(int index) {
     if (_isFanart) return _cardWidth;
+
+    // Folder tiles are always square (no box art to measure).
+    if (index < widget.folderCount) return _cardWidth;
 
     final game = widget.games[index];
     // 1. From DB
@@ -818,6 +832,10 @@ class _GamesGridState extends State<GamesGrid> {
     int targetWidth,
     ThemeData theme,
   ) {
+    if (index < widget.folderCount) {
+      return _buildFolderCard(index, theme);
+    }
+
     final game = widget.games[index];
 
     if (_isFanart) {
@@ -1034,6 +1052,62 @@ class _GamesGridState extends State<GamesGrid> {
                     child: _buildScrapeProgress(game),
                   ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFolderCard(int index, ThemeData theme) {
+    final folder = widget.folderEntries[index];
+    return GestureDetector(
+      key: ValueKey('folder_${folder.relPath}'),
+      onTap: () {
+        setState(() => _selectedIndex = index);
+        SfxService().playNavSound();
+        widget.onFolderActivated?.call(index);
+      },
+      child: RepaintBoundary(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12.r),
+          child: Container(
+            color: theme.colorScheme.surfaceContainerHighest,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Symbols.folder_rounded,
+                    size: 40.r,
+                    fill: 1,
+                    color: widget.system.colorAsColor,
+                  ),
+                  SizedBox(height: 6.r),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6.r),
+                    child: Text(
+                      folder.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9.r,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 2.r),
+                  Text(
+                    '${folder.gameCount}',
+                    style: TextStyle(
+                      fontSize: 8.r,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

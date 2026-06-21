@@ -173,6 +173,29 @@ void main() {
       expect(settings['hide_extension'], 0);
     });
 
+    test('setSubfolderView persists setting', () async {
+      await seedSystem(id: 'nes', realName: 'NES', folderName: 'nes');
+
+      await SystemRepository.setSubfolderView('nes', true);
+      var settings = await SystemRepository.getSystemSettings('nes');
+      expect(settings['subfolder_view'], 1);
+
+      await SystemRepository.setSubfolderView('nes', false);
+      settings = await SystemRepository.getSystemSettings('nes');
+      expect(settings['subfolder_view'], 0);
+    });
+
+    test('getSystemByFolderName reflects subfolder_view', () async {
+      // Regression: the loaded SystemModel must carry the persisted setting, so
+      // reopening the settings dialog shows the toggle as it was saved.
+      await seedSystem(id: 'nes', realName: 'NES', folderName: 'nes');
+      await SystemRepository.setSubfolderView('nes', true);
+
+      final system = await SystemRepository.getSystemByFolderName('nes');
+      expect(system, isNotNull);
+      expect(system!.subfolderView, isTrue);
+    });
+
     test('getHiddenSystems returns hidden folder names', () async {
       await seedSystem(id: 'nes', realName: 'NES', folderName: 'nes');
       await db.execute(

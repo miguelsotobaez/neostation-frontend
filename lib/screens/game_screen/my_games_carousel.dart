@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
+import 'package:neostation/utils/rom_tree.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/system_background_provider.dart';
@@ -33,6 +34,13 @@ class GamesCarousel extends StatefulWidget {
   final Set<String> scrapingGameRomnames;
   final Map<String, double> scrapeProgress;
 
+  /// Subfolder navigation: the first [folderCount] entries of [games] are folder
+  /// placeholders rendered from [folderEntries]; tapping one calls
+  /// [onFolderActivated] with its index to descend.
+  final int folderCount;
+  final List<RomFolderEntry> folderEntries;
+  final void Function(int folderIndex)? onFolderActivated;
+
   const GamesCarousel({
     super.key,
     required this.system,
@@ -48,6 +56,9 @@ class GamesCarousel extends StatefulWidget {
     this.onScrape,
     this.scrapingGameRomnames = const {},
     this.scrapeProgress = const {},
+    this.folderCount = 0,
+    this.folderEntries = const [],
+    this.onFolderActivated,
   });
 
   @override
@@ -670,6 +681,62 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
   }
 
+  Widget _buildFolderCard(RomFolderEntry folder, int index) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () {
+        SfxService().playNavSound();
+        widget.onFolderActivated?.call(index);
+      },
+      child: Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16.r),
+          child: Container(
+            width: 220.r,
+            height: 220.r,
+            color: theme.colorScheme.surfaceContainerHighest,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Symbols.folder_rounded,
+                    size: 96.r,
+                    fill: 1,
+                    color: widget.system.colorAsColor,
+                  ),
+                  SizedBox(height: 12.r),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.r),
+                    child: Text(
+                      folder.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 16.r,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 4.r),
+                  Text(
+                    '${folder.gameCount}',
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      fontSize: 13.r,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFallbackCard(GameModel game, ThemeData theme) {
     return Container(
       color: theme.colorScheme.surfaceContainerHighest,
@@ -878,6 +945,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 itemCount: widget.games.length,
                 initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
                 itemBuilder: (context, index) {
+                  if (index < widget.folderCount) {
+                    final folder = widget.folderEntries[index];
+                    return KeyedSubtree(
+                      key: ValueKey('folder_${folder.relPath}'),
+                      child: _buildFolderCard(folder, index),
+                    );
+                  }
                   final game = widget.games[index];
                   return KeyedSubtree(
                     key: ValueKey(game.romname),

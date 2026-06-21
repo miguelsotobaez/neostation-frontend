@@ -81,6 +81,11 @@ const Map<String, dynamic> appLocaleRu = {
       'Рекурсивное сканирование включено. Сканирование {name}...',
   AppLocale.recursiveScanDisabled:
       'Рекурсивное сканирование выключено. Сканирование {name}...',
+  AppLocale.subfolderView: 'Показывать подпапки',
+  AppLocale.subfolderViewSubtitle:
+      'Группировать ROM в подпапках в виде просматриваемых папок, а не смешивать их с играми',
+  AppLocale.subfolderViewEnabled: 'Подпапки показаны как папки',
+  AppLocale.subfolderViewDisabled: 'Подпапки смешаны с играми',
   AppLocale.errorScanningSystem: 'Ошибка при сканировании системы: {error}',
   AppLocale.scrapedTitlesUsed:
       'Будут использоваться полученные названия, если они доступны',

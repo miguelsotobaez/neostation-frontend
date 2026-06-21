@@ -85,6 +85,11 @@ const Map<String, dynamic> appLocaleFr = {
       'Analyse récursive activée. Analyse de {name}...',
   AppLocale.recursiveScanDisabled:
       'Analyse récursive désactivée. Analyse de {name}...',
+  AppLocale.subfolderView: 'Afficher les sous-dossiers',
+  AppLocale.subfolderViewSubtitle:
+      'Regrouper les ROMs des sous-dossiers dans des dossiers navigables au lieu de les mélanger avec les jeux',
+  AppLocale.subfolderViewEnabled: 'Sous-dossiers affichés comme dossiers',
+  AppLocale.subfolderViewDisabled: 'Sous-dossiers mélangés aux jeux',
   AppLocale.errorScanningSystem:
       'Erreur lors de l’analyse du système : {error}',
   AppLocale.scrapedTitlesUsed:
