@@ -11,6 +11,8 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
+import 'package:neostation/screens/search_screen/search_screen.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -161,7 +163,13 @@ class HeaderState extends State<Header> {
               if (widget.selectedTabIndex == 0)
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: HeaderSortDropdown(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      HeaderSortDropdown(),
+                      _buildSearchButton(context),
+                    ],
+                  ),
                 ),
 
               // Grouped Tab Navigation with Background (Glass Style)
@@ -393,6 +401,19 @@ class HeaderState extends State<Header> {
           color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
+    );
+  }
+
+  /// Library-wide ROM search entry (Systems tab only).
+  Widget _buildSearchButton(BuildContext context) {
+    return IconButton(
+      tooltip: AppLocale.searchOpen.getString(context),
+      icon: Icon(
+        Symbols.search_rounded,
+        size: 22.r,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+      onPressed: () => SearchScreen.open(context),
     );
   }
 }

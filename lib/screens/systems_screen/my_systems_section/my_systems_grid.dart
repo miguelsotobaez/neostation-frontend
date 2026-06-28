@@ -27,6 +27,7 @@ import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/palette_provider.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
+import 'package:neostation/screens/search_screen/search_screen.dart';
 import 'package:neostation/widgets/systems_grid_footer.dart';
 
 import 'package:neostation/services/logger_service.dart';
@@ -1092,6 +1093,9 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
       onSettings: () => widget.onEscapePressed?.call(),
       onXButton: () {
         HeaderSortDropdown.globalKey.currentState?.showDropdown();
+      },
+      onSelectButton: () {
+        if (mounted) SearchScreen.open(context);
       },
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
