@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -56,6 +58,8 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _nameController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
   final ScrollController _resultScroll = ScrollController();
+  final ScrollController _controlsScroll = ScrollController();
+  final Map<int, GlobalKey> _controlKeys = {};
 
   bool _loading = true;
   List<DatabaseGameModel> _all = [];
@@ -87,7 +91,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<DatabaseGameModel> _results = [];
 
-  static const double _resultExtent = 64;
+  static const double _resultExtent = 76;
 
   @override
   void initState() {
@@ -121,6 +125,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _nameController.dispose();
     _nameFocus.dispose();
     _resultScroll.dispose();
+    _controlsScroll.dispose();
     super.dispose();
   }
 
@@ -232,6 +237,7 @@ class _SearchScreenState extends State<SearchScreen> {
       if (_resultIndex == 0) {
         // Top of the list — hand focus back to the controls column.
         setState(() => _region = _FocusRegion.controls);
+        _ensureControlVisible();
       } else {
         setState(() => _resultIndex -= 1);
         _scrollResultIntoView();
@@ -241,15 +247,14 @@ class _SearchScreenState extends State<SearchScreen> {
         () =>
             _controlIndex = (_controlIndex - 1 + _controlCount) % _controlCount,
       );
+      _ensureControlVisible();
     }
     SfxService().playNavSound();
   }
 
   void _navigateDown() {
     if (_region == _FocusRegion.action) {
-      setState(
-        () => _actionIndex = (_actionIndex + 1) % _resultActions.length,
-      );
+      setState(() => _actionIndex = (_actionIndex + 1) % _resultActions.length);
     } else if (_region == _FocusRegion.results) {
       if (_results.isEmpty) return;
       setState(
@@ -267,6 +272,7 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     } else {
       setState(() => _controlIndex += 1);
+      _ensureControlVisible();
     }
     SfxService().playNavSound();
   }
@@ -603,36 +609,64 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildControls(ThemeData theme) {
-    final children = <Widget>[_buildNameField(theme), SizedBox(height: 8.r)];
+    final children = <Widget>[
+      KeyedSubtree(key: _controlKey(0), child: _buildNameField(theme)),
+      SizedBox(height: 8.r),
+    ];
 
     final filters = _visibleFilters;
     final controlsFocused = _region == _FocusRegion.controls;
     for (var i = 0; i < filters.length; i++) {
       children.add(
-        _buildFilterRow(
-          theme,
-          filters[i],
-          controlsFocused && _controlIndex == i + 1,
+        KeyedSubtree(
+          key: _controlKey(i + 1),
+          child: _buildFilterRow(
+            theme,
+            filters[i],
+            controlsFocused && _controlIndex == i + 1,
+          ),
         ),
       );
     }
 
     children.add(SizedBox(height: 8.r));
     children.add(
-      _buildActionTile(
-        theme,
-        Symbols.filter_alt_off_rounded,
-        AppLocale.searchClearFilters.getString(context),
-        _region == _FocusRegion.controls && _controlIndex == _clearIndex,
+      KeyedSubtree(
+        key: _controlKey(_clearIndex),
+        child: _buildActionTile(
+          theme,
+          Symbols.filter_alt_off_rounded,
+          AppLocale.searchClearFilters.getString(context),
+          _region == _FocusRegion.controls && _controlIndex == _clearIndex,
+        ),
       ),
     );
 
     return SingleChildScrollView(
+      controller: _controlsScroll,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
       ),
     );
+  }
+
+  /// Stable per-index keys so the focused control can be scrolled into view.
+  GlobalKey _controlKey(int index) =>
+      _controlKeys.putIfAbsent(index, () => GlobalKey());
+
+  /// Keeps the focused filter/control visible when the column overflows.
+  void _ensureControlVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _controlKeys[_controlIndex]?.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   Widget _buildNameField(ThemeData theme) {
@@ -862,6 +896,8 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         child: Row(
           children: [
+            _buildBoxArt(theme, g),
+            SizedBox(width: 10.r),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -906,6 +942,52 @@ class _SearchScreenState extends State<SearchScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Box art (box2d) thumbnail for a result, or a neutral placeholder when the
+  /// game has no scraped cover.
+  Widget _buildBoxArt(ThemeData theme, DatabaseGameModel g) {
+    final scheme = theme.colorScheme;
+    final folder = g.systemFolderName;
+    File? art;
+    if (folder != null && folder.isNotEmpty) {
+      final fileProvider = context.read<FileProvider>();
+      for (final ext in const ['png', 'jpg']) {
+        final candidate = File(
+          fileProvider.getMediaPath(folder, 'box2d', g.romname, ext),
+        );
+        if (candidate.existsSync()) {
+          art = candidate;
+          break;
+        }
+      }
+    }
+
+    return Container(
+      width: 48.r,
+      height: 60.r,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(6.r),
+        border: Border.all(
+          color: scheme.onSurface.withValues(alpha: 0.12),
+          width: 1.r,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: art != null
+          ? Image.file(
+              art,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+            )
+          : Icon(
+              Symbols.videogame_asset_rounded,
+              size: 22.r,
+              color: scheme.onSurface.withValues(alpha: 0.35),
+            ),
     );
   }
 }
