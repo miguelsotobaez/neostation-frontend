@@ -692,6 +692,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.searchClearFilters: '清除筛选',
   AppLocale.searchViewResults: '查看结果',
   AppLocale.searchOpen: '搜索',
+  AppLocale.searchGoToGame: '跳转到游戏',
   AppLocale.filterPlatform: '平台',
   AppLocale.filterDeveloper: '开发商',
   AppLocale.filterGenre: '类型',

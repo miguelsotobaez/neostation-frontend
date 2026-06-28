@@ -692,6 +692,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.searchClearFilters: '清除篩選',
   AppLocale.searchViewResults: '檢視結果',
   AppLocale.searchOpen: '搜尋',
+  AppLocale.searchGoToGame: '前往遊戲',
   AppLocale.filterPlatform: '平台',
   AppLocale.filterDeveloper: '開發商',
   AppLocale.filterGenre: '類型',

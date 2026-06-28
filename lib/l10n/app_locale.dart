@@ -794,6 +794,7 @@ mixin AppLocale {
   static const String searchClearFilters = 'search_clear_filters';
   static const String searchViewResults = 'search_view_results';
   static const String searchOpen = 'search_open';
+  static const String searchGoToGame = 'search_go_to_game';
   static const String filterPlatform = 'filter_platform';
   static const String filterDeveloper = 'filter_developer';
   static const String filterGenre = 'filter_genre';

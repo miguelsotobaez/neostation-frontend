@@ -767,6 +767,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.searchClearFilters: 'Hapus filter',
   AppLocale.searchViewResults: 'Lihat hasil',
   AppLocale.searchOpen: 'Cari',
+  AppLocale.searchGoToGame: 'Buka di daftar',
   AppLocale.filterPlatform: 'Platform',
   AppLocale.filterDeveloper: 'Pengembang',
   AppLocale.filterGenre: 'Genre',

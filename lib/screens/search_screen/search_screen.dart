@@ -16,6 +16,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_launch_utils.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/screens/game_screen/my_games_list.dart';
 
 /// Library-wide ROM search & filter overlay.
 ///
@@ -38,7 +39,13 @@ class SearchScreen extends StatefulWidget {
 }
 
 /// Which pane currently owns gamepad focus.
-enum _FocusRegion { controls, results }
+///
+/// [action] is the per-result chooser overlay (Go to game / Play) shown after
+/// a result is selected, so launching is always an explicit second step.
+enum _FocusRegion { controls, results, action }
+
+/// Ordered choices offered when a search result is selected.
+enum _ResultAction { goTo, play }
 
 /// Discrete rating thresholds offered in the rating filter (null == Any).
 const List<double?> _ratingThresholds = [null, 3.0, 4.0, 4.5];
@@ -69,6 +76,14 @@ class _SearchScreenState extends State<SearchScreen> {
   _FocusRegion _region = _FocusRegion.controls;
   int _controlIndex = 0;
   int _resultIndex = 0;
+
+  // Active result-action chooser state (valid while _region == action).
+  static const List<_ResultAction> _resultActions = [
+    _ResultAction.goTo,
+    _ResultAction.play,
+  ];
+  int _actionIndex = 0;
+  DatabaseGameModel? _actionTarget;
 
   List<DatabaseGameModel> _results = [];
 
@@ -185,8 +200,9 @@ class _SearchScreenState extends State<SearchScreen> {
   double? get _ratingThresholdValue => _ratingThresholds[_ratingIdx];
 
   // ── Control model ─────────────────────────────────────────────────────────
-  // Index 0 = name field, then one row per visible filter, then Clear, then
-  // View results. Hidden (empty-option) filters are skipped entirely.
+  // Index 0 = name field, then one row per visible filter, then Clear. Results
+  // update live, so navigating Down past Clear flows straight into them.
+  // Hidden (empty-option) filters are skipped entirely.
 
   /// Ordered keys of the currently visible filter rows.
   List<String> get _visibleFilters {
@@ -199,21 +215,27 @@ class _SearchScreenState extends State<SearchScreen> {
     ];
   }
 
-  /// Total focusable controls: name + filters + clear + view-results.
-  int get _controlCount => 1 + _visibleFilters.length + 2;
+  /// Total focusable controls: name + filters + clear.
+  int get _controlCount => 1 + _visibleFilters.length + 1;
 
   int get _clearIndex => 1 + _visibleFilters.length;
-  int get _viewResultsIndex => _clearIndex + 1;
 
   // ── Navigation handlers ───────────────────────────────────────────────────
 
   void _navigateUp() {
-    if (_region == _FocusRegion.results) {
-      if (_results.isEmpty) return;
+    if (_region == _FocusRegion.action) {
       setState(
-        () => _resultIndex = (_resultIndex - 1).clamp(0, _results.length - 1),
+        () => _actionIndex =
+            (_actionIndex - 1 + _resultActions.length) % _resultActions.length,
       );
-      _scrollResultIntoView();
+    } else if (_region == _FocusRegion.results) {
+      if (_resultIndex == 0) {
+        // Top of the list — hand focus back to the controls column.
+        setState(() => _region = _FocusRegion.controls);
+      } else {
+        setState(() => _resultIndex -= 1);
+        _scrollResultIntoView();
+      }
     } else {
       setState(
         () =>
@@ -224,14 +246,27 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _navigateDown() {
-    if (_region == _FocusRegion.results) {
+    if (_region == _FocusRegion.action) {
+      setState(
+        () => _actionIndex = (_actionIndex + 1) % _resultActions.length,
+      );
+    } else if (_region == _FocusRegion.results) {
       if (_results.isEmpty) return;
       setState(
         () => _resultIndex = (_resultIndex + 1).clamp(0, _results.length - 1),
       );
       _scrollResultIntoView();
+    } else if (_controlIndex >= _controlCount - 1) {
+      // Past the last control — flow into the live results list.
+      if (_results.isNotEmpty) {
+        setState(() {
+          _region = _FocusRegion.results;
+          _resultIndex = _resultIndex.clamp(0, _results.length - 1);
+        });
+        _scrollResultIntoView();
+      }
     } else {
-      setState(() => _controlIndex = (_controlIndex + 1) % _controlCount);
+      setState(() => _controlIndex += 1);
     }
     SfxService().playNavSound();
   }
@@ -280,8 +315,22 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _handleSelect() {
+    if (_region == _FocusRegion.action) {
+      _runResultAction(_resultActions[_actionIndex]);
+      return;
+    }
+
     if (_region == _FocusRegion.results) {
-      if (_results.isNotEmpty) _launch(_results[_resultIndex]);
+      // Open the per-result chooser instead of launching outright, so the
+      // user can reveal the game in its list rather than always playing it.
+      if (_results.isNotEmpty) {
+        setState(() {
+          _actionTarget = _results[_resultIndex];
+          _actionIndex = 0;
+          _region = _FocusRegion.action;
+        });
+        SfxService().playNavSound();
+      }
       return;
     }
 
@@ -294,20 +343,29 @@ class _SearchScreenState extends State<SearchScreen> {
       _clearFilters();
       return;
     }
-    if (_controlIndex == _viewResultsIndex) {
-      if (_results.isNotEmpty) {
-        setState(() => _region = _FocusRegion.results);
-        _scrollResultIntoView();
-      }
-      return;
-    }
     // A filter row: advance its value (same as Right).
     _cycleActiveFilter(1);
+  }
+
+  void _runResultAction(_ResultAction action) {
+    final target = _actionTarget;
+    if (target == null) return;
+    setState(() => _region = _FocusRegion.results);
+    switch (action) {
+      case _ResultAction.play:
+        _launch(target);
+      case _ResultAction.goTo:
+        _goToGame(target);
+    }
   }
 
   void _handleBack() {
     if (_nameFocus.hasFocus) {
       _nameFocus.unfocus();
+      return;
+    }
+    if (_region == _FocusRegion.action) {
+      setState(() => _region = _FocusRegion.results);
       return;
     }
     if (_region == _FocusRegion.results) {
@@ -381,6 +439,30 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  /// Closes search and opens the result's system game list with that game
+  /// pre-selected, so the user lands on it in the normal browsing view.
+  Future<void> _goToGame(DatabaseGameModel dbGame) async {
+    final folder = dbGame.systemFolderName;
+    if (folder == null || folder.isEmpty) return;
+
+    final fileProvider = context.read<FileProvider>();
+    final system = await SqliteService.getSystemByFolderName(folder);
+    if (!mounted) return;
+
+    final game = GameModel.fromDatabaseModel(dbGame);
+    final navigator = Navigator.of(context);
+    navigator.pop(); // close the search overlay
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => SystemGamesList(
+          system: system,
+          fileProvider: fileProvider,
+          initialGameRomname: game.romname,
+        ),
+      ),
+    );
+  }
+
   // ── UI ────────────────────────────────────────────────────────────────────
 
   @override
@@ -398,17 +480,125 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: EdgeInsets.all(12.r),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 320.r, child: _buildControls(theme)),
-                  SizedBox(width: 12.r),
-                  Expanded(child: _buildResults(theme)),
-                ],
+          : Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(12.r),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 320.r, child: _buildControls(theme)),
+                      SizedBox(width: 12.r),
+                      Expanded(child: _buildResults(theme)),
+                    ],
+                  ),
+                ),
+                if (_region == _FocusRegion.action && _actionTarget != null)
+                  _buildActionChooser(theme, _actionTarget!),
+              ],
+            ),
+    );
+  }
+
+  /// Modal overlay offering Go-to-game / Play for a selected result.
+  Widget _buildActionChooser(ThemeData theme, DatabaseGameModel target) {
+    final scheme = theme.colorScheme;
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: () => setState(() => _region = _FocusRegion.results),
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.6),
+          child: Center(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: 320.r,
+                padding: EdgeInsets.all(16.r),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.4),
+                    width: 1.r,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      target.realName ?? target.filename,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15.r,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 12.r),
+                    for (var i = 0; i < _resultActions.length; i++)
+                      _buildActionOption(theme, _resultActions[i], i),
+                  ],
+                ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionOption(ThemeData theme, _ResultAction action, int index) {
+    final scheme = theme.colorScheme;
+    final isFocused = _actionIndex == index;
+    final (icon, label) = switch (action) {
+      _ResultAction.goTo => (
+        Symbols.my_location_rounded,
+        AppLocale.searchGoToGame.getString(context),
+      ),
+      _ResultAction.play => (
+        Symbols.play_arrow_rounded,
+        AppLocale.play.getString(context),
+      ),
+    };
+    return GestureDetector(
+      onTap: () {
+        setState(() => _actionIndex = index);
+        _runResultAction(action);
+      },
+      child: Container(
+        margin: EdgeInsets.symmetric(vertical: 4.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 12.r),
+        decoration: BoxDecoration(
+          color: isFocused
+              ? scheme.primary.withValues(alpha: 0.18)
+              : scheme.surface.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: isFocused ? scheme.primary : Colors.transparent,
+            width: 2.r,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18.r,
+              color: isFocused ? scheme.primary : scheme.onSurface,
+            ),
+            SizedBox(width: 8.r),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14.r,
+                fontWeight: FontWeight.w700,
+                color: isFocused ? scheme.primary : scheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -416,8 +606,15 @@ class _SearchScreenState extends State<SearchScreen> {
     final children = <Widget>[_buildNameField(theme), SizedBox(height: 8.r)];
 
     final filters = _visibleFilters;
+    final controlsFocused = _region == _FocusRegion.controls;
     for (var i = 0; i < filters.length; i++) {
-      children.add(_buildFilterRow(theme, filters[i], _controlIndex == i + 1));
+      children.add(
+        _buildFilterRow(
+          theme,
+          filters[i],
+          controlsFocused && _controlIndex == i + 1,
+        ),
+      );
     }
 
     children.add(SizedBox(height: 8.r));
@@ -426,16 +623,7 @@ class _SearchScreenState extends State<SearchScreen> {
         theme,
         Symbols.filter_alt_off_rounded,
         AppLocale.searchClearFilters.getString(context),
-        _controlIndex == _clearIndex,
-      ),
-    );
-    children.add(
-      _buildActionTile(
-        theme,
-        Symbols.list_rounded,
-        '${AppLocale.searchViewResults.getString(context)} '
-        '(${_results.length})',
-        _controlIndex == _viewResultsIndex,
+        _region == _FocusRegion.controls && _controlIndex == _clearIndex,
       ),
     );
 

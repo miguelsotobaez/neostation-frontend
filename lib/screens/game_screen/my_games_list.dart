@@ -116,10 +116,16 @@ class SystemGamesList extends StatefulWidget {
   final SystemModel system;
   final FileProvider fileProvider;
 
+  /// When set, the list opens with this game (matched by `romname`) selected
+  /// and scrolled into view instead of defaulting to the first entry. Used by
+  /// the library-wide search "Go to game" action to reveal a result in place.
+  final String? initialGameRomname;
+
   const SystemGamesList({
     super.key,
     required this.system,
     required this.fileProvider,
+    this.initialGameRomname,
   });
 
   @override
@@ -1815,6 +1821,23 @@ class _SystemGamesListState extends State<SystemGamesList> {
           }
         }
 
+        // Initial deep-link selection: when opened with an explicit target
+        // (e.g. the search "Go to game" action), focus that game on first load
+        // rather than the first entry. Seeds _selectedGame so the persistent
+        // selection logic below keeps it across any subsequent reloads.
+        if (isInitialLoad &&
+            _selectedGame == null &&
+            widget.initialGameRomname != null &&
+            widget.system.folderName != 'music') {
+          final initialIndex = games.indexWhere(
+            (game) => game.romname == widget.initialGameRomname,
+          );
+          if (initialIndex != -1) {
+            _selectedGameIndex = initialIndex;
+            _selectedGame = games[initialIndex];
+          }
+        }
+
         // Persistent Selection Logic: Retain current index if the game still exists post-reload.
         if (_selectedGame != null && widget.system.folderName != 'music') {
           final selectedIndex = games.indexWhere(
@@ -1839,6 +1862,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _startVideoTimer();
           _performBackgroundOperationsForSelectedGame();
+          // Reveal a deep-linked selection (search "Go to game") in the list.
+          if (isInitialLoad && _selectedGameIndex > 0) {
+            _scrollToSelectedItem();
+          }
         });
       }
     } catch (e) {

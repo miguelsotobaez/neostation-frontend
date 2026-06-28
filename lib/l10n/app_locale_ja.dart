@@ -700,6 +700,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.searchClearFilters: 'フィルターをクリア',
   AppLocale.searchViewResults: '結果を表示',
   AppLocale.searchOpen: '検索',
+  AppLocale.searchGoToGame: 'ゲームへ移動',
   AppLocale.filterPlatform: 'プラットフォーム',
   AppLocale.filterDeveloper: '開発元',
   AppLocale.filterGenre: 'ジャンル',

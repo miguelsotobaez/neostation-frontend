@@ -762,6 +762,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.searchClearFilters: 'Сбросить фильтры',
   AppLocale.searchViewResults: 'Показать результаты',
   AppLocale.searchOpen: 'Поиск',
+  AppLocale.searchGoToGame: 'Перейти к игре',
   AppLocale.filterPlatform: 'Платформа',
   AppLocale.filterDeveloper: 'Разработчик',
   AppLocale.filterGenre: 'Жанр',

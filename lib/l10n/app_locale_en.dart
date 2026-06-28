@@ -764,6 +764,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.searchClearFilters: 'Clear filters',
   AppLocale.searchViewResults: 'View results',
   AppLocale.searchOpen: 'Search',
+  AppLocale.searchGoToGame: 'Go to game',
   AppLocale.filterPlatform: 'Platform',
   AppLocale.filterDeveloper: 'Developer',
   AppLocale.filterGenre: 'Genre',
