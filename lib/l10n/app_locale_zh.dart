@@ -690,6 +690,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.searchNoResults: '未找到游戏',
   AppLocale.searchResultsCount: '{count} 个结果',
   AppLocale.searchClearFilters: '清除筛选',
+  AppLocale.searchFilters: '筛选',
   AppLocale.searchViewResults: '查看结果',
   AppLocale.searchOpen: '搜索',
   AppLocale.searchGoToGame: '跳转到游戏',

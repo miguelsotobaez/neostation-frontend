@@ -790,6 +790,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.searchNoResults: 'Aucun jeu trouvé',
   AppLocale.searchResultsCount: '{count} résultats',
   AppLocale.searchClearFilters: 'Effacer les filtres',
+  AppLocale.searchFilters: 'Filtres',
   AppLocale.searchViewResults: 'Voir les résultats',
   AppLocale.searchOpen: 'Rechercher',
   AppLocale.searchGoToGame: 'Aller au jeu',

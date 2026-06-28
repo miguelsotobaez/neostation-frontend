@@ -760,6 +760,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.searchNoResults: 'Игры не найдены',
   AppLocale.searchResultsCount: 'Результатов: {count}',
   AppLocale.searchClearFilters: 'Сбросить фильтры',
+  AppLocale.searchFilters: 'Фильтры',
   AppLocale.searchViewResults: 'Показать результаты',
   AppLocale.searchOpen: 'Поиск',
   AppLocale.searchGoToGame: 'Перейти к игре',

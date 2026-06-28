@@ -698,6 +698,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.searchNoResults: 'ゲームが見つかりません',
   AppLocale.searchResultsCount: '{count}件の結果',
   AppLocale.searchClearFilters: 'フィルターをクリア',
+  AppLocale.searchFilters: 'フィルター',
   AppLocale.searchViewResults: '結果を表示',
   AppLocale.searchOpen: '検索',
   AppLocale.searchGoToGame: 'ゲームへ移動',

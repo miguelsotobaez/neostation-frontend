@@ -788,6 +788,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.searchNoResults: 'Keine Spiele gefunden',
   AppLocale.searchResultsCount: '{count} Ergebnisse',
   AppLocale.searchClearFilters: 'Filter zurücksetzen',
+  AppLocale.searchFilters: 'Filter',
   AppLocale.searchViewResults: 'Ergebnisse anzeigen',
   AppLocale.searchOpen: 'Suche',
   AppLocale.searchGoToGame: 'Zum Spiel springen',

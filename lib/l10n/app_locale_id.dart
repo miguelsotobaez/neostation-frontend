@@ -765,6 +765,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.searchNoResults: 'Tidak ada gim ditemukan',
   AppLocale.searchResultsCount: '{count} hasil',
   AppLocale.searchClearFilters: 'Hapus filter',
+  AppLocale.searchFilters: 'Filter',
   AppLocale.searchViewResults: 'Lihat hasil',
   AppLocale.searchOpen: 'Cari',
   AppLocale.searchGoToGame: 'Buka di daftar',

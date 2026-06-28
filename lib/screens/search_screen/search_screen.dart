@@ -41,11 +41,14 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-/// Which pane currently owns gamepad focus.
+/// Which band currently owns gamepad focus.
 ///
-/// [action] is the per-result chooser overlay (Go to game / Play) shown after
-/// a result is selected, so launching is always an explicit second step.
-enum _FocusRegion { controls, results, action }
+/// The screen stacks top-to-bottom: [search] field, then the [filters] chip
+/// row, then the full-width [results] list — Up/Down step between them.
+/// [filterMenu] is the value picker opened from a chip; [action] is the
+/// per-result chooser overlay (Go to game / Play) shown after a result is
+/// selected, so launching is always an explicit step.
+enum _FocusRegion { search, filters, results, filterMenu, action }
 
 /// Ordered choices offered when a search result is selected.
 enum _ResultAction { goTo, play }
@@ -59,8 +62,6 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _nameController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
   final ScrollController _resultScroll = ScrollController();
-  final ScrollController _controlsScroll = ScrollController();
-  final Map<int, GlobalKey> _controlKeys = {};
 
   bool _loading = true;
   List<DatabaseGameModel> _all = [];
@@ -78,9 +79,23 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _year;
   int _ratingIdx = 0;
 
-  _FocusRegion _region = _FocusRegion.controls;
-  int _controlIndex = 0;
+  _FocusRegion _region = _FocusRegion.search;
+  int _barIndex = 0;
   int _resultIndex = 0;
+
+  // The search band holds two items: the text field (0) and the Filters toggle
+  // (1). Filters stay collapsed by default — most users only want text search.
+  int _searchIndex = 0;
+  bool _filtersExpanded = false;
+
+  // Filter value-picker state, valid while _region == filterMenu. The original
+  // value is snapshotted on open so Back can cancel a live preview.
+  String? _menuKey;
+  String? _menuOrigValue;
+  int _menuOrigRatingIdx = 0;
+  final ScrollController _menuScroll = ScrollController();
+
+  static const double _menuExtent = 44;
 
   // Active result-action chooser state (valid while _region == action).
   static const List<_ResultAction> _resultActions = [
@@ -101,8 +116,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
-      onNavigateLeft: () => _cycleActiveFilter(-1),
-      onNavigateRight: () => _cycleActiveFilter(1),
+      onNavigateLeft: _navigateLeft,
+      onNavigateRight: _navigateRight,
       onSelectItem: _handleSelect,
       onBack: _handleBack,
     );
@@ -126,7 +141,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _nameController.dispose();
     _nameFocus.dispose();
     _resultScroll.dispose();
-    _controlsScroll.dispose();
+    _menuScroll.dispose();
     super.dispose();
   }
 
@@ -170,12 +185,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   double? get _ratingThresholdValue => _ratingThresholds[_ratingIdx];
 
-  // ── Control model ─────────────────────────────────────────────────────────
-  // Index 0 = name field, then one row per visible filter, then Clear. Results
-  // update live, so navigating Down past Clear flows straight into them.
-  // Hidden (empty-option) filters are skipped entirely.
+  // ── Band model ──────────────────────────────────────────────────────────
+  // Three stacked bands: search field, the filter-chip row, then results.
+  // Up/Down step between bands; within the chip row Left/Right move between
+  // chips. Hidden (empty-option) filters are skipped entirely.
 
-  /// Ordered keys of the currently visible filter rows.
+  /// Ordered keys of the currently visible filter chips.
   List<String> get _visibleFilters {
     return [
       if (_platforms.isNotEmpty) 'platform',
@@ -186,131 +201,160 @@ class _SearchScreenState extends State<SearchScreen> {
     ];
   }
 
-  /// Total focusable controls: name + filters + clear.
-  int get _controlCount => 1 + _visibleFilters.length + 1;
+  /// Chip-row items left-to-right: each visible filter, then Clear.
+  List<String> get _barItems => [..._visibleFilters, 'clear'];
 
-  int get _clearIndex => 1 + _visibleFilters.length;
+  /// Number of filters currently narrowing the results (shown on the toggle
+  /// so applied filters stay visible even while the chip row is collapsed).
+  int get _activeFilterCount =>
+      [_platform, _developer, _genre, _year].where((v) => v != null).length +
+      (_ratingIdx != 0 ? 1 : 0);
+
+  /// Shows/hides the filter chip row, moving focus to follow.
+  void _toggleFilters() {
+    setState(() {
+      _filtersExpanded = !_filtersExpanded;
+      if (_filtersExpanded) {
+        _region = _FocusRegion.filters;
+        _barIndex = 0;
+      } else {
+        _region = _FocusRegion.search;
+        _searchIndex = 1;
+      }
+    });
+    SfxService().playNavSound();
+  }
 
   // ── Navigation handlers ───────────────────────────────────────────────────
 
+  void _navigateLeft() {
+    if (_region == _FocusRegion.search) {
+      setState(() => _searchIndex = 0);
+      SfxService().playNavSound();
+    } else if (_region == _FocusRegion.filters) {
+      setState(
+        () => _barIndex = (_barIndex - 1 + _barItems.length) % _barItems.length,
+      );
+      SfxService().playNavSound();
+    }
+  }
+
+  void _navigateRight() {
+    if (_region == _FocusRegion.search) {
+      setState(() => _searchIndex = 1);
+      SfxService().playNavSound();
+    } else if (_region == _FocusRegion.filters) {
+      setState(() => _barIndex = (_barIndex + 1) % _barItems.length);
+      SfxService().playNavSound();
+    }
+  }
+
   void _navigateUp() {
-    if (_region == _FocusRegion.action) {
-      setState(
-        () => _actionIndex =
-            (_actionIndex - 1 + _resultActions.length) % _resultActions.length,
-      );
-    } else if (_region == _FocusRegion.results) {
-      if (_resultIndex == 0) {
-        // Top of the list — hand focus back to the controls column.
-        setState(() => _region = _FocusRegion.controls);
-        _ensureControlVisible();
-      } else {
-        setState(() => _resultIndex -= 1);
-        _scrollResultIntoView();
-      }
-    } else {
-      setState(
-        () =>
-            _controlIndex = (_controlIndex - 1 + _controlCount) % _controlCount,
-      );
-      _ensureControlVisible();
+    switch (_region) {
+      case _FocusRegion.action:
+        setState(
+          () => _actionIndex =
+              (_actionIndex - 1 + _resultActions.length) %
+              _resultActions.length,
+        );
+      case _FocusRegion.filterMenu:
+        _moveMenuSelection(-1);
+      case _FocusRegion.results:
+        if (_resultIndex == 0) {
+          setState(
+            () => _region = _filtersExpanded
+                ? _FocusRegion.filters
+                : _FocusRegion.search,
+          );
+        } else {
+          setState(() => _resultIndex -= 1);
+          _scrollResultIntoView();
+        }
+      case _FocusRegion.filters:
+        setState(() => _region = _FocusRegion.search);
+      case _FocusRegion.search:
+        break; // already at the top
     }
     SfxService().playNavSound();
   }
 
   void _navigateDown() {
-    if (_region == _FocusRegion.action) {
-      setState(() => _actionIndex = (_actionIndex + 1) % _resultActions.length);
-    } else if (_region == _FocusRegion.results) {
-      if (_results.isEmpty) return;
-      setState(
-        () => _resultIndex = (_resultIndex + 1).clamp(0, _results.length - 1),
-      );
-      _scrollResultIntoView();
-    } else if (_controlIndex >= _controlCount - 1) {
-      // Past the last control — flow into the live results list.
-      if (_results.isNotEmpty) {
-        setState(() {
-          _region = _FocusRegion.results;
-          _resultIndex = _resultIndex.clamp(0, _results.length - 1);
-        });
+    switch (_region) {
+      case _FocusRegion.action:
+        setState(
+          () => _actionIndex = (_actionIndex + 1) % _resultActions.length,
+        );
+      case _FocusRegion.filterMenu:
+        _moveMenuSelection(1);
+      case _FocusRegion.results:
+        if (_results.isEmpty) return;
+        setState(
+          () => _resultIndex = (_resultIndex + 1).clamp(0, _results.length - 1),
+        );
         _scrollResultIntoView();
-      }
-    } else {
-      setState(() => _controlIndex += 1);
-      _ensureControlVisible();
+      case _FocusRegion.search:
+        if (_filtersExpanded) {
+          setState(() {
+            _nameFocus.unfocus();
+            _region = _FocusRegion.filters;
+          });
+        } else {
+          _enterResults();
+        }
+      case _FocusRegion.filters:
+        // Flow from the chip row straight into the live results list.
+        _enterResults();
     }
     SfxService().playNavSound();
   }
 
-  /// The filter key for the focused control row, or null if not a filter.
-  String? get _focusedFilterKey {
-    final filters = _visibleFilters;
-    if (_controlIndex >= 1 && _controlIndex <= filters.length) {
-      return filters[_controlIndex - 1];
-    }
-    return null;
-  }
-
-  void _cycleActiveFilter(int delta) {
-    if (_region != _FocusRegion.controls) return;
-    final key = _focusedFilterKey;
-    if (key == null) return;
-
+  /// Moves focus into the results list if it has any entries.
+  void _enterResults() {
+    if (_results.isEmpty) return;
     setState(() {
-      switch (key) {
-        case 'platform':
-          _platform = _cycleValue(_platforms, _platform, delta);
-        case 'developer':
-          _developer = _cycleValue(_developers, _developer, delta);
-        case 'genre':
-          _genre = _cycleValue(_genres, _genre, delta);
-        case 'year':
-          _year = _cycleValue(_years, _year, delta);
-        case 'rating':
-          _ratingIdx = (_ratingIdx + delta) % _ratingThresholds.length;
-          if (_ratingIdx < 0) _ratingIdx += _ratingThresholds.length;
-      }
-      _recompute();
+      _nameFocus.unfocus();
+      _region = _FocusRegion.results;
+      _resultIndex = _resultIndex.clamp(0, _results.length - 1);
     });
-    SfxService().playNavSound();
+    _scrollResultIntoView();
   }
-
-  /// Cycles through [options] with an "Any" (null) slot at the head.
-  String? _cycleValue(List<String> options, String? current, int delta) =>
-      cycleFilterValue(options, current, delta);
 
   void _handleSelect() {
-    if (_region == _FocusRegion.action) {
-      _runResultAction(_resultActions[_actionIndex]);
-      return;
-    }
-
-    if (_region == _FocusRegion.results) {
-      // Open the per-result chooser instead of launching outright, so the
-      // user can reveal the game in its list rather than always playing it.
-      if (_results.isNotEmpty) {
+    switch (_region) {
+      case _FocusRegion.action:
+        _runResultAction(_resultActions[_actionIndex]);
+      case _FocusRegion.filterMenu:
+        // Confirm the live-previewed value.
         setState(() {
-          _actionTarget = _results[_resultIndex];
-          _actionIndex = 0;
-          _region = _FocusRegion.action;
+          _menuKey = null;
+          _region = _FocusRegion.filters;
         });
-        SfxService().playNavSound();
-      }
-      return;
+      case _FocusRegion.search:
+        if (_searchIndex == 0) {
+          // Hand focus to the text field so the keyboard opens.
+          _nameFocus.requestFocus();
+        } else {
+          _toggleFilters();
+        }
+      case _FocusRegion.results:
+        // Open the per-result chooser instead of launching outright, so the
+        // user can reveal the game in its list rather than always playing it.
+        if (_results.isNotEmpty) {
+          setState(() {
+            _actionTarget = _results[_resultIndex];
+            _actionIndex = 0;
+            _region = _FocusRegion.action;
+          });
+          SfxService().playNavSound();
+        }
+      case _FocusRegion.filters:
+        final item = _barItems[_barIndex];
+        if (item == 'clear') {
+          _clearFilters();
+        } else {
+          _openFilterMenu(item);
+        }
     }
-
-    if (_controlIndex == 0) {
-      // Name field: hand focus to the text field so the keyboard opens.
-      _nameFocus.requestFocus();
-      return;
-    }
-    if (_controlIndex == _clearIndex) {
-      _clearFilters();
-      return;
-    }
-    // A filter row: advance its value (same as Right).
-    _cycleActiveFilter(1);
   }
 
   void _runResultAction(_ResultAction action) {
@@ -330,15 +374,119 @@ class _SearchScreenState extends State<SearchScreen> {
       _nameFocus.unfocus();
       return;
     }
-    if (_region == _FocusRegion.action) {
-      setState(() => _region = _FocusRegion.results);
-      return;
+    switch (_region) {
+      case _FocusRegion.action:
+        setState(() => _region = _FocusRegion.results);
+      case _FocusRegion.filterMenu:
+        _cancelFilterMenu();
+      case _FocusRegion.results:
+        setState(() => _region = _FocusRegion.search);
+      case _FocusRegion.filters:
+        setState(() => _region = _FocusRegion.search);
+      case _FocusRegion.search:
+        Navigator.of(context).maybePop();
     }
-    if (_region == _FocusRegion.results) {
-      setState(() => _region = _FocusRegion.controls);
-      return;
+  }
+
+  // ── Filter value menu ──────────────────────────────────────────────────────
+
+  void _openFilterMenu(String key) {
+    setState(() {
+      _menuKey = key;
+      _menuOrigValue = _currentFilterValue(key);
+      _menuOrigRatingIdx = _ratingIdx;
+      _region = _FocusRegion.filterMenu;
+    });
+    _scrollMenuIntoView();
+    SfxService().playNavSound();
+  }
+
+  /// Back out of the menu, restoring the value as it was before opening.
+  void _cancelFilterMenu() {
+    final key = _menuKey;
+    setState(() {
+      if (key == 'rating') {
+        _ratingIdx = _menuOrigRatingIdx;
+      } else if (key != null) {
+        _setFilterValue(key, _menuOrigValue);
+      }
+      _recompute();
+      _menuKey = null;
+      _region = _FocusRegion.filters;
+    });
+  }
+
+  /// Moves the menu cursor by [delta], previewing the result live.
+  void _moveMenuSelection(int delta) {
+    final key = _menuKey;
+    if (key == null) return;
+    setState(() {
+      if (key == 'rating') {
+        _ratingIdx =
+            (_ratingIdx + delta + _ratingThresholds.length) %
+            _ratingThresholds.length;
+      } else {
+        _setFilterValue(
+          key,
+          cycleFilterValue(_menuOptions(key), _currentFilterValue(key), delta),
+        );
+      }
+      _recompute();
+    });
+    _scrollMenuIntoView();
+  }
+
+  /// Commits the menu entry at [index] (mouse / tap path) and closes.
+  void _applyMenuIndex(String key, int index) {
+    setState(() {
+      if (key == 'rating') {
+        _ratingIdx = index;
+      } else {
+        _setFilterValue(key, index == 0 ? null : _menuOptions(key)[index - 1]);
+      }
+      _recompute();
+      _menuKey = null;
+      _region = _FocusRegion.filters;
+    });
+  }
+
+  List<String> _menuOptions(String key) => switch (key) {
+    'platform' => _platforms,
+    'developer' => _developers,
+    'genre' => _genres,
+    'year' => _years,
+    _ => const [],
+  };
+
+  String? _currentFilterValue(String key) => switch (key) {
+    'platform' => _platform,
+    'developer' => _developer,
+    'genre' => _genre,
+    'year' => _year,
+    _ => null,
+  };
+
+  void _setFilterValue(String key, String? value) {
+    switch (key) {
+      case 'platform':
+        _platform = value;
+      case 'developer':
+        _developer = value;
+      case 'genre':
+        _genre = value;
+      case 'year':
+        _year = value;
     }
-    Navigator.of(context).maybePop();
+  }
+
+  /// Index of the selected entry within the open menu's option list
+  /// (0 == the leading "Any" slot).
+  int _menuSelectedIndex(String key) {
+    if (key == 'rating') return _ratingIdx;
+    final cur = _currentFilterValue(key);
+    if (cur == null) return 0;
+    final i = _menuOptions(key).indexOf(cur);
+    return i < 0 ? 0 : i + 1;
   }
 
   void _clearFilters() {
@@ -364,6 +512,23 @@ class _SearchScreenState extends State<SearchScreen> {
       pos.animateTo(
         target.clamp(pos.minScrollExtent, pos.maxScrollExtent),
         duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  /// Keeps the selected menu entry visible when the option list overflows.
+  void _scrollMenuIntoView() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _menuKey;
+      if (key == null || !_menuScroll.hasClients) return;
+      final pos = _menuScroll.position;
+      final target =
+          (_menuSelectedIndex(key) * _menuExtent.r) -
+          (pos.viewportDimension - _menuExtent.r) / 2;
+      pos.animateTo(
+        target.clamp(pos.minScrollExtent, pos.maxScrollExtent),
+        duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
       );
     });
@@ -450,15 +615,21 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 Padding(
                   padding: EdgeInsets.all(12.r),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(width: 320.r, child: _buildControls(theme)),
-                      SizedBox(width: 12.r),
+                      _buildSearchRow(theme),
+                      if (_filtersExpanded) ...[
+                        SizedBox(height: 8.r),
+                        _buildFilterChips(theme),
+                      ],
+                      SizedBox(height: 10.r),
                       Expanded(child: _buildResults(theme)),
                     ],
                   ),
                 ),
+                if (_region == _FocusRegion.filterMenu && _menuKey != null)
+                  _buildFilterMenu(theme, _menuKey!),
                 if (_region == _FocusRegion.action && _actionTarget != null)
                   _buildActionChooser(theme, _actionTarget!),
               ],
@@ -568,69 +739,111 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildControls(ThemeData theme) {
-    final children = <Widget>[
-      KeyedSubtree(key: _controlKey(0), child: _buildNameField(theme)),
-      SizedBox(height: 8.r),
-    ];
+  /// The filter-chip row beneath the search box: one chip per visible filter,
+  /// then Clear. Wraps to a second line if the chips overflow.
+  Widget _buildFilterChips(ThemeData theme) {
+    final inFilters = _region == _FocusRegion.filters;
+    final items = _barItems;
+    return Wrap(
+      spacing: 8.r,
+      runSpacing: 8.r,
+      children: [
+        for (var i = 0; i < items.length; i++)
+          items[i] == 'clear'
+              ? _buildClearChip(theme, inFilters && _barIndex == i)
+              : _buildFilterChip(theme, items[i], inFilters && _barIndex == i),
+      ],
+    );
+  }
 
-    final filters = _visibleFilters;
-    final controlsFocused = _region == _FocusRegion.controls;
-    for (var i = 0; i < filters.length; i++) {
-      children.add(
-        KeyedSubtree(
-          key: _controlKey(i + 1),
-          child: _buildFilterRow(
-            theme,
-            filters[i],
-            controlsFocused && _controlIndex == i + 1,
+  /// The top band: the search field plus the Filters (advanced) toggle.
+  Widget _buildSearchRow(ThemeData theme) {
+    final inSearch = _region == _FocusRegion.search;
+    return Row(
+      children: [
+        Expanded(child: _buildNameField(theme, inSearch && _searchIndex == 0)),
+        SizedBox(width: 10.r),
+        _buildAdvancedToggle(theme, inSearch && _searchIndex == 1),
+      ],
+    );
+  }
+
+  /// Toggle that reveals/collapses the filter chip row. Shows a count badge so
+  /// applied filters remain visible while collapsed.
+  Widget _buildAdvancedToggle(ThemeData theme, bool focused) {
+    final scheme = theme.colorScheme;
+    final count = _activeFilterCount;
+    final accent = focused || count > 0;
+    return GestureDetector(
+      onTap: _toggleFilters,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 14.r),
+        decoration: BoxDecoration(
+          color: focused
+              ? scheme.primary.withValues(alpha: 0.18)
+              : (count > 0
+                    ? scheme.primary.withValues(alpha: 0.10)
+                    : scheme.surface.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: focused
+                ? scheme.primary
+                : (count > 0
+                      ? scheme.primary.withValues(alpha: 0.5)
+                      : Colors.transparent),
+            width: 2.r,
           ),
         ),
-      );
-    }
-
-    children.add(SizedBox(height: 8.r));
-    children.add(
-      KeyedSubtree(
-        key: _controlKey(_clearIndex),
-        child: _buildActionTile(
-          theme,
-          Symbols.filter_alt_off_rounded,
-          AppLocale.searchClearFilters.getString(context),
-          _region == _FocusRegion.controls && _controlIndex == _clearIndex,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Symbols.tune_rounded,
+              size: 18.r,
+              color: accent ? scheme.primary : scheme.onSurface,
+            ),
+            SizedBox(width: 6.r),
+            Text(
+              AppLocale.searchFilters.getString(context),
+              style: TextStyle(
+                fontSize: 13.r,
+                fontWeight: FontWeight.w700,
+                color: accent ? scheme.primary : scheme.onSurface,
+              ),
+            ),
+            if (count > 0) ...[
+              SizedBox(width: 6.r),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 1.r),
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 11.r,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onPrimary,
+                  ),
+                ),
+              ),
+            ],
+            SizedBox(width: 4.r),
+            Icon(
+              _filtersExpanded
+                  ? Symbols.expand_less_rounded
+                  : Symbols.expand_more_rounded,
+              size: 16.r,
+              color: scheme.onSurface.withValues(alpha: focused ? 0.9 : 0.5),
+            ),
+          ],
         ),
       ),
     );
-
-    return SingleChildScrollView(
-      controller: _controlsScroll,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
-    );
   }
 
-  /// Stable per-index keys so the focused control can be scrolled into view.
-  GlobalKey _controlKey(int index) =>
-      _controlKeys.putIfAbsent(index, () => GlobalKey());
-
-  /// Keeps the focused filter/control visible when the column overflows.
-  void _ensureControlVisible() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _controlKeys[_controlIndex]?.currentContext;
-      if (ctx == null || !mounted) return;
-      Scrollable.ensureVisible(
-        ctx,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-      );
-    });
-  }
-
-  Widget _buildNameField(ThemeData theme) {
-    final focused = _region == _FocusRegion.controls && _controlIndex == 0;
+  Widget _buildNameField(ThemeData theme, bool focused) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12.r),
@@ -648,6 +861,7 @@ class _SearchScreenState extends State<SearchScreen> {
         decoration: InputDecoration(
           hintText: AppLocale.searchNameHint.getString(context),
           prefixIcon: const Icon(Symbols.search_rounded),
+          isDense: true,
           filled: true,
           fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
             alpha: 0.5,
@@ -661,72 +875,260 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildFilterRow(ThemeData theme, String key, bool isFocused) {
+  /// A single filter chip showing "Label: value"; tapping opens its picker.
+  Widget _buildFilterChip(ThemeData theme, String key, bool isFocused) {
     final scheme = theme.colorScheme;
-    final label = switch (key) {
-      'platform' => AppLocale.filterPlatform.getString(context),
-      'developer' => AppLocale.filterDeveloper.getString(context),
-      'genre' => AppLocale.filterGenre.getString(context),
-      'rating' => AppLocale.filterRating.getString(context),
-      'year' => AppLocale.filterYear.getString(context),
-      _ => key,
-    };
+    final label = _filterLabel(key);
     final value = _filterValueLabel(key);
+    final active = _isFilterActive(key);
 
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 4.r),
-      padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 10.r),
-      decoration: BoxDecoration(
-        color: isFocused
-            ? scheme.primary.withValues(alpha: 0.18)
-            : scheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(
-          color: isFocused ? scheme.primary : Colors.transparent,
-          width: 2.r,
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _region = _FocusRegion.filters;
+          _barIndex = _barItems.indexOf(key);
+        });
+        _openFilterMenu(key);
+      },
+      child: Container(
+        margin: EdgeInsets.only(right: 8.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 11.r),
+        decoration: BoxDecoration(
+          color: isFocused
+              ? scheme.primary.withValues(alpha: 0.18)
+              : (active
+                    ? scheme.primary.withValues(alpha: 0.10)
+                    : scheme.surface.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: isFocused
+                ? scheme.primary
+                : (active
+                      ? scheme.primary.withValues(alpha: 0.5)
+                      : Colors.transparent),
+            width: 2.r,
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$label: ',
               style: TextStyle(
                 fontSize: 13.r,
                 fontWeight: FontWeight.w600,
-                color: scheme.onSurface,
+                color: scheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
-          ),
-          Icon(
-            Symbols.chevron_left_rounded,
-            size: 16.r,
-            color: scheme.onSurface.withValues(alpha: isFocused ? 0.9 : 0.3),
-          ),
-          SizedBox(width: 4.r),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 150.r),
-            child: Text(
-              value,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 13.r,
-                fontWeight: FontWeight.w700,
-                color: isFocused ? scheme.primary : scheme.onSurface,
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 140.r),
+              child: Text(
+                value,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13.r,
+                  fontWeight: FontWeight.w700,
+                  color: (active || isFocused)
+                      ? scheme.primary
+                      : scheme.onSurface,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: 4.r),
-          Icon(
-            Symbols.chevron_right_rounded,
-            size: 16.r,
-            color: scheme.onSurface.withValues(alpha: isFocused ? 0.9 : 0.3),
-          ),
-        ],
+            SizedBox(width: 4.r),
+            Icon(
+              Symbols.expand_more_rounded,
+              size: 16.r,
+              color: scheme.onSurface.withValues(alpha: isFocused ? 0.9 : 0.4),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _buildClearChip(ThemeData theme, bool isFocused) {
+    final scheme = theme.colorScheme;
+    return GestureDetector(
+      onTap: _clearFilters,
+      child: Container(
+        margin: EdgeInsets.only(right: 8.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 11.r),
+        decoration: BoxDecoration(
+          color: isFocused
+              ? scheme.primary.withValues(alpha: 0.18)
+              : scheme.surface.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: isFocused ? scheme.primary : Colors.transparent,
+            width: 2.r,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Symbols.filter_alt_off_rounded,
+              size: 16.r,
+              color: scheme.onSurface,
+            ),
+            SizedBox(width: 6.r),
+            Text(
+              AppLocale.searchClearFilters.getString(context),
+              style: TextStyle(
+                fontSize: 13.r,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The value picker overlay opened from a filter chip.
+  Widget _buildFilterMenu(ThemeData theme, String key) {
+    final scheme = theme.colorScheme;
+    final labels = _menuLabels(key);
+    final selected = _menuSelectedIndex(key);
+
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: _cancelFilterMenu,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.6),
+          child: Center(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: 320.r,
+                constraints: BoxConstraints(maxHeight: 360.r),
+                padding: EdgeInsets.all(12.r),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.4),
+                    width: 1.r,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
+                      child: Text(
+                        _filterLabel(key),
+                        style: TextStyle(
+                          fontSize: 15.r,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView.builder(
+                        controller: _menuScroll,
+                        shrinkWrap: true,
+                        itemExtent: _menuExtent.r,
+                        itemCount: labels.length,
+                        itemBuilder: (context, i) => _buildMenuOption(
+                          theme,
+                          key,
+                          labels[i],
+                          i,
+                          selected,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuOption(
+    ThemeData theme,
+    String key,
+    String label,
+    int index,
+    int selected,
+  ) {
+    final scheme = theme.colorScheme;
+    final isSelected = index == selected;
+    return GestureDetector(
+      onTap: () => _applyMenuIndex(key, index),
+      child: Container(
+        margin: EdgeInsets.symmetric(vertical: 2.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? scheme.primary.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10.r),
+          border: Border.all(
+            color: isSelected ? scheme.primary : Colors.transparent,
+            width: 2.r,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13.r,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? scheme.primary : scheme.onSurface,
+                ),
+              ),
+            ),
+            if (isSelected)
+              Icon(Symbols.check_rounded, size: 16.r, color: scheme.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _filterLabel(String key) => switch (key) {
+    'platform' => AppLocale.filterPlatform.getString(context),
+    'developer' => AppLocale.filterDeveloper.getString(context),
+    'genre' => AppLocale.filterGenre.getString(context),
+    'rating' => AppLocale.filterRating.getString(context),
+    'year' => AppLocale.filterYear.getString(context),
+    _ => key,
+  };
+
+  /// Display labels for a filter's menu, with "Any" at the head.
+  List<String> _menuLabels(String key) {
+    final any = AppLocale.filterAny.getString(context);
+    if (key == 'rating') {
+      return [
+        for (var i = 0; i < _ratingThresholds.length; i++)
+          i == 0 ? any : _ratingDisplay(_ratingThresholds[i]!),
+      ];
+    }
+    return [any, ..._menuOptions(key)];
+  }
+
+  String _ratingDisplay(double t) =>
+      '★ ${t.toStringAsFixed(t == 4.5 ? 1 : 0)}+';
+
+  bool _isFilterActive(String key) => switch (key) {
+    'platform' => _platform != null,
+    'developer' => _developer != null,
+    'genre' => _genre != null,
+    'year' => _year != null,
+    'rating' => _ratingIdx != 0,
+    _ => false,
+  };
 
   String _filterValueLabel(String key) {
     final any = AppLocale.filterAny.getString(context);
@@ -741,49 +1143,10 @@ class _SearchScreenState extends State<SearchScreen> {
         return _year ?? any;
       case 'rating':
         final t = _ratingThresholdValue;
-        return t == null ? any : '★ ${t.toStringAsFixed(t == 4.5 ? 1 : 0)}+';
+        return t == null ? any : _ratingDisplay(t);
       default:
         return any;
     }
-  }
-
-  Widget _buildActionTile(
-    ThemeData theme,
-    IconData icon,
-    String label,
-    bool isFocused,
-  ) {
-    final scheme = theme.colorScheme;
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 4.r),
-      padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 12.r),
-      decoration: BoxDecoration(
-        color: isFocused
-            ? scheme.primary.withValues(alpha: 0.18)
-            : scheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(
-          color: isFocused ? scheme.primary : Colors.transparent,
-          width: 2.r,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18.r, color: scheme.onSurface),
-          SizedBox(width: 8.r),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13.r,
-                fontWeight: FontWeight.w700,
-                color: scheme.onSurface,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildResults(ThemeData theme) {
