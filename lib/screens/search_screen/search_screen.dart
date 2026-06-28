@@ -11,6 +11,7 @@ import 'package:neostation/models/database_game_model.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
+import 'package:neostation/screens/search_screen/search_filter.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
@@ -50,7 +51,7 @@ enum _FocusRegion { controls, results, action }
 enum _ResultAction { goTo, play }
 
 /// Discrete rating thresholds offered in the rating filter (null == Any).
-const List<double?> _ratingThresholds = [null, 3.0, 4.0, 4.5];
+const List<double?> _ratingThresholds = kRatingThresholds;
 
 class _SearchScreenState extends State<SearchScreen> {
   late GamepadNavigation _gamepadNav;
@@ -135,67 +136,32 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // Distinct, sorted option sets. Metadata-derived filters stay empty (and
     // therefore hidden) on an unscraped library.
-    List<String> distinct(String? Function(DatabaseGameModel) pick) {
-      final set = <String>{};
-      for (final g in games) {
-        final v = pick(g)?.trim();
-        if (v != null && v.isNotEmpty) set.add(v);
-      }
-      final list = set.toList()
-        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      return list;
-    }
-
     setState(() {
       _all = games;
-      _platforms = distinct((g) => g.systemRealName);
-      _developers = distinct((g) => g.developer);
-      _genres = distinct((g) => g.genre);
-      _years = (() {
-        final set = <String>{};
-        for (final g in games) {
-          final y = _yearOf(g);
-          if (y != null) set.add(y);
-        }
-        final list = set.toList()..sort((a, b) => b.compareTo(a));
-        return list;
-      })();
+      _platforms = distinctOptions(games, (g) => g.systemRealName);
+      _developers = distinctOptions(games, (g) => g.developer);
+      _genres = distinctOptions(games, (g) => g.genre);
+      _years = distinctYears(games);
       _loading = false;
       _recompute();
     });
   }
 
   /// Extracts a 4-digit year from a raw year / ISO release-date string.
-  String? _yearOf(DatabaseGameModel g) {
-    final raw = g.year?.trim();
-    if (raw == null || raw.isEmpty) return null;
-    final m = RegExp(r'(\d{4})').firstMatch(raw);
-    return m?.group(1);
-  }
+  String? _yearOf(DatabaseGameModel g) => searchYearOf(g);
 
   void _recompute() {
-    final query = _nameController.text.trim().toLowerCase();
-    final minRating = _ratingThresholdValue;
-
-    _results =
-        _all.where((g) {
-          if (query.isNotEmpty) {
-            final name = (g.realName ?? g.filename).toLowerCase();
-            if (!name.contains(query)) return false;
-          }
-          if (_platform != null && g.systemRealName != _platform) return false;
-          if (_developer != null && (g.developer?.trim() ?? '') != _developer) {
-            return false;
-          }
-          if (_genre != null && (g.genre?.trim() ?? '') != _genre) return false;
-          if (_year != null && _yearOf(g) != _year) return false;
-          if (minRating != null && (g.rating ?? -1) < minRating) return false;
-          return true;
-        }).toList()..sort((a, b) {
-          final an = (a.realName ?? a.filename).toLowerCase();
-          final bn = (b.realName ?? b.filename).toLowerCase();
-          return an.compareTo(bn);
-        });
+    _results = filterAndSortGames(
+      _all,
+      SearchCriteria(
+        query: _nameController.text,
+        platform: _platform,
+        developer: _developer,
+        genre: _genre,
+        year: _year,
+        minRating: _ratingThresholdValue,
+      ),
+    );
 
     if (_resultIndex >= _results.length) {
       _resultIndex = _results.isEmpty ? 0 : _results.length - 1;
@@ -311,14 +277,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// Cycles through [options] with an "Any" (null) slot at the head.
-  String? _cycleValue(List<String> options, String? current, int delta) {
-    // Combined list: [null, ...options]. Move by delta with wraparound.
-    final len = options.length + 1;
-    final currentIdx = current == null ? 0 : options.indexOf(current) + 1;
-    var next = (currentIdx + delta) % len;
-    if (next < 0) next += len;
-    return next == 0 ? null : options[next - 1];
-  }
+  String? _cycleValue(List<String> options, String? current, int delta) =>
+      cycleFilterValue(options, current, delta);
 
   void _handleSelect() {
     if (_region == _FocusRegion.action) {
