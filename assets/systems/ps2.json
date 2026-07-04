@@ -257,6 +257,18 @@
       }
     },
     {
+      "name": "Standalone ARMSX2 Refresh",
+      "unique_id": "ps2.com.armsx2",
+      "description": "Supported extensions: iso, chd, gz, mdf, bin, ciso, img.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.armsx2/.Main -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+
+    {
       "name": "Standalone PCSX2",
       "unique_id": "ps2.net.pcsx2.android",
       "description": "Supported extensions: iso, chd, gz, mdf, bin, ciso, img.",
