@@ -204,4 +204,50 @@ void main() {
       expect(folder.gameCount, 1);
     });
   });
+
+  group('gamesUnderFolder — folder cover mosaic source', () {
+    List<GameModel> under(String relPath, {int? limit}) => gamesUnderFolder(
+      games: all,
+      rootFolders: const [root],
+      folderRelPath: relPath,
+      limit: limit,
+    );
+
+    test('returns every game beneath the folder, recursively', () {
+      expect(under('Hacks (NES)').map((g) => g.name).toSet(), {
+        'Some Hack',
+        'Another Hack',
+        'Deep Hack',
+      });
+    });
+
+    test('descends into nested subfolders only', () {
+      expect(under('Hacks (NES)/Sub').map((g) => g.name).toList(), [
+        'Deep Hack',
+      ]);
+    });
+
+    test('orders favorites first, then by name', () {
+      final favHack = game(
+        'Zzz Fav Hack',
+        '$root/Hacks (NES)/Zzz Fav Hack.zip',
+        favorite: true,
+      );
+      final ordered = gamesUnderFolder(
+        games: [...all, favHack],
+        rootFolders: const [root],
+        folderRelPath: 'Hacks (NES)',
+      );
+      // Favorite pinned first despite sorting last by name.
+      expect(ordered.first.name, 'Zzz Fav Hack');
+    });
+
+    test('limit caps the result after ordering', () {
+      expect(under('Hacks (NES)', limit: 2).length, 2);
+    });
+
+    test('empty relPath returns nothing (root is not a folder tile)', () {
+      expect(under(''), isEmpty);
+    });
+  });
 }

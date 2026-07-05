@@ -15,6 +15,7 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';
 import '../../services/game_service.dart';
 import '../../utils/game_launch_utils.dart';
 import '../../services/music_player_service.dart';
@@ -155,6 +156,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
   List<RomFolderEntry> _currentFolderEntries = []; // Folders at this level.
   final Set<GameModel> _folderPlaceholders =
       {}; // Identity set for folder rows.
+
+  // Folder preview mosaic: a varied-but-stable sample of the folder's covers.
+  // The sample is seeded by the folder path, so each folder consistently shows
+  // the same covers (different folders look different, but a folder doesn't
+  // reshuffle every time it's selected). Memoized per relPath to skip rework.
+  List<File> _folderCovers = const [];
+  String? _folderCoversRelPath;
 
   int get _folderCount => _currentFolderEntries.length;
   bool _isFolderEntry(GameModel? g) =>
@@ -881,9 +889,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _performBackgroundOperationsForSelectedGame({bool force = false}) {
     if (_selectedGame == null || !mounted) return;
 
-    // Folder rows have no media/preview to resolve.
+    // Folder rows have no media/preview to resolve. Clear the primary preview
+    // AND the secondary display, otherwise the second screen keeps showing the
+    // art/video of the game that was hovered before backing out into the folder.
     if (_isFolderEntry(_selectedGame)) {
       _resetVideoState();
+      _clearSecondaryDisplayForFolder();
       return;
     }
 
@@ -902,6 +913,32 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _updateMusicDucking();
   }
 
+  /// Clears the secondary display's game media when a folder row is focused, so
+  /// the second screen drops back to the system/idle view instead of holding
+  /// the previously-hovered game's art and video. No-op when nothing game-like
+  /// is currently shown, to avoid redundant pushes while scrolling folders.
+  void _clearSecondaryDisplayForFolder() {
+    final state = _secondaryDisplayState;
+    if (state == null) return;
+    final current = state.value;
+    if (current != null &&
+        !current.isGameSelected &&
+        current.gameId == null &&
+        current.gameVideo == null) {
+      return;
+    }
+    // ignore: unawaited_futures
+    state.updateState(
+      isGameSelected: false,
+      clearGameId: true,
+      clearVideo: true,
+      clearFanart: true,
+      clearScreenshot: true,
+      clearWheel: true,
+      clearImageBytes: true,
+    );
+  }
+
   /// Synchronizes selection metadata and assets with secondary hardware displays.
   ///
   /// [forceMediaRefresh] forces a push even when every media path is unchanged
@@ -914,6 +951,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
     bool forceMediaRefresh = false,
   }) async {
     if (_secondaryDisplayState == null || _isNavigatingBack) return;
+
+    // Folder placeholders carry no real media — never push them as a game, or
+    // the second screen would show the stale art of the last hovered game.
+    if (_isFolderEntry(game)) {
+      _clearSecondaryDisplayForFolder();
+      return;
+    }
 
     final systemFolderName =
         (widget.system.folderName == 'all' ||
@@ -2997,16 +3041,33 @@ class _SystemGamesListState extends State<SystemGamesList> {
     );
     final color = Colors.white.withValues(alpha: 0.8);
 
+    // Preview the folder with up to four covers of the games it contains,
+    // falling back to the folder glyph when none of them have art on disk.
+    // Seeded by relPath (see _folderCoverFiles) so the sample is stable per
+    // folder; memoized to avoid recomputing on every rebuild.
+    if (_folderCoversRelPath != entry.relPath) {
+      _folderCovers = _folderCoverFiles(entry.relPath, max: 4);
+      _folderCoversRelPath = entry.relPath;
+    }
+    final covers = _folderCovers;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Symbols.folder_rounded,
-            size: 64.r,
-            color: widget.system.colorAsColor,
-            fill: 1,
-          ),
+          if (covers.isEmpty)
+            Icon(
+              Symbols.folder_rounded,
+              size: 160.r,
+              color: widget.system.colorAsColor,
+              fill: 1,
+            )
+          else
+            SizedBox(
+              width: 210.r,
+              height: 210.r,
+              child: _buildCoverMosaic(covers),
+            ),
           SizedBox(height: 16.r),
           Text(
             entry.name,
@@ -3027,6 +3088,58 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Resolves on-disk cover files (box art, falling back to screenshot) for up
+  /// to [max] games contained beneath [folderRelPath], for the folder preview
+  /// mosaic. The contained games are shuffled with a seed derived from the
+  /// folder path, so the sample varies between folders but is stable for a
+  /// given folder across selections. Games without any art are skipped.
+  List<File> _folderCoverFiles(String folderRelPath, {required int max}) {
+    final systemFolder = widget.system.primaryFolderName;
+    final games =
+        gamesUnderFolder(
+          games: _allGames,
+          rootFolders: _subfolderRoots,
+          folderRelPath: folderRelPath,
+        ).toList()..shuffle(Random(folderRelPath.hashCode));
+    final covers = <File>[];
+    for (final game in games) {
+      final box = game.getImagePath(systemFolder, 'box2d', _fileProvider);
+      if (File(box).existsSync()) {
+        covers.add(File(box));
+      } else {
+        final shot = game.getScreenshotPath(systemFolder, _fileProvider);
+        if (File(shot).existsSync()) covers.add(File(shot));
+      }
+      if (covers.length >= max) break;
+    }
+    return covers;
+  }
+
+  /// Lays out 1–4 cover images: a single cover fills the square, otherwise a
+  /// 2×2 grid (a 3-cover set leaves one cell empty).
+  Widget _buildCoverMosaic(List<File> covers) {
+    final crossAxisCount = covers.length == 1 ? 1 : 2;
+    return GridView.count(
+      crossAxisCount: crossAxisCount,
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      mainAxisSpacing: 4.r,
+      crossAxisSpacing: 4.r,
+      children: [
+        for (final file in covers)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8.r),
+            child: Image.file(
+              file,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+      ],
     );
   }
 

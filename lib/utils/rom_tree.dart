@@ -117,6 +117,41 @@ List<RomListEntry> buildRomLevel({
   return [...folders, ...directGames.map(RomGameEntry.new)];
 }
 
+/// Returns the games contained anywhere beneath [folderRelPath] (recursively),
+/// ordered favorites-first then by name — matching [buildRomLevel]'s ordering,
+/// so a folder's cover mosaic shows the same games the user would see inside.
+///
+/// [limit], when set, caps how many games are returned (after ordering).
+List<GameModel> gamesUnderFolder({
+  required List<GameModel> games,
+  required List<String> rootFolders,
+  required String folderRelPath,
+  int? limit,
+}) {
+  final normalizedRoots = rootFolders.map(_normalize).toList();
+  final prefix = _normalize(folderRelPath);
+  if (prefix.isEmpty) return const [];
+
+  final matched = <GameModel>[];
+  for (final g in games) {
+    final rel = _relativePath(g.romPath, normalizedRoots);
+    if (rel == null) continue;
+    if (rel == prefix || rel.startsWith('$prefix/')) matched.add(g);
+  }
+
+  matched.sort((a, b) {
+    final aFav = a.isFavorite == true;
+    final bFav = b.isFavorite == true;
+    if (aFav != bFav) return aFav ? -1 : 1;
+    return a.name.compareTo(b.name);
+  });
+
+  if (limit != null && matched.length > limit) {
+    return matched.sublist(0, limit);
+  }
+  return matched;
+}
+
 /// Normalizes a ROM path so the tree logic is identical across platforms:
 /// forward slashes, no trailing separator. On Android the path is a Storage
 /// Access Framework content URI whose real path lives — URL-encoded — in the
