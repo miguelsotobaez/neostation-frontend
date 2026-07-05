@@ -3051,43 +3051,55 @@ class _SystemGamesListState extends State<SystemGamesList> {
     }
     final covers = _folderCovers;
 
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (covers.isEmpty)
-            Icon(
-              Symbols.folder_rounded,
-              size: 160.r,
-              color: widget.system.colorAsColor,
-              fill: 1,
-            )
-          else
-            SizedBox(
-              width: 210.r,
-              height: 210.r,
-              child: _buildCoverMosaic(covers),
-            ),
-          SizedBox(height: 16.r),
-          Text(
-            entry.name,
-            style: TextStyle(
-              fontSize: 18.r,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-            textAlign: TextAlign.center,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Scale the preview to the panel: fill most of the width but leave room
+        // for the name/count and keep it within the panel height.
+        final maxByWidth = constraints.maxWidth * 0.82;
+        final maxByHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight * 0.68
+            : maxByWidth;
+        final side = min(maxByWidth, maxByHeight).clamp(200.0, 460.0);
+
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (covers.isEmpty)
+                Icon(
+                  Symbols.folder_rounded,
+                  size: side * 0.8,
+                  color: widget.system.colorAsColor,
+                  fill: 1,
+                )
+              else
+                SizedBox(
+                  width: side,
+                  height: side,
+                  child: _buildCoverMosaic(covers),
+                ),
+              SizedBox(height: 16.r),
+              Text(
+                entry.name,
+                style: TextStyle(
+                  fontSize: 18.r,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8.r),
+              Text(
+                '${entry.gameCount}',
+                style: TextStyle(
+                  fontSize: 14.r,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: 8.r),
-          Text(
-            '${entry.gameCount}',
-            style: TextStyle(
-              fontSize: 14.r,
-              color: Colors.white.withValues(alpha: 0.5),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
