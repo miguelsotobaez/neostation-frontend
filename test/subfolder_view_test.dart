@@ -49,4 +49,5 @@ void main() {
       expect(from({}).subfolderView, isFalse);
     });
   });
+
 }

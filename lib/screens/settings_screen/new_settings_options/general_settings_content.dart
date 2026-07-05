@@ -170,6 +170,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // Auto-update Systems
     count++; // SFX Sounds
     count++; // 12-Hour Clock
+    count++; // Global Subfolder View Default
     count++; // Language
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -235,6 +236,15 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     if (index == currentItemIndex) {
       configProvider.updateUse12HourClock(
         !configProvider.config.use12HourClock,
+      );
+      return;
+    }
+    currentItemIndex++;
+
+    // Protocol: Global Subfolder View Default.
+    if (index == currentItemIndex) {
+      configProvider.updateSubfolderViewDefault(
+        !configProvider.config.subfolderViewDefault,
       );
       return;
     }
@@ -741,6 +751,78 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                       context.read<SqliteConfigProvider>().updateUse12HourClock(
                         value,
                       );
+                    },
+                    activeColor: theme.colorScheme.primary,
+                  ),
+                ],
+              ),
+            );
+          }(),
+
+          // Setting: Global Subfolder View Default.
+          SizedBox(height: 12.r),
+          () {
+            final index = currentItemIdx++;
+            return Container(
+              key: _itemKeys[index],
+              padding: EdgeInsets.only(
+                left: 12.r,
+                right: 12.r,
+                top: 6.r,
+                bottom: 6.r,
+              ),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8.r),
+                border: Border.all(
+                  color:
+                      widget.isContentFocused &&
+                          widget.selectedContentIndex == index
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          AppLocale.subfolderViewDefault.getString(context),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontSize: 12.r,
+                            fontWeight: FontWeight.w500,
+                            color:
+                                widget.isContentFocused &&
+                                    widget.selectedContentIndex == index
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        SizedBox(height: 4.r),
+                        Text(
+                          AppLocale.subfolderViewDefaultSubtitle.getString(
+                            context,
+                          ),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 9.r,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  CustomToggleSwitch(
+                    value: config.subfolderViewDefault,
+                    onChanged: (value) {
+                      context
+                          .read<SqliteConfigProvider>()
+                          .updateSubfolderViewDefault(value);
                     },
                     activeColor: theme.colorScheme.primary,
                   ),

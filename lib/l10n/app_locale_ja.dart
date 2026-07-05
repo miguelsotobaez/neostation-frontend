@@ -76,6 +76,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.subfolderViewSubtitle: 'サブフォルダ内のROMをゲームと混在させず、閲覧可能なフォルダにまとめます',
   AppLocale.subfolderViewEnabled: 'サブフォルダをフォルダとして表示',
   AppLocale.subfolderViewDisabled: 'サブフォルダをゲームと混在',
+  AppLocale.subfolderViewDefault: 'サブフォルダを表示（全システム）',
+  AppLocale.subfolderViewDefaultSubtitle: '全システムのサブフォルダ表示を一括で切り替えます。各システムは個別に変更できます',
   AppLocale.errorScanningSystem: 'システムのスキャン中にエラーが発生しました: {error}',
   AppLocale.scrapedTitlesUsed: '利用可能な場合はスクレイピングされたタイトルを使用',
   AppLocale.gameExtensionsHidden: 'ゲームの拡張子が非表示になります',

@@ -76,6 +76,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.subfolderViewSubtitle: '將子資料夾中的 ROM 歸入可瀏覽的資料夾，而非與遊戲混在一起',
   AppLocale.subfolderViewEnabled: '子資料夾顯示為資料夾',
   AppLocale.subfolderViewDisabled: '子資料夾與遊戲混合',
+  AppLocale.subfolderViewDefault: '顯示子資料夾（所有系統）',
+  AppLocale.subfolderViewDefaultSubtitle: '一次開啟或關閉所有系統的子資料夾；每個系統仍可單獨變更',
   AppLocale.errorScanningSystem: '掃描系統時發生錯誤: {error}',
   AppLocale.scrapedTitlesUsed: '抓取的標題可用時將被使用',
   AppLocale.gameExtensionsHidden: '遊戲副檔名將隱藏',

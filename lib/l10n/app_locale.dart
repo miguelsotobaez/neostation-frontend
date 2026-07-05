@@ -103,6 +103,9 @@ mixin AppLocale {
   static const String subfolderViewSubtitle = 'subfolder_view_subtitle';
   static const String subfolderViewEnabled = 'subfolder_view_enabled';
   static const String subfolderViewDisabled = 'subfolder_view_disabled';
+  static const String subfolderViewDefault = 'subfolder_view_default';
+  static const String subfolderViewDefaultSubtitle =
+      'subfolder_view_default_subtitle';
   static const String errorScanningSystem = 'error_scanning_system';
   static const String scrapedTitlesUsed = 'scraped_titles_used';
   static const String gameExtensionsHidden = 'game_extensions_hidden';

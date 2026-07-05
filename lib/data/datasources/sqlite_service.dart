@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 93;
+  static const int _databaseVersion = 95;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1362,11 +1362,6 @@ class SqliteService {
           'ALTER TABLE user_system_settings ADD COLUMN prefer_file_name INTEGER DEFAULT 0',
         );
       }
-      if (!columns.contains('subfolder_view')) {
-        await db.execute(
-          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
-        );
-      }
       if (!columns.contains('custom_logo_path')) {
         await db.execute(
           'ALTER TABLE user_system_settings ADD COLUMN custom_logo_path TEXT',
@@ -1622,6 +1617,7 @@ class SqliteService {
         system_grid_columns TEXT DEFAULT 'M',
         game_grid_columns TEXT DEFAULT 'M',
         use_12_hour_clock INTEGER DEFAULT 0,
+        subfolder_view_default INTEGER DEFAULT 0,
         dock_apps TEXT,
         dock_enabled INTEGER DEFAULT 1,
         dock_slot_count INTEGER DEFAULT 3,
@@ -2337,6 +2333,7 @@ class SqliteService {
     int? hideBottomScreen,
     int? sfxEnabled,
     int? use12HourClock,
+    int? subfolderViewDefault,
     String? systemSortBy,
     String? systemSortOrder,
     String? appLanguage,
@@ -2399,6 +2396,9 @@ class SqliteService {
     }
     if (use12HourClock != null) {
       newConfig['use_12_hour_clock'] = use12HourClock;
+    }
+    if (subfolderViewDefault != null) {
+      newConfig['subfolder_view_default'] = subfolderViewDefault;
     }
     if (systemSortBy != null) {
       newConfig['system_sort_by'] = systemSortBy;
@@ -2554,6 +2554,24 @@ class SqliteService {
     bool enabled,
   ) async {
     await _updateSystemSetting(systemId, 'subfolder_view', enabled ? 1 : 0);
+  }
+
+  /// Stamps every system's subfolder-view setting to [enabled]. Used by the
+  /// global General-settings toggle, which acts as a master switch: it writes
+  /// the value to all systems, after which each system can be toggled
+  /// individually.
+  static Future<void> setSubfolderViewForAllSystems(bool enabled) async {
+    final db = await instance.database;
+    await db.execute(
+      '''
+      INSERT INTO user_system_settings (app_system_id, subfolder_view)
+      SELECT id, ? FROM app_systems WHERE true
+      ON CONFLICT(app_system_id)
+      DO UPDATE SET subfolder_view = excluded.subfolder_view,
+                    updated_at = CURRENT_TIMESTAMP
+      ''',
+      [enabled ? 1 : 0],
+    );
   }
 
   /// Retrieves the complete configuration for a system.

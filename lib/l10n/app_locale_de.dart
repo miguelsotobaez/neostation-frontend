@@ -87,6 +87,9 @@ const Map<String, dynamic> appLocaleDe = {
       'ROMs in Unterordnern als durchsuchbare Ordner gruppieren, statt sie mit Spielen zu vermischen',
   AppLocale.subfolderViewEnabled: 'Unterordner werden als Ordner angezeigt',
   AppLocale.subfolderViewDisabled: 'Unterordner mit Spielen vermischt',
+  AppLocale.subfolderViewDefault: 'Unterordner anzeigen (alle Systeme)',
+  AppLocale.subfolderViewDefaultSubtitle:
+      'Schaltet Unterordner für jedes System ein oder aus; einzelne Systeme können weiterhin angepasst werden',
   AppLocale.errorScanningSystem: 'Fehler beim Scannen des Systems: {error}',
   AppLocale.scrapedTitlesUsed:
       'Scraper-Titel werden verwendet, falls verfügbar',

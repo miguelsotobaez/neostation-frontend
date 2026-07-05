@@ -309,7 +309,10 @@ class _SystemEmulatorSettingsDialogState
       } else if (_generalIndex == 6 &&
           widget.system.folderName != 'all' &&
           widget.system.folderName != 'android') {
-        _toggleSubfolderView(!_system.subfolderView);
+        // Inert unless recursive scanning is on (no subfolders to show).
+        if (_system.recursiveScan) {
+          _toggleSubfolderView(!_system.subfolderView);
+        }
       }
     } else if (_currentTab == 2) {
       if (_appearanceIndex == 0) {
@@ -1816,6 +1819,9 @@ class _SystemEmulatorSettingsDialogState
             subtitle: AppLocale.subfolderViewSubtitle.getString(context),
             value: _system.subfolderView,
             onChanged: _toggleSubfolderView,
+            // Subfolders only exist when recursive scanning is on, so the
+            // toggle is inert otherwise.
+            enabled: _system.recursiveScan,
           ),
         ],
       ],
@@ -1829,9 +1835,11 @@ class _SystemEmulatorSettingsDialogState
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    bool enabled = true,
   }) {
     final bool isFocused = _generalIndex == index;
     final theme = Theme.of(context);
+    final double contentOpacity = enabled ? 1.0 : 0.4;
 
     return Container(
       key: key,
@@ -1842,46 +1850,54 @@ class _SystemEmulatorSettingsDialogState
         borderRadius: BorderRadius.circular(8.r),
       ),
       child: InkWell(
-        onTap: () {
-          SfxService().playNavSound();
-          onChanged(!value);
-        },
+        onTap: enabled
+            ? () {
+                SfxService().playNavSound();
+                onChanged(!value);
+              }
+            : null,
         borderRadius: BorderRadius.circular(8.r),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 6.r),
           child: Row(
             children: [
               Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 10.r,
-                        fontWeight: FontWeight.w600,
-                        color: isFocused
-                            ? theme.colorScheme.secondary
-                            : theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 9.r,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
+                child: Opacity(
+                  opacity: contentOpacity,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 10.r,
+                          fontWeight: FontWeight.w600,
+                          color: isFocused
+                              ? theme.colorScheme.secondary
+                              : theme.colorScheme.onSurface,
                         ),
                       ),
-                    ),
-                  ],
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 9.r,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              CustomToggleSwitch(
-                value: value,
-                onChanged: onChanged,
-                activeColor: theme.colorScheme.primary,
+              Opacity(
+                opacity: contentOpacity,
+                child: CustomToggleSwitch(
+                  value: value,
+                  onChanged: enabled ? onChanged : (_) {},
+                  activeColor: theme.colorScheme.primary,
+                ),
               ),
             ],
           ),

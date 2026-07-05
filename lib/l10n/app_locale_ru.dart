@@ -86,6 +86,9 @@ const Map<String, dynamic> appLocaleRu = {
       'Группировать ROM в подпапках в виде просматриваемых папок, а не смешивать их с играми',
   AppLocale.subfolderViewEnabled: 'Подпапки показаны как папки',
   AppLocale.subfolderViewDisabled: 'Подпапки смешаны с играми',
+  AppLocale.subfolderViewDefault: 'Показывать подпапки (все системы)',
+  AppLocale.subfolderViewDefaultSubtitle:
+      'Включает или отключает подпапки для всех систем; каждую систему всё ещё можно изменить отдельно',
   AppLocale.errorScanningSystem: 'Ошибка при сканировании системы: {error}',
   AppLocale.scrapedTitlesUsed:
       'Будут использоваться полученные названия, если они доступны',

@@ -88,6 +88,9 @@ const Map<String, dynamic> appLocalePt = {
       'Agrupar ROMs em subpastas em pastas navegáveis em vez de misturá-las com os jogos',
   AppLocale.subfolderViewEnabled: 'Subpastas mostradas como pastas',
   AppLocale.subfolderViewDisabled: 'Subpastas misturadas com os jogos',
+  AppLocale.subfolderViewDefault: 'Mostrar subpastas (todos os sistemas)',
+  AppLocale.subfolderViewDefaultSubtitle:
+      'Ativa ou desativa as subpastas em todos os sistemas; cada sistema ainda pode ser alterado individualmente',
   AppLocale.errorScanningSystem: 'Erro ao varrer o sistema: {error}',
   AppLocale.scrapedTitlesUsed: 'Títulos buscados serão usados se disponíveis',
   AppLocale.gameExtensionsHidden: 'Extensões de jogo serão ocultadas',

@@ -285,6 +285,12 @@ class SqliteMigrations {
       case 93:
         await _migrateToVersion93(db);
         break;
+      case 94:
+        await _migrateToVersion94(db);
+        break;
+      case 95:
+        await _migrateToVersion95(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4637,6 +4643,52 @@ class SqliteMigrations {
       }
     } catch (e, stackTrace) {
       _log.e('Error in migration v93: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion94(Database db) async {
+    _log.i('Migration v94: Adding subfolder_view to user_system_settings');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_system_settings)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('subfolder_view')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view added via v94');
+      } else {
+        _log.i('Column subfolder_view already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v94: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v95: Adds the global `subfolder_view_default` master toggle to
+  /// user_config. Toggling it in General settings stamps every system's
+  /// user_system_settings.subfolder_view; each system can then be adjusted
+  /// individually.
+  static Future<void> _migrateToVersion95(Database db) async {
+    _log.i('Migration v95: Adding subfolder_view_default to user_config');
+    try {
+      final configInfo = db.select('PRAGMA table_info(user_config)');
+      final configColumns = configInfo
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!configColumns.contains('subfolder_view_default')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN subfolder_view_default INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view_default added via v95');
+      } else {
+        _log.i('Column subfolder_view_default already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v95: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

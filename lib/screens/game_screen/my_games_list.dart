@@ -2061,6 +2061,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       if (!mounted) return;
 
       // Resolve the per-system "Show Subfolders" setting (fresh source of truth).
+      // The global General-settings toggle stamps every system's value, so we
+      // only ever need to read the per-system flag here.
       bool subfolderView = false;
       final sysId = widget.system.id;
       final folderName = widget.system.folderName;
