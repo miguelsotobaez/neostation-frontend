@@ -95,7 +95,7 @@ class RetroAchievementsUser {
   }
 
   /// Whether the user primarily or exclusively plays in softcore (casual) mode.
-  bool get isSoftcore => totalSoftcorePoints > totalTruePoints;
+  bool get isSoftcore => totalSoftcorePoints > totalPoints;
 
   /// Returns a display string representing the user's primary gameplay mode.
   String get userType => isSoftcore ? 'Softcore User' : 'Hardcore User';
