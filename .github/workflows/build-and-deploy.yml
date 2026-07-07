@@ -61,12 +61,10 @@ jobs:
       - name: Create .env from secrets
         shell: bash
         env:
-          RA_API_KEY: ${{ secrets.RA_API_KEY }}
           SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
           SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
         run: |
           : > .env
-          [ -n "$RA_API_KEY" ] && echo "RA_API_KEY=$RA_API_KEY" >> .env
           [ -n "$SCREENSCRAPER_DEV_ID" ] && echo "SCREENSCRAPER_DEV_ID=$SCREENSCRAPER_DEV_ID" >> .env
           [ -n "$SCREENSCRAPER_DEV_PASSWORD" ] && echo "SCREENSCRAPER_DEV_PASSWORD=$SCREENSCRAPER_DEV_PASSWORD" >> .env
           echo ".env created with $(wc -l < .env) lines"

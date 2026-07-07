@@ -24,6 +24,27 @@ class UserDataLocationService {
     await prefs.remove(customPathKey);
   }
 
+  /// Counts top-level entries in [dirPath].
+  ///
+  /// Returns 0 if the directory is empty, does not exist, or cannot be listed.
+  /// This is fail-open on purpose: it only decides whether to *warn* the user
+  /// that a chosen folder is non-empty, never to block, so an unreadable
+  /// directory must not surface a spurious warning.
+  static Future<int> countDirectoryEntries(String dirPath) async {
+    try {
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) return 0;
+      var count = 0;
+      await for (final _ in dir.list()) {
+        count++;
+      }
+      return count;
+    } catch (e) {
+      _log.w('countDirectoryEntries failed for $dirPath: $e');
+      return 0;
+    }
+  }
+
   /// Converts an Android SAF tree URI (content://com.android.externalstorage...)
   /// to a real filesystem path.
   ///
@@ -133,10 +154,36 @@ class UserDataLocationService {
     return direct;
   }
 
-  /// Copies all content from [sourceUserDataPath] to [destPath], then deletes source.
+  /// Top-level entry names under the user-data directory that NeoStation
+  /// creates and owns. Only these are ever migrated or deleted.
+  ///
+  /// Any other file/folder sharing the directory — e.g. a user's pre-existing
+  /// ES-DE `downloaded_media/`, `gamelists/`, `es_systems.xml` — is foreign
+  /// data and must never be touched. This is the guard that prevents wiping a
+  /// user's emulation library when the user-data location was pointed at their
+  /// existing front-end folder.
+  static bool _isOwnedEntry(String name) {
+    return name == 'media' ||
+        name == 'systems' ||
+        name == 'temp' ||
+        name == 'config.json' ||
+        name.startsWith('data.sqlite') || // data.sqlite + -wal/-shm/-journal
+        name.startsWith('app.log'); // app.log + rotated variants
+  }
+
+  /// Migrates NeoStation's own user data from [sourceUserDataPath] to
+  /// [destPath], then removes the migrated copies from the source.
+  ///
+  /// Only NeoStation-owned entries (see [_isOwnedEntry]) are copied or deleted.
+  /// Foreign files that happen to share the folder are never read or removed.
+  ///
+  /// A source file is deleted ONLY after its destination copy is verified
+  /// (exists, matching length). If ANY owned file fails to copy, the whole
+  /// operation aborts and nothing is deleted — the source stays fully intact
+  /// and the error is thrown to the caller.
   ///
   /// On platforms where media lives outside user-data (Linux/macOS),
-  /// [sourceMediaPath] is also copied into [destPath]/media/.
+  /// [sourceMediaPath] is also migrated into [destPath]/media/.
   ///
   /// Progress is reported in two phases via [onProgress]:
   ///   - Copy phase: 0.0 → 0.5
@@ -152,24 +199,56 @@ class UserDataLocationService {
       throw Exception('Source path does not exist: $sourceUserDataPath');
     }
 
+    // Guard against source and destination being the same folder (or one
+    // nested in the other). The caller only compares raw strings, so a
+    // normalization difference — trailing slash, a SAF-resolved path vs the
+    // stored path — slips through. Without this, each owned file would be
+    // copied onto itself (truncating it) and then deleted. canonicalize()
+    // normalizes '.', '..' and separators (it does not resolve symlinks).
+    final canonSource = path.canonicalize(sourceUserDataPath);
+    final canonDest = path.canonicalize(destPath);
+    if (canonSource == canonDest) {
+      _log.i('Migration skipped: source and destination are the same folder');
+      onProgress?.call(1.0, '');
+      return;
+    }
+    if (path.isWithin(canonSource, canonDest) ||
+        path.isWithin(canonDest, canonSource)) {
+      throw Exception(
+        'Cannot migrate between overlapping folders: '
+        '$sourceUserDataPath <-> $destPath',
+      );
+    }
+
     final destDir = Directory(destPath);
     if (!await destDir.exists()) {
       await destDir.create(recursive: true);
     }
 
-    // ---- Collect copy jobs ----
+    // ---- Collect copy jobs from OWNED entries only ----
     final List<(String, String)> copyJobs = []; // (src, dest)
-    await _collectCopyJobs(
-      sourceDir: sourceUserDataPath,
-      destDir: destPath,
-      jobs: copyJobs,
-    );
+    // Owned directories whose now-empty tree we prune after deleting files.
+    final List<String> ownedSourceDirs = [];
+
+    await for (final entity in sourceDir.list()) {
+      final name = path.basename(entity.path);
+      if (!_isOwnedEntry(name)) continue; // leave foreign data untouched
+      if (entity is File) {
+        copyJobs.add((entity.path, path.join(destPath, name)));
+      } else if (entity is Directory) {
+        await _collectCopyJobs(
+          sourceDir: entity.path,
+          destDir: path.join(destPath, name),
+          jobs: copyJobs,
+        );
+        ownedSourceDirs.add(entity.path);
+      }
+    }
 
     // If media lives outside user-data dir (Linux/macOS), also migrate it.
     final mediaIsInsideUserData = sourceMediaPath.startsWith(
       sourceUserDataPath,
     );
-    List<String> extraSourceDirs = [];
     if (!mediaIsInsideUserData && await Directory(sourceMediaPath).exists()) {
       final destMediaPath = path.join(destPath, 'media');
       await _collectCopyJobs(
@@ -177,59 +256,76 @@ class UserDataLocationService {
         destDir: destMediaPath,
         jobs: copyJobs,
       );
-      extraSourceDirs.add(sourceMediaPath);
+      ownedSourceDirs.add(sourceMediaPath);
     }
 
     final total = copyJobs.isEmpty ? 1 : copyJobs.length;
 
-    // ---- Copy phase (0.0 → 0.5) ----
+    // ---- Copy phase (0.0 → 0.5) with per-file verification ----
     int copied = 0;
+    final List<String> failedCopies = [];
     for (final (src, dest) in copyJobs) {
-      final destFile = File(dest);
-      await destFile.parent.create(recursive: true);
-      await File(src).copy(dest);
+      try {
+        final destFile = File(dest);
+        await destFile.parent.create(recursive: true);
+        await File(src).copy(dest);
+        // Verify the copy landed intact before it becomes eligible for delete.
+        final srcLen = await File(src).length();
+        if (!await destFile.exists() || await destFile.length() != srcLen) {
+          failedCopies.add(src);
+        }
+      } catch (e) {
+        failedCopies.add(src);
+        _log.e('Migration copy failed for $src: $e');
+      }
       copied++;
       onProgress?.call(0.5 * copied / total, path.basename(src));
+    }
+
+    // SAFETY GATE: if any owned file failed to copy, delete NOTHING. The source
+    // stays fully intact; the caller surfaces the error and keeps the old path.
+    if (failedCopies.isNotEmpty) {
+      throw Exception(
+        'Migration aborted: ${failedCopies.length} of ${copyJobs.length} '
+        'file(s) failed to copy. Source data left intact.',
+      );
     }
 
     _log.i('Migration: $copied files copied to $destPath');
 
     // ---- Delete phase (0.5 → 1.0) ----
-    final allSourceFiles = <FileSystemEntity>[];
-    await for (final e in sourceDir.list(recursive: true)) {
-      allSourceFiles.add(e);
-    }
-    for (final extra in extraSourceDirs) {
-      await for (final e in Directory(extra).list(recursive: true)) {
-        allSourceFiles.add(e);
-      }
-    }
-
-    // Delete files first, then empty subdirs (deepest first).
-    // Root source directories are kept — only their contents are removed.
-    final files = allSourceFiles.whereType<File>().toList();
-    final dirs = allSourceFiles.whereType<Directory>().toList()
-      ..sort((a, b) => b.path.length.compareTo(a.path.length)); // deepest first
-
+    // Delete ONLY the source files we successfully copied (all verified above).
+    // Foreign files were never added to copyJobs, so they are never deleted.
     int deleted = 0;
-    final deleteTotal = files.length + dirs.length;
-
-    for (final f in files) {
+    final deleteTotal = copyJobs.isEmpty ? 1 : copyJobs.length;
+    for (final (src, _) in copyJobs) {
       try {
-        await f.delete();
-      } catch (_) {}
+        await File(src).delete();
+      } catch (e) {
+        _log.w('Migration: could not delete migrated source file $src: $e');
+      }
       deleted++;
-      onProgress?.call(
-        0.5 + 0.5 * deleted / deleteTotal,
-        path.basename(f.path),
-      );
+      onProgress?.call(0.5 + 0.5 * deleted / deleteTotal, path.basename(src));
     }
-    for (final d in dirs) {
-      try {
-        await d.delete();
-      } catch (_) {} // skip if unexpectedly non-empty
-      deleted++;
-      onProgress?.call(0.5 + 0.5 * deleted / deleteTotal, '');
+
+    // Prune now-empty owned subdirectories (deepest first). A dir left
+    // non-empty here still held foreign data, so it is deliberately kept.
+    for (final root in ownedSourceDirs) {
+      final dir = Directory(root);
+      if (!await dir.exists()) continue;
+      final subDirs = <Directory>[];
+      await for (final e in dir.list(recursive: true)) {
+        if (e is Directory) subDirs.add(e);
+      }
+      subDirs.add(dir);
+      subDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+      for (final d in subDirs) {
+        try {
+          if (await d.exists() && await d.list().isEmpty) {
+            await d.delete();
+          }
+        } catch (_) {}
+      }
     }
 
     onProgress?.call(1.0, '');

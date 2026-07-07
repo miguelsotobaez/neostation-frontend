@@ -372,9 +372,40 @@ void main() async {
 }
 
 @pragma('vm:entry-point')
-void subDisplay() {
+Future<void> subDisplay() async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint('--- [SECONDARY ENGINE] subDisplay signal received ---');
+
+  // The secondary display runs in its own engine/isolate, so it must set up
+  // localization independently — otherwise AppLocale.getString() falls back to
+  // raw keys here. Mirror the persisted-language init done in main().
+  String initLang = 'en';
+  try {
+    final rawConfig = await ConfigRepository.getUserConfig();
+    if (rawConfig != null && rawConfig['app_language'] != null) {
+      initLang = rawConfig['app_language'].toString();
+    }
+  } catch (e) {
+    debugPrint('Secondary display could not load saved language: $e');
+  }
+  await FlutterLocalization.instance.ensureInitialized();
+  FlutterLocalization.instance.init(
+    mapLocales: [
+      MapLocale('en', AppLocale.en),
+      MapLocale('es', AppLocale.es),
+      MapLocale('pt', AppLocale.pt),
+      MapLocale('ru', AppLocale.ru),
+      MapLocale('zh', AppLocale.zh),
+      MapLocale('zh_Hant', AppLocale.zhHant),
+      MapLocale('fr', AppLocale.fr),
+      MapLocale('de', AppLocale.de),
+      MapLocale('it', AppLocale.it),
+      MapLocale('id', AppLocale.id),
+      MapLocale('ja', AppLocale.ja),
+    ],
+    initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
+  );
+
   runApp(const SecondaryScreen());
 }
 

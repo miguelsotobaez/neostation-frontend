@@ -555,6 +555,23 @@ class SecondaryDisplayStateData {
 /// Extends [SharedState] to leverage cross-process or cross-display communication
 /// provided by the `sub_screen` package.
 class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
+  SecondaryDisplayState._();
+
+  /// Per-isolate shared instance. All producers within an engine MUST use this
+  /// so every partial update copyWith's from one authoritative local state.
+  ///
+  /// The `sub_screen` [SharedState] base ships a full-state snapshot on every
+  /// setState and syncs sibling instances only asynchronously. With multiple
+  /// instances, a producer whose local copy hasn't synced yet ships a stale
+  /// snapshot that clobbers fields another instance just set (this caused the
+  /// intermittent "no Now Playing screen" on PSX/GameCube). A single instance
+  /// removes the cross-instance race. Each Flutter engine (main vs. secondary
+  /// display) is a separate isolate and gets its own instance — correct, since
+  /// they sync across the process boundary via the platform channel.
+  ///
+  /// Never dispose this — it lives for the isolate's lifetime.
+  static final SecondaryDisplayState instance = SecondaryDisplayState._();
+
   @override
   SecondaryDisplayStateData fromJson(Map<String, dynamic> json) {
     return SecondaryDisplayStateData.fromJson(json);

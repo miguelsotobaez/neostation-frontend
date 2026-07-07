@@ -55,6 +55,26 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // A HOME launcher is not paused on screen-off, so lifecycle `paused` never
+    // fires on lock. Bridge the native screen on/off signal to the websocket:
+    // suspend it while locked, reconnect on wake (music/audio is handled in
+    // GameService's channel handler). Screen-on only fires here when NeoStation
+    // is foreground (gated on !isGameLaunched at the call site).
+    GameService.onScreenStateChanged = (screenOn) {
+      if (!mounted) return;
+      final notificationService = Provider.of<NotificationService>(
+        context,
+        listen: false,
+      );
+      if (screenOn) {
+        notificationService.connect().catchError((error) {
+          _log.e('Failed to reconnect notifications on screen-on: $error');
+        });
+      } else {
+        notificationService.suspend();
+      }
+    };
     // Initialize with current plan after a delay to ensure auth is loaded
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Wait a bit more to ensure auth service is fully loaded
@@ -69,6 +89,7 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   @override
   void dispose() {
+    GameService.onScreenStateChanged = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

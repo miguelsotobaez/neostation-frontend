@@ -802,6 +802,16 @@ const Map<String, dynamic> appLocaleDe = {
       'Wähle, wo Medien, Themes und App-Daten gespeichert werden',
   AppLocale.userDataLocationDefault: 'Standardspeicherort',
   AppLocale.selectUserDataFolder: 'Datenordner auswählen',
+  AppLocale.folderNotEmptyTitle: 'Ordner nicht leer',
+  AppLocale.folderNotEmptyBody:
+      'Dieser Ordner enthält bereits {count} Element(e). NeoStation speichert seine eigenen Daten hier, zusammen mit den vorhandenen Inhalten.',
+  AppLocale.folderNotEmptyUseAnyway: 'Trotzdem verwenden',
+  AppLocale.moveUserDataTitle: 'Benutzerdaten verschieben?',
+  AppLocale.moveUserDataBody:
+      'NeoStation verschiebt seine eigenen Daten – Datenbank, gescrapte Medien und Einstellungen – vom aktuellen Ordner in den neuen. Dateien, die nicht von NeoStation erstellt wurden, bleiben unberührt.',
+  AppLocale.moveUserDataDestNotEmpty:
+      'Der neue Ordner enthält bereits {count} Element(e). Die Daten von NeoStation werden daneben abgelegt.',
+  AppLocale.moveUserDataConfirm: 'Daten verschieben',
   AppLocale.migratingUserData: 'Daten werden verschoben',
   AppLocale.migratingUserDataComplete: 'Migration abgeschlossen',
   AppLocale.migratingUserDataError: 'Migration fehlgeschlagen',
@@ -821,4 +831,36 @@ const Map<String, dynamic> appLocaleDe = {
       'Die ROM-Datei, gescrapte Daten und Mediendateien werden dauerhaft gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.',
   AppLocale.deleteGameSubtitle:
       'Entfernt die ROM-Datei dauerhaft von der Festplatte',
+
+  AppLocale.raCompletionsLabel: 'Abschlüsse',
+  AppLocale.raMasteriesLabel: 'Meisterungen',
+  AppLocale.raEarned: 'Verdient',
+  AppLocale.raOwned: 'Im Besitz',
+  AppLocale.raPointsAbbrev: 'Pkt.',
+  AppLocale.raAlreadyEarned: 'Du hast diesen Erfolg bereits verdient',
+  AppLocale.raTapToOpenLocalGame: 'Tippe, um lokale Spieldetails zu öffnen',
+  AppLocale.raRecentUnlocks: 'Neueste Freischaltungen',
+  AppLocale.raRecentCompletions: 'Neueste Abschlüsse',
+  AppLocale.raRecentMasteries: 'Neueste Meisterungen',
+  AppLocale.raNoCompletionsYet: 'Noch keine Abschlüsse',
+  AppLocale.raNoMasteriesYet: 'Noch keine Meisterungen',
+  AppLocale.raTrackedGames: 'verfolgte Spiele',
+  AppLocale.raCompletionLabel: 'Abschluss',
+  AppLocale.raMasteryLabel: 'Meisterung',
+  AppLocale.raCouldNotResolveLocalSystem:
+      'Das lokale System für dieses Spiel konnte nicht ermittelt werden',
+  AppLocale.raMissable: 'VERPASSBAR',
+  AppLocale.raComments: 'KOMMENTARE',
+  AppLocale.raCommentsCouldNotLoad: 'Kommentare konnten nicht geladen werden.',
+  AppLocale.raNoCommentsYet: 'Noch keine Kommentare.',
+  AppLocale.raOlderCommentsAvailable: 'Ältere Kommentare sind verfügbar.',
+  AppLocale.raLoadMore: 'MEHR LADEN',
+  AppLocale.raRateLimited:
+      'RetroAchievements ist gerade ausgelastet. Bitte warte einen Moment und versuche es erneut.',
+  AppLocale.raApiKey: 'API-Schlüssel',
+  AppLocale.raEnterApiKey: 'Gib deinen API-Schlüssel ein',
+  AppLocale.raNoRecentUnlocks:
+      'Keine kürzlichen Freischaltungen in den letzten 30 Tagen',
+  AppLocale.raRecentlyPlayedTitle: 'Kürzlich Gespielt',
+  AppLocale.raNoRecentlyPlayed: 'Keine kürzlich gespielten Spiele',
 };

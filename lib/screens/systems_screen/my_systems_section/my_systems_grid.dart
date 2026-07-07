@@ -837,7 +837,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     _initializeGamepad();
 
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
+      _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
 
@@ -1116,10 +1116,10 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   void dispose() {
     _cardSizeLabelTimer?.cancel();
     _cardSizeLabel.dispose();
+    // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _cleanupGamepad();
     _scrollController.dispose();
-    _secondaryDisplayState?.dispose();
     super.dispose();
   }
 

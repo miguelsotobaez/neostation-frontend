@@ -778,6 +778,16 @@ const Map<String, dynamic> appLocaleId = {
       'Pilih di mana media, tema, dan data aplikasi disimpan',
   AppLocale.userDataLocationDefault: 'Lokasi default',
   AppLocale.selectUserDataFolder: 'Pilih Folder Data',
+  AppLocale.folderNotEmptyTitle: 'Folder Tidak Kosong',
+  AppLocale.folderNotEmptyBody:
+      'Folder ini sudah berisi {count} item. NeoStation akan menyimpan datanya sendiri di sini, bersama konten yang sudah ada.',
+  AppLocale.folderNotEmptyUseAnyway: 'Tetap Gunakan',
+  AppLocale.moveUserDataTitle: 'Pindahkan Data Pengguna?',
+  AppLocale.moveUserDataBody:
+      'NeoStation akan memindahkan datanya sendiri — basis data, media hasil scrape, dan pengaturan — dari folder saat ini ke folder baru. Berkas yang tidak dibuat oleh NeoStation tidak akan diubah.',
+  AppLocale.moveUserDataDestNotEmpty:
+      'Folder baru sudah berisi {count} item. Data NeoStation akan ditambahkan di sampingnya.',
+  AppLocale.moveUserDataConfirm: 'Pindahkan Data',
   AppLocale.migratingUserData: 'Memindahkan Data',
   AppLocale.migratingUserDataComplete: 'Migrasi selesai',
   AppLocale.migratingUserDataError: 'Migrasi gagal',
@@ -796,4 +806,36 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.deleteGameConfirmBody:
       'Ini akan menghapus permanen ROM game, data scraping, dan file media. Tindakan ini tidak dapat dibatalkan.',
   AppLocale.deleteGameSubtitle: 'Menghapus permanen file ROM dari disk',
+
+  AppLocale.raCompletionsLabel: 'Penyelesaian',
+  AppLocale.raMasteriesLabel: 'Penguasaan',
+  AppLocale.raEarned: 'Diperoleh',
+  AppLocale.raOwned: 'Dimiliki',
+  AppLocale.raPointsAbbrev: 'poin',
+  AppLocale.raAlreadyEarned: 'Anda sudah memperoleh pencapaian ini',
+  AppLocale.raTapToOpenLocalGame: 'Ketuk untuk membuka detail game lokal',
+  AppLocale.raRecentUnlocks: 'Terbuka Baru-baru Ini',
+  AppLocale.raRecentCompletions: 'Penyelesaian Terbaru',
+  AppLocale.raRecentMasteries: 'Penguasaan Terbaru',
+  AppLocale.raNoCompletionsYet: 'Belum ada penyelesaian',
+  AppLocale.raNoMasteriesYet: 'Belum ada penguasaan',
+  AppLocale.raTrackedGames: 'game terlacak',
+  AppLocale.raCompletionLabel: 'Penyelesaian',
+  AppLocale.raMasteryLabel: 'Penguasaan',
+  AppLocale.raCouldNotResolveLocalSystem:
+      'Tidak dapat menemukan sistem lokal untuk game ini',
+  AppLocale.raMissable: 'BISA TERLEWAT',
+  AppLocale.raComments: 'KOMENTAR',
+  AppLocale.raCommentsCouldNotLoad: 'Komentar tidak dapat dimuat.',
+  AppLocale.raNoCommentsYet: 'Belum ada komentar.',
+  AppLocale.raOlderCommentsAvailable: 'Komentar lama tersedia.',
+  AppLocale.raLoadMore: 'MUAT LEBIH BANYAK',
+  AppLocale.raRateLimited:
+      'RetroAchievements sedang sibuk saat ini. Tunggu sebentar lalu coba lagi.',
+  AppLocale.raApiKey: 'Kunci API',
+  AppLocale.raEnterApiKey: 'Masukkan kunci API Anda',
+  AppLocale.raNoRecentUnlocks:
+      'Tidak ada pembukaan baru dalam 30 hari terakhir',
+  AppLocale.raRecentlyPlayedTitle: 'Baru Dimainkan',
+  AppLocale.raNoRecentlyPlayed: 'Tidak ada game yang baru dimainkan',
 };

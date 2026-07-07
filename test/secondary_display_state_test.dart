@@ -51,6 +51,7 @@ void main() {
           points: 5,
           badgeName: '111',
           displayOrder: 0,
+          type: 'missable',
           earned: true,
           earnedHardcore: false,
         ),
@@ -108,6 +109,8 @@ void main() {
       expect(restored.achievements, hasLength(2));
       expect(restored.achievements![0].id, 1);
       expect(restored.achievements![0].earned, isTrue);
+      expect(restored.achievements![0].type, 'missable');
+      expect(restored.achievements![0].isMissable, isTrue);
       expect(restored.achievements![1].earned, isFalse);
     });
 
@@ -145,6 +148,60 @@ void main() {
       expect(restored.lastPlayedMillis, 1700000000000);
       expect(restored.nowPlayingDimLevel, 75);
       expect(restored.dockSlotCount, 5);
+    });
+  });
+
+  // The "no Now Playing on launch" bug was a partial state update silently
+  // dropping nowPlayingActive. Every secondary-display write goes through
+  // copyWith, so these pin the merge contract the fix depends on: a field not
+  // named in a copyWith call must survive unchanged.
+  group('SecondaryDisplayStateData.copyWith merge contract', () {
+    final active = SecondaryDisplayStateData(
+      systemName: 'ps1',
+      gameTitle: 'Silent Hill',
+      nowPlayingActive: true,
+      isGameLaunching: true,
+    );
+
+    test('a partial update that omits nowPlayingActive preserves it', () {
+      // This is exactly the clobber that broke Now Playing: a browse-style
+      // update (media/system fields) that never mentions nowPlayingActive must
+      // NOT turn it off.
+      final next = active.copyWith(
+        systemName: 'ps1',
+        gameFanart: '/data/fanart.png',
+        gameScreenshot: '/data/shot.png',
+      );
+
+      expect(next.nowPlayingActive, isTrue);
+      expect(next.gameTitle, 'Silent Hill');
+      expect(next.gameFanart, '/data/fanart.png');
+    });
+
+    test('an explicit nowPlayingActive: false clears it (game exit)', () {
+      // The legitimate way Now Playing turns off — on game return.
+      final next = active.copyWith(nowPlayingActive: false);
+
+      expect(next.nowPlayingActive, isFalse);
+      // Other fields still untouched.
+      expect(next.gameTitle, 'Silent Hill');
+      expect(next.isGameLaunching, isTrue);
+    });
+
+    test('the atomic launch write sets isGameLaunching + nowPlayingActive '
+        'together without dropping either', () {
+      // Models pushForLaunch's single authoritative write: both flags on in one
+      // copyWith, and neither is lost.
+      final idle = SecondaryDisplayStateData(systemName: 'ps1');
+      final launched = idle.copyWith(
+        isGameLaunching: true,
+        nowPlayingActive: true,
+        gameTitle: 'Silent Hill',
+      );
+
+      expect(launched.isGameLaunching, isTrue);
+      expect(launched.nowPlayingActive, isTrue);
+      expect(launched.gameTitle, 'Silent Hill');
     });
   });
 }

@@ -10,6 +10,7 @@ void main() {
       points: 10,
       badgeName: '12345',
       displayOrder: 3,
+      type: 'missable',
       earned: true,
       earnedHardcore: true,
     );
@@ -23,6 +24,8 @@ void main() {
       expect(restored.points, item.points);
       expect(restored.badgeName, item.badgeName);
       expect(restored.displayOrder, item.displayOrder);
+      expect(restored.type, item.type);
+      expect(restored.isMissable, isTrue);
       expect(restored.earned, item.earned);
       expect(restored.earnedHardcore, item.earnedHardcore);
     });
@@ -36,8 +39,18 @@ void main() {
       expect(restored.points, 0);
       expect(restored.badgeName, '');
       expect(restored.displayOrder, 0);
+      expect(restored.type, isNull);
+      expect(restored.isMissable, isFalse);
       expect(restored.earned, isFalse);
       expect(restored.earnedHardcore, isFalse);
+    });
+
+    test('missable detection is case-insensitive', () {
+      final restored = SecondaryAchievementItem.fromJson(const {
+        'type': 'MiSsAbLe',
+      });
+
+      expect(restored.isMissable, isTrue);
     });
 
     test('fromJson coerces numeric fields arriving as doubles', () {

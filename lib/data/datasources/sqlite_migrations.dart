@@ -291,6 +291,9 @@ class SqliteMigrations {
       case 95:
         await _migrateToVersion95(db);
         break;
+      case 96:
+        await _migrateToVersion96(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4649,17 +4652,24 @@ class SqliteMigrations {
   }
 
   static Future<void> _migrateToVersion94(Database db) async {
-    _log.i('Migration v94: Adding subfolder_view to user_system_settings');
+    // The RetroAchievements overhaul requires each user to supply their own
+    // username AND personal web API key. Older builds let users connect with a
+    // username alone (riding on the bundled build-time key), so any existing
+    // session must be invalidated on upgrade to force a fresh login. Clearing
+    // ra_user is sufficient: auto-login is skipped when no username is stored.
+    _log.i(
+      'Migration v94: Clearing saved RetroAchievements user to force '
+      're-login with a personal API key',
+    );
     try {
-      final tableInfo = db.select('PRAGMA table_info(user_system_settings)');
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
       final columns = tableInfo.map((c) => c['name'].toString()).toList();
-      if (!columns.contains('subfolder_view')) {
-        db.execute(
-          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
-        );
-        _log.i('Column subfolder_view added via v94');
+
+      if (columns.contains('ra_user')) {
+        db.execute('UPDATE user_config SET ra_user = NULL');
+        _log.i('Cleared ra_user via v94');
       } else {
-        _log.i('Column subfolder_view already exists');
+        _log.i('user_config has no ra_user column; nothing to clear in v94');
       }
     } catch (e, stackTrace) {
       _log.e('Error in migration v94: $e');
@@ -4668,12 +4678,32 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v95: Adds the global `subfolder_view_default` master toggle to
+  static Future<void> _migrateToVersion95(Database db) async {
+    _log.i('Migration v95: Adding subfolder_view to user_system_settings');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_system_settings)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('subfolder_view')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view added via v95');
+      } else {
+        _log.i('Column subfolder_view already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v95: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v96: Adds the global `subfolder_view_default` master toggle to
   /// user_config. Toggling it in General settings stamps every system's
   /// user_system_settings.subfolder_view; each system can then be adjusted
   /// individually.
-  static Future<void> _migrateToVersion95(Database db) async {
-    _log.i('Migration v95: Adding subfolder_view_default to user_config');
+  static Future<void> _migrateToVersion96(Database db) async {
+    _log.i('Migration v96: Adding subfolder_view_default to user_config');
     try {
       final configInfo = db.select('PRAGMA table_info(user_config)');
       final configColumns = configInfo
@@ -4683,12 +4713,12 @@ class SqliteMigrations {
         db.execute(
           'ALTER TABLE user_config ADD COLUMN subfolder_view_default INTEGER DEFAULT 0',
         );
-        _log.i('Column subfolder_view_default added via v95');
+        _log.i('Column subfolder_view_default added via v96');
       } else {
         _log.i('Column subfolder_view_default already exists');
       }
     } catch (e, stackTrace) {
-      _log.e('Error in migration v95: $e');
+      _log.e('Error in migration v96: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

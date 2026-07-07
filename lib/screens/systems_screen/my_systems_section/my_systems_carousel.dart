@@ -112,7 +112,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     _initializeGamepad();
 
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
+      _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
 
@@ -167,11 +167,11 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   @override
   void dispose() {
     _musicPlayerService.removeListener(_handleMusicStateChanged);
+    // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _cleanupGamepad();
     _scrollController.dispose();
     _achievementsController.dispose();
-    _secondaryDisplayState?.dispose();
     super.dispose();
   }
 

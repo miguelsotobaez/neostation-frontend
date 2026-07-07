@@ -80,9 +80,10 @@ Create a `.env` file from `.env.example` for local development.
 
 | Variable | Description |
 |----------|-------------|
-| `RA_API_KEY` | RetroAchievements API key — get yours at [retroachievements.org/controlpanel.php](https://retroachievements.org/controlpanel.php) |
 | `SCREENSCRAPER_DEV_ID` | ScreenScraper developer ID |
 | `SCREENSCRAPER_DEV_PASSWORD` | ScreenScraper developer password |
+
+> RetroAchievements no longer uses a build-time key. Each user signs in with their own RetroAchievements username and web API key (from [retroachievements.org/controlpanel.php](https://retroachievements.org/controlpanel.php)) inside the app.
 
 ### Android release signing (optional)
 
@@ -105,7 +106,6 @@ The release workflow (`.github/workflows/build-and-deploy.yml`) reads build secr
 
 | Secret / Variable | Description |
 |-------------------|-------------|
-| `RA_API_KEY` | RetroAchievements API key |
 | `SCREENSCRAPER_DEV_ID` | ScreenScraper developer ID |
 | `SCREENSCRAPER_DEV_PASSWORD` | ScreenScraper developer password |
 
@@ -134,13 +134,12 @@ If the Android secrets are missing, the CI build falls back to debug signing (us
 ```bash
 # Development
 flutter run \
-  --dart-define=RA_API_KEY=your_key \
   --dart-define=SCREENSCRAPER_DEV_ID=your_id \
   --dart-define=SCREENSCRAPER_DEV_PASSWORD=your_password
 
 # Production builds
 # Replace these with your actual keys
-DART_DEFINES="--dart-define=RA_API_KEY=your_key --dart-define=SCREENSCRAPER_DEV_ID=your_id --dart-define=SCREENSCRAPER_DEV_PASSWORD=your_password"
+DART_DEFINES="--dart-define=SCREENSCRAPER_DEV_ID=your_id --dart-define=SCREENSCRAPER_DEV_PASSWORD=your_password"
 
 # Android APK
 flutter build apk --release $DART_DEFINES

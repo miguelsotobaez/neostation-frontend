@@ -150,8 +150,14 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         val receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 when (intent?.action) {
-                    android.content.Intent.ACTION_SCREEN_OFF -> pushDeviceScreenOn(false)
-                    android.content.Intent.ACTION_SCREEN_ON -> pushDeviceScreenOn(true)
+                    android.content.Intent.ACTION_SCREEN_OFF -> {
+                        pushDeviceScreenOn(false)
+                        notifyFlutterScreenState(false)
+                    }
+                    android.content.Intent.ACTION_SCREEN_ON -> {
+                        pushDeviceScreenOn(true)
+                        notifyFlutterScreenState(true)
+                    }
                 }
             }
         }
@@ -175,6 +181,25 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             SharedStateManager.updateState(type, current)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "pushDeviceScreenOn: ${e.message}")
+        }
+    }
+
+    // As a HOME launcher, this Activity is NOT paused when the device screen
+    // turns off, so Flutter never sees AppLifecycleState.paused on lock. Bridge
+    // the raw screen on/off state to Dart so it can release the shared audio
+    // engine while locked (its output device otherwise keeps the SoC awake and
+    // drains the battery). Independent of pushDeviceScreenOn(), which no-ops on
+    // single-screen devices.
+    private fun notifyFlutterScreenState(on: Boolean) {
+        runOnUiThread {
+            try {
+                methodChannel?.invokeMethod(
+                    if (on) "onDeviceScreenOn" else "onDeviceScreenOff",
+                    null
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "notifyFlutterScreenState: ${e.message}")
+            }
         }
     }
 

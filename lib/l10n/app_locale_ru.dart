@@ -774,6 +774,16 @@ const Map<String, dynamic> appLocaleRu = {
       'Выберите, где хранятся медиафайлы, темы и данные приложения',
   AppLocale.userDataLocationDefault: 'Стандартное расположение',
   AppLocale.selectUserDataFolder: 'Выбрать папку данных',
+  AppLocale.folderNotEmptyTitle: 'Папка не пуста',
+  AppLocale.folderNotEmptyBody:
+      'Эта папка уже содержит {count} элемент(ов). NeoStation будет хранить свои данные здесь, рядом с существующим содержимым.',
+  AppLocale.folderNotEmptyUseAnyway: 'Всё равно использовать',
+  AppLocale.moveUserDataTitle: 'Переместить данные пользователя?',
+  AppLocale.moveUserDataBody:
+      'NeoStation переместит свои данные (базу данных, загруженные медиа и настройки) из текущей папки в новую. Файлы, созданные не NeoStation, останутся нетронутыми.',
+  AppLocale.moveUserDataDestNotEmpty:
+      'Новая папка уже содержит {count} элемент(ов). Данные NeoStation будут добавлены рядом с ними.',
+  AppLocale.moveUserDataConfirm: 'Переместить',
   AppLocale.migratingUserData: 'Перемещение данных',
   AppLocale.migratingUserDataComplete: 'Миграция завершена',
   AppLocale.migratingUserDataError: 'Ошибка миграции',
@@ -792,4 +802,36 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.deleteGameConfirmBody:
       'ROM-файл игры, данные скрапинга и медиафайлы будут безвозвратно удалены. Это действие нельзя отменить.',
   AppLocale.deleteGameSubtitle: 'Навсегда удаляет ROM-файл с диска',
+
+  AppLocale.raCompletionsLabel: 'Прохождения',
+  AppLocale.raMasteriesLabel: 'Мастерства',
+  AppLocale.raEarned: 'Получено',
+  AppLocale.raOwned: 'Всего',
+  AppLocale.raPointsAbbrev: 'очк.',
+  AppLocale.raAlreadyEarned: 'Вы уже получили это достижение',
+  AppLocale.raTapToOpenLocalGame:
+      'Нажмите, чтобы открыть данные локальной игры',
+  AppLocale.raRecentUnlocks: 'Недавние разблокировки',
+  AppLocale.raRecentCompletions: 'Недавние прохождения',
+  AppLocale.raRecentMasteries: 'Недавние мастерства',
+  AppLocale.raNoCompletionsYet: 'Пока нет прохождений',
+  AppLocale.raNoMasteriesYet: 'Пока нет мастерств',
+  AppLocale.raTrackedGames: 'отслеживаемых игр',
+  AppLocale.raCompletionLabel: 'Прохождение',
+  AppLocale.raMasteryLabel: 'Мастерство',
+  AppLocale.raCouldNotResolveLocalSystem:
+      'Не удалось определить локальную систему для этой игры',
+  AppLocale.raMissable: 'МОЖНО ПРОПУСТИТЬ',
+  AppLocale.raComments: 'КОММЕНТАРИИ',
+  AppLocale.raCommentsCouldNotLoad: 'Не удалось загрузить комментарии.',
+  AppLocale.raNoCommentsYet: 'Пока нет комментариев.',
+  AppLocale.raOlderCommentsAvailable: 'Доступны более старые комментарии.',
+  AppLocale.raLoadMore: 'ЗАГРУЗИТЬ ЕЩЁ',
+  AppLocale.raRateLimited:
+      'RetroAchievements сейчас перегружен. Подождите немного и попробуйте снова.',
+  AppLocale.raApiKey: 'API-ключ',
+  AppLocale.raEnterApiKey: 'Введите ваш API-ключ',
+  AppLocale.raNoRecentUnlocks: 'Нет недавних достижений за последние 30 дней',
+  AppLocale.raRecentlyPlayedTitle: 'Недавно сыгранные',
+  AppLocale.raNoRecentlyPlayed: 'Нет недавно сыгранных игр',
 };

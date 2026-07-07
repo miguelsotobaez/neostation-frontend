@@ -803,6 +803,14 @@ mixin AppLocale {
   static const String userDataLocationSubtitle = 'user_data_location_subtitle';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
+  static const String folderNotEmptyTitle = 'folder_not_empty_title';
+  static const String folderNotEmptyBody = 'folder_not_empty_body';
+  static const String folderNotEmptyUseAnyway = 'folder_not_empty_use_anyway';
+  static const String moveUserDataTitle = 'move_user_data_title';
+  static const String moveUserDataBody = 'move_user_data_body';
+  static const String moveUserDataDestNotEmpty =
+      'move_user_data_dest_not_empty';
+  static const String moveUserDataConfirm = 'move_user_data_confirm';
   static const String migratingUserData = 'migrating_user_data';
   static const String migratingUserDataComplete =
       'migrating_user_data_complete';
@@ -819,6 +827,37 @@ mixin AppLocale {
   static const String romDirectories = 'rom_directories';
   static const String addRomFolder = 'add_rom_folder';
   static const String removeRomFolder = 'remove_rom_folder';
+
+  // RetroAchievements dashboard & achievement comments
+  static const String raCompletionsLabel = 'ra_completions_label';
+  static const String raMasteriesLabel = 'ra_masteries_label';
+  static const String raEarned = 'ra_earned';
+  static const String raOwned = 'ra_owned';
+  static const String raPointsAbbrev = 'ra_points_abbrev';
+  static const String raAlreadyEarned = 'ra_already_earned';
+  static const String raTapToOpenLocalGame = 'ra_tap_to_open_local_game';
+  static const String raRecentUnlocks = 'ra_recent_unlocks';
+  static const String raRecentCompletions = 'ra_recent_completions';
+  static const String raRecentMasteries = 'ra_recent_masteries';
+  static const String raNoCompletionsYet = 'ra_no_completions_yet';
+  static const String raNoMasteriesYet = 'ra_no_masteries_yet';
+  static const String raTrackedGames = 'ra_tracked_games';
+  static const String raCompletionLabel = 'ra_completion_label';
+  static const String raMasteryLabel = 'ra_mastery_label';
+  static const String raCouldNotResolveLocalSystem =
+      'ra_could_not_resolve_local_system';
+  static const String raMissable = 'ra_missable';
+  static const String raComments = 'ra_comments';
+  static const String raCommentsCouldNotLoad = 'ra_comments_could_not_load';
+  static const String raNoCommentsYet = 'ra_no_comments_yet';
+  static const String raOlderCommentsAvailable = 'ra_older_comments_available';
+  static const String raLoadMore = 'ra_load_more';
+  static const String raRateLimited = 'ra_rate_limited';
+  static const String raApiKey = 'ra_api_key';
+  static const String raEnterApiKey = 'ra_enter_api_key';
+  static const String raNoRecentUnlocks = 'ra_no_recent_unlocks';
+  static const String raRecentlyPlayedTitle = 'ra_recently_played_title';
+  static const String raNoRecentlyPlayed = 'ra_no_recently_played';
 
   // ==========================================================================
   // Localization Maps

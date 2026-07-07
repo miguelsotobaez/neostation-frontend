@@ -286,11 +286,14 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     // When NeoStation's own UI regains focus and no game is actually running,
-    // clear any stale Now Playing state left over from quitting mid-game. The
-    // isGameLaunched guard avoids interfering with the emulator launch handoff.
+    // clear any stale Now Playing state left over from quitting mid-game. Use
+    // isGameLaunchInProgress (not isGameLaunched) so a transient resume during
+    // the launch dialog/handoff window — before _registerGameLaunch flips
+    // isGameLaunched ~2s in — can't clobber the Now Playing state we just
+    // pushed. This was the PSX/GameCube "no Now Playing" race.
     if (state == AppLifecycleState.resumed &&
         Platform.isAndroid &&
-        !GameService.isGameLaunched) {
+        !GameService.isGameLaunchInProgress) {
       Provider.of<SqliteConfigProvider>(
         context,
         listen: false,
@@ -373,6 +376,10 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   void _navigateContentDown() {
     if (_selectedTabIndex == 0) return;
+    if (_selectedTabIndex == 2) {
+      RAContent.navigateDown();
+      return;
+    }
     if (_selectedTabIndex == 3) {
       NewScraperOptionsScreen.navigateDown();
       return;
@@ -385,6 +392,10 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   void _navigateContentUp() {
     if (_selectedTabIndex == 0) return;
+    if (_selectedTabIndex == 2) {
+      RAContent.navigateUp();
+      return;
+    }
     if (_selectedTabIndex == 3) {
       NewScraperOptionsScreen.navigateUp();
       return;

@@ -14,6 +14,7 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/move_user_data_dialog.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/widgets/restart_required_dialog.dart';
 import 'package:neostation/widgets/tv_directory_picker.dart';
@@ -271,6 +272,21 @@ class DirectoriesSettingsContentState
 
       final current = _currentUserDataPath;
       if (current == null || selected == current) return;
+
+      // Relocating actually MOVES data (copy + delete of NeoStation's own
+      // files), so confirm the source → destination move explicitly, noting
+      // when the destination already contains files.
+      final entryCount = await UserDataLocationService.countDirectoryEntries(
+        selected,
+      );
+      if (!mounted) return;
+      final proceed = await MoveUserDataDialog.show(
+        context,
+        fromPath: current,
+        toPath: selected,
+        destItemCount: entryCount,
+      );
+      if (!proceed || !mounted) return;
 
       await _migrateUserData(sourcePath: current, destPath: selected);
     } catch (e) {

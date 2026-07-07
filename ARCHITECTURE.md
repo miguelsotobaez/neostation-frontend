@@ -96,7 +96,7 @@ Database migrations are versioned in `lib/data/datasources/sqlite_migrations.dar
 
 | API | Purpose | Auth |
 |-----|---------|------|
-| RetroAchievements | Achievements, leaderboards, game hashes | `RA_API_KEY` (build-time) |
+| RetroAchievements | Achievements, leaderboards, game hashes | Per-user web API key (runtime login) |
 | ScreenScraper | Game metadata, media, descriptions | `SCREENSCRAPER_DEV_ID/PASSWORD` (build-time) |
 | NeoSync Backend | Auth, cloud sync, billing, notifications | JWT (runtime) |
 
