@@ -516,12 +516,57 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             contentResolver,
             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        val component = "$packageName/$packageName.ScreenshotAccessibilityService"
+        // Build the component via ComponentName so the class keeps its real
+        // namespace (com.neogamelab.neostation.*) while the package picks up the
+        // flavor's applicationId suffix (.dev/.featuretest). A hand-built
+        // "$packageName/$packageName.Foo" string gets the class package wrong on
+        // suffixed flavors and never matches.
+        val component = android.content.ComponentName(
+            this,
+            ScreenshotAccessibilityService::class.java,
+        ).flattenToString()
         return enabled.split(':').any { it.equals(component, ignoreCase = true) }
     }
 
-    /** Opens the system accessibility settings so the user can grant access. */
+    /**
+     * Opens accessibility settings so the user can grant access. Deep-links
+     * straight to NeoStation's own service page (ACTION_ACCESSIBILITY_DETAILS_SETTINGS)
+     * so the user only has to flip one toggle + confirm, rather than hunting for
+     * NeoStation in the full list. Falls back to the general list if the details
+     * screen isn't available.
+     */
     private fun openScreenshotAccessSettings() {
+        val component = android.content.ComponentName(
+            this,
+            ScreenshotAccessibilityService::class.java,
+        ).flattenToString()
+
+        // Details page (API 30+): lands directly on our service's toggle.
+        try {
+            // Literal action string ("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            // rather than the Settings constant, which isn't exposed on all
+            // compile SDKs.
+            val intent = android.content.Intent(
+                "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
+            )
+            // The Settings details screen reads the target component from these
+            // fragment-arg extras.
+            val args = android.os.Bundle().apply {
+                putString(":settings:fragment_args_key", component)
+            }
+            intent.putExtra(":settings:fragment_args_key", component)
+            intent.putExtra(":settings:show_fragment_args", args)
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            return
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "MainActivity",
+                "Accessibility details screen unavailable, falling back: ${e.message}",
+            )
+        }
+
+        // Fallback: the general accessibility list.
         try {
             val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
