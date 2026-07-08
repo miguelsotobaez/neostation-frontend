@@ -811,14 +811,27 @@ class GamepadNavigation {
       _stopRepeatTimer(GamepadInputType.dpadLeft);
     }
 
-    SfxService().playNavSound();
-    if (action is Function(bool)) {
-      action(false); // First press
-    } else if (action is VoidCallback) {
-      action();
+    if (_runNavAction(action, false)) {
+      SfxService().playNavSound();
     }
 
     _startRepeatTimer(key, action);
+  }
+
+  /// Invokes a navigation [action], passing whether this is a [repeat] press.
+  ///
+  /// Returns whether the navigation actually moved. Actions that report a
+  /// `bool` (e.g. list navigation that clamps at a boundary) drive whether the
+  /// nav sound plays; actions that return void are treated as always-moved to
+  /// preserve the legacy behavior.
+  bool _runNavAction(Function action, bool repeat) {
+    dynamic result;
+    if (action is Function(bool)) {
+      result = action(repeat);
+    } else if (action is Function()) {
+      result = (action as dynamic)();
+    }
+    return result is bool ? result : true;
   }
 
   /// Internal auto-repeat logic for held buttons.
@@ -837,12 +850,8 @@ class GamepadNavigation {
           return;
         }
 
-        SfxService().playNavSound();
-
-        if (action is Function(bool)) {
-          action(true); // Repeat events
-        } else if (action is VoidCallback) {
-          action();
+        if (_runNavAction(action, true)) {
+          SfxService().playNavSound();
         }
       });
     });

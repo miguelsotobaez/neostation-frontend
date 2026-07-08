@@ -116,11 +116,13 @@ Future<String?> loadLocalizedDescriptionInBackground(
 class SystemGamesList extends StatefulWidget {
   final SystemModel system;
   final FileProvider fileProvider;
+  final String? initialRomPath;
 
   const SystemGamesList({
     super.key,
     required this.system,
     required this.fileProvider,
+    this.initialRomPath,
   });
 
   @override
@@ -245,13 +247,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
     MusicPlayerService().addListener(_onMusicPlayerStateChanged);
 
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
-      _secondaryDisplayState!.addListener(() {
-        if (mounted) {
-          setState(() {});
-          _updateMusicDucking();
-        }
-      });
+      _secondaryDisplayState = SecondaryDisplayState.instance;
+      _secondaryDisplayState!.addListener(_onSecondaryDisplayChanged);
     }
   }
 
@@ -265,6 +262,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _letterIndicatorTextShadow = primary;
   }
 
+  void _onSecondaryDisplayChanged() {
+    if (mounted) {
+      setState(() {});
+      _updateMusicDucking();
+    }
+  }
+
   @override
   void dispose() {
     // Detach listeners before disposal.
@@ -272,7 +276,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _databaseProvider.removeListener(_onDatabaseUpdated);
     MusicPlayerService().removeListener(_onMusicPlayerStateChanged);
 
-    _secondaryDisplayState?.dispose();
+    // Shared singleton — detach our listener, never dispose the instance.
+    _secondaryDisplayState?.removeListener(_onSecondaryDisplayChanged);
     _achievementsController.dispose();
 
     _cleanupResources();
@@ -1036,7 +1041,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ? game.systemFolderName!
           : widget.system.id;
       final path =
-          'assets/images/systems/logos/$sysId.webp'; // Correcting to logo fallback for grid consistency.
+          'assets/images/logos/$sysId.webp'; // Correcting to logo fallback for grid consistency.
       imageProvider = AssetImage(path);
       imagePath = path;
     }
@@ -1135,19 +1140,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // → bundled asset, themed background when present) so themed systems don't
     // flash the default logo here before the grid re-asserts its state on pop.
     final configProvider = context.read<SqliteConfigProvider>();
-    final neoAssets = context.read<NeoAssetsProvider>();
     final folder = widget.system.primaryFolderName;
 
     final String? customLogo = widget.system.customLogoPath?.isNotEmpty == true
         ? widget.system.customLogoPath
         : null;
-    final String? themeLogo = customLogo == null
-        ? neoAssets.getLogoForSystemSync(folder)
-        : null;
-    final systemLogo =
-        customLogo ?? themeLogo ?? 'assets/images/systems/logos/$folder.webp';
-    final bool isLogoAsset = customLogo == null && themeLogo == null;
+    final systemLogo = customLogo ?? 'assets/images/logos/$folder.webp';
+    final bool isLogoAsset = customLogo == null;
 
+    final neoAssets = context.read<NeoAssetsProvider>();
     final String? customBg = widget.system.customBackgroundPath;
     final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
     final String? themeBg = hasCustomBg
@@ -1499,9 +1500,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
     // Resource termination and UI synchronization prior to process handoff.
     _stopVideoAndCleanup();
-    // Await the art push first so it can't land after the achievement push and
-    // re-hide the panel; the panel push is then the definitive last write.
-    await _updateSecondaryDisplay(_selectedGame!);
+    // NOTE: do NOT push a separate _updateSecondaryDisplay here. The game's
+    // media is already in the shared state from browsing, and a separate launch
+    // snapshot (carrying nowPlayingActive=false + isGameLaunching=true) can be
+    // delivered to the secondary engine AFTER the Now Playing push below and
+    // clobber it — the cross-engine transport gives no ordering guarantee. The
+    // launch push (_pushAchievementsForLaunch) now carries isGameLaunching
+    // itself, so it is the single authoritative launch write.
     if (!mounted) return;
 
     // Push the in-game RetroAchievements panel. Fired without awaiting so it
@@ -1915,8 +1920,21 @@ class _SystemGamesListState extends State<SystemGamesList> {
           }
         }
 
-        // Persistent Selection Logic: Retain current index if the game still exists post-reload.
-        if (_selectedGame != null && widget.system.folderName != 'music') {
+        if (widget.initialRomPath != null &&
+            widget.initialRomPath!.isNotEmpty) {
+          final initialIndex = games.indexWhere(
+            (game) => game.romPath == widget.initialRomPath,
+          );
+          if (initialIndex != -1) {
+            _selectedGameIndex = initialIndex;
+            _selectedGame = games[initialIndex];
+          } else {
+            _selectedGameIndex = 0;
+            _selectedGame = games.isNotEmpty ? games.first : null;
+          }
+        } else if (_selectedGame != null &&
+            widget.system.folderName != 'music') {
+          // Persistent Selection Logic: Retain current index if the game still exists post-reload.
           final selectedIndex = games.indexWhere(
             (game) => game.romname == _selectedGame!.romname,
           );
@@ -2920,6 +2938,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
     });
 
     if (_games.isNotEmpty && _selectedGame != null) {
+      // The list view's didUpdateWidget already recenters the new selection
+      // when [_selectedGameIndex] changes, so an explicit scroll here is
+      // redundant and can cause conflicting animations.
       _updateSecondaryDisplay(_selectedGame!);
       _updateBackground(_selectedGame!);
       _startVideoTimer();
@@ -3025,6 +3046,12 @@ class _GameListViewState extends State<GameListView>
       duration: duration,
       curve: curve,
     );
+  }
+
+  /// Immediately jumps to center on the item at [index] without animation.
+  /// Unlike [scrollToIndex], this executes synchronously.
+  void jumpToIndex(int index) {
+    _centeredScrollController.jumpToIndex(index);
   }
 
   @override
@@ -3145,6 +3172,7 @@ class _GameListViewState extends State<GameListView>
     final theme = Theme.of(context);
     final itemHeight = _itemHeightBase.r;
     final totalItemHeight = itemHeight;
+    _centeredScrollController.setItemExtent(totalItemHeight, paddingTop: 2.r);
 
     return Column(
       children: [

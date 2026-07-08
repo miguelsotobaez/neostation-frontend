@@ -1,7 +1,13 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../models/database_game_model.dart';
+import '../models/retro_achievements_dashboard_models.dart';
 
 /// Repository for RetroAchievements data access.
 class RetroAchievementsRepository {
+  static const String _raApiKeyStorageKey = 'ra_api_key';
+  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+
   /// Returns local ROM counts: total and RA-compatible (has ra_hash).
   static Future<({int totalRoms, int raCompatibleRoms})>
   getLocalRomStats() async {
@@ -37,6 +43,21 @@ class RetroAchievementsRepository {
   /// Persists the RA username.
   static Future<void> saveRAUser(String username) =>
       SqliteService.updateRAUser(username);
+
+  /// Persists the RA API key securely.
+  static Future<void> saveRAApiKey(String apiKey) async {
+    await _storage.write(key: _raApiKeyStorageKey, value: apiKey);
+  }
+
+  /// Returns the persisted RA API key, or null if not set.
+  static Future<String?> getRAApiKey() async {
+    return _storage.read(key: _raApiKeyStorageKey);
+  }
+
+  /// Clears the stored RA API key.
+  static Future<void> clearRAApiKey() async {
+    await _storage.delete(key: _raApiKeyStorageKey);
+  }
 
   /// Clears the stored RA username.
   static Future<void> clearRAUser() async {
@@ -177,5 +198,36 @@ class RetroAchievementsRepository {
     }
 
     return null;
+  }
+
+  static Future<OwnedWeekGameResolution?> findBestLocalGameByRaGameId(
+    int raGameId,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        ur.*,
+        s.folder_name AS system_folder_name,
+        s.real_name AS system_real_name,
+        s.short_name AS system_short_name
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      WHERE ur.id_ra = ?
+      ORDER BY
+        CASE WHEN ur.last_played IS NULL THEN 1 ELSE 0 END ASC,
+        ur.last_played DESC,
+        ur.is_favorite DESC,
+        LOWER(COALESCE(ur.title_name, ur.filename)) ASC
+      LIMIT 1
+      ''',
+      [raGameId],
+    );
+    if (results.isEmpty) return null;
+
+    final game = DatabaseGameModel.fromJson(
+      Map<String, dynamic>.from(results.first),
+    );
+    return OwnedWeekGameResolution(raGameId: raGameId, game: game);
   }
 }

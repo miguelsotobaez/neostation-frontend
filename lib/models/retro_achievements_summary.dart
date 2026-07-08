@@ -70,10 +70,10 @@ class AwardedStats {
   /// Maximum possible score achievable for this game.
   final int possibleScore;
 
-  /// Number of achievements currently earned by the user (casual/softcore).
+  /// Number of achievements currently earned by the user (casual).
   final int numAchieved;
 
-  /// Total score accumulated by the user for this game (casual/softcore).
+  /// Total score accumulated by the user for this game (casual).
   final int scoreAchieved;
 
   /// Number of achievements earned in hardcore mode.
@@ -107,7 +107,7 @@ class AwardedStats {
     );
   }
 
-  /// Returns the user's completion percentage (casual/softcore).
+  /// Returns the user's completion percentage (casual).
   double get completionPercentage {
     return numPossibleAchievements > 0
         ? (numAchieved / numPossibleAchievements) * 100
@@ -215,8 +215,8 @@ class RetroAchievementsUserSummary {
   /// Total points accumulated (Hardcore mode).
   final int totalPoints;
 
-  /// Total points accumulated in casual (Softcore) mode.
-  final int totalSoftcorePoints;
+  /// Total points accumulated in casual mode.
+  final int totalCasualPoints;
 
   /// Total weighted "True" points.
   final int totalTruePoints;
@@ -275,7 +275,7 @@ class RetroAchievementsUserSummary {
     required this.contribCount,
     required this.contribYield,
     required this.totalPoints,
-    required this.totalSoftcorePoints,
+    required this.totalCasualPoints,
     required this.totalTruePoints,
     required this.permissions,
     required this.untracked,
@@ -330,7 +330,7 @@ class RetroAchievementsUserSummary {
       contribCount: RAParsingUtils.toInt(json['ContribCount']),
       contribYield: RAParsingUtils.toInt(json['ContribYield']),
       totalPoints: RAParsingUtils.toInt(json['TotalPoints']),
-      totalSoftcorePoints: RAParsingUtils.toInt(json['TotalSoftcorePoints']),
+      totalCasualPoints: RAParsingUtils.toInt(json['TotalSoftcorePoints']),
       totalTruePoints: RAParsingUtils.toInt(json['TotalTruePoints']),
       permissions: RAParsingUtils.toInt(json['Permissions']),
       untracked: RAParsingUtils.toInt(json['Untracked']),

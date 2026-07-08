@@ -187,7 +187,12 @@ class SqliteConfigProvider extends ChangeNotifier {
       _initialized = true;
 
       if (Platform.isAndroid) {
-        _secondaryDisplayState = SecondaryDisplayState();
+        _secondaryDisplayState = SecondaryDisplayState.instance;
+        // Idempotent: reinitialize() can re-run initialize() (first-launch
+        // custom data dir). Since the state is now a shared singleton that is
+        // never disposed, remove any prior registration before re-adding so a
+        // second init can't accumulate a duplicate listener.
+        _secondaryDisplayState!.removeListener(_onSecondaryStateChanged);
         _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
 
         _secondaryDisplayChannel.setMethodCallHandler(

@@ -321,7 +321,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       imageProvider = FileImage(File(imagePath));
     } else {
       final sysId = widget.system.id;
-      final path = 'assets/images/systems/logos/$sysId.webp';
+      final path = 'assets/images/logos/$sysId.webp';
       imageProvider = AssetImage(path);
       imagePath = path;
     }

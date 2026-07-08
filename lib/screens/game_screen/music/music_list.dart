@@ -10,7 +10,6 @@ import '../../../utils/game_utils.dart';
 import '../../../utils/centered_scroll_controller.dart';
 import '../../../widgets/marquee_text.dart';
 import '../../../models/system_model.dart';
-import '../../../providers/neo_assets_provider.dart';
 import '../../../widgets/system_logo_fallback.dart';
 
 /// A specialized list view for the Music system, optimized for rapid track navigation and playback status.
@@ -138,6 +137,7 @@ class _MusicListState extends State<MusicList> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final itemHeight = _itemHeightBase.r;
     final totalItemHeight = itemHeight;
+    _centeredScrollController.setItemExtent(totalItemHeight, paddingTop: 2.r);
 
     return ListenableBuilder(
       listenable: MusicPlayerService(),
@@ -285,16 +285,10 @@ class _MusicListState extends State<MusicList> with TickerProviderStateMixin {
 
   /// Builds the system identity header with multi-tiered logo resolution logic.
   Widget _buildHeader() {
-    context.select<NeoAssetsProvider, String>((p) => p.activeThemeFolder);
-
     final folderName = widget.system.primaryFolderName;
-    final assetLogoPath = 'assets/images/systems/logos/$folderName.webp';
+    final assetLogoPath = 'assets/images/logos/$folderName.webp';
     final customLogoPath = widget.system.customLogoPath;
     final hasCustomLogo = customLogoPath != null && customLogoPath.isNotEmpty;
-    final neoAssets = context.read<NeoAssetsProvider>();
-    final themeLogoPath = hasCustomLogo
-        ? null
-        : neoAssets.getLogoForSystemSync(folderName);
 
     Widget fallback() => Center(
       child: SystemLogoFallback(
@@ -305,24 +299,10 @@ class _MusicListState extends State<MusicList> with TickerProviderStateMixin {
     );
 
     Widget logoWidget;
-    // Resolution Priority: User-defined Custom Logo > Theme-specific Logo > Built-in Asset Logo > Text Fallback.
-    if (customLogoPath != null && customLogoPath.isNotEmpty) {
+    if (hasCustomLogo) {
       logoWidget = Image.file(
         File(customLogoPath),
         key: ValueKey('${customLogoPath}_${widget.system.imageVersion}'),
-        fit: BoxFit.contain,
-        cacheWidth: 256,
-        errorBuilder: (context, error, stackTrace) => Image.asset(
-          assetLogoPath,
-          fit: BoxFit.contain,
-          cacheWidth: 256,
-          errorBuilder: (context, error, stackTrace) => fallback(),
-        ),
-      );
-    } else if (themeLogoPath != null && themeLogoPath.isNotEmpty) {
-      logoWidget = Image.file(
-        File(themeLogoPath),
-        key: ValueKey(themeLogoPath),
         fit: BoxFit.contain,
         cacheWidth: 256,
         errorBuilder: (context, error, stackTrace) => Image.asset(

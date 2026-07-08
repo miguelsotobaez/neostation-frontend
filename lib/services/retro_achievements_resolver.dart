@@ -190,6 +190,7 @@ class RetroAchievementsResolver {
           points: a.points,
           badgeName: a.badgeName,
           displayOrder: a.displayOrder,
+          type: a.type,
           earned: earned,
           earnedHardcore: earnedHardcore,
         );

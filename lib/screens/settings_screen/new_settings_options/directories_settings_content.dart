@@ -6,6 +6,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/config_service.dart';
@@ -14,6 +15,7 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/move_user_data_dialog.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/widgets/restart_required_dialog.dart';
 import 'package:neostation/widgets/tv_directory_picker.dart';
@@ -203,6 +205,15 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _removeRomFolder(String path) async {
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.removeRomFolder.getString(context),
+      body: AppLocale.removeRomFolderConfirmBody.getString(context),
+      confirmLabel: AppLocale.removeRomFolder.getString(context),
+      icon: Symbols.folder_delete_rounded,
+    );
+    if (!confirmed || !mounted) return;
+
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
@@ -271,6 +282,21 @@ class DirectoriesSettingsContentState
 
       final current = _currentUserDataPath;
       if (current == null || selected == current) return;
+
+      // Relocating actually MOVES data (copy + delete of NeoStation's own
+      // files), so confirm the source → destination move explicitly, noting
+      // when the destination already contains files.
+      final entryCount = await UserDataLocationService.countDirectoryEntries(
+        selected,
+      );
+      if (!mounted) return;
+      final proceed = await MoveUserDataDialog.show(
+        context,
+        fromPath: current,
+        toPath: selected,
+        destItemCount: entryCount,
+      );
+      if (!proceed || !mounted) return;
 
       await _migrateUserData(sourcePath: current, destPath: selected);
     } catch (e) {

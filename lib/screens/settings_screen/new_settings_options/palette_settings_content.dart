@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/providers/palette_provider.dart';
 import 'package:neostation/widgets/theme_card.dart';
@@ -35,6 +36,9 @@ class PaletteSettingsContentState extends State<PaletteSettingsContent> {
 
   /// Keys used for calculating viewport alignment during grid-based navigation.
   final List<GlobalKey> _itemKeys = [];
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
 
   @override
   void initState() {
@@ -129,12 +133,7 @@ class PaletteSettingsContentState extends State<PaletteSettingsContent> {
     if (index >= 0 && index < _itemKeys.length) {
       final context = _itemKeys[index].currentContext;
       if (context != null) {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
+        _scroller.ensureVisible(context);
       }
     }
   }

@@ -25,6 +25,9 @@ class SecondaryAchievementItem {
   /// Original display order, used to sort locked achievements consistently.
   final int displayOrder;
 
+  /// RetroAchievements classification such as progression, missable, or null.
+  final String? type;
+
   /// Whether the current user has earned this achievement (casual or hardcore).
   final bool earned;
 
@@ -38,6 +41,7 @@ class SecondaryAchievementItem {
     required this.points,
     required this.badgeName,
     required this.displayOrder,
+    this.type,
     required this.earned,
     required this.earnedHardcore,
   });
@@ -51,6 +55,7 @@ class SecondaryAchievementItem {
       points: (json['points'] as num?)?.toInt() ?? 0,
       badgeName: json['badgeName'] as String? ?? '',
       displayOrder: (json['displayOrder'] as num?)?.toInt() ?? 0,
+      type: json['type'] as String?,
       earned: json['earned'] as bool? ?? false,
       earnedHardcore: json['earnedHardcore'] as bool? ?? false,
     );
@@ -65,8 +70,11 @@ class SecondaryAchievementItem {
       'points': points,
       'badgeName': badgeName,
       'displayOrder': displayOrder,
+      'type': type,
       'earned': earned,
       'earnedHardcore': earnedHardcore,
     };
   }
+
+  bool get isMissable => type?.toLowerCase() == 'missable';
 }

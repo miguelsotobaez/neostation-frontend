@@ -796,6 +796,16 @@ const Map<String, dynamic> appLocaleFr = {
       'Choisissez où sont stockés les médias, thèmes et données de l\'application',
   AppLocale.userDataLocationDefault: 'Emplacement par défaut',
   AppLocale.selectUserDataFolder: 'Sélectionner le dossier de données',
+  AppLocale.folderNotEmptyTitle: 'Dossier non vide',
+  AppLocale.folderNotEmptyBody:
+      'Ce dossier contient déjà {count} élément(s). NeoStation y stockera ses propres données, aux côtés du contenu existant.',
+  AppLocale.folderNotEmptyUseAnyway: 'Utiliser quand même',
+  AppLocale.moveUserDataTitle: 'Déplacer les données ?',
+  AppLocale.moveUserDataBody:
+      'NeoStation déplacera ses propres données (base de données, médias récupérés et paramètres) du dossier actuel vers le nouveau. Les fichiers non créés par NeoStation restent intacts.',
+  AppLocale.moveUserDataDestNotEmpty:
+      'Le nouveau dossier contient déjà {count} élément(s). Les données de NeoStation seront ajoutées à côté.',
+  AppLocale.moveUserDataConfirm: 'Déplacer',
   AppLocale.migratingUserData: 'Déplacement des données',
   AppLocale.migratingUserDataComplete: 'Migration terminée',
   AppLocale.migratingUserDataError: 'Échec de la migration',
@@ -808,6 +818,16 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.romDirectories: 'Répertoires ROM',
   AppLocale.addRomFolder: 'Ajouter un dossier ROM',
   AppLocale.removeRomFolder: 'Supprimer',
+  AppLocale.resetPlayTimeConfirm: 'Réinitialiser le temps de jeu',
+  AppLocale.resetPlayTimeConfirmBody:
+      'Cela réinitialisera définitivement à zéro le temps de jeu enregistré pour ce jeu. Cette action est irréversible.',
+  AppLocale.removeRomFolderConfirmBody:
+      'Cela supprimera ce dossier de ROM des sources de votre bibliothèque. Vos fichiers sur le disque ne sont pas supprimés.',
+  AppLocale.disconnectRaConfirm: 'Déconnecter RetroAchievements',
+  AppLocale.disconnectRaConfirmBody:
+      'Cela vous déconnectera et supprimera vos identifiants RetroAchievements enregistrés de cet appareil.',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'Cela vous déconnectera de votre compte NeoSync sur cet appareil.',
 
   AppLocale.deleteGame: 'Supprimer le jeu',
   AppLocale.deleteGameConfirm: 'Supprimer définitivement',
@@ -815,4 +835,38 @@ const Map<String, dynamic> appLocaleFr = {
       'Le fichier ROM, les données et médias scrapés seront définitivement supprimés. Cette action est irréversible.',
   AppLocale.deleteGameSubtitle:
       'Supprime définitivement le fichier ROM du disque',
+
+  AppLocale.raCompletionsLabel: 'Complétions',
+  AppLocale.raMasteriesLabel: 'Maîtrises',
+  AppLocale.raEarned: 'Obtenus',
+  AppLocale.raOwned: 'Possédés',
+  AppLocale.raPointsAbbrev: 'pts',
+  AppLocale.raAlreadyEarned: 'Vous avez déjà obtenu ce succès',
+  AppLocale.raTapToOpenLocalGame:
+      'Appuyez pour ouvrir les détails du jeu local',
+  AppLocale.raRecentUnlocks: 'Déblocages Récents',
+  AppLocale.raRecentCompletions: 'Complétions Récentes',
+  AppLocale.raRecentMasteries: 'Maîtrises Récentes',
+  AppLocale.raNoCompletionsYet: 'Aucune complétion pour le moment',
+  AppLocale.raNoMasteriesYet: 'Aucune maîtrise pour le moment',
+  AppLocale.raTrackedGames: 'jeux suivis',
+  AppLocale.raCompletionLabel: 'Complétion',
+  AppLocale.raMasteryLabel: 'Maîtrise',
+  AppLocale.raCouldNotResolveLocalSystem:
+      'Impossible de déterminer le système local pour ce jeu',
+  AppLocale.raMissable: 'MANQUABLE',
+  AppLocale.raComments: 'COMMENTAIRES',
+  AppLocale.raCommentsCouldNotLoad: 'Impossible de charger les commentaires.',
+  AppLocale.raNoCommentsYet: 'Aucun commentaire pour le moment.',
+  AppLocale.raOlderCommentsAvailable:
+      'D\'anciens commentaires sont disponibles.',
+  AppLocale.raLoadMore: 'CHARGER PLUS',
+  AppLocale.raRateLimited:
+      'RetroAchievements est occupé pour le moment. Veuillez patienter un instant et réessayer.',
+  AppLocale.raApiKey: 'Clé API',
+  AppLocale.raEnterApiKey: 'Entrez votre clé API',
+  AppLocale.raNoRecentUnlocks:
+      'Aucun déblocage récent au cours des 30 derniers jours',
+  AppLocale.raRecentlyPlayedTitle: 'Joués Récemment',
+  AppLocale.raNoRecentlyPlayed: 'Aucun jeu joué récemment',
 };

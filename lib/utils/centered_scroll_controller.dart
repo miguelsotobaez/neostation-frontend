@@ -32,6 +32,9 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
   int? _currentSelectedIndex;
   int _totalItems = 0;
   Size? _lastSize;
+  double _totalPadding = 0;
+  double? _itemExtent;
+  double _paddingTop = 0;
 
   /// Notifier to trigger manual rebuilds of the list when layout changes occur.
   final ValueNotifier<int> rebuildNotifier = ValueNotifier<int>(0);
@@ -44,6 +47,22 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
     this.animationDuration = const Duration(milliseconds: 360),
     this.animationCurve = Curves.easeInOut,
   }) : scrollController = scrollController ?? ScrollController();
+
+  /// Sets the total vertical padding of the ListView (top + bottom).
+  /// Used to improve scroll centering accuracy.
+  void setListPadding(double padding) {
+    _totalPadding = padding;
+  }
+
+  /// Sets the fixed height of each list item and the top padding of the list.
+  ///
+  /// When provided, scroll calculations use this exact extent instead of
+  /// deriving it from [maxScrollExtent], which avoids drift after list
+  /// mutations such as deletions.
+  void setItemExtent(double? itemExtent, {double paddingTop = 0}) {
+    _itemExtent = itemExtent;
+    _paddingTop = paddingTop;
+  }
 
   /// Initializes the controller and registers platform-specific listeners.
   void initialize({
@@ -159,10 +178,27 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
     });
   }
 
-  /// Internal logic to calculate and execute the re-centering jump.
-  void _performRecenter(int index) {
+  /// Resolves the exact item height.
+  ///
+  /// Prefers a user-supplied fixed [itemExtent]. Falls back to deriving it from
+  /// the scrollable geometry, which can be inaccurate right after the list
+  /// mutates (e.g. a game is deleted).
+  double? _resolveItemHeight(double viewportHeight, double scrollableHeight) {
+    if (_itemExtent != null) {
+      return _itemExtent;
+    }
+    if (_totalItems == 0) {
+      return null;
+    }
+    final contentHeight = scrollableHeight + viewportHeight;
+    return (contentHeight - _totalPadding) / _totalItems;
+  }
+
+  /// Computes the scroll offset that places the item at [index] at the configured
+  /// [centerPosition], or `null` when centering is not possible.
+  double? _calculateTargetOffset(int index) {
     if (!scrollController.hasClients || _totalItems == 0) {
-      return;
+      return null;
     }
 
     try {
@@ -170,21 +206,45 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
       final scrollableHeight = scrollController.position.maxScrollExtent;
 
       if (_totalItems <= 1 || scrollableHeight == 0) {
-        return;
+        return null;
       }
 
-      final contentHeight = scrollableHeight + viewportHeight;
-      final itemHeight = contentHeight / _totalItems;
-      final itemCenterPosition = (index * itemHeight) + (itemHeight / 2);
+      final itemHeight = _resolveItemHeight(viewportHeight, scrollableHeight);
+      if (itemHeight == null) {
+        return null;
+      }
+
+      final itemCenterPosition =
+          _paddingTop + (index * itemHeight) + (itemHeight / 2);
       final targetOffset =
           itemCenterPosition - (viewportHeight * centerPosition);
 
-      final clampedOffset = targetOffset.clamp(
-        0.0,
-        scrollController.position.maxScrollExtent,
-      );
+      return targetOffset
+          .clamp(0.0, scrollController.position.maxScrollExtent)
+          .toDouble();
+    } catch (e) {
+      _log.e('CenteredScrollController: Error calculating target offset: $e');
+      return null;
+    }
+  }
 
-      scrollController.jumpTo(clampedOffset);
+  /// Internal logic to calculate and execute the re-centering jump.
+  void _performRecenter(int index) {
+    _jumpToIndex(index);
+  }
+
+  /// Immediately jumps to center on the item at [index] without animation.
+  void jumpToIndex(int index) {
+    _currentSelectedIndex = index;
+    _jumpToIndex(index);
+  }
+
+  void _jumpToIndex(int index) {
+    final targetOffset = _calculateTargetOffset(index);
+    if (targetOffset == null) return;
+
+    try {
+      scrollController.jumpTo(targetOffset);
     } catch (e) {
       _log.e('CenteredScrollController: Error during re-centering: $e');
     }
@@ -204,34 +264,15 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
     _currentSelectedIndex = index;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!scrollController.hasClients) return;
+      final targetOffset = _calculateTargetOffset(index);
+      if (targetOffset == null) return;
 
       try {
-        final viewportHeight = scrollController.position.viewportDimension;
-        final scrollableHeight = scrollController.position.maxScrollExtent;
-
-        if (_totalItems <= 1 || scrollableHeight == 0) {
-          return;
-        }
-
-        final contentHeight = scrollableHeight + viewportHeight;
-        final itemHeight = contentHeight / _totalItems;
-        final itemCenterPosition = (index * itemHeight) + (itemHeight / 2);
-
-        // Position target so that itemCenterPosition sits at centerPosition * viewportHeight from top.
-        final targetOffset =
-            itemCenterPosition - (viewportHeight * centerPosition);
-
-        final clampedOffset = targetOffset.clamp(
-          0.0,
-          scrollController.position.maxScrollExtent,
-        );
-
         if (immediate) {
-          scrollController.jumpTo(clampedOffset);
+          scrollController.jumpTo(targetOffset);
         } else {
           scrollController.animateTo(
-            clampedOffset,
+            targetOffset,
             duration: duration ?? animationDuration,
             curve: curve ?? animationCurve,
           );
@@ -257,8 +298,10 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
         return 0;
       }
 
-      final contentHeight = scrollableHeight + viewportHeight;
-      final itemHeight = contentHeight / _totalItems;
+      final itemHeight = _resolveItemHeight(viewportHeight, scrollableHeight);
+      if (itemHeight == null) {
+        return null;
+      }
       final centerPositionInContent =
           currentOffset + (viewportHeight * centerPosition);
 
@@ -266,7 +309,7 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
       double closestDistance = double.infinity;
 
       for (int i = 0; i < _totalItems; i++) {
-        final itemCenter = (i * itemHeight) + (itemHeight / 2);
+        final itemCenter = _paddingTop + (i * itemHeight) + (itemHeight / 2);
         final distance = (itemCenter - centerPositionInContent).abs();
 
         if (distance < closestDistance) {
@@ -275,7 +318,7 @@ class CenteredScrollController with WindowListener, WidgetsBindingObserver {
         }
       }
 
-      return closestIndex.clamp(0, maxItems - 1);
+      return closestIndex.clamp(0, maxItems - 1).toInt();
     } catch (e) {
       _log.e('CenteredScrollController: Error identifying centered index: $e');
       return null;

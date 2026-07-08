@@ -15,6 +15,7 @@ import '../utils/gamepad_nav.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import '../widgets/tv_directory_picker.dart';
+import '../widgets/folder_not_empty_dialog.dart';
 import '../models/secondary_display_state.dart';
 
 /// Initial configuration wizard for the first time the app is opened
@@ -45,7 +46,7 @@ class _SetupWizardState extends State<SetupWizard> {
     _initializeSteps();
     _initGamepad();
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
+      _secondaryDisplayState = SecondaryDisplayState.instance;
     }
   }
 
@@ -78,7 +79,7 @@ class _SetupWizardState extends State<SetupWizard> {
   @override
   void dispose() {
     _gamepadNav?.dispose();
-    _secondaryDisplayState?.dispose();
+    // Shared singleton — never dispose the instance.
     super.dispose();
   }
 
@@ -636,6 +637,21 @@ class _SetupWizardState extends State<SetupWizard> {
       }
 
       if (selected == _selectedUserDataPath) return;
+
+      // Warn if the chosen folder already contains files, so the user doesn't
+      // unknowingly store NeoStation's data inside an existing library.
+      final entryCount = await UserDataLocationService.countDirectoryEntries(
+        selected,
+      );
+      if (!mounted) return;
+      if (entryCount > 0) {
+        final proceed = await FolderNotEmptyDialog.show(
+          context,
+          path: selected,
+          itemCount: entryCount,
+        );
+        if (!proceed || !mounted) return;
+      }
 
       await UserDataLocationService.setCustomPath(selected);
 

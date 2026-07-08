@@ -32,8 +32,16 @@ Future<void> launchGameWithDialog({
   Future<void> Function(BuildContext context, GameLaunchResult result)?
   onLaunchFailed,
 }) async {
+  // Open the launch-pending window immediately so a transient app resume during
+  // the dialog/handoff can't clear the Now Playing state (see
+  // GameService.isGameLaunchInProgress). Closed by _registerGameLaunch on
+  // success, or below on failure.
+  GameService.beginLaunchPending();
   await GameLaunchManager().beginSession();
-  if (!context.mounted) return;
+  if (!context.mounted) {
+    GameService.clearLaunchPending();
+    return;
+  }
 
   // Display the launch overlay.
   showDialog(
@@ -50,17 +58,23 @@ Future<void> launchGameWithDialog({
 
   // Artificial delay for UX consistency and asset loading.
   await Future.delayed(const Duration(seconds: 2));
-  if (!context.mounted) return;
+  if (!context.mounted) {
+    GameService.clearLaunchPending();
+    return;
+  }
 
   final result = await GameService.launchGame(context, system, game);
 
   if (result.success) {
-    // Notify manager to begin background process monitoring.
+    // Notify manager to begin background process monitoring. On success
+    // _registerGameLaunch has already closed the launch-pending window
+    // (isGameLaunched now covers it).
     GameLaunchManager().onGameStarted(
       emulatorExe: GameService.launchedEmulatorExe,
     );
   } else {
     // Clean up session and close dialog on failure.
+    GameService.clearLaunchPending();
     GameLaunchManager().onDialogDisposed();
     if (context.mounted) Navigator.of(context).pop();
     if (onLaunchFailed != null && context.mounted) {

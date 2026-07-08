@@ -656,28 +656,15 @@ class MySystems extends StatelessWidget {
     if (secondaryState == null) return;
     final folder = system.primaryFolderName ?? system.folderName ?? 'all';
 
-    // UI Asset Mapping logic — resolve the same way as the hover path
-    // (_updateSecondaryScreenName): prefer a custom logo, then the active
-    // theme's logo, then the bundled asset. Resolving the theme asset here
-    // (instead of always falling back to the bundled asset) is what keeps the
-    // correct system art on the secondary display when returning from a
-    // system, rather than reverting to the default logo until the user hovers
-    // another system. See NeoAssetsProvider (returns null when no theme).
     final neoAssets = Provider.of<NeoAssetsProvider>(context, listen: false);
 
     final String? customLogo = system.customLogoPath?.isNotEmpty == true
         ? system.customLogoPath
         : null;
-    final String? themeLogo = customLogo == null
-        ? neoAssets.getLogoForSystemSync(folder)
-        : null;
     final String? systemLogo = system.isGame
         ? system.customWheelImage
-        : (customLogo ??
-              themeLogo ??
-              'assets/images/systems/logos/$folder.webp');
-    final bool isLogoAsset =
-        !system.isGame && customLogo == null && themeLogo == null;
+        : (customLogo ?? 'assets/images/logos/$folder.webp');
+    final bool isLogoAsset = !system.isGame && customLogo == null;
 
     final String? customBg = system.customBackgroundPath;
     final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
@@ -810,7 +797,6 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   SecondaryDisplayState? _secondaryDisplayState;
 
   final Map<String, String?> _themeBackgrounds = {};
-  final Map<String, String?> _themeLogos = {};
   String _lastThemeFolder = '';
 
   List<List<int>>? _cachedVirtualGrid;
@@ -837,7 +823,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     _initializeGamepad();
 
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
+      _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
 
@@ -882,10 +868,9 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     _lastThemeFolder = themeFolder;
 
     if (themeFolder.isEmpty) {
-      if (_themeBackgrounds.isNotEmpty || _themeLogos.isNotEmpty) {
+      if (_themeBackgrounds.isNotEmpty) {
         setState(() {
           _themeBackgrounds.clear();
-          _themeLogos.clear();
         });
       }
       return;
@@ -902,20 +887,15 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
         .toSet();
 
     final Map<String, String?> newBgs = {};
-    final Map<String, String?> newLogos = {};
 
     for (final folder in folderNames) {
       newBgs[folder] = neoAssets.getBackgroundForSystemSync(folder);
-      newLogos[folder] = neoAssets.getLogoForSystemSync(folder);
     }
 
     setState(() {
       _themeBackgrounds
         ..clear()
         ..addAll(newBgs);
-      _themeLogos
-        ..clear()
-        ..addAll(newLogos);
     });
   }
 
@@ -962,15 +942,6 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           if (file.existsSync()) {
             precacheImage(ResizeImage(FileImage(file), width: 512), context);
           }
-        } else {
-          final folderName = sys.primaryFolderName ?? sys.folderName ?? '';
-          final themeLogo = _themeLogos[folderName];
-          if (themeLogo != null && themeLogo.isNotEmpty) {
-            final file = File(themeLogo);
-            if (file.existsSync()) {
-              precacheImage(ResizeImage(FileImage(file), width: 512), context);
-            }
-          }
         }
       }
     }
@@ -994,14 +965,10 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     final String? customLogo = info.customLogoPath?.isNotEmpty == true
         ? info.customLogoPath
         : null;
-    final String? themeLogo = customLogo == null ? _themeLogos[folder] : null;
     final String? systemLogo = info.isGame
         ? info.customWheelImage
-        : (customLogo ??
-              themeLogo ??
-              'assets/images/systems/logos/$folder.webp');
-    final bool isLogoAsset =
-        !info.isGame && customLogo == null && themeLogo == null;
+        : (customLogo ?? 'assets/images/logos/$folder.webp');
+    final bool isLogoAsset = !info.isGame && customLogo == null;
 
     final String? customBg = info.customBackgroundPath;
     final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
@@ -1116,10 +1083,10 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   void dispose() {
     _cardSizeLabelTimer?.cancel();
     _cardSizeLabel.dispose();
+    // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _cleanupGamepad();
     _scrollController.dispose();
-    _secondaryDisplayState?.dispose();
     super.dispose();
   }
 
@@ -1377,7 +1344,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     // For system cards (childAspectRatio != 1) add extra height for logo footer.
     final double itemHeight;
     if (widget.childAspectRatio != 1) {
-      itemHeight = itemWidth + 56.r;
+      itemHeight = itemWidth + 32.r;
     } else {
       itemHeight = itemWidth / widget.childAspectRatio;
     }
@@ -1689,6 +1656,8 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
         final List<Widget> cardWidgets = [];
         final Set<int> placedIndices = {};
 
+        double? selLeft, selTop, selWidth, selHeight;
+
         for (int r = 0; r < grid.length; r++) {
           for (int c = 0; c < grid[r].length; c++) {
             final cardIdx = grid[r][c];
@@ -1702,6 +1671,13 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             final top = r * (rowHeight + spY);
             final width = spanW * colWidth + (spanW - 1) * spX;
             final height = spanH * rowHeight + (spanH - 1) * spY;
+
+            if (cardIdx == widget.selectedIndex) {
+              selLeft = left;
+              selTop = top;
+              selWidth = width;
+              selHeight = height;
+            }
 
             cardWidgets.add(
               Positioned(
@@ -1738,62 +1714,60 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           }
         }
 
-        // Focused Item Highlight calculations.
-        double? highlightLeft, highlightTop, highlightWidth, highlightHeight;
-        if (widget.selectedIndex != -1) {
-          for (int r = 0; r < grid.length; r++) {
-            for (int c = 0; c < grid[r].length; c++) {
-              if (grid[r][c] == widget.selectedIndex) {
-                final card = systemCards[widget.selectedIndex];
-                final spanW = (card.isGame && cols >= 3) ? 3 : 1;
-                final spanH = (card.isGame && cols >= 3) ? 2 : 1;
-
-                highlightLeft = c * (colWidth + spX);
-                highlightTop = r * (rowHeight + spY);
-                highlightWidth = spanW * colWidth + (spanW - 1) * spX;
-                highlightHeight = spanH * rowHeight + (spanH - 1) * spY;
-                break;
-              }
-            }
-            if (highlightLeft != null) break;
-          }
-        }
+        final focusIndicator =
+            (selLeft != null &&
+                selTop != null &&
+                selWidth != null &&
+                selHeight != null)
+            ? AnimatedPositioned(
+                key: const ValueKey('focus_indicator'),
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.fastOutSlowIn,
+                left: selLeft + 1.r,
+                top: selTop + 1.r,
+                width: selWidth - 2.r,
+                height: selHeight - 2.r,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14.r),
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Theme.of(
+                            context,
+                          ).colorScheme.secondary.withValues(alpha: 0.28),
+                          Theme.of(
+                            context,
+                          ).colorScheme.secondary.withValues(alpha: 0.08),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.35, 1.0],
+                      ),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.secondary.withValues(alpha: 0.55),
+                        width: 2.r,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink();
 
         return SingleChildScrollView(
           controller: _scrollController,
+          clipBehavior: Clip.none,
           physics: const BouncingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
           ),
           child: SizedBox(
             height: totalHeight,
             child: Stack(
-              children: [
-                ...cardWidgets,
-                if (highlightLeft != null)
-                  AnimatedPositioned(
-                    duration: Duration(
-                      milliseconds: _isNavigatingFast ? 120 : 300,
-                    ),
-                    curve: Curves.easeOutQuart,
-                    left: highlightLeft,
-                    top: highlightTop!,
-                    width: highlightWidth!,
-                    height: highlightHeight!,
-                    child: RepaintBoundary(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.secondary,
-                              width: 4.r,
-                            ),
-                            borderRadius: BorderRadius.circular(14.r),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+              clipBehavior: Clip.none,
+              children: [...cardWidgets, focusIndicator],
             ),
           ),
         );

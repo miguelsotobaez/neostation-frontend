@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../models/retro_achievements_user.dart';
 import '../models/retro_achievements_summary.dart';
 import '../services/retro_achievements_service.dart';
 import '../repositories/retro_achievements_repository.dart';
+import '../models/retro_achievements_dashboard_models.dart';
 import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
 import '../models/retro_achievements_user_awards.dart';
@@ -14,6 +17,12 @@ import 'retroachievements/strategy_factory.dart';
 /// Handles user authentication, profile synchronization, achievement progress
 /// tracking, and ROM identification via console-specific hashing algorithms.
 class RetroAchievementsProvider extends ChangeNotifier {
+  static const String _dashboardApiKeyError =
+      'A RetroAchievements web API key is required for this dashboard data.';
+
+  static const String _rateLimitError =
+      'RetroAchievements is rate-limiting requests. Please wait a moment and try again.';
+
   /// Basic profile information for the authenticated user.
   RetroAchievementsUser? _user;
 
@@ -28,6 +37,9 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   /// Current authenticated username.
   String _username = '';
+
+  /// Current RetroAchievements API key used for requests.
+  String _apiKey = '';
 
   static final _log = LoggerService.instance;
 
@@ -84,6 +96,27 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   /// Whether the user awards have been loaded.
   bool _userAwardsLoaded = false;
+  bool _userAwardsLoading = false;
+  String? _userAwardsError;
+
+  List<RetroAchievementRecentUnlockItem> _recentUnlocks = [];
+  bool _recentUnlocksLoaded = false;
+  bool _recentUnlocksLoading = false;
+  String? _recentUnlocksError;
+
+  List<RetroAchievementRecentlyPlayedGameItem> _recentlyPlayedGames = [];
+  bool _recentlyPlayedLoaded = false;
+  bool _recentlyPlayedLoading = false;
+  String? _recentlyPlayedError;
+
+  RetroAchievementCompletionProgressSummary? _completionProgress;
+  bool _completionProgressLoaded = false;
+  bool _completionProgressLoading = false;
+  String? _completionProgressError;
+
+  bool _gotwLoading = false;
+  String? _gotwError;
+  OwnedWeekGameResolution? _ownedWeekGame;
 
   // Getters
   RetroAchievementsUser? get user => _user;
@@ -91,6 +124,7 @@ class RetroAchievementsProvider extends ChangeNotifier {
   bool get isConnected => _isConnected;
   String? get error => _error;
   String get username => _username;
+  String get apiKey => _apiKey;
 
   bool get isScanning => _isScanning;
   double get scanProgress => _scanProgress;
@@ -114,16 +148,65 @@ class RetroAchievementsProvider extends ChangeNotifier {
   RetroAchievementsGOTW? get gotw => _gotw;
   bool get gotwLoaded => _gotwLoaded;
 
+  /// Whether the current user has already earned the Achievement of the Week.
+  bool get gotwEarned {
+    if (_gotw == null || _user == null) return false;
+    return _gotw!.unlocks.any((u) => u.user == _user!.user);
+  }
+
+  /// Recent mastery awards (hardcore) visible to the user.
+  List<UserAward> get recentMasteries => _recentAwardsForMode(hardcore: true);
+
+  /// Recent completion awards (casual) visible to the user.
+  List<UserAward> get recentCompletions =>
+      _recentAwardsForMode(hardcore: false);
+
   RetroAchievementsUserAwards? get userAwards => _userAwards;
   bool get userAwardsLoaded => _userAwardsLoaded;
+  bool get userAwardsLoading => _userAwardsLoading;
+  String? get userAwardsError => _userAwardsError;
+  List<RetroAchievementRecentUnlockItem> get recentUnlocks => _recentUnlocks;
+  bool get recentUnlocksLoaded => _recentUnlocksLoaded;
+  bool get recentUnlocksLoading => _recentUnlocksLoading;
+  String? get recentUnlocksError => _recentUnlocksError;
+  List<RetroAchievementRecentlyPlayedGameItem> get recentlyPlayedGames =>
+      _recentlyPlayedGames;
+  bool get recentlyPlayedLoaded => _recentlyPlayedLoaded;
+  bool get recentlyPlayedLoading => _recentlyPlayedLoading;
+  String? get recentlyPlayedError => _recentlyPlayedError;
+  RetroAchievementCompletionProgressSummary? get completionProgress =>
+      _completionProgress;
+  bool get completionProgressLoaded => _completionProgressLoaded;
+  bool get completionProgressLoading => _completionProgressLoading;
+  String? get completionProgressError => _completionProgressError;
+  bool get gotwLoading => _gotwLoading;
+  String? get gotwError => _gotwError;
+  OwnedWeekGameResolution? get ownedWeekGame => _ownedWeekGame;
+  bool get hasResolvedApiKey =>
+      RetroAchievementsService.resolveApiKey(_apiKey).trim().isNotEmpty;
+
+  bool get dashboardLoaded =>
+      _recentUnlocksLoaded &&
+      _recentlyPlayedLoaded &&
+      _userAwardsLoaded &&
+      _completionProgressLoaded &&
+      _gotwLoaded;
 
   /// Authenticates with RetroAchievements using the specified username.
   ///
   /// Upon successful connection, it persists the credentials for auto-login
   /// and triggers a background fetch of user statistics, summaries, and awards.
-  Future<bool> connect(String username) async {
+  Future<bool> connect(String username, {String? apiKey}) async {
     if (username.trim().isEmpty) {
       _error = 'Please enter a username';
+      notifyListeners();
+      return false;
+    }
+
+    final resolvedApiKey = RetroAchievementsService.resolveApiKey(apiKey);
+    if (resolvedApiKey.trim().isEmpty) {
+      _error = 'Please enter your RetroAchievements web API key';
+      _isConnected = false;
       notifyListeners();
       return false;
     }
@@ -131,10 +214,12 @@ class RetroAchievementsProvider extends ChangeNotifier {
     _setLoading(true);
     _error = null;
     _username = username.trim();
+    _apiKey = resolvedApiKey.trim();
 
     try {
       final userProfile = await RetroAchievementsService.getUserProfile(
         _username,
+        apiKey: _apiKey,
       );
 
       if (userProfile != null) {
@@ -142,9 +227,9 @@ class RetroAchievementsProvider extends ChangeNotifier {
         _isConnected = true;
 
         await _saveRAUserToConfig(_username);
+        await _saveRAApiKeyToConfig(_apiKey);
         await loadLocalStats();
-        await loadUserSummary();
-        await fetchUserAwards();
+        unawaited(loadUserSummary());
 
         notifyListeners();
         return true;
@@ -173,16 +258,25 @@ class RetroAchievementsProvider extends ChangeNotifier {
       return false;
     }
 
+    if (!hasResolvedApiKey) {
+      _summaryLoaded = false;
+      _error = _dashboardApiKeyError;
+      notifyListeners();
+      return false;
+    }
+
     _setLoading(true);
     _error = null;
 
     try {
-      final summary = await RetroAchievementsService.getUserSummary(_username);
+      final summary = await RetroAchievementsService.getUserSummary(
+        _username,
+        apiKey: _apiKey,
+      );
 
       if (summary != null) {
         _userSummary = summary;
         _summaryLoaded = true;
-        await fetchUserAwards();
         notifyListeners();
         return true;
       } else {
@@ -192,7 +286,7 @@ class RetroAchievementsProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _error = 'Error loading user summary: $e';
+      _error = _describeApiError(e, 'Error loading user summary');
       _summaryLoaded = false;
       _log.e('$_error');
       notifyListeners();
@@ -204,32 +298,56 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   /// Fetches metadata for the current site-wide "Game of the Week".
   Future<bool> fetchGOTW() async {
-    _error = null;
-    _setLoading(true);
+    if (!_isConnected) {
+      _gotwLoaded = false;
+      return false;
+    }
+
+    if (!hasResolvedApiKey) {
+      _gotw = null;
+      _gotwLoaded = false;
+      _gotwError = _dashboardApiKeyError;
+      notifyListeners();
+      return false;
+    }
+
+    _gotwLoading = true;
+    _gotwError = null;
+    notifyListeners();
 
     try {
       final gotw = await RetroAchievementsService.getAchievementOfTheWeek(
-        username: _user?.user,
+        apiKey: _apiKey,
       );
 
       if (gotw != null) {
         _gotw = gotw;
         _gotwLoaded = true;
+        await _resolveOwnedWeekGame();
         notifyListeners();
         return true;
       } else {
         _log.w('fetchAOTW returned null');
+        _gotw = null;
         _gotwLoaded = false;
+        _gotwError = 'Could not load Achievement of the Week';
         notifyListeners();
         return false;
       }
     } catch (e) {
-      _log.e('Error loading achievement of the week: $e');
+      _gotwError = _describeApiError(
+        e,
+        'Error loading Achievement of the Week',
+      );
       _gotwLoaded = false;
+      _gotw = null;
+      _ownedWeekGame = null;
+      _log.e(_gotwError ?? 'Unknown GOTW error');
       notifyListeners();
       return false;
     } finally {
-      _setLoading(false);
+      _gotwLoading = false;
+      notifyListeners();
     }
   }
 
@@ -237,21 +355,40 @@ class RetroAchievementsProvider extends ChangeNotifier {
   Future<bool> fetchUserAwards() async {
     if (!_isConnected || _username.isEmpty) return false;
 
+    if (!hasResolvedApiKey) {
+      _userAwards = null;
+      _userAwardsLoaded = false;
+      _userAwardsError = _dashboardApiKeyError;
+      notifyListeners();
+      return false;
+    }
+
+    _userAwardsLoading = true;
+    _userAwardsError = null;
+    notifyListeners();
+
     try {
       final awardsData = await RetroAchievementsService.getUserAwards(
         _username,
+        apiKey: _apiKey,
       );
       if (awardsData != null) {
         _userAwards = RetroAchievementsUserAwards.fromJson(awardsData);
         _userAwardsLoaded = true;
-        notifyListeners();
         return true;
       }
+      _userAwardsLoaded = false;
+      _userAwardsError = 'User awards could not be loaded';
       return false;
     } catch (e) {
-      _log.e('Error loading user awards: $e');
+      _userAwardsError = _describeApiError(e, 'Error loading user awards');
       _userAwardsLoaded = false;
+      _userAwards = null;
+      _log.e(_userAwardsError ?? 'Unknown user awards error');
       return false;
+    } finally {
+      _userAwardsLoading = false;
+      notifyListeners();
     }
   }
 
@@ -285,6 +422,7 @@ class RetroAchievementsProvider extends ChangeNotifier {
             gameId,
             _username,
             md5Hash: md5Hash,
+            apiKey: _apiKey,
           );
 
       if (gameInfo != null) {
@@ -304,8 +442,10 @@ class RetroAchievementsProvider extends ChangeNotifier {
   /// Initializes the provider and attempts automatic login with stored credentials.
   Future<void> initialize() async {
     try {
-      await tryAutoLogin();
-      await fetchGOTW();
+      final loggedIn = await tryAutoLogin();
+      if (loggedIn) {
+        await fetchGOTW();
+      }
     } catch (e) {
       _log.e('Error initializing RA: $e');
     }
@@ -315,9 +455,19 @@ class RetroAchievementsProvider extends ChangeNotifier {
   Future<bool> tryAutoLogin() async {
     try {
       final savedUsername = await _loadRAUserFromConfig();
+      final savedApiKey = await _loadRAApiKeyFromConfig();
 
       if (savedUsername != null && savedUsername.isNotEmpty) {
-        final success = await connect(savedUsername);
+        if (RetroAchievementsService.resolveApiKey(
+          savedApiKey,
+        ).trim().isEmpty) {
+          _log.i(
+            'Skipping RetroAchievements auto-login for $savedUsername: no API key available',
+          );
+          return false;
+        }
+
+        final success = await connect(savedUsername, apiKey: savedApiKey);
         if (!success) {
           _log.e(
             'Auto-login failed for: $savedUsername (user preserved for retry)',
@@ -325,6 +475,18 @@ class RetroAchievementsProvider extends ChangeNotifier {
         }
         return success;
       } else {
+        // No saved username. Older builds persisted the maintainer's shared
+        // API key here and authenticated everyone's traffic with it; the v94
+        // migration cleared the username to force a personal-key login. Since
+        // credentials are now always saved/cleared as a pair, a key with no
+        // username can only be that orphaned legacy key — drop it so it can
+        // never be reused.
+        if (savedApiKey != null && savedApiKey.isNotEmpty) {
+          await RetroAchievementsRepository.clearRAApiKey();
+          _log.i(
+            'Cleared orphaned RetroAchievements API key (legacy shared key)',
+          );
+        }
         return false;
       }
     } catch (e) {
@@ -340,12 +502,35 @@ class RetroAchievementsProvider extends ChangeNotifier {
     _user = null;
     _isConnected = false;
     _username = '';
+    _apiKey = '';
     _error = null;
     _userSummary = null;
     _summaryLoaded = false;
+    _gotw = null;
+    _gotwLoaded = false;
+    _gotwLoading = false;
+    _gotwError = null;
+    _ownedWeekGame = null;
+    _userAwards = null;
+    _userAwardsLoaded = false;
+    _userAwardsLoading = false;
+    _userAwardsError = null;
+    _recentUnlocks = [];
+    _recentUnlocksLoaded = false;
+    _recentUnlocksLoading = false;
+    _recentUnlocksError = null;
+    _recentlyPlayedGames = [];
+    _recentlyPlayedLoaded = false;
+    _recentlyPlayedLoading = false;
+    _recentlyPlayedError = null;
+    _completionProgress = null;
+    _completionProgressLoaded = false;
+    _completionProgressLoading = false;
+    _completionProgressError = null;
 
     if (clearSavedUser) {
       _clearRAUserFromConfig();
+      _clearRAApiKeyFromConfig();
     }
 
     notifyListeners();
@@ -409,12 +594,31 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
   }
 
+  /// Persists the RetroAchievements API key to secure storage.
+  Future<void> _saveRAApiKeyToConfig(String apiKey) async {
+    try {
+      await RetroAchievementsRepository.saveRAApiKey(apiKey);
+    } catch (e) {
+      _log.e('Error saving RA API key: $e');
+    }
+  }
+
   /// Retrieves the persisted RetroAchievements username from the configuration table.
   Future<String?> _loadRAUserFromConfig() async {
     try {
       return await RetroAchievementsRepository.getRAUser();
     } catch (e) {
       _log.e('Error loading RA user from DB: $e');
+    }
+    return null;
+  }
+
+  /// Retrieves the persisted RetroAchievements API key from secure storage.
+  Future<String?> _loadRAApiKeyFromConfig() async {
+    try {
+      return await RetroAchievementsRepository.getRAApiKey();
+    } catch (e) {
+      _log.e('Error loading RA API key from secure storage: $e');
     }
     return null;
   }
@@ -426,5 +630,180 @@ class RetroAchievementsProvider extends ChangeNotifier {
     } catch (e) {
       _log.e('Error clearing RA user: $e');
     }
+  }
+
+  /// Removes the RetroAchievements API key from secure storage.
+  Future<void> _clearRAApiKeyFromConfig() async {
+    try {
+      await RetroAchievementsRepository.clearRAApiKey();
+    } catch (e) {
+      _log.e('Error clearing RA API key: $e');
+    }
+  }
+
+  Future<bool> fetchCompletionProgress() async {
+    if (!_isConnected || _username.isEmpty) return false;
+
+    if (!hasResolvedApiKey) {
+      _completionProgress = null;
+      _completionProgressLoaded = false;
+      _completionProgressError = _dashboardApiKeyError;
+      notifyListeners();
+      return false;
+    }
+
+    _completionProgressLoading = true;
+    _completionProgressError = null;
+    notifyListeners();
+
+    try {
+      final progress = await RetroAchievementsService.getUserCompletionProgress(
+        _username,
+        apiKey: _apiKey,
+      );
+      _completionProgress = progress;
+      _completionProgressLoaded = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _completionProgressError = _describeApiError(
+        e,
+        'Error loading completion progress',
+      );
+      _completionProgressLoaded = false;
+      _completionProgress = null;
+      _log.e(_completionProgressError ?? 'Unknown completion progress error');
+      return false;
+    } finally {
+      _completionProgressLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> fetchRecentlyPlayedGames() async {
+    if (!_isConnected || _username.isEmpty) return false;
+
+    if (!hasResolvedApiKey) {
+      _recentlyPlayedGames = [];
+      _recentlyPlayedLoaded = false;
+      _recentlyPlayedError = _dashboardApiKeyError;
+      notifyListeners();
+      return false;
+    }
+
+    _recentlyPlayedLoading = true;
+    _recentlyPlayedError = null;
+    notifyListeners();
+
+    try {
+      final list = await RetroAchievementsService.getUserRecentlyPlayedGames(
+        _username,
+        apiKey: _apiKey,
+      );
+      _recentlyPlayedGames = list;
+      _recentlyPlayedLoaded = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _recentlyPlayedError = _describeApiError(
+        e,
+        'Error loading recently played games',
+      );
+      _recentlyPlayedLoaded = false;
+      _recentlyPlayedGames = [];
+      _log.e(_recentlyPlayedError ?? 'Unknown recently played error');
+      return false;
+    } finally {
+      _recentlyPlayedLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> fetchRecentUnlocks() async {
+    if (!_isConnected || _username.isEmpty) return false;
+
+    if (!hasResolvedApiKey) {
+      _recentUnlocks = [];
+      _recentUnlocksLoaded = false;
+      _recentUnlocksError = _dashboardApiKeyError;
+      notifyListeners();
+      return false;
+    }
+
+    _recentUnlocksLoading = true;
+    _recentUnlocksError = null;
+    notifyListeners();
+
+    try {
+      final list = await RetroAchievementsService.getUserRecentAchievements(
+        _username,
+        apiKey: _apiKey,
+      );
+      _recentUnlocks = list;
+      _recentUnlocksLoaded = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _recentUnlocksError = _describeApiError(
+        e,
+        'Error loading recent unlocks',
+      );
+      _recentUnlocksLoaded = false;
+      _recentUnlocks = [];
+      _log.e(_recentUnlocksError ?? 'Unknown recent unlocks error');
+      return false;
+    } finally {
+      _recentUnlocksLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _resolveOwnedWeekGame() async {
+    final raGameId = _gotw?.game.id;
+    if (raGameId == null || raGameId <= 0) {
+      _ownedWeekGame = null;
+      return;
+    }
+
+    try {
+      _ownedWeekGame =
+          await RetroAchievementsRepository.findBestLocalGameByRaGameId(
+            raGameId,
+          );
+    } catch (e) {
+      _ownedWeekGame = null;
+      _log.e('Error resolving local GOTW ownership: $e');
+    }
+  }
+
+  bool _isUnauthorizedError(Object error) => error.toString().contains('(401)');
+
+  /// The RetroAchievements API (behind Cloudflare) returns HTTP 429 when a
+  /// user exceeds the request rate. The services surface it as a `(429)` in
+  /// the thrown message, so match on that.
+  bool _isRateLimitedError(Object error) => error.toString().contains('(429)');
+
+  /// Maps a caught API error to a user-facing message: a missing/invalid key
+  /// and rate-limiting each get a dedicated, actionable string; everything
+  /// else falls back to [fallback] with the raw error appended.
+  String _describeApiError(Object error, String fallback) {
+    if (_isUnauthorizedError(error)) return _dashboardApiKeyError;
+    if (_isRateLimitedError(error)) return _rateLimitError;
+    return '$fallback: $error';
+  }
+
+  List<UserAward> _recentAwardsForMode({required bool hardcore}) {
+    final awards = _userAwards?.visibleUserAwards ?? const <UserAward>[];
+    final matchingMode = hardcore ? 1 : 0;
+
+    final filtered = awards.where((award) {
+      if (award.awardType.toLowerCase() != 'mastery/completion') {
+        return false;
+      }
+      return award.awardDataExtra == matchingMode;
+    }).toList();
+
+    filtered.sort((a, b) => b.awardedAt.compareTo(a.awardedAt));
+    return filtered;
   }
 }

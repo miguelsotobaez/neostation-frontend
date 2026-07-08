@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import '../../../providers/sqlite_config_provider.dart';
@@ -48,6 +49,9 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
   /// Keys for scroll-into-view orchestration during gamepad navigation.
   final List<GlobalKey> _itemKeys = [];
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
 
   @override
   void initState() {
@@ -299,12 +303,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     if (index >= 0 && index < _itemKeys.length) {
       final context = _itemKeys[index].currentContext;
       if (context != null) {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
+        _scroller.ensureVisible(context);
       }
     }
   }

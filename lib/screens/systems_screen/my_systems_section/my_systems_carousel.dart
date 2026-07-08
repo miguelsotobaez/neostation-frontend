@@ -91,7 +91,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
   /// Asset mapping caches for the active theme.
   final Map<String, String?> _themeBackgrounds = {};
-  final Map<String, String?> _themeLogos = {};
   String _lastThemeFolder = '';
   final bool _loadingThemeAssets = false;
 
@@ -112,7 +111,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     _initializeGamepad();
 
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
+      _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
 
@@ -167,11 +166,11 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   @override
   void dispose() {
     _musicPlayerService.removeListener(_handleMusicStateChanged);
+    // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _cleanupGamepad();
     _scrollController.dispose();
     _achievementsController.dispose();
-    _secondaryDisplayState?.dispose();
     super.dispose();
   }
 
@@ -648,10 +647,9 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     _lastThemeFolder = themeFolder;
 
     if (themeFolder.isEmpty) {
-      if (_themeBackgrounds.isNotEmpty || _themeLogos.isNotEmpty) {
+      if (_themeBackgrounds.isNotEmpty) {
         setState(() {
           _themeBackgrounds.clear();
-          _themeLogos.clear();
         });
       }
       return;
@@ -665,20 +663,15 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
         .toSet();
 
     final Map<String, String?> newBgs = {};
-    final Map<String, String?> newLogos = {};
 
     for (final folder in folderNames) {
       newBgs[folder] = neoAssets.getBackgroundForSystemSync(folder);
-      newLogos[folder] = neoAssets.getLogoForSystemSync(folder);
     }
 
     setState(() {
       _themeBackgrounds
         ..clear()
         ..addAll(newBgs);
-      _themeLogos
-        ..clear()
-        ..addAll(newLogos);
       _itemWidthCache.clear();
     });
   }
@@ -1067,24 +1060,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       );
     }
 
-    // 2. Active Theme branding (resolved from local theme directory).
-    final themeLogoPath = _themeLogos[displayFolderName ?? ''];
-    if (themeLogoPath != null && themeLogoPath.isNotEmpty) {
-      return Image.file(
-        File(themeLogoPath),
-        key: ValueKey(themeLogoPath),
-        cacheWidth: 512,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => Image.asset(
-          assetLogoPath,
-          cacheWidth: 512,
-          fit: BoxFit.contain,
-          errorBuilder: (context, e2, st2) => fallback,
-        ),
-      );
-    }
-
-    // 3. Fallback: Bundled internal asset.
+    // 2. Fallback: Bundled internal asset.
     return Image.asset(
       assetLogoPath,
       cacheWidth: 512,
@@ -1105,7 +1081,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
         : (system.folderName?.isNotEmpty == true ? system.folderName! : 'all');
 
     // Primary identification asset resolution.
-    final assetLogoPath = 'assets/images/systems/logos/$displayFolderName.webp';
+    final assetLogoPath = 'assets/images/logos/$displayFolderName.webp';
     final customWheelPath = system.customWheelImage;
     final wheelFile =
         (system.isGame && customWheelPath != null && customWheelPath.isNotEmpty)
@@ -1224,14 +1200,10 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       final String? customLogo = system.customLogoPath?.isNotEmpty == true
           ? system.customLogoPath
           : null;
-      final String? themeLogo = customLogo == null ? _themeLogos[folder] : null;
       final String? systemLogo = system.isGame
           ? system.customWheelImage
-          : (customLogo ??
-                themeLogo ??
-                'assets/images/systems/logos/$folder.webp');
-      final bool isLogoAsset =
-          !system.isGame && customLogo == null && themeLogo == null;
+          : (customLogo ?? 'assets/images/logos/$folder.webp');
+      final bool isLogoAsset = !system.isGame && customLogo == null;
 
       // Background resolution for secondary display.
       final String? customBg = system.customBackgroundPath;

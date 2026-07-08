@@ -285,6 +285,12 @@ class SqliteMigrations {
       case 93:
         await _migrateToVersion93(db);
         break;
+      case 94:
+        await _migrateToVersion94(db);
+        break;
+      case 95:
+        await _migrateToVersion95(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4637,6 +4643,53 @@ class SqliteMigrations {
       }
     } catch (e, stackTrace) {
       _log.e('Error in migration v93: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion94(Database db) async {
+    // The RetroAchievements overhaul requires each user to supply their own
+    // username AND personal web API key. Older builds let users connect with a
+    // username alone (riding on the bundled build-time key), so any existing
+    // session must be invalidated on upgrade to force a fresh login. Clearing
+    // ra_user is sufficient: auto-login is skipped when no username is stored.
+    _log.i(
+      'Migration v94: Clearing saved RetroAchievements user to force '
+      're-login with a personal API key',
+    );
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (columns.contains('ra_user')) {
+        db.execute('UPDATE user_config SET ra_user = NULL');
+        _log.i('Cleared ra_user via v94');
+      } else {
+        _log.i('user_config has no ra_user column; nothing to clear in v94');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v94: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion95(Database db) async {
+    _log.i('Migration v95: Adding game_carousel_card_style to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('game_carousel_card_style')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN game_carousel_card_style TEXT DEFAULT 'fanart'",
+        );
+        _log.i('Column game_carousel_card_style added via v95');
+      } else {
+        _log.i('Column game_carousel_card_style already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v95: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

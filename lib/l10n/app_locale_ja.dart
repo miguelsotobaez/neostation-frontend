@@ -700,6 +700,16 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.userDataLocationSubtitle: 'メディア、テーマ、アプリデータの保存場所を選択します',
   AppLocale.userDataLocationDefault: 'デフォルトの場所',
   AppLocale.selectUserDataFolder: 'データフォルダを選択',
+  AppLocale.folderNotEmptyTitle: 'フォルダが空ではありません',
+  AppLocale.folderNotEmptyBody:
+      'このフォルダには既に {count} 個の項目があります。NeoStation は既存の内容とともに、ここに独自のデータを保存します。',
+  AppLocale.folderNotEmptyUseAnyway: 'このまま使用',
+  AppLocale.moveUserDataTitle: 'ユーザーデータを移動しますか？',
+  AppLocale.moveUserDataBody:
+      'NeoStation は自身のデータ（データベース、取得したメディア、設定）を現在のフォルダから新しいフォルダへ移動します。NeoStation が作成していないファイルはそのまま残ります。',
+  AppLocale.moveUserDataDestNotEmpty:
+      '新しいフォルダには既に {count} 個の項目があります。NeoStation のデータはそれらと一緒に追加されます。',
+  AppLocale.moveUserDataConfirm: 'データを移動',
   AppLocale.migratingUserData: 'データを移動中',
   AppLocale.migratingUserDataComplete: '移行完了',
   AppLocale.migratingUserDataError: '移行に失敗しました',
@@ -711,10 +721,49 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.romDirectories: 'ROMディレクトリ',
   AppLocale.addRomFolder: 'ROMフォルダを追加',
   AppLocale.removeRomFolder: '削除',
+  AppLocale.resetPlayTimeConfirm: 'プレイ時間をリセット',
+  AppLocale.resetPlayTimeConfirmBody:
+      'このゲームの記録されたプレイ時間を完全にゼロにリセットします。この操作は元に戻せません。',
+  AppLocale.removeRomFolderConfirmBody:
+      'このROMフォルダをライブラリのソースから削除します。ディスク上のファイルは削除されません。',
+  AppLocale.disconnectRaConfirm: 'RetroAchievements の接続を解除',
+  AppLocale.disconnectRaConfirmBody:
+      'ログアウトし、保存されたRetroAchievementsの認証情報をこのデバイスから削除します。',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'このデバイスでNeoSyncアカウントからログアウトします。',
 
   AppLocale.deleteGame: 'ゲームを削除',
   AppLocale.deleteGameConfirm: '完全に削除する',
   AppLocale.deleteGameConfirmBody:
       'ゲームのROMファイル、スクレイピングデータ、メディアファイルを完全に削除します。この操作は元に戻せません。',
   AppLocale.deleteGameSubtitle: 'ROMファイルをディスクから完全に削除します',
+
+  AppLocale.raCompletionsLabel: 'コンプリート',
+  AppLocale.raMasteriesLabel: 'マスター',
+  AppLocale.raEarned: '獲得済み',
+  AppLocale.raOwned: '所有',
+  AppLocale.raPointsAbbrev: 'pt',
+  AppLocale.raAlreadyEarned: 'この実績はすでに獲得済みです',
+  AppLocale.raTapToOpenLocalGame: 'タップしてローカルゲームの詳細を開く',
+  AppLocale.raRecentUnlocks: '最近のアンロック',
+  AppLocale.raRecentCompletions: '最近のコンプリート',
+  AppLocale.raRecentMasteries: '最近のマスター',
+  AppLocale.raNoCompletionsYet: 'まだコンプリートはありません',
+  AppLocale.raNoMasteriesYet: 'まだマスターはありません',
+  AppLocale.raTrackedGames: '個の追跡中ゲーム',
+  AppLocale.raCompletionLabel: 'コンプリート',
+  AppLocale.raMasteryLabel: 'マスター',
+  AppLocale.raCouldNotResolveLocalSystem: 'このゲームのローカルシステムを特定できませんでした',
+  AppLocale.raMissable: '見逃し注意',
+  AppLocale.raComments: 'コメント',
+  AppLocale.raCommentsCouldNotLoad: 'コメントを読み込めませんでした。',
+  AppLocale.raNoCommentsYet: 'まだコメントはありません。',
+  AppLocale.raOlderCommentsAvailable: '過去のコメントがあります。',
+  AppLocale.raLoadMore: 'もっと読み込む',
+  AppLocale.raRateLimited: 'RetroAchievements は現在混雑しています。少し待ってからもう一度お試しください。',
+  AppLocale.raApiKey: 'APIキー',
+  AppLocale.raEnterApiKey: 'APIキーを入力',
+  AppLocale.raNoRecentUnlocks: '過去30日間に解除した実績はありません',
+  AppLocale.raRecentlyPlayedTitle: '最近プレイ',
+  AppLocale.raNoRecentlyPlayed: '最近プレイしたゲームはありません',
 };

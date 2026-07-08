@@ -7,6 +7,7 @@ import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:logger/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:neostation/services/saf_directory_service.dart';
+import 'package:neostation/services/sfx_service.dart';
 import '../repositories/game_repository.dart';
 import '../models/game_model.dart';
 
@@ -126,6 +127,14 @@ class MusicPlayerService extends ChangeNotifier {
   GameModel? get activeTrack => _activeTrack;
 
   bool _isAppActive = true;
+
+  // Battery: when the app is backgrounded/locked we fully release the shared
+  // SoLoud engine so its audio output device stops running and the CPU can
+  // deep-sleep. These fields remember what to restore on resume.
+  bool _engineTornDownByPause = false;
+  bool _wasPlayingBeforePause = false;
+  int _resumeIndexAfterPause = -1;
+
   final _positionController = StreamController<Duration>.broadcast();
   final _durationController = StreamController<Duration>.broadcast();
   final _playerStateController = StreamController<bool>.broadcast();
@@ -171,12 +180,68 @@ class MusicPlayerService extends ChangeNotifier {
     _positionTimer = null;
     _durationTimer = null;
     _playerStateTimer = null;
+
+    // Release the shared audio engine while backgrounded. An initialized
+    // SoLoud engine keeps its output device (and mixing callback) running
+    // continuously, which prevents the SoC from deep-sleeping and drains the
+    // battery while the device is locked. Key off the engine's real state:
+    // SFX may hold it open even when this service was never initialized.
+    if (!SoLoud.instance.isInitialized) return;
+    _teardownEngine();
   }
 
-  void appResumed() {
-    if (!_isAppActive) {
-      _isAppActive = true;
+  /// Tears down the shared SoLoud engine and records what to restore later.
+  void _teardownEngine() {
+    _wasPlayingBeforePause = _isPlaying || _wasPlayingBeforeGame;
+    _resumeIndexAfterPause = _activeIndex;
+    try {
+      SoLoud.instance.deinit();
+    } catch (e) {
+      _logger.w("Error releasing SoLoud engine on pause: $e");
+    }
+    // The engine is gone; all handles/sources are now invalid.
+    _currentHandle = null;
+    _currentSource = null;
+    _audioData = null;
+    _isPlaying = false;
+    _isInitialized = false;
+    _initCompleter = null;
+    _engineTornDownByPause = true;
+    // SFX shares the engine — drop its cached sources so it reloads on resume.
+    SfxService().handleEngineTornDown();
+  }
+
+  Future<void> appResumed() async {
+    if (_isAppActive) return;
+    _isAppActive = true;
+
+    if (!_engineTornDownByPause) {
+      // Nothing was released (e.g. engine was never open); just restart timers.
       if (_isInitialized) _startStreamTimers();
+      return;
+    }
+    _engineTornDownByPause = false;
+
+    final restoreMusic = _wasPlayingBeforePause && _playlist.isNotEmpty;
+    final restoreIndex = _resumeIndexAfterPause;
+    _wasPlayingBeforePause = false;
+    _wasPlayingBeforeGame = false;
+
+    // Reopen the engine for SFX (the eager consumer). This re-inits the shared
+    // native engine, so a subsequent music init() will find it already up.
+    try {
+      await SfxService().reinitializeAfterEngineRestart();
+    } catch (e) {
+      _logger.w("Error reloading SFX after resume: $e");
+    }
+
+    // Resume music from the top of the track it was playing when we paused.
+    if (restoreMusic) {
+      try {
+        await start(index: restoreIndex, updateUI: true);
+      } catch (e) {
+        _logger.w("Error resuming music after resume: $e");
+      }
     }
   }
 
@@ -560,7 +625,7 @@ class MusicPlayerService extends ChangeNotifier {
             }
 
             _logger.d("Playing audio source...");
-            _currentHandle = await SoLoud.instance.play(
+            _currentHandle = SoLoud.instance.play(
               _currentSource!,
               volume: _isDucked ? _volume * 0.5 : _volume,
             );

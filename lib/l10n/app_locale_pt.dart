@@ -777,6 +777,16 @@ const Map<String, dynamic> appLocalePt = {
       'Escolha onde mídias, temas e dados do aplicativo são armazenados',
   AppLocale.userDataLocationDefault: 'Localização padrão',
   AppLocale.selectUserDataFolder: 'Selecionar Pasta de Dados',
+  AppLocale.folderNotEmptyTitle: 'Pasta não vazia',
+  AppLocale.folderNotEmptyBody:
+      'Esta pasta já contém {count} item(ns). O NeoStation irá armazenar os seus próprios dados aqui, junto com o conteúdo existente.',
+  AppLocale.folderNotEmptyUseAnyway: 'Usar mesmo assim',
+  AppLocale.moveUserDataTitle: 'Mover dados do usuário?',
+  AppLocale.moveUserDataBody:
+      'O NeoStation moverá seus próprios dados — banco de dados, mídia obtida e configurações — da pasta atual para a nova. Arquivos não criados pelo NeoStation permanecem intactos.',
+  AppLocale.moveUserDataDestNotEmpty:
+      'A nova pasta já contém {count} item(ns). Os dados do NeoStation serão adicionados junto a eles.',
+  AppLocale.moveUserDataConfirm: 'Mover dados',
   AppLocale.migratingUserData: 'Movendo Dados',
   AppLocale.migratingUserDataComplete: 'Migração concluída',
   AppLocale.migratingUserDataError: 'Falha na migração',
@@ -789,10 +799,52 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.romDirectories: 'Diretórios de ROM',
   AppLocale.addRomFolder: 'Adicionar pasta de ROM',
   AppLocale.removeRomFolder: 'Remover',
+  AppLocale.resetPlayTimeConfirm: 'Redefinir tempo de jogo',
+  AppLocale.resetPlayTimeConfirmBody:
+      'Isto irá redefinir permanentemente para zero o tempo de jogo registado deste jogo. Esta ação não pode ser desfeita.',
+  AppLocale.removeRomFolderConfirmBody:
+      'Isto irá remover esta pasta de ROMs das fontes da sua biblioteca. Os seus ficheiros no disco não são eliminados.',
+  AppLocale.disconnectRaConfirm: 'Desligar RetroAchievements',
+  AppLocale.disconnectRaConfirmBody:
+      'Isto irá terminar a sua sessão e remover as suas credenciais guardadas do RetroAchievements deste dispositivo.',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'Isto irá terminar a sessão da sua conta NeoSync neste dispositivo.',
 
   AppLocale.deleteGame: 'Excluir Jogo',
   AppLocale.deleteGameConfirm: 'Excluir Permanentemente',
   AppLocale.deleteGameConfirmBody:
       'Isso excluirá permanentemente o ROM do jogo, seus dados de scraping e arquivos de mídia. Esta ação não pode ser desfeita.',
   AppLocale.deleteGameSubtitle: 'Remove permanentemente o arquivo ROM do disco',
+
+  AppLocale.raCompletionsLabel: 'Conclusões',
+  AppLocale.raMasteriesLabel: 'Masterizações',
+  AppLocale.raEarned: 'Conquistados',
+  AppLocale.raOwned: 'Possuídos',
+  AppLocale.raPointsAbbrev: 'pts',
+  AppLocale.raAlreadyEarned: 'Você já conquistou esta conquista',
+  AppLocale.raTapToOpenLocalGame: 'Toque para abrir os detalhes do jogo local',
+  AppLocale.raRecentUnlocks: 'Desbloqueios Recentes',
+  AppLocale.raRecentCompletions: 'Conclusões Recentes',
+  AppLocale.raRecentMasteries: 'Masterizações Recentes',
+  AppLocale.raNoCompletionsYet: 'Nenhuma conclusão ainda',
+  AppLocale.raNoMasteriesYet: 'Nenhuma masterização ainda',
+  AppLocale.raTrackedGames: 'jogos acompanhados',
+  AppLocale.raCompletionLabel: 'Conclusão',
+  AppLocale.raMasteryLabel: 'Masterização',
+  AppLocale.raCouldNotResolveLocalSystem:
+      'Não foi possível resolver o sistema local para este jogo',
+  AppLocale.raMissable: 'PERDÍVEL',
+  AppLocale.raComments: 'COMENTÁRIOS',
+  AppLocale.raCommentsCouldNotLoad: 'Não foi possível carregar os comentários.',
+  AppLocale.raNoCommentsYet: 'Nenhum comentário ainda.',
+  AppLocale.raOlderCommentsAvailable:
+      'Há comentários mais antigos disponíveis.',
+  AppLocale.raLoadMore: 'CARREGAR MAIS',
+  AppLocale.raRateLimited:
+      'O RetroAchievements está ocupado no momento. Aguarde um instante e tente novamente.',
+  AppLocale.raApiKey: 'Chave de API',
+  AppLocale.raEnterApiKey: 'Digite sua chave de API',
+  AppLocale.raNoRecentUnlocks: 'Nenhum desbloqueio recente nos últimos 30 dias',
+  AppLocale.raRecentlyPlayedTitle: 'Jogados Recentemente',
+  AppLocale.raNoRecentlyPlayed: 'Nenhum jogo jogado recentemente',
 };

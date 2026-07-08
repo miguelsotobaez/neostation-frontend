@@ -6,20 +6,25 @@ import '../models/retro_achievements_user.dart';
 import '../models/retro_achievements_summary.dart';
 import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
+import '../models/retro_achievement_comment.dart';
+import '../models/retro_achievements_dashboard_models.dart';
 
 /// Service for interacting with the RetroAchievements API.
 ///
 /// Provides access to user profiles, game achievements, and global community
-/// events like "Achievement of the Week". Requires a valid API key — either
-/// passed at build time via `--dart-define=RA_API_KEY=...` or set as a
-/// runtime environment variable (`RA_API_KEY`).
+/// events like "Achievement of the Week". Every request is authenticated with
+/// the *user's own* RetroAchievements web API key, supplied at connect time.
+///
+/// There is deliberately no build-time/environment fallback key: earlier
+/// versions silently authenticated every user's traffic with the maintainer's
+/// key, which is incorrect. A caller that passes no key gets an empty string
+/// and the request-level guards reject it.
 class RetroAchievementsService {
   static const String _baseUrl = 'https://retroachievements.org/API';
-  static String get _apiKey {
-    const compileTime = String.fromEnvironment('RA_API_KEY');
-    if (compileTime.isNotEmpty) return compileTime;
-    return Platform.environment['RA_API_KEY'] ?? '';
-  }
+
+  /// Returns the trimmed [apiKey], or an empty string if none was supplied.
+  /// Callers must pass the signed-in user's key; there is no shared fallback.
+  static String resolveApiKey(String? apiKey) => apiKey?.trim() ?? '';
 
   static final _log = LoggerService.instance;
 
@@ -28,34 +33,36 @@ class RetroAchievementsService {
   /// Optionally takes a [username] to include user-specific progress toward the achievement.
   static Future<RetroAchievementsGOTW?> getAchievementOfTheWeek({
     String? username,
+    String? apiKey,
   }) async {
-    try {
-      final effectiveUsername = username ?? '';
-      final effectiveApiKey = _apiKey;
-
-      final url = Uri.parse('$_baseUrl/API_GetAchievementOfTheWeek.php')
-          .replace(
-            queryParameters: {'u': effectiveUsername, 'y': effectiveApiKey},
-          );
-
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data != null && data['Achievement'] != null) {
-          return RetroAchievementsGOTW.fromJson(data);
-        } else if (data != null && data['Error'] != null) {
-          _log.e('API Error: ${data['Error']}');
-        }
-      }
-      return null;
-    } catch (e) {
-      _log.e('Exception getting GOTW: $e');
-      return null;
+    final effectiveApiKey = resolveApiKey(apiKey);
+    if (effectiveApiKey.isEmpty) {
+      throw StateError('A RetroAchievements API key is required');
     }
+
+    final url = Uri.parse(
+      '$_baseUrl/API_GetAchievementOfTheWeek.php',
+    ).replace(queryParameters: {'y': effectiveApiKey});
+
+    final response = await http.get(
+      url,
+      headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'RetroAchievements achievement of the week request failed (${response.statusCode})',
+      );
+    }
+
+    final data = json.decode(response.body);
+    if (data != null && data['Achievement'] != null) {
+      return RetroAchievementsGOTW.fromJson(data);
+    }
+    if (data != null && data['Error'] != null) {
+      _log.e('API Error: ${data['Error']}');
+    }
+    return null;
   }
 
   /// Mapping of NeoStation system identifiers to RetroAchievements console IDs.
@@ -92,11 +99,14 @@ class RetroAchievementsService {
   }
 
   /// Retrieves basic profile information for a RetroAchievements user.
-  static Future<RetroAchievementsUser?> getUserProfile(String username) async {
+  static Future<RetroAchievementsUser?> getUserProfile(
+    String username, {
+    String? apiKey,
+  }) async {
     try {
       final url = Uri.parse(
         '$_baseUrl/API_GetUserProfile.php',
-      ).replace(queryParameters: {'u': username, 'y': _apiKey});
+      ).replace(queryParameters: {'u': username, 'y': resolveApiKey(apiKey)});
 
       final response = await http.get(
         url,
@@ -123,8 +133,8 @@ class RetroAchievementsService {
   }
 
   /// Checks if a username is registered on RetroAchievements.
-  static Future<bool> userExists(String username) async {
-    final user = await getUserProfile(username);
+  static Future<bool> userExists(String username, {String? apiKey}) async {
+    final user = await getUserProfile(username, apiKey: apiKey);
     return user != null;
   }
 
@@ -132,8 +142,9 @@ class RetroAchievementsService {
   ///
   /// Employs a cache-busting timestamp to ensure fresh data.
   static Future<RetroAchievementsUserSummary?> getUserSummary(
-    String username,
-  ) async {
+    String username, {
+    String? apiKey,
+  }) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final url = Uri.parse('$_baseUrl/API_GetUserSummary.php').replace(
@@ -141,7 +152,7 @@ class RetroAchievementsService {
           'u': username,
           'g': '1', // Include recent games
           'a': '2', // Include recent achievements
-          'y': _apiKey,
+          'y': resolveApiKey(apiKey),
           '_t': timestamp.toString(),
         },
       );
@@ -194,20 +205,17 @@ class RetroAchievementsService {
     int gameId,
     String username, {
     String? md5Hash,
+    String? apiKey,
   }) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final queryParams = {
         'g': gameId.toString(),
         'u': username,
-        'y': _apiKey,
+        'y': resolveApiKey(apiKey),
         'a': '1', // Include achievements
         '_t': timestamp.toString(),
       };
-
-      if (md5Hash != null && md5Hash.isNotEmpty) {
-        queryParams['m'] = md5Hash;
-      }
 
       final url = Uri.parse(
         '$_baseUrl/API_GetGameInfoAndUserProgress.php',
@@ -243,91 +251,248 @@ class RetroAchievementsService {
     }
   }
 
+  /// Retrieves newest-first comments from an achievement's RA page.
+  static Future<RetroAchievementCommentsPage> getAchievementComments(
+    int achievementId, {
+    int count = 25,
+    int offset = 0,
+    String? apiKey,
+    http.Client? client,
+  }) async {
+    final effectiveApiKey = resolveApiKey(apiKey);
+    if (effectiveApiKey.isEmpty) {
+      throw StateError('A RetroAchievements API key is required');
+    }
+
+    final url = Uri.parse('$_baseUrl/API_GetComments.php').replace(
+      queryParameters: {
+        't': '2',
+        'i': achievementId.toString(),
+        'c': count.clamp(1, 500).toString(),
+        'o': offset.clamp(0, 1 << 31).toString(),
+        'sort': '-submitted',
+        'y': effectiveApiKey,
+      },
+    );
+    final headers = {
+      'User-Agent': 'NeoStation/1.0',
+      'Accept': 'application/json',
+    };
+    final response = client == null
+        ? await http.get(url, headers: headers)
+        : await client.get(url, headers: headers);
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'RetroAchievements comments request failed (${response.statusCode})',
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException(
+        'Invalid RetroAchievements comments response',
+      );
+    }
+    return RetroAchievementCommentsPage.fromJson(
+      Map<String, dynamic>.from(decoded),
+    );
+  }
+
   /// Resolves a game's information and user progress using a file hash.
+  @Deprecated(
+    'The Web API does not support hash lookup on the user-progress endpoint. '
+    'Resolve the hash to a game ID locally, then call getGameInfoAndUserProgress.',
+  )
   static Future<GameInfoAndUserProgress?> searchGameByHash(
     String md5Hash,
-    String username,
-  ) async {
-    try {
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final url = Uri.parse('$_baseUrl/API_GetGameInfoAndUserProgress.php')
-          .replace(
-            queryParameters: {
-              'm': md5Hash,
-              'u': username,
-              'y': _apiKey,
-              'a': '1',
-              '_t': timestamp.toString(),
-            },
-          );
-
-      final response = await http.get(
-        url,
-        headers: {
-          'User-Agent': 'NeoStation/1.0',
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['ID'] != null) {
-          return GameInfoAndUserProgress.fromJson(data);
-        } else {
-          _log.e('Game not found with hash: $md5Hash');
-          return null;
-        }
-      } else {
-        _log.e('HTTP error ${response.statusCode}: ${response.body}');
-        return null;
-      }
-    } catch (e) {
-      _log.e('Error searching game by hash: $e');
-      return null;
-    }
+    String username, {
+    String? apiKey,
+  }) async {
+    _log.w(
+      'Ignoring unsupported RA hash-only lookup for $md5Hash. '
+      'Resolve a game ID from the local hash database first.',
+    );
+    return null;
   }
 
   static const String apiGetUserAwards = 'API_GetUserAwards.php';
 
-  /// Retrieves the list of site-wide awards earned by a user.
-  static Future<Map<String, dynamic>?> getUserAwards(String username) async {
-    try {
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final url = Uri.parse('$_baseUrl/$apiGetUserAwards').replace(
-        queryParameters: {
-          'u': username,
-          'y': _apiKey,
-          '_t': timestamp.toString(),
-        },
+  static Future<List<RetroAchievementRecentUnlockItem>>
+  getUserRecentAchievements(
+    String username, {
+    int minutes = 43200,
+    String? apiKey,
+    http.Client? client,
+  }) async {
+    final url = Uri.parse('$_baseUrl/API_GetUserRecentAchievements.php')
+        .replace(
+          queryParameters: {
+            'u': username,
+            'm': minutes.toString(),
+            'y': resolveApiKey(apiKey),
+          },
+        );
+
+    final headers = {
+      'User-Agent': 'NeoStation/1.0',
+      'Accept': 'application/json',
+    };
+    final response = client == null
+        ? await http.get(url, headers: headers)
+        : await client.get(url, headers: headers);
+
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'RetroAchievements recent achievements request failed (${response.statusCode})',
       );
-
-      final response = await http.get(
-        url,
-        headers: {
-          'User-Agent': 'NeoStation/1.0',
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        return data as Map<String, dynamic>;
-      } else {
-        _log.e('HTTP error ${response.statusCode}: ${response.body}');
-        return null;
-      }
-    } catch (e) {
-      _log.e('Error getting user awards: $e');
-      return null;
     }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! List) {
+      throw const FormatException(
+        'Invalid RetroAchievements recent achievements response',
+      );
+    }
+
+    return decoded
+        .map(
+          (item) => RetroAchievementRecentUnlockItem.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList();
+  }
+
+  static Future<List<RetroAchievementRecentlyPlayedGameItem>>
+  getUserRecentlyPlayedGames(
+    String username, {
+    int count = 10,
+    int offset = 0,
+    String? apiKey,
+    http.Client? client,
+  }) async {
+    final url = Uri.parse('$_baseUrl/API_GetUserRecentlyPlayedGames.php')
+        .replace(
+          queryParameters: {
+            'u': username,
+            'c': count.clamp(1, 50).toString(),
+            'o': offset.clamp(0, 1 << 31).toString(),
+            'y': resolveApiKey(apiKey),
+          },
+        );
+
+    final headers = {
+      'User-Agent': 'NeoStation/1.0',
+      'Accept': 'application/json',
+    };
+    final response = client == null
+        ? await http.get(url, headers: headers)
+        : await client.get(url, headers: headers);
+
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'RetroAchievements recently played request failed (${response.statusCode})',
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! List) {
+      throw const FormatException(
+        'Invalid RetroAchievements recently played response',
+      );
+    }
+
+    return decoded
+        .map(
+          (item) => RetroAchievementRecentlyPlayedGameItem.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList();
+  }
+
+  static Future<RetroAchievementCompletionProgressSummary>
+  getUserCompletionProgress(
+    String username, {
+    int count = 100,
+    int offset = 0,
+    String? apiKey,
+    http.Client? client,
+  }) async {
+    final url = Uri.parse('$_baseUrl/API_GetUserCompletionProgress.php')
+        .replace(
+          queryParameters: {
+            'u': username,
+            'c': count.clamp(1, 500).toString(),
+            'o': offset.clamp(0, 1 << 31).toString(),
+            'y': resolveApiKey(apiKey),
+          },
+        );
+
+    final headers = {
+      'User-Agent': 'NeoStation/1.0',
+      'Accept': 'application/json',
+    };
+    final response = client == null
+        ? await http.get(url, headers: headers)
+        : await client.get(url, headers: headers);
+
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'RetroAchievements completion progress request failed (${response.statusCode})',
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException(
+        'Invalid RetroAchievements completion progress response',
+      );
+    }
+
+    return RetroAchievementCompletionProgressSummary.fromJson(
+      Map<String, dynamic>.from(decoded),
+    );
+  }
+
+  /// Retrieves the list of site-wide awards earned by a user.
+  static Future<Map<String, dynamic>?> getUserAwards(
+    String username, {
+    String? apiKey,
+  }) async {
+    final effectiveApiKey = resolveApiKey(apiKey);
+    if (effectiveApiKey.isEmpty) {
+      throw StateError('A RetroAchievements API key is required');
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final url = Uri.parse('$_baseUrl/$apiGetUserAwards').replace(
+      queryParameters: {
+        'u': username,
+        'y': effectiveApiKey,
+        '_t': timestamp.toString(),
+      },
+    );
+
+    final response = await http.get(
+      url,
+      headers: {
+        'User-Agent': 'NeoStation/1.0',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'RetroAchievements user awards request failed (${response.statusCode})',
+      );
+    }
+
+    final data = json.decode(response.body);
+    return data as Map<String, dynamic>;
   }
 
   /// Searches for games by name within a specific console category.
@@ -336,12 +501,16 @@ class RetroAchievementsService {
   /// excessive whitespace) to improve discovery.
   static Future<List<Map<String, dynamic>>> searchGamesByName(
     String gameName,
-    int consoleId,
-  ) async {
+    int consoleId, {
+    String? apiKey,
+  }) async {
     try {
-      final url = Uri.parse(
-        '$_baseUrl/API_GetGameList.php',
-      ).replace(queryParameters: {'i': consoleId.toString(), 'y': _apiKey});
+      final url = Uri.parse('$_baseUrl/API_GetGameList.php').replace(
+        queryParameters: {
+          'i': consoleId.toString(),
+          'y': resolveApiKey(apiKey),
+        },
+      );
 
       final response = await http.get(
         url,

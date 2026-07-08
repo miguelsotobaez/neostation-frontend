@@ -8,6 +8,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../../widgets/marquee_text.dart';
 import '../../../widgets/shaders/shader_gif_widget.dart';
@@ -53,7 +54,6 @@ class _SystemCardState extends State<SystemCard> {
   String? _lastActiveTrackPath;
 
   String? _themeBackgroundPath;
-  String? _themeLogoPath;
   String _lastThemeFolder = '';
 
   /// Cached wheel file and existence check — computed once, not on every build.
@@ -100,7 +100,6 @@ class _SystemCardState extends State<SystemCard> {
         oldWidget.info.primaryFolderName != widget.info.primaryFolderName;
     if (folderChanged) {
       _themeBackgroundPath = null;
-      _themeLogoPath = null;
       _lastThemeFolder = '';
     }
     if (oldWidget.info.customWheelImage != widget.info.customWheelImage ||
@@ -197,70 +196,68 @@ class _SystemCardState extends State<SystemCard> {
       final folderName =
           widget.info.primaryFolderName ?? widget.info.folderName ?? '';
 
-      // Asset hierarchy: Custom > Theme-specific > Null (fallback to color).
       _themeBackgroundPath =
           widget.info.customBackgroundPath?.isNotEmpty == true
           ? null
           : neoAssets.getBackgroundForSystemSync(folderName);
-      _themeLogoPath = widget.info.customLogoPath?.isNotEmpty == true
-          ? null
-          : neoAssets.getLogoForSystemSync(folderName);
     }
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.basic,
-      child: Container(
-        margin: EdgeInsets.all(2.r),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(12.r),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 2.r,
-              offset: Offset(2.0.r, 2.0.r),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
-          child: InkWell(
-            focusNode: _focusNode,
-            onTap: () {
-              SfxService().playNavSound();
-              widget.onTap?.call();
-            },
-            canRequestFocus: false,
-            focusColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            splashColor: Colors.transparent,
-            child: Padding(
-              padding: EdgeInsets.all(4.r),
-              child: widget.info.isGame
-                  ? Stack(
-                      key: _contentStackKey,
-                      children: [
-                        _buildSystemBackground(),
-                        _buildMainBodyContent(context, true),
-                        _buildRecentFooter(context),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        AspectRatio(
-                          aspectRatio: 1,
-                          child: Stack(
-                            key: _contentStackKey,
-                            children: [
-                              _buildSystemBackground(),
-                              _buildMainBodyContent(context, true),
-                            ],
+    return Padding(
+      padding: EdgeInsets.all(2.r),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.basic,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(14.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 5.r,
+                offset: Offset(2.0.r, 2.0.r),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9.r),
+            child: InkWell(
+              focusNode: _focusNode,
+              onTap: () {
+                SfxService().playNavSound();
+                widget.onTap?.call();
+              },
+              canRequestFocus: false,
+              focusColor: Colors.transparent,
+              hoverColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              splashColor: Colors.transparent,
+              child: Padding(
+                padding: EdgeInsets.all(6.r),
+                child: widget.info.isGame
+                    ? Stack(
+                        key: _contentStackKey,
+                        children: [
+                          _buildSystemBackground(),
+                          _buildMainBodyContent(context, true),
+                          _buildRecentFooter(context),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 1,
+                            child: Stack(
+                              key: _contentStackKey,
+                              children: [
+                                _buildSystemBackground(),
+                                _buildMainBodyContent(context, true),
+                              ],
+                            ),
                           ),
-                        ),
-                        _buildSystemFooter(context),
-                      ],
-                    ),
+                          _buildSystemFooter(context),
+                        ],
+                      ),
+              ),
             ),
           ),
         ),
@@ -309,7 +306,7 @@ class _SystemCardState extends State<SystemCard> {
     if (hasCustomBg && ImageUtils.isGif(customBgPath)) {
       return Positioned.fill(
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.circular(9.r),
           child: Container(
             color: Theme.of(context).colorScheme.surface,
             child: ShaderGifWidget(
@@ -325,7 +322,7 @@ class _SystemCardState extends State<SystemCard> {
     if (!hasCustomBg && ImageUtils.isGif(_themeBackgroundPath)) {
       return Positioned.fill(
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.circular(9.r),
           child: Container(
             color: Theme.of(context).colorScheme.surface,
             child: ShaderGifWidget(
@@ -345,7 +342,7 @@ class _SystemCardState extends State<SystemCard> {
 
     return Positioned.fill(
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: BorderRadius.circular(9.r),
         child: hasActiveBg
             ? Image.file(
                 File(activeBgPath),
@@ -388,63 +385,58 @@ class _SystemCardState extends State<SystemCard> {
   }
 
   /// Renders the system brand logo with fallback support.
-  Widget _buildSystemLogo(String assetLogoPath, {double? height}) {
-    height ??= 128.r;
+  /// The white-transparent logo is tinted with [color] (falls back to theme text).
+  Widget _buildSystemLogo(
+    String assetLogoPath, {
+    double? height,
+    Color? color,
+  }) {
+    height ??= 32.r;
     final customLogoPath = widget.info.customLogoPath;
     final hasCustomLogo = customLogoPath != null && customLogoPath.isNotEmpty;
 
+    Widget buildLogo(Widget image) {
+      if (color == null) return image;
+      return ColorFiltered(
+        colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        child: image,
+      );
+    }
+
     if (hasCustomLogo) {
-      return Image.file(
-        File(customLogoPath),
-        key: ValueKey('${customLogoPath}_${widget.info.imageVersion}'),
-        height: height,
-        cacheWidth: 384,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => Image.asset(
-          assetLogoPath,
+      return buildLogo(
+        Image.file(
+          File(customLogoPath),
+          key: ValueKey('${customLogoPath}_${widget.info.imageVersion}'),
           height: height,
-          cacheWidth: 384,
+          cacheWidth: 256,
           fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => SystemLogoFallback(
-            title: widget.info.title,
-            shortName: widget.info.shortName,
-            height: 24.r,
+          errorBuilder: (context, error, stackTrace) => Image.asset(
+            assetLogoPath,
+            height: height,
+            cacheWidth: 256,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => SystemLogoFallback(
+              title: widget.info.title,
+              shortName: widget.info.shortName,
+              height: 24.r,
+            ),
           ),
         ),
       );
     }
 
-    final themeLogoPath = _themeLogoPath;
-    if (themeLogoPath != null && themeLogoPath.isNotEmpty) {
-      return Image.file(
-        File(themeLogoPath),
-        key: ValueKey(themeLogoPath),
+    return buildLogo(
+      Image.asset(
+        assetLogoPath,
         height: height,
-        cacheWidth: 384,
+        cacheWidth: 256,
         fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => Image.asset(
-          assetLogoPath,
-          height: height,
-          cacheWidth: 384,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error2, stackTrace2) => SystemLogoFallback(
-            title: widget.info.title,
-            shortName: widget.info.shortName,
-            height: 24.r,
-          ),
+        errorBuilder: (context, error, stackTrace) => SystemLogoFallback(
+          title: widget.info.title,
+          shortName: widget.info.shortName,
+          height: 24.r,
         ),
-      );
-    }
-
-    return Image.asset(
-      assetLogoPath,
-      height: height,
-      cacheWidth: 384,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) => SystemLogoFallback(
-        title: widget.info.title,
-        shortName: widget.info.shortName,
-        height: 24.r,
       ),
     );
   }
@@ -612,13 +604,17 @@ class _SystemCardState extends State<SystemCard> {
         : (widget.info.folderName?.isNotEmpty == true
               ? widget.info.folderName!
               : 'all');
-    final assetLogoPath =
-        'assets/images/systems/logos/$resolvedLogoFolder.webp';
+    final assetLogoPath = 'assets/images/logos/$resolvedLogoFolder.webp';
 
-    return SizedBox(
-      height: 44.r,
+    return Container(
+      height: 32.r,
+      padding: EdgeInsets.only(left: 0.r, right: 0.r, top: 4.r, bottom: 0.r),
       child: Center(
-        child: _buildSystemLogo(assetLogoPath, height: 36.r),
+        child: _buildSystemLogo(
+          assetLogoPath,
+          height: 30.r,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
       ),
     );
   }

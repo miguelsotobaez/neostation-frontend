@@ -10,6 +10,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:provider/provider.dart';
 import '../../../../models/system_model.dart';
 import '../../../../providers/file_provider.dart';
@@ -157,7 +158,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
     }
     // Play-time Reset Action.
     else if (idx == _settingsPlayTimeIdx) {
-      if ((_game.playTime ?? 0) > 0) _resetPlayTime();
+      if ((_game.playTime ?? 0) > 0) _confirmResetPlayTime();
     }
     // Delete Game Action.
     else if (idx == _settingsDeleteGameIdx) {
@@ -265,13 +266,29 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
     }
   }
 
+  /// Confirms with the user before clearing the recorded play-time.
+  Future<void> _confirmResetPlayTime() async {
+    SfxService().playNavSound();
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.resetPlayTimeConfirm.getString(context),
+      body: AppLocale.resetPlayTimeConfirmBody.getString(context),
+      confirmLabel: AppLocale.reset.getString(context),
+      icon: Symbols.timer_off_rounded,
+    );
+    if (confirmed && mounted) {
+      _resetPlayTime();
+    }
+  }
+
   /// Shows a confirmation dialog and permanently deletes the game and its data.
   Future<void> _confirmDeleteGame() async {
     SfxService().playNavSound();
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _DeleteGameDialog(gameName: _game.name),
+      builder: (ctx) =>
+          _DeleteGameDialog(gameName: _game.name, romName: _game.romname),
     );
     if (confirmed == true && mounted) {
       _deleteGame();
@@ -504,7 +521,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                           );
                           if ((_game.playTime ?? 0) > 0 &&
                               !_isResettingPlayTime) {
-                            _resetPlayTime();
+                            _confirmResetPlayTime();
                           }
                         },
                         trailing: _isResettingPlayTime
@@ -526,7 +543,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                                         !_isResettingPlayTime;
                                     final theme = Theme.of(context);
                                     return GestureDetector(
-                                      onTap: canReset ? _resetPlayTime : null,
+                                      onTap: canReset ? _confirmResetPlayTime : null,
                                       child: Container(
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 8.r,
@@ -964,8 +981,9 @@ class _EmulatorRow extends StatelessWidget {
 /// A gamepad-friendly confirmation dialog that warns about permanent game deletion.
 class _DeleteGameDialog extends StatefulWidget {
   final String gameName;
+  final String romName;
 
-  const _DeleteGameDialog({required this.gameName});
+  const _DeleteGameDialog({required this.gameName, required this.romName});
 
   @override
   State<_DeleteGameDialog> createState() => _DeleteGameDialogState();
@@ -1040,6 +1058,14 @@ class _DeleteGameDialogState extends State<_DeleteGameDialog> {
             style: theme.textTheme.bodyLarge?.copyWith(
               fontSize: 13.r,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 2.r),
+          Text(
+            widget.romName,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 11.r,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
           SizedBox(height: 8.r),
