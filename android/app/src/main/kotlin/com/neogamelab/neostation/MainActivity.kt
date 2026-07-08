@@ -417,6 +417,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             }
         }
 
+        // When the accessibility service connects (user just enabled it), notify
+        // the main engine so it re-pushes the screenshot/return state to the
+        // secondary display — even while a game keeps the main engine
+        // backgrounded. Hop to the UI thread: onServiceConnected runs off it.
+        ScreenshotAccessibilityService.onConnected = {
+            runOnUiThread {
+                secondaryDisplayChannel?.invokeMethod("onAccessibilityConnected", null)
+            }
+        }
+
         // Launcher channel
         launcherMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LAUNCHER_CHANNEL)
         launcherMethodChannel?.setMethodCallHandler { call, result ->

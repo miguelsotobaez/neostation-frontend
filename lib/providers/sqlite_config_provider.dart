@@ -1450,6 +1450,14 @@ class SqliteConfigProvider extends ChangeNotifier {
         _log.i('Secondary display disconnected');
         _onSecondaryDisplayChanged(connected: false);
         break;
+      case 'onAccessibilityConnected':
+        // The user just enabled the Screen Return service (e.g. via the in-game
+        // launcher nudge). Re-push access state so the secondary display clears
+        // the launcher warning badge and reveals the screenshot button — this
+        // fires even while a game keeps the main engine backgrounded.
+        // ignore: unawaited_futures
+        refreshSecondaryScreenshotAccess();
+        break;
     }
   }
 
