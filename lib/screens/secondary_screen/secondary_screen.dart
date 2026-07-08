@@ -1371,6 +1371,13 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 0, child: _buildAppDock(value)),
+          // All-apps launcher pinned to the bottom-left corner.
+          if (value.dockEnabled)
+            Positioned(
+              left: 16.r,
+              bottom: 16.r,
+              child: _buildLauncherButton(value),
+            ),
         ],
       ),
     );
@@ -1443,40 +1450,78 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             if (i > 0) SizedBox(width: 14.r),
             _buildDockSlot(i, apps[i], scheme),
           ],
-          // Separator, then the all-apps launcher button.
-          SizedBox(width: 14.r),
-          Container(
-            width: 1.r,
-            height: 40.r,
-            color: scheme.onSurface.withValues(alpha: 0.14),
-          ),
-          SizedBox(width: 14.r),
-          _buildLauncherButton(scheme),
         ],
       ),
     );
   }
 
-  /// The all-apps launcher button that sits at the end of the dock and opens
-  /// the app picker in launch mode.
-  Widget _buildLauncherButton(ColorScheme scheme) {
+  /// The all-apps launcher, pinned to the bottom-left of the Now Playing
+  /// screen. Normally opens the app picker in launch mode. When the Screen
+  /// Return accessibility service isn't enabled, it's highlighted with an
+  /// accent border + warning badge and instead opens accessibility settings —
+  /// launching an app without that service would strand the user with no way
+  /// back to Now Playing.
+  Widget _buildLauncherButton(SecondaryDisplayStateData value) {
+    final scheme = _panelScheme(value);
+    final accessOk = value.screenshotAccessEnabled;
     return GestureDetector(
-      onTap: _openAppLauncher,
-      child: Container(
-        width: 56.r,
-        height: 56.r,
-        decoration: BoxDecoration(
-          color: scheme.onSurface.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(color: scheme.onSurface.withValues(alpha: 0.14)),
-        ),
-        child: Icon(
-          Symbols.apps_rounded,
-          color: scheme.onSurface.withValues(alpha: 0.65),
-          size: 28.r,
-        ),
+      onTap: accessOk ? _openAppLauncher : _openAccessibilitySettings,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 56.r,
+            height: 56.r,
+            decoration: BoxDecoration(
+              color: accessOk
+                  ? scheme.onSurface.withValues(alpha: 0.05)
+                  : scheme.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14.r),
+              border: Border.all(
+                color: accessOk
+                    ? scheme.onSurface.withValues(alpha: 0.14)
+                    : scheme.primary,
+                width: accessOk ? 1.r : 2.r,
+              ),
+            ),
+            child: Icon(
+              Symbols.apps_rounded,
+              color: accessOk
+                  ? scheme.onSurface.withValues(alpha: 0.65)
+                  : scheme.primary,
+              size: 28.r,
+            ),
+          ),
+          if (!accessOk)
+            Positioned(
+              top: -4.r,
+              right: -4.r,
+              child: Container(
+                width: 20.r,
+                height: 20.r,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 2.r),
+                ),
+                child: Icon(
+                  Symbols.priority_high_rounded,
+                  size: 12.r,
+                  color: scheme.onPrimary,
+                ),
+              ),
+            ),
+        ],
       ),
     );
+  }
+
+  /// Opens Android accessibility settings from the secondary engine so the user
+  /// can enable the Screen Return service.
+  void _openAccessibilitySettings() {
+    _wakeInGamePanel();
+    SfxService().playNavSound();
+    SecondaryAppsService.openAccessibilitySettings();
   }
 
   /// A single dock slot. [package] empty = free slot.

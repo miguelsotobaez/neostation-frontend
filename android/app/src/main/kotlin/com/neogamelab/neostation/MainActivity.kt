@@ -535,7 +535,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
      * NeoStation in the full list. Falls back to the general list if the details
      * screen isn't available.
      */
-    private fun openScreenshotAccessSettings() {
+    internal fun openScreenshotAccessSettings() {
         val component = android.content.ComponentName(
             this,
             ScreenshotAccessibilityService::class.java,

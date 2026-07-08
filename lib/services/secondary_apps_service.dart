@@ -70,4 +70,16 @@ class SecondaryAppsService {
       return false;
     }
   }
+
+  /// Opens Android's accessibility settings (deep-linked to NeoStation's own
+  /// service page) from the secondary-display engine. Used when the Screen
+  /// Return service isn't enabled yet — launching an app without it would
+  /// strand the user with no way back to Now Playing.
+  static Future<void> openAccessibilitySettings() async {
+    try {
+      await _channel.invokeMethod('openAccessibilitySettings');
+    } on PlatformException catch (e) {
+      _log.e("Secondary: failed to open accessibility settings: '${e.message}'.");
+    }
+  }
 }
