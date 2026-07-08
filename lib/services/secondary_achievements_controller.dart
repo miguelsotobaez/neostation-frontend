@@ -6,6 +6,7 @@ import '../models/secondary_display_state.dart';
 import '../providers/file_provider.dart';
 import '../providers/retro_achievements_provider.dart';
 import 'retro_achievements_resolver.dart';
+import 'screenshot_service.dart';
 
 /// Drives the live RetroAchievements panel on the secondary display for a
 /// single game session, independent of which screen launched the game.
@@ -101,6 +102,19 @@ class SecondaryAchievementsController {
       lastPlayedMillis: game.lastPlayed?.millisecondsSinceEpoch,
       clearLastPlayed: game.lastPlayed == null,
     );
+
+    // Refresh the in-game screenshot button's visibility on every launch. The
+    // screenshotAccessEnabled flag is otherwise seeded only once at cold start,
+    // which on a fresh install happens BEFORE the user grants access in
+    // first-run setup — so the button would stay hidden until a later cold
+    // restart or display reconnect re-seeded it. Pushed as its own snapshot: it
+    // doesn't touch nowPlayingActive, so there's no clobber race with the
+    // launch snapshot above.
+    final launchState = state;
+    // ignore: unawaited_futures
+    ScreenshotService.isAccessEnabled().then((enabled) {
+      launchState.updateState(screenshotAccessEnabled: enabled);
+    });
 
     if (!_active) return;
 
