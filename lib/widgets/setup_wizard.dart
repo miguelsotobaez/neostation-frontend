@@ -9,6 +9,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/user_data_location_service.dart';
+import 'package:neostation/services/screenshot_service.dart';
 import 'package:neostation/providers/palette_provider.dart';
 import '../providers/sqlite_config_provider.dart';
 import '../utils/gamepad_nav.dart';
@@ -28,7 +29,8 @@ class SetupWizard extends StatefulWidget {
   State<SetupWizard> createState() => _SetupWizardState();
 }
 
-class _SetupWizardState extends State<SetupWizard> {
+class _SetupWizardState extends State<SetupWizard>
+    with WidgetsBindingObserver {
   int _currentStep = 0;
   bool _isSelectingFolder = false;
   bool _isSelectingUserDataFolder = false;
@@ -36,17 +38,88 @@ class _SetupWizardState extends State<SetupWizard> {
   String? _selectedUserDataPath;
   SecondaryDisplayState? _secondaryDisplayState;
 
+  /// Whether All-Files (storage) access is currently granted.
+  bool _storageGranted = false;
+
+  /// Whether the screenshot/return accessibility service is currently granted.
+  /// Both are re-checked whenever the app resumes (the user grants them in
+  /// system Settings, so we can't observe the change synchronously).
+  bool _accessibilityGranted = false;
+
+  /// Whether a secondary display is present. The accessibility (Screen Return)
+  /// grant only makes sense on dual-screen devices, so we hide it otherwise.
+  bool _hasSecondaryDisplay = false;
+
+  /// Whether the accessibility grant should be offered at all.
+  bool get _needsAccessibility => Platform.isAndroid && _hasSecondaryDisplay;
+
+  /// Whether the accessibility requirement is satisfied — either it's granted,
+  /// or it doesn't apply on this device.
+  bool get _accessibilityDone => !_needsAccessibility || _accessibilityGranted;
+
   static final _log = LoggerService.instance;
 
   GamepadNavigation? _gamepadNav;
 
+  // Step indices. Android has two extra steps (Permissions + Accessibility)
+  // that don't exist on desktop; the getters resolve to -1 there so a
+  // comparison against a real (>= 0) step never matches.
+  //   Android: 0=UserData, 1=Permissions, 2=Folder, 3=Scanning
+  //   Desktop: 0=UserData, 1=Folder, 2=Scanning
+  // The Permissions step covers both All-Files access and the accessibility
+  // (Screen Return) service.
+  int get _stepUserData => 0;
+  int get _stepPermissions => Platform.isAndroid ? 1 : -1;
+  int get _stepFolder => Platform.isAndroid ? 2 : 1;
+  int get _stepScanning => Platform.isAndroid ? 3 : 2;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeSteps();
     _initGamepad();
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
+      _hasSecondaryDisplay =
+          _secondaryDisplayState!.value?.isSecondaryActive ?? false;
+      _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
+      _refreshPermissionStates();
+    }
+  }
+
+  /// Keeps [_hasSecondaryDisplay] in sync so the accessibility row appears the
+  /// moment a secondary display reports in (it may connect after the wizard
+  /// first builds).
+  void _onSecondaryStateChanged() {
+    final has = _secondaryDisplayState?.value?.isSecondaryActive ?? false;
+    if (has != _hasSecondaryDisplay && mounted) {
+      setState(() => _hasSecondaryDisplay = has);
+    }
+  }
+
+  /// Re-polls both permission states (storage + accessibility). Called on
+  /// resume so the Permissions step reflects grants the user just made in
+  /// system Settings.
+  Future<void> _refreshPermissionStates() async {
+    final storage = await PermissionService.hasAllFilesAccess();
+    final access = await ScreenshotService.isAccessEnabled();
+    if (mounted &&
+        (storage != _storageGranted || access != _accessibilityGranted)) {
+      setState(() {
+        _storageGranted = storage;
+        _accessibilityGranted = access;
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
+      _refreshPermissionStates();
+      // The gamepad was deactivated before we sent the user to Settings; bring
+      // it back now that we have focus again on the Permissions step.
+      if (_currentStep == _stepPermissions) _gamepadNav?.activate();
     }
   }
 
@@ -55,9 +128,7 @@ class _SetupWizardState extends State<SetupWizard> {
       onSelectItem: () {
         if (_isSelectingFolder || _isSelectingUserDataFolder) return;
 
-        final lastStep = Platform.isAndroid ? 3 : 2;
-
-        if (_currentStep == lastStep) {
+        if (_currentStep == _stepScanning) {
           // Last step: A finishes when scan is done.
           final provider = Provider.of<SqliteConfigProvider>(
             context,
@@ -78,6 +149,8 @@ class _SetupWizardState extends State<SetupWizard> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _gamepadNav?.dispose();
     // Shared singleton — never dispose the instance.
     super.dispose();
@@ -101,12 +174,19 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   void _handleSkip() {
-    // Folder selection step: Android=2, Desktop=1
-    final folderStep = Platform.isAndroid ? 2 : 1;
+    // Permissions step: the accessibility grant is optional, so once storage
+    // is granted the user can skip past it to folder selection.
+    if (_currentStep == _stepPermissions &&
+        _storageGranted &&
+        _needsAccessibility &&
+        !_accessibilityGranted) {
+      setState(() => _currentStep = _stepFolder);
+      return;
+    }
 
-    if (_currentStep == folderStep) {
+    if (_currentStep == _stepFolder) {
       // Skip folder selection → Advance to Scanning step.
-      setState(() => _currentStep++);
+      setState(() => _currentStep = _stepScanning);
 
       // Start initial scan to detect available systems (e.g., Android apps).
       final provider = Provider.of<SqliteConfigProvider>(
@@ -127,8 +207,8 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   // Step layout:
-  // Android: 0=UserDataLocation, 1=Permissions, 2=FolderSelect, 3=Scanning (4 steps)
-  // Desktop: 0=UserDataLocation, 1=FolderSelect, 2=Scanning (3 steps)
+  // Android: 0=UserData, 1=Permissions, 2=FolderSelect, 3=Scanning (4 steps)
+  // Desktop: 0=UserData, 1=FolderSelect, 2=Scanning (3 steps)
   int get _totalSteps => Platform.isAndroid ? 4 : 3;
 
   @override
@@ -452,31 +532,19 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   Widget _buildStepContent(ThemeData theme) {
-    if (_currentStep == 0) {
+    if (_currentStep == _stepUserData) {
       return _buildUserDataLocationStep(theme);
     }
-
-    if (Platform.isAndroid) {
-      switch (_currentStep) {
-        case 1:
-          return _buildPermissionStep(theme);
-        case 2:
-          return _buildFolderSelectionStep(theme);
-        case 3:
-          return _buildScanningStep(theme);
-        default:
-          return Container();
-      }
-    } else {
-      switch (_currentStep) {
-        case 1:
-          return _buildFolderSelectionStep(theme);
-        case 2:
-          return _buildScanningStep(theme);
-        default:
-          return Container();
-      }
+    if (_currentStep == _stepPermissions) {
+      return _buildPermissionStep(theme);
     }
+    if (_currentStep == _stepFolder) {
+      return _buildFolderSelectionStep(theme);
+    }
+    if (_currentStep == _stepScanning) {
+      return _buildScanningStep(theme);
+    }
+    return Container();
   }
 
   Widget _buildUserDataLocationStep(ThemeData theme) {
@@ -672,42 +740,127 @@ class _SetupWizardState extends State<SetupWizard> {
     }
   }
 
+  /// Combined permissions step: All-Files (storage) access plus the optional
+  /// accessibility (Screen Return) service, each with a live granted/pending
+  /// status. The main action button grants the next pending one, then advances.
   Widget _buildPermissionStep(ThemeData theme) {
     final orientation = MediaQuery.of(context).orientation;
     final isLandscape = orientation == Orientation.landscape;
-    final iconSize = isLandscape ? 48.r : 80.r;
-    final titleSize = isLandscape ? 14.r : 24.r;
-    final textSize = isLandscape ? 10.r : 14.r;
 
     return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildPermissionRow(
+            theme,
+            icon: Symbols.security_rounded,
+            title: AppLocale.storagePermission.getString(context),
+            description: AppLocale.storagePermissionDesc.getString(context),
+            granted: _storageGranted,
+            isLandscape: isLandscape,
+          ),
+          // Screen Return access only applies to dual-screen devices.
+          if (_needsAccessibility) ...[
+            SizedBox(height: isLandscape ? 12.r : 20.r),
+            _buildPermissionRow(
+              theme,
+              icon: Symbols.settings_accessibility_rounded,
+              title: AppLocale.screenReturnAccess.getString(context),
+              description: AppLocale.screenReturnAccessDesc.getString(context),
+              granted: _accessibilityGranted,
+              isLandscape: isLandscape,
+              hint: AppLocale.screenReturnAccessHint.getString(context),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A single permission entry: leading semantic icon, title + description, and
+  /// a trailing status indicator that turns into a green check once granted.
+  Widget _buildPermissionRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool granted,
+    required bool isLandscape,
+    String? hint,
+  }) {
+    final iconSize = isLandscape ? 28.r : 40.r;
+    final titleSize = isLandscape ? 13.r : 18.r;
+    final textSize = isLandscape ? 9.r : 13.r;
+
+    return Container(
+      padding: EdgeInsets.all(isLandscape ? 12.r : 16.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: granted
+              ? Colors.green.withValues(alpha: 0.5)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            Symbols.security_rounded,
+            icon,
             size: iconSize,
-            color: theme.colorScheme.primary,
+            color: granted ? Colors.green : theme.colorScheme.primary,
           ),
-          SizedBox(height: isLandscape ? 16.r : 24.r),
-          Text(
-            AppLocale.storagePermission.getString(context),
-            style: TextStyle(
-              fontSize: titleSize,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface,
+          SizedBox(width: isLandscape ? 12.r : 16.r),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: titleSize,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(height: 4.r),
+                Text(
+                  granted ? AppLocale.enabled.getString(context) : description,
+                  style: TextStyle(
+                    fontSize: textSize,
+                    color: granted
+                        ? Colors.green
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    height: 1.3,
+                  ),
+                ),
+                if (!granted && hint != null) ...[
+                  SizedBox(height: 6.r),
+                  Text(
+                    hint,
+                    style: TextStyle(
+                      fontSize: textSize,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.primary,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          SizedBox(height: isLandscape ? 8.r : 16.r),
-          Text(
-            AppLocale.storagePermissionDesc.getString(context),
-            style: TextStyle(
-              fontSize: textSize,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              height: 1.3,
-            ),
-            textAlign: TextAlign.center,
+          SizedBox(width: isLandscape ? 8.r : 12.r),
+          Icon(
+            granted
+                ? Symbols.check_circle_rounded
+                : Symbols.radio_button_unchecked_rounded,
+            size: isLandscape ? 20.r : 26.r,
+            color: granted
+                ? Colors.green
+                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
           ),
-          if (isLandscape) SizedBox(height: 16.r),
         ],
       ),
     );
@@ -917,7 +1070,7 @@ class _SetupWizardState extends State<SetupWizard> {
 
   Widget _buildNavigationButtons(ThemeData theme) {
     // The last step is always the scanning step
-    final isInScanningStep = _currentStep == (Platform.isAndroid ? 3 : 2);
+    final isInScanningStep = _currentStep == _stepScanning;
 
     if (isInScanningStep) {
       return Consumer<SqliteConfigProvider>(
@@ -974,8 +1127,15 @@ class _SetupWizardState extends State<SetupWizard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Skip button (only in folder selection step)
-        if (Platform.isAndroid && _currentStep == 2)
+        // Skip button on the optional steps: the folder step, and the
+        // permissions step once storage is granted (only accessibility, which
+        // is optional, remains).
+        if (Platform.isAndroid &&
+            (_currentStep == _stepFolder ||
+                (_currentStep == _stepPermissions &&
+                    _storageGranted &&
+                    _needsAccessibility &&
+                    !_accessibilityGranted)))
           TextButton(
             onPressed: () => _handleSkip(),
             style: TextButton.styleFrom(
@@ -1056,63 +1216,85 @@ class _SetupWizardState extends State<SetupWizard> {
   }
 
   String _getButtonText() {
-    if (_currentStep == 0) return AppLocale.next.getString(context);
-    if (Platform.isAndroid) {
-      if (_currentStep == 1) return AppLocale.grantAccess.getString(context);
-      if (_currentStep == 2) return AppLocale.selectFolder.getString(context);
-    } else {
-      if (_currentStep == 1) return AppLocale.selectFolder.getString(context);
+    if (_currentStep == _stepUserData) return AppLocale.next.getString(context);
+    if (_currentStep == _stepPermissions) {
+      // Grant the next pending permission; once both are satisfied, advance.
+      if (!_storageGranted || !_accessibilityDone) {
+        return AppLocale.grantAccess.getString(context);
+      }
+      return AppLocale.next.getString(context);
+    }
+    if (_currentStep == _stepFolder) {
+      return AppLocale.selectFolder.getString(context);
     }
     return AppLocale.next.getString(context);
   }
 
   Future<void> _handleMainAction() async {
-    // Step 0 (user data location): advance and auto-skip permission step if already granted.
-    if (_currentStep == 0) {
-      setState(() => _currentStep++);
+    // Step 0 (user data location): advance, then auto-skip the permissions step
+    // if both permissions are already granted.
+    if (_currentStep == _stepUserData) {
+      setState(() => _currentStep = _currentStep + 1);
       if (Platform.isAndroid) {
-        PermissionService.hasAllFilesAccess().then((hasAccess) {
-          if (hasAccess && mounted && _currentStep == 1) {
-            setState(() => _currentStep = 2);
+        _refreshPermissionStates().then((_) {
+          if (mounted &&
+              _currentStep == _stepPermissions &&
+              _storageGranted &&
+              _accessibilityDone) {
+            setState(() => _currentStep = _stepFolder);
           }
         });
       }
       return;
     }
 
-    if (Platform.isAndroid) {
-      if (_currentStep == 1) {
-        // Deactivate gamepad before opening system settings to prevent key event
-        // leakage when the app regains focus after the user grants the permission.
-        _gamepadNav?.deactivate();
-        try {
-          final success = await PermissionService.requestAllFilesAccess();
-          if (success && mounted) {
-            context.read<SqliteConfigProvider>().refreshAllFilesAccess();
-            setState(() => _currentStep++);
-            // Drain any pending key events before re-enabling gamepad input.
-            await Future.delayed(const Duration(milliseconds: 600));
-            if (mounted) _gamepadNav?.activate();
-          } else if (mounted) {
-            _gamepadNav?.activate();
-          }
-        } catch (e) {
-          _log.e('Error requesting permissions: $e');
-          if (mounted) _gamepadNav?.activate();
+    if (_currentStep == _stepPermissions) {
+      await _handlePermissionAction();
+      return;
+    }
+
+    if (_currentStep == _stepFolder) {
+      await _selectFolder();
+    }
+  }
+
+  /// Drives the combined permissions step: grants the next pending permission
+  /// (storage first, then accessibility), or advances to folder once both are
+  /// granted. Gamepad input is suspended around any trip to system Settings.
+  Future<void> _handlePermissionAction() async {
+    // Both satisfied → move on.
+    if (_storageGranted && _accessibilityDone) {
+      setState(() => _currentStep = _stepFolder);
+      return;
+    }
+
+    // Deactivate gamepad before opening system settings to prevent key event
+    // leakage when the app regains focus after the user grants the permission.
+    _gamepadNav?.deactivate();
+    try {
+      if (!_storageGranted) {
+        final success = await PermissionService.requestAllFilesAccess();
+        if (success && mounted) {
+          context.read<SqliteConfigProvider>().refreshAllFilesAccess();
+          setState(() => _storageGranted = true);
         }
-      } else if (_currentStep == 2) {
-        await _selectFolder();
+      } else {
+        // Accessibility can't be granted in-app — send the user to system
+        // Settings. We re-check on resume (didChangeAppLifecycleState) and
+        // light up the green check when they come back with it enabled.
+        await ScreenshotService.openAccessSettings();
       }
-    } else {
-      if (_currentStep == 1) {
-        await _selectFolder();
-      }
+    } catch (e) {
+      _log.e('Error requesting permissions: $e');
+    } finally {
+      // Drain any pending key events before re-enabling gamepad input.
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) _gamepadNav?.activate();
     }
   }
 
   Future<void> _selectFolder() async {
-    final folderStep = Platform.isAndroid ? 2 : 1;
-    if (_currentStep != folderStep) return;
+    if (_currentStep != _stepFolder) return;
 
     // Guard: prevent re-entry and stop gamepad from intercepting picker events
     setState(() {
