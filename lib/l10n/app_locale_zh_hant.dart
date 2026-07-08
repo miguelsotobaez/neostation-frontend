@@ -103,8 +103,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.nowPlayingDimOff: '關閉',
   AppLocale.secondarySectionNowPlaying: 'Now Playing 面板',
   AppLocale.secondarySectionDock: '應用程式塢',
-  AppLocale.screenshotAccess: '截圖權限',
-  AppLocale.screenshotAccessSubtitle: '允許截圖按鈕擷取主螢幕（開啟 Android 輔助使用設定）',
+  AppLocale.screenshotAccess: 'Screen return & screenshots',
+  AppLocale.screenshotAccessSubtitle: 'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle: '應用程式啟動時自動掃描 ROM 資料夾',
   AppLocale.ignoreHiddenFiles: '忽略隱藏項目',
   AppLocale.ignoreHiddenFilesSubtitle: 'ROM 掃描期間隱藏隱藏檔案和資料夾',
@@ -500,6 +500,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.storagePermission: '儲存權限',
   AppLocale.storagePermissionDesc:
       'NeoStation 需要「所有檔案存取權限」來管理 RetroArch 設定並同步遊戲存檔。',
+  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccessDesc:
+      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: '選擇 ROM 資料夾',
   AppLocale.romFolderSelected: 'ROM 資料夾已選擇！',
   AppLocale.chooseRomFolderDesc: '選擇儲存 ROM 檔案的資料夾。NeoStation 將掃描其中的遊戲。',
