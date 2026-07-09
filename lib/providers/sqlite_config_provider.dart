@@ -1613,7 +1613,12 @@ class SqliteConfigProvider extends ChangeNotifier {
     final isAsc = _config.systemSortOrder == 'asc';
 
     // Map priority folders that should NEVER be sorted
-    final priorityMap = <String, int>{'all': 1, 'music': 2, 'android': 3};
+    final priorityMap = <String, int>{
+      'all': 1,
+      'favorites': 2,
+      'music': 3,
+      'android': 4,
+    };
 
     _detectedSystems.sort((a, b) {
       final pA = priorityMap[a.folderName] ?? 999;
