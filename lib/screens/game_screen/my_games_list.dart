@@ -162,9 +162,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // Folder preview mosaic: a varied-but-stable sample of the folder's covers.
   // The sample is seeded by the folder path, so each folder consistently shows
   // the same covers (different folders look different, but a folder doesn't
-  // reshuffle every time it's selected). Memoized per relPath to skip rework.
-  List<File> _folderCovers = const [];
-  String? _folderCoversRelPath;
+  // reshuffle every time it's selected). Cached per relPath so scrolling back
+  // over a folder is free — resolving the covers walks the game list and hits
+  // the filesystem, which is too costly to redo every time a folder is focused.
+  final Map<String, List<File>> _folderCoverCache = {};
 
   int get _folderCount => _currentFolderEntries.length;
   bool _isFolderEntry(GameModel? g) =>
@@ -3064,12 +3065,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Preview the folder with up to four covers of the games it contains,
     // falling back to the folder glyph when none of them have art on disk.
     // Seeded by relPath (see _folderCoverFiles) so the sample is stable per
-    // folder; memoized to avoid recomputing on every rebuild.
-    if (_folderCoversRelPath != entry.relPath) {
-      _folderCovers = _folderCoverFiles(entry.relPath, max: 4);
-      _folderCoversRelPath = entry.relPath;
+    // folder. Resolving the covers walks the game list and stats the disk, so
+    // it's cached per folder and skipped entirely during fast scrolling — the
+    // glyph shows immediately, and the mosaic fills in once scrolling settles
+    // (the fast-nav debounce triggers a rebuild). Cached folders stay instant.
+    List<File> covers;
+    if (_folderCoverCache.containsKey(entry.relPath)) {
+      covers = _folderCoverCache[entry.relPath]!;
+    } else if (_isNavigatingFast) {
+      covers = const [];
+    } else {
+      covers = _folderCoverFiles(entry.relPath, max: 4);
+      _folderCoverCache[entry.relPath] = covers;
     }
-    final covers = _folderCovers;
 
     return LayoutBuilder(
       builder: (context, constraints) {
