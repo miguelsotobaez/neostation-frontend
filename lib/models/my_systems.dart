@@ -247,7 +247,7 @@ class SystemInfo {
   String get gridImagePath =>
       customBackgroundPath != null && customBackgroundPath!.isNotEmpty
       ? customBackgroundPath!
-      : 'assets/images/systems/logos/$_resolvedPrimaryFolderName.webp';
+      : 'assets/images/logos/$_resolvedPrimaryFolderName.webp';
 
   /// Internal helper to determine the directory name used for asset resolution.
   String get _resolvedPrimaryFolderName =>

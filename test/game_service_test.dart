@@ -146,13 +146,15 @@ void main() {
       expect(GameService.isGameLaunchInProgress, isFalse);
     });
 
-    test('beginLaunchPending opens the window before the game is registered',
-        () {
-      expect(GameService.isGameLaunched, isFalse);
-      GameService.beginLaunchPending();
-      // Guard is true even though the game process is not yet registered.
-      expect(GameService.isGameLaunchInProgress, isTrue);
-    });
+    test(
+      'beginLaunchPending opens the window before the game is registered',
+      () {
+        expect(GameService.isGameLaunched, isFalse);
+        GameService.beginLaunchPending();
+        // Guard is true even though the game process is not yet registered.
+        expect(GameService.isGameLaunchInProgress, isTrue);
+      },
+    );
 
     test('clearLaunchPending closes the window (failed/aborted launch)', () {
       GameService.beginLaunchPending();

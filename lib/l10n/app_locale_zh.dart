@@ -109,8 +109,8 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.nowPlayingDimOff: '关闭',
   AppLocale.secondarySectionNowPlaying: 'Now Playing 面板',
   AppLocale.secondarySectionDock: '应用坞',
-  AppLocale.screenshotAccess: '截图权限',
-  AppLocale.screenshotAccessSubtitle: '允许截图按钮捕获主屏幕（打开 Android 辅助功能设置）',
+  AppLocale.screenshotAccess: 'Screen return & screenshots',
+  AppLocale.screenshotAccessSubtitle: 'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle: '应用程序启动时自动扫描 ROM 文件夹',
   AppLocale.ignoreHiddenFiles: '忽略隐藏项目',
   AppLocale.ignoreHiddenFilesSubtitle: 'ROM 扫描期间隐藏隐藏文件和文件夹',
@@ -506,6 +506,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.storagePermission: '存储权限',
   AppLocale.storagePermissionDesc:
       'NeoStation 需要“所有文件访问权限”来管理 RetroArch 配置并同步游戏存档。',
+  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccessDesc:
+      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: '选择 ROM 文件夹',
   AppLocale.romFolderSelected: 'ROM 文件夹已选择！',
   AppLocale.chooseRomFolderDesc: '选择存储 ROM 文件的文件夹。NeoStation 将扫描其中的游戏。',
@@ -718,6 +722,16 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.romDirectories: 'ROM 目录',
   AppLocale.addRomFolder: '添加 ROM 文件夹',
   AppLocale.removeRomFolder: '删除',
+  AppLocale.resetPlayTimeConfirm: '重置游戏时间',
+  AppLocale.resetPlayTimeConfirmBody:
+      '这将永久将此游戏记录的游戏时间重置为零。此操作无法撤销。',
+  AppLocale.removeRomFolderConfirmBody:
+      '这将从您的库来源中移除此 ROM 文件夹。磁盘上的文件不会被删除。',
+  AppLocale.disconnectRaConfirm: '断开 RetroAchievements 连接',
+  AppLocale.disconnectRaConfirmBody:
+      '这将使您退出登录，并从此设备中移除已保存的 RetroAchievements 凭据。',
+  AppLocale.neoSyncLogoutConfirmBody:
+      '这将使您在此设备上退出 NeoSync 账户。',
 
   AppLocale.deleteGame: '删除游戏',
   AppLocale.deleteGameConfirm: '永久删除',

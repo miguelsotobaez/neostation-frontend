@@ -151,21 +151,23 @@ void main() {
       expect(gameId, isNull);
     });
 
-    test('findBestLocalGameByRaGameId prefers most recently played match', () async {
-      await db.execute(
-        "INSERT INTO user_roms (filename, rom_path, app_system_id, id_ra, is_favorite, last_played) VALUES ('older.nes', '/roms/nes/older.nes', 'nes', 777, 0, '2024-01-01T00:00:00.000')",
-      );
-      await db.execute(
-        "INSERT INTO user_roms (filename, rom_path, app_system_id, id_ra, is_favorite, last_played) VALUES ('newer.nes', '/roms/nes/newer.nes', 'nes', 777, 0, '2024-02-01T00:00:00.000')",
-      );
+    test(
+      'findBestLocalGameByRaGameId prefers most recently played match',
+      () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, id_ra, is_favorite, last_played) VALUES ('older.nes', '/roms/nes/older.nes', 'nes', 777, 0, '2024-01-01T00:00:00.000')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, id_ra, is_favorite, last_played) VALUES ('newer.nes', '/roms/nes/newer.nes', 'nes', 777, 0, '2024-02-01T00:00:00.000')",
+        );
 
-      final result = await RetroAchievementsRepository.findBestLocalGameByRaGameId(
-        777,
-      );
+        final result =
+            await RetroAchievementsRepository.findBestLocalGameByRaGameId(777);
 
-      expect(result, isNotNull);
-      expect(result!.game.romPath, '/roms/nes/newer.nes');
-    });
+        expect(result, isNotNull);
+        expect(result!.game.romPath, '/roms/nes/newer.nes');
+      },
+    );
 
     test('findBestLocalGameByRaGameId breaks ties by favorite then name', () async {
       await db.execute(
@@ -175,9 +177,8 @@ void main() {
         "INSERT INTO user_roms (filename, rom_path, app_system_id, id_ra, is_favorite, last_played, title_name) VALUES ('a.nes', '/roms/nes/a.nes', 'nes', 888, 1, NULL, 'Alpha')",
       );
 
-      final result = await RetroAchievementsRepository.findBestLocalGameByRaGameId(
-        888,
-      );
+      final result =
+          await RetroAchievementsRepository.findBestLocalGameByRaGameId(888);
 
       expect(result, isNotNull);
       expect(result!.game.romPath, '/roms/nes/a.nes');

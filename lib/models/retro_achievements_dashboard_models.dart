@@ -50,8 +50,8 @@ class RetroAchievementRecentUnlockItem {
         json['AchievementID'] ?? json['achievementId'],
       ),
       title: (json['Title'] ?? json['title'] ?? '').toString(),
-      description:
-          (json['Description'] ?? json['description'] ?? '').toString(),
+      description: (json['Description'] ?? json['description'] ?? '')
+          .toString(),
       badgeName: (json['BadgeName'] ?? json['badgeName'] ?? '').toString(),
       badgeUrl: (json['BadgeURL'] ?? json['badgeUrl'] ?? '').toString(),
       points: RAParsingUtils.toInt(json['Points'] ?? json['points']),
@@ -62,8 +62,8 @@ class RetroAchievementRecentUnlockItem {
       gameTitle: (json['GameTitle'] ?? json['gameTitle'] ?? '').toString(),
       gameIcon: (json['GameIcon'] ?? json['gameIcon'] ?? '').toString(),
       gameId: RAParsingUtils.toInt(json['GameID'] ?? json['gameId']),
-      consoleName:
-          (json['ConsoleName'] ?? json['consoleName'] ?? '').toString(),
+      consoleName: (json['ConsoleName'] ?? json['consoleName'] ?? '')
+          .toString(),
       gameUrl: (json['GameURL'] ?? json['gameUrl'] ?? '').toString(),
     );
   }
@@ -112,15 +112,15 @@ class RetroAchievementRecentlyPlayedGameItem {
     return RetroAchievementRecentlyPlayedGameItem(
       gameId: RAParsingUtils.toInt(json['GameID'] ?? json['gameId']),
       consoleId: RAParsingUtils.toInt(json['ConsoleID'] ?? json['consoleId']),
-      consoleName:
-          (json['ConsoleName'] ?? json['consoleName'] ?? '').toString(),
+      consoleName: (json['ConsoleName'] ?? json['consoleName'] ?? '')
+          .toString(),
       title: (json['Title'] ?? json['title'] ?? '').toString(),
       imageIcon: (json['ImageIcon'] ?? json['imageIcon'] ?? '').toString(),
       imageTitle: (json['ImageTitle'] ?? json['imageTitle'] ?? '').toString(),
-      imageIngame:
-          (json['ImageIngame'] ?? json['imageIngame'] ?? '').toString(),
-      imageBoxArt:
-          (json['ImageBoxArt'] ?? json['imageBoxArt'] ?? '').toString(),
+      imageIngame: (json['ImageIngame'] ?? json['imageIngame'] ?? '')
+          .toString(),
+      imageBoxArt: (json['ImageBoxArt'] ?? json['imageBoxArt'] ?? '')
+          .toString(),
       lastPlayed: (json['LastPlayed'] ?? json['lastPlayed'] ?? '').toString(),
       achievementsTotal: RAParsingUtils.toInt(
         json['AchievementsTotal'] ?? json['achievementsTotal'],
@@ -166,9 +166,11 @@ class RetroAchievementCompletionProgressSummary {
         (json['results'] as List<dynamic>?) ??
         const <dynamic>[];
     final results = rawResults
-        .map((item) => RetroAchievementCompletionProgressItem.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ))
+        .map(
+          (item) => RetroAchievementCompletionProgressItem.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
         .toList();
     return RetroAchievementCompletionProgressSummary(
       count: RAParsingUtils.toInt(json['Count'] ?? json['count']),
@@ -213,8 +215,8 @@ class RetroAchievementCompletionProgressItem {
       title: (json['Title'] ?? json['title'] ?? '').toString(),
       imageIcon: (json['ImageIcon'] ?? json['imageIcon'] ?? '').toString(),
       consoleId: RAParsingUtils.toInt(json['ConsoleID'] ?? json['consoleId']),
-      consoleName:
-          (json['ConsoleName'] ?? json['consoleName'] ?? '').toString(),
+      consoleName: (json['ConsoleName'] ?? json['consoleName'] ?? '')
+          .toString(),
       maxPossible: RAParsingUtils.toInt(
         json['MaxPossible'] ?? json['maxPossible'],
       ),

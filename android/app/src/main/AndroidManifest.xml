@@ -132,6 +132,23 @@
             </intent-filter>
         </provider>
         
+        <!-- Accessibility service: takes the system screenshot and watches the
+             bottom display so Now Playing is restored when a dock-launched app
+             is closed. Must be declared here or Android never registers it and
+             it can't be enabled in Settings > Accessibility. -->
+        <service
+            android:name=".ScreenshotAccessibilityService"
+            android:exported="true"
+            android:label="${appName}"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/screenshot_accessibility_config" />
+        </service>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

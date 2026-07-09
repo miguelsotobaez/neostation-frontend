@@ -5,6 +5,7 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/config_model.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/screenshot_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:provider/provider.dart';
 
 import '../../../widgets/custom_toggle_switch.dart';
@@ -34,6 +35,9 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
     with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _itemKeys = [];
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
 
   /// Inactivity-delay stops for the Now Playing dim, in seconds (0 = Never).
   static const _dimDelayCycle = [1, 3, 5, 0];
@@ -133,12 +137,7 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
     if (index >= 0 && index < _itemKeys.length) {
       final ctx = _itemKeys[index].currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
+        _scroller.ensureVisible(ctx);
       }
     }
   }

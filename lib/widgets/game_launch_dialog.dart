@@ -223,7 +223,7 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
                     cacheWidth: 400,
                     errorBuilder: (context, error, stackTrace) {
                       final systemLogoPath =
-                          'assets/images/systems/logos/${widget.system.folderName}.webp';
+                          'assets/images/logos/${widget.system.folderName}.webp';
                       return Container(
                         padding: EdgeInsets.all(12.r),
                         child: Image.asset(

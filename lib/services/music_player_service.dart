@@ -625,7 +625,7 @@ class MusicPlayerService extends ChangeNotifier {
             }
 
             _logger.d("Playing audio source...");
-            _currentHandle = await SoLoud.instance.play(
+            _currentHandle = SoLoud.instance.play(
               _currentSource!,
               volume: _isDucked ? _volume * 0.5 : _volume,
             );

@@ -127,9 +127,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.nowPlayingDimOff: 'Mati',
   AppLocale.secondarySectionNowPlaying: 'Panel Now Playing',
   AppLocale.secondarySectionDock: 'Dock aplikasi',
-  AppLocale.screenshotAccess: 'Akses tangkapan layar',
+  AppLocale.screenshotAccess: 'Screen return & screenshots',
   AppLocale.screenshotAccessSubtitle:
-      'Izinkan tombol tangkapan layar untuk menangkap layar utama (membuka pengaturan aksesibilitas Android)',
+      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle:
       'Pindai folder ROM secara otomatis saat membuka aplikasi',
   AppLocale.ignoreHiddenFiles: 'Abaikan item tersembunyi',
@@ -560,6 +560,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.storagePermission: 'Izin Penyimpanan',
   AppLocale.storagePermissionDesc:
       'NeoStation memerlukan "Akses Semua File" untuk mengelola konfigurasi RetroArch dan menyinkronkan simpanan Anda dengan benar.\n\nHarap berikan izin ini di layar berikutnya.',
+  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccessDesc:
+      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'Pilih Folder ROM',
   AppLocale.romFolderSelected: 'Folder ROM dipilih!',
   AppLocale.chooseRomFolderDesc:
@@ -800,6 +804,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.romDirectories: 'Direktori ROM',
   AppLocale.addRomFolder: 'Tambah Folder ROM',
   AppLocale.removeRomFolder: 'Hapus',
+  AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',
+  AppLocale.resetPlayTimeConfirmBody:
+      'Ini akan mengatur ulang waktu bermain yang tercatat untuk game ini menjadi nol secara permanen. Tindakan ini tidak dapat dibatalkan.',
+  AppLocale.removeRomFolderConfirmBody:
+      'Ini akan menghapus folder ROM ini dari sumber pustaka Anda. File Anda di disk tidak akan dihapus.',
+  AppLocale.disconnectRaConfirm: 'Putuskan RetroAchievements',
+  AppLocale.disconnectRaConfirmBody:
+      'Ini akan mengeluarkan Anda dan menghapus kredensial RetroAchievements yang tersimpan dari perangkat ini.',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'Ini akan mengeluarkan Anda dari akun NeoSync di perangkat ini.',
 
   AppLocale.deleteGame: 'Hapus Game',
   AppLocale.deleteGameConfirm: 'Hapus Secara Permanen',

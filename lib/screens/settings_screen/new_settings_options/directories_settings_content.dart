@@ -6,6 +6,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/config_service.dart';
@@ -204,6 +205,15 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _removeRomFolder(String path) async {
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.removeRomFolder.getString(context),
+      body: AppLocale.removeRomFolderConfirmBody.getString(context),
+      confirmLabel: AppLocale.removeRomFolder.getString(context),
+      icon: Symbols.folder_delete_rounded,
+    );
+    if (!confirmed || !mounted) return;
+
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,

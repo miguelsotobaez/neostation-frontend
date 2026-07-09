@@ -66,6 +66,10 @@ class SecondaryAppsPresentation(
                             result.error("INVALID_ARGUMENTS", "Package name is required", null)
                         }
                     }
+                    "openAccessibilitySettings" -> {
+                        activity.openScreenshotAccessSettings()
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

@@ -6,11 +6,11 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/responsive.dart';
-import 'package:neostation/services/game_service.dart'
-    show GamepadNavigationManager;
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:provider/provider.dart';
 import 'settings_title.dart';
 
@@ -36,6 +36,9 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _itemKeys = [];
 
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
+
   int get _gridColumns => Responsive.getThemesCrossAxisCount(context);
 
   int getItemCount() => _itemKeys.length;
@@ -51,12 +54,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
     if (index >= 0 && index < _itemKeys.length) {
       final ctx = _itemKeys[index].currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
+        _scroller.ensureVisible(ctx);
       }
     }
   }
@@ -156,13 +154,17 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   }
 
   Future<bool> _showConfirmDialog(String themeName, bool isNone) async {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) =>
-          _ThemeConfirmDialog(themeName: themeName, isNone: isNone),
+    final body = isNone
+        ? '"$themeName"'
+        : '"$themeName"\n\n${AppLocale.neoThemesApplyBody.getString(context)}';
+    return ConfirmActionDialog.show(
+      context,
+      title: AppLocale.neoThemesApplyTitle.getString(context),
+      body: body,
+      confirmLabel: AppLocale.apply.getString(context),
+      icon: Symbols.image_rounded,
+      accentColor: Theme.of(context).colorScheme.primary,
     );
-    return result ?? false;
   }
 
   @override
@@ -574,154 +576,3 @@ class _NeoThemeCard extends StatelessWidget {
   }
 }
 
-class _ThemeConfirmDialog extends StatefulWidget {
-  final String themeName;
-  final bool isNone;
-
-  const _ThemeConfirmDialog({required this.themeName, required this.isNone});
-
-  @override
-  State<_ThemeConfirmDialog> createState() => _ThemeConfirmDialogState();
-}
-
-class _ThemeConfirmDialogState extends State<_ThemeConfirmDialog> {
-  late final GamepadNavigation _gamepadNav;
-
-  @override
-  void initState() {
-    super.initState();
-    _gamepadNav = GamepadNavigation(
-      onSelectItem: () {
-        if (mounted) Navigator.of(context).pop(true);
-      },
-      onBack: () {
-        if (mounted) Navigator.of(context).pop(false);
-      },
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _gamepadNav.initialize();
-      GamepadNavigationManager.pushLayer(
-        'theme_confirm_dialog',
-        onActivate: () => _gamepadNav.activate(),
-        onDeactivate: () => _gamepadNav.deactivate(),
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    GamepadNavigationManager.popLayer('theme_confirm_dialog');
-    _gamepadNav.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
-    return AlertDialog(
-      backgroundColor: theme.cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        side: BorderSide(color: primary.withValues(alpha: 0.3)),
-      ),
-      title: Row(
-        children: [
-          Icon(Symbols.image_rounded, color: primary, size: 20.r),
-          SizedBox(width: 8.r),
-          Text(
-            AppLocale.neoThemesApplyTitle.getString(context),
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontSize: 14.r,
-              color: primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '"${widget.themeName}"',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontSize: 13.r,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (!widget.isNone) ...[
-            SizedBox(height: 8.r),
-            Text(
-              AppLocale.neoThemesApplyBody.getString(context),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: 11.r,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 18.r,
-                height: 18.r,
-                child: Image.asset(
-                  'assets/images/gamepad/Xbox_B_button.png',
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  colorBlendMode: BlendMode.srcIn,
-                ),
-              ),
-              SizedBox(width: 4.r),
-              Text(
-                AppLocale.cancel.getString(context),
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  fontSize: 12.r,
-                ),
-              ),
-            ],
-          ),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primary,
-            foregroundColor: theme.colorScheme.onPrimary,
-            padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 8.r),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8.r),
-            ),
-          ),
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 18.r,
-                height: 18.r,
-                child: Image.asset(
-                  'assets/images/gamepad/Xbox_A_button.png',
-                  color: theme.colorScheme.onPrimary,
-                  colorBlendMode: BlendMode.srcIn,
-                ),
-              ),
-              SizedBox(width: 4.r),
-              Text(
-                AppLocale.apply.getString(context),
-                style: TextStyle(fontSize: 12.r),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}

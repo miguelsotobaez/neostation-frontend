@@ -32,3 +32,22 @@ This project includes or depends on the following third-party software:
 
 For full attribution and licensing details of all dependencies,
 please refer to the respective package repositories and license files.
+
+---
+
+TRADEMARK NOTICE
+
+All trademarks, service marks, trade names, product names, and logos
+appearing in this project (including but not limited to Nintendo,
+Sony PlayStation, Microsoft Xbox, SEGA, and any other video game
+console or company names, marks, and imagery) are the property of
+their respective owners.
+
+NeoStation is an independent frontend application and is not
+affiliated with, endorsed by, sponsored by, or otherwise associated
+with any of the trademark holders referenced herein. These trademarks
+are used solely for identification and compatibility purposes in the
+context of organizing and launching video game software.
+
+Any rights not expressly granted herein are reserved by the
+respective trademark holders.

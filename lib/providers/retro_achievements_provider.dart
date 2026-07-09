@@ -157,7 +157,7 @@ class RetroAchievementsProvider extends ChangeNotifier {
   /// Recent mastery awards (hardcore) visible to the user.
   List<UserAward> get recentMasteries => _recentAwardsForMode(hardcore: true);
 
-  /// Recent completion awards (softcore) visible to the user.
+  /// Recent completion awards (casual) visible to the user.
   List<UserAward> get recentCompletions =>
       _recentAwardsForMode(hardcore: false);
 

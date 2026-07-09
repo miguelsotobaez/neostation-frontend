@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/screenscraper_service.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -364,25 +365,12 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
   }
 
   Future<void> _handleLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppLocale.logoutConfirm.getString(context)),
-        content: Text(AppLocale.logoutConfirmationDesc.getString(context)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(AppLocale.cancel.getString(context)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: Text(AppLocale.logout.getString(context)),
-          ),
-        ],
-      ),
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.logoutConfirm.getString(context),
+      body: AppLocale.logoutConfirmationDesc.getString(context),
+      confirmLabel: AppLocale.logout.getString(context),
+      icon: Symbols.logout_rounded,
     );
 
     if (confirmed == true) {

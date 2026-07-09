@@ -243,7 +243,7 @@ class SfxService {
       return;
     }
     try {
-      await SoLoud.instance.play(source, volume: _volume);
+      SoLoud.instance.play(source, volume: _volume);
     } catch (e) {
       _log.w('[SfxService] Playback error for $path: $e');
     }

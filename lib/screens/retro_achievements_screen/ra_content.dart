@@ -19,9 +19,11 @@ import 'ra_dashboard.dart';
 class RAContent extends StatefulWidget {
   const RAContent({super.key});
 
-  static void navigateUp() => _RAContentState.navigateUp();
+  /// Returns whether the selection/scroll actually moved, so the gamepad
+  /// handler can suppress the nav sound when repeating against a boundary.
+  static bool navigateUp() => _RAContentState.navigateUp();
 
-  static void navigateDown() => _RAContentState.navigateDown();
+  static bool navigateDown() => _RAContentState.navigateDown();
 
   @override
   State<RAContent> createState() => _RAContentState();
@@ -70,11 +72,14 @@ class _RAContentState extends State<RAContent> {
     );
   }
 
-  void _tvMove(int delta) {
-    if (!_isTelevision || _usernameFocus.hasFocus) return;
+  bool _tvMove(int delta) {
+    if (!_isTelevision || _usernameFocus.hasFocus) return false;
+    final next = (_tvFieldIndex + delta).clamp(0, 2);
+    if (next == _tvFieldIndex) return false;
     setState(() {
-      _tvFieldIndex = (_tvFieldIndex + delta).clamp(0, 2);
+      _tvFieldIndex = next;
     });
+    return true;
   }
 
   void _tvSelect() {
@@ -129,41 +134,40 @@ class _RAContentState extends State<RAContent> {
     super.dispose();
   }
 
-  static void navigateUp() => _currentInstance?._handleNavigateUp();
+  static bool navigateUp() => _currentInstance?._handleNavigateUp() ?? true;
 
-  static void navigateDown() => _currentInstance?._handleNavigateDown();
+  static bool navigateDown() => _currentInstance?._handleNavigateDown() ?? true;
 
-  void _handleNavigateUp() {
+  bool _handleNavigateUp() {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (!raProvider.isConnected) {
-      _tvMove(-1);
-      return;
+      return _tvMove(-1);
     }
-    _scrollDashboard(-160.r);
+    return _scrollDashboard(-160.r);
   }
 
-  void _handleNavigateDown() {
+  bool _handleNavigateDown() {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (!raProvider.isConnected) {
-      _tvMove(1);
-      return;
+      return _tvMove(1);
     }
-    _scrollDashboard(160.r);
+    return _scrollDashboard(160.r);
   }
 
-  void _scrollDashboard(double delta) {
-    if (!_dashboardScrollController.hasClients) return;
+  bool _scrollDashboard(double delta) {
+    if (!_dashboardScrollController.hasClients) return false;
     final position = _dashboardScrollController.position;
     final target = (position.pixels + delta).clamp(
       position.minScrollExtent,
       position.maxScrollExtent,
     );
-    if ((target - position.pixels).abs() < 1) return;
+    if ((target - position.pixels).abs() < 1) return false;
     _dashboardScrollController.animateTo(
       target,
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
     );
+    return true;
   }
 
   @override

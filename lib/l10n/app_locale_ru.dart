@@ -128,9 +128,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.nowPlayingDimOff: 'Выкл',
   AppLocale.secondarySectionNowPlaying: 'Панель Now Playing',
   AppLocale.secondarySectionDock: 'Док приложений',
-  AppLocale.screenshotAccess: 'Доступ к скриншотам',
+  AppLocale.screenshotAccess: 'Screen return & screenshots',
   AppLocale.screenshotAccessSubtitle:
-      'Разрешить кнопке скриншота захватывать главный экран (открывает настройки специальных возможностей Android)',
+      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle:
       'Автоматически сканировать папки ROM при запуске приложения',
   AppLocale.ignoreHiddenFiles: 'Игнорировать скрытые элементы',
@@ -567,6 +567,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.storagePermission: 'Разрешение на доступ к памяти',
   AppLocale.storagePermissionDesc:
       'NeoStation нужен «Доступ ко всем файлам» для управления конфигурациями RetroArch.',
+  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccessDesc:
+      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'Выбрать папку ROM',
   AppLocale.romFolderSelected: 'Папка ROM выбрана!',
   AppLocale.chooseRomFolderDesc: 'Выберите папку, где хранятся ваши ROM.',
@@ -796,6 +800,16 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.romDirectories: 'Директории ROM',
   AppLocale.addRomFolder: 'Добавить папку ROM',
   AppLocale.removeRomFolder: 'Удалить',
+  AppLocale.resetPlayTimeConfirm: 'Сбросить время игры',
+  AppLocale.resetPlayTimeConfirmBody:
+      'Записанное время игры для этой игры будет безвозвратно сброшено до нуля. Это действие нельзя отменить.',
+  AppLocale.removeRomFolderConfirmBody:
+      'Эта папка ROM будет удалена из источников вашей библиотеки. Ваши файлы на диске не будут удалены.',
+  AppLocale.disconnectRaConfirm: 'Отключить RetroAchievements',
+  AppLocale.disconnectRaConfirmBody:
+      'Вы выйдете из системы, а сохранённые учётные данные RetroAchievements будут удалены с этого устройства.',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'Вы выйдете из своей учётной записи NeoSync на этом устройстве.',
 
   AppLocale.deleteGame: 'Удалить игру',
   AppLocale.deleteGameConfirm: 'Удалить навсегда',

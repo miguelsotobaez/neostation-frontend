@@ -96,8 +96,16 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   bool _inGameDimmed = false;
 
   /// Dock slot index currently being assigned via the app picker, or null when
-  /// the picker is closed.
+  /// the picker is not open for slot assignment.
   int? _pickerSlot;
+
+  /// True while the picker is open as a full app launcher (tap launches the
+  /// app) rather than to assign a dock slot. Mutually exclusive with a
+  /// non-null [_pickerSlot].
+  bool _launcherOpen = false;
+
+  /// Whether the app picker overlay is currently visible in either mode.
+  bool get _pickerVisible => _pickerSlot != null || _launcherOpen;
 
   /// Installed-app list backing the picker; null until first loaded.
   List<Map<String, dynamic>>? _pickerApps;
@@ -515,20 +523,42 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   Future<void> _openAppPicker(int slot) async {
     _wakeInGamePanel();
     SfxService().playNavSound();
-    setState(() => _pickerSlot = slot);
-    if (_pickerApps == null && !_loadingPickerApps) {
-      setState(() => _loadingPickerApps = true);
-      final apps = await SecondaryAppsService.getInstalledApps();
-      if (!mounted) return;
-      setState(() {
-        _pickerApps = apps;
-        _loadingPickerApps = false;
-      });
-    }
+    setState(() {
+      _pickerSlot = slot;
+      _launcherOpen = false;
+    });
+    await _ensurePickerApps();
+  }
+
+  /// Opens the picker as a full app launcher: tapping a tile launches the app
+  /// instead of assigning it to a dock slot.
+  Future<void> _openAppLauncher() async {
+    _wakeInGamePanel();
+    SfxService().playNavSound();
+    setState(() {
+      _launcherOpen = true;
+      _pickerSlot = null;
+    });
+    await _ensurePickerApps();
+  }
+
+  /// Lazily loads the installed-app list backing the picker/launcher, once.
+  Future<void> _ensurePickerApps() async {
+    if (_pickerApps != null || _loadingPickerApps) return;
+    setState(() => _loadingPickerApps = true);
+    final apps = await SecondaryAppsService.getInstalledApps();
+    if (!mounted) return;
+    setState(() {
+      _pickerApps = apps;
+      _loadingPickerApps = false;
+    });
   }
 
   void _closeAppPicker() {
-    setState(() => _pickerSlot = null);
+    setState(() {
+      _pickerSlot = null;
+      _launcherOpen = false;
+    });
   }
 
   /// Assigns [package] to the pending picker slot and closes the picker.
@@ -1120,7 +1150,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           ),
           // App picker overlay sits above the dim scrim so opening it (which
           // also wakes the panel) is always visible.
-          if (_pickerSlot != null) _buildAppPickerOverlay(),
+          if (_pickerVisible) _buildAppPickerOverlay(),
         ],
       ),
     );
@@ -1341,6 +1371,13 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 0, child: _buildAppDock(value)),
+          // All-apps launcher pinned to the bottom-left corner.
+          if (value.dockEnabled)
+            Positioned(
+              left: 16.r,
+              bottom: 16.r,
+              child: _buildLauncherButton(value),
+            ),
         ],
       ),
     );
@@ -1418,6 +1455,75 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
+  /// The all-apps launcher, pinned to the bottom-left of the Now Playing
+  /// screen. Normally opens the app picker in launch mode. When the Screen
+  /// Return accessibility service isn't enabled, it's highlighted with an
+  /// accent border + warning badge and instead opens accessibility settings —
+  /// launching an app without that service would strand the user with no way
+  /// back to Now Playing.
+  Widget _buildLauncherButton(SecondaryDisplayStateData value) {
+    final scheme = _panelScheme(value);
+    final accessOk = value.screenshotAccessEnabled;
+    return GestureDetector(
+      onTap: accessOk ? _openAppLauncher : _openAccessibilitySettings,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 56.r,
+            height: 56.r,
+            decoration: BoxDecoration(
+              color: accessOk
+                  ? scheme.onSurface.withValues(alpha: 0.05)
+                  : scheme.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14.r),
+              border: Border.all(
+                color: accessOk
+                    ? scheme.onSurface.withValues(alpha: 0.14)
+                    : scheme.primary,
+                width: accessOk ? 1.r : 2.r,
+              ),
+            ),
+            child: Icon(
+              Symbols.apps_rounded,
+              color: accessOk
+                  ? scheme.onSurface.withValues(alpha: 0.65)
+                  : scheme.primary,
+              size: 28.r,
+            ),
+          ),
+          if (!accessOk)
+            Positioned(
+              top: -4.r,
+              right: -4.r,
+              child: Container(
+                width: 20.r,
+                height: 20.r,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 2.r),
+                ),
+                child: Icon(
+                  Symbols.priority_high_rounded,
+                  size: 12.r,
+                  color: scheme.onPrimary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens Android accessibility settings from the secondary engine so the user
+  /// can enable the Screen Return service.
+  void _openAccessibilitySettings() {
+    _wakeInGamePanel();
+    SfxService().playNavSound();
+    SecondaryAppsService.openAccessibilitySettings();
+  }
+
   /// A single dock slot. [package] empty = free slot.
   Widget _buildDockSlot(int index, String package, ColorScheme scheme) {
     final filled = package.isNotEmpty;
@@ -1490,7 +1596,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                   Row(
                     children: [
                       Text(
-                        'CHOOSE AN APP',
+                        _launcherOpen ? 'LAUNCH AN APP' : 'CHOOSE AN APP',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16.r,
@@ -1556,9 +1662,20 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
+  /// Handles a picker-tile tap: launches the app in launcher mode, otherwise
+  /// assigns it to the pending dock slot.
+  void _onPickerTileTap(String package) {
+    if (_launcherOpen) {
+      _closeAppPicker();
+      _launchDockApp(package);
+    } else {
+      _assignSlot(package);
+    }
+  }
+
   Widget _buildPickerTile(String package, String name) {
     return GestureDetector(
-      onTap: package.isEmpty ? null : () => _assignSlot(package),
+      onTap: package.isEmpty ? null : () => _onPickerTileTap(package),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

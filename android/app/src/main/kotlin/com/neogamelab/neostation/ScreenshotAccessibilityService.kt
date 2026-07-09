@@ -24,6 +24,15 @@ class ScreenshotAccessibilityService : AccessibilityService() {
         val isConnected: Boolean
             get() = instance != null
 
+        /**
+         * Invoked when the service connects (the user just enabled it). Lets the
+         * app re-push accessibility state to the secondary display while a game
+         * is running — the main engine is backgrounded then, so it can't observe
+         * the grant via its own lifecycle.
+         */
+        @Volatile
+        var onConnected: (() -> Unit)? = null
+
         // --- Dock app-close watch ---
         @Volatile
         private var watchedPackage: String? = null
@@ -63,6 +72,7 @@ class ScreenshotAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        onConnected?.invoke()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {

@@ -294,6 +294,9 @@ class SqliteMigrations {
       case 96:
         await _migrateToVersion96(db);
         break;
+      case 97:
+        await _migrateToVersion97(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4679,17 +4682,17 @@ class SqliteMigrations {
   }
 
   static Future<void> _migrateToVersion95(Database db) async {
-    _log.i('Migration v95: Adding subfolder_view to user_system_settings');
+    _log.i('Migration v95: Adding game_carousel_card_style to user_config');
     try {
-      final tableInfo = db.select('PRAGMA table_info(user_system_settings)');
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
       final columns = tableInfo.map((c) => c['name'].toString()).toList();
-      if (!columns.contains('subfolder_view')) {
+      if (!columns.contains('game_carousel_card_style')) {
         db.execute(
-          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
+          "ALTER TABLE user_config ADD COLUMN game_carousel_card_style TEXT DEFAULT 'fanart'",
         );
-        _log.i('Column subfolder_view added via v95');
+        _log.i('Column game_carousel_card_style added via v95');
       } else {
-        _log.i('Column subfolder_view already exists');
+        _log.i('Column game_carousel_card_style already exists');
       }
     } catch (e, stackTrace) {
       _log.e('Error in migration v95: $e');
@@ -4698,12 +4701,32 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v96: Adds the global `subfolder_view_default` master toggle to
+  static Future<void> _migrateToVersion96(Database db) async {
+    _log.i('Migration v96: Adding subfolder_view to user_system_settings');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_system_settings)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('subfolder_view')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view added via v96');
+      } else {
+        _log.i('Column subfolder_view already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v96: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v97: Adds the global `subfolder_view_default` master toggle to
   /// user_config. Toggling it in General settings stamps every system's
   /// user_system_settings.subfolder_view; each system can then be adjusted
   /// individually.
-  static Future<void> _migrateToVersion96(Database db) async {
-    _log.i('Migration v96: Adding subfolder_view_default to user_config');
+  static Future<void> _migrateToVersion97(Database db) async {
+    _log.i('Migration v97: Adding subfolder_view_default to user_config');
     try {
       final configInfo = db.select('PRAGMA table_info(user_config)');
       final configColumns = configInfo
@@ -4713,12 +4736,12 @@ class SqliteMigrations {
         db.execute(
           'ALTER TABLE user_config ADD COLUMN subfolder_view_default INTEGER DEFAULT 0',
         );
-        _log.i('Column subfolder_view_default added via v96');
+        _log.i('Column subfolder_view_default added via v97');
       } else {
         _log.i('Column subfolder_view_default already exists');
       }
     } catch (e, stackTrace) {
-      _log.e('Error in migration v96: $e');
+      _log.e('Error in migration v97: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

@@ -7,6 +7,7 @@ import '../models/retro_achievements_dashboard_models.dart';
 class RetroAchievementsRepository {
   static const String _raApiKeyStorageKey = 'ra_api_key';
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
+
   /// Returns local ROM counts: total and RA-compatible (has ra_hash).
   static Future<({int totalRoms, int raCompatibleRoms})>
   getLocalRomStats() async {

@@ -4,6 +4,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../providers/sqlite_database_provider.dart';
@@ -32,6 +33,9 @@ class SystemsSettingsContent extends StatefulWidget {
 class SystemsSettingsContentState extends State<SystemsSettingsContent> {
   final ScrollController _scrollController = ScrollController();
 
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
+
   /// GlobalKeys for maintaining focal visibility during gamepad navigation.
   final List<GlobalKey> _itemKeys = [];
 
@@ -47,12 +51,7 @@ class SystemsSettingsContentState extends State<SystemsSettingsContent> {
     if (index >= 0 && index < _itemKeys.length) {
       final ctx = _itemKeys[index].currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
+        _scroller.ensureVisible(ctx);
       }
     }
   }

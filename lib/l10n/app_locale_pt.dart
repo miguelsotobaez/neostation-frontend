@@ -130,9 +130,9 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.nowPlayingDimOff: 'Desligado',
   AppLocale.secondarySectionNowPlaying: 'Painel Now Playing',
   AppLocale.secondarySectionDock: 'Dock de apps',
-  AppLocale.screenshotAccess: 'Acesso a capturas de tela',
+  AppLocale.screenshotAccess: 'Screen return & screenshots',
   AppLocale.screenshotAccessSubtitle:
-      'Permitir que o botão de captura capture a tela principal (abre configurações de acessibilidade do Android)',
+      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle:
       'Varre automaticamente as pastas de ROMs ao abrir o aplicativo',
   AppLocale.ignoreHiddenFiles: 'Ignorar itens ocultos',
@@ -566,6 +566,10 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.storagePermission: 'Permissão de Armazenamento',
   AppLocale.storagePermissionDesc:
       'NeoStation precisa de "Acesso a Todos os Arquivos" para gerenciar suas configurações do RetroArch e sincronizar seus saves corretamente.\n\nPor favor, conceda esta permissão na próxima tela.',
+  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccessDesc:
+      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'Selecionar Pasta de ROMs',
   AppLocale.romFolderSelected: 'Pasta de ROMs selecionada!',
   AppLocale.chooseRomFolderDesc:
@@ -807,6 +811,16 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.romDirectories: 'Diretórios de ROM',
   AppLocale.addRomFolder: 'Adicionar pasta de ROM',
   AppLocale.removeRomFolder: 'Remover',
+  AppLocale.resetPlayTimeConfirm: 'Redefinir tempo de jogo',
+  AppLocale.resetPlayTimeConfirmBody:
+      'Isto irá redefinir permanentemente para zero o tempo de jogo registado deste jogo. Esta ação não pode ser desfeita.',
+  AppLocale.removeRomFolderConfirmBody:
+      'Isto irá remover esta pasta de ROMs das fontes da sua biblioteca. Os seus ficheiros no disco não são eliminados.',
+  AppLocale.disconnectRaConfirm: 'Desligar RetroAchievements',
+  AppLocale.disconnectRaConfirmBody:
+      'Isto irá terminar a sua sessão e remover as suas credenciais guardadas do RetroAchievements deste dispositivo.',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'Isto irá terminar a sessão da sua conta NeoSync neste dispositivo.',
 
   AppLocale.deleteGame: 'Excluir Jogo',
   AppLocale.deleteGameConfirm: 'Excluir Permanentemente',

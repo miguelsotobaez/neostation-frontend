@@ -1460,6 +1460,14 @@ class SqliteConfigProvider extends ChangeNotifier {
         _log.i('Secondary display disconnected');
         _onSecondaryDisplayChanged(connected: false);
         break;
+      case 'onAccessibilityConnected':
+        // The user just enabled the Screen Return service (e.g. via the in-game
+        // launcher nudge). Re-push access state so the secondary display clears
+        // the launcher warning badge and reveals the screenshot button — this
+        // fires even while a game keeps the main engine backgrounded.
+        // ignore: unawaited_futures
+        refreshSecondaryScreenshotAccess();
+        break;
     }
   }
 
@@ -1615,7 +1623,12 @@ class SqliteConfigProvider extends ChangeNotifier {
     final isAsc = _config.systemSortOrder == 'asc';
 
     // Map priority folders that should NEVER be sorted
-    final priorityMap = <String, int>{'all': 1, 'music': 2, 'android': 3};
+    final priorityMap = <String, int>{
+      'all': 1,
+      'favorites': 2,
+      'music': 3,
+      'android': 4,
+    };
 
     _detectedSystems.sort((a, b) {
       final pA = priorityMap[a.folderName] ?? 999;

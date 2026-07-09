@@ -20,8 +20,8 @@ class RetroAchievementsUserAwards {
   /// Number of games "Beaten" in hardcore mode.
   final int beatenHardcoreAwardsCount;
 
-  /// Number of games "Beaten" in casual (softcore) mode.
-  final int beatenSoftcoreAwardsCount;
+  /// Number of games "Beaten" in casual mode.
+  final int beatenCasualAwardsCount;
 
   /// Number of awards earned during special community events.
   final int eventAwardsCount;
@@ -38,7 +38,7 @@ class RetroAchievementsUserAwards {
     required this.masteryAwardsCount,
     required this.completionAwardsCount,
     required this.beatenHardcoreAwardsCount,
-    required this.beatenSoftcoreAwardsCount,
+    required this.beatenCasualAwardsCount,
     required this.eventAwardsCount,
     required this.siteAwardsCount,
     required this.visibleUserAwards,
@@ -56,7 +56,7 @@ class RetroAchievementsUserAwards {
       beatenHardcoreAwardsCount: RAParsingUtils.toInt(
         json['BeatenHardcoreAwardsCount'],
       ),
-      beatenSoftcoreAwardsCount: RAParsingUtils.toInt(
+      beatenCasualAwardsCount: RAParsingUtils.toInt(
         json['BeatenSoftcoreAwardsCount'],
       ),
       eventAwardsCount: RAParsingUtils.toInt(json['EventAwardsCount']),

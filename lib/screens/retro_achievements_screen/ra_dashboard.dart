@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_locale.dart';
+import '../../widgets/confirm_action_dialog.dart';
 import '../../models/retro_achievements_dashboard_models.dart';
 import '../../models/retro_achievements_user_awards.dart';
 import '../../providers/file_provider.dart';
@@ -147,11 +148,14 @@ class _RADashboardHubState extends State<RADashboardHub> {
   ) {
     final theme = Theme.of(context);
     final user = raProvider.user!;
-    final showCompletions = user.isSoftcore;
+    final showCompletions = user.isCasual;
     final trackedGames = raProvider.completionProgress?.total ?? 0;
+    // Bright gold/silver read fine on dark surfaces but wash out on light
+    // palettes, so pick a darker goldenrod/grey when the theme is light.
+    final isLightTheme = theme.brightness == Brightness.light;
     final highlightColor = showCompletions
-        ? const Color(0xFFC0C0C0)
-        : const Color(0xFFFFD700);
+        ? (isLightTheme ? const Color(0xFF757575) : const Color(0xFFC0C0C0))
+        : (isLightTheme ? const Color(0xFFB8860B) : const Color(0xFFFFD700));
     final highlightCount = showCompletions
         ? (raProvider.userAwards?.completionAwardsCount ?? 0)
         : (raProvider.userAwards?.masteryAwardsCount ?? 0);
@@ -223,13 +227,13 @@ class _RADashboardHubState extends State<RADashboardHub> {
                       icon: Symbols.stars_rounded,
                       label:
                           '${user.totalPoints} ${AppLocale.raPointsAbbrev.getString(context)}',
-                      color: theme.colorScheme.tertiary,
+                      color: theme.colorScheme.primary,
                     ),
                     _buildPill(
                       context,
                       icon: Symbols.sports_esports_rounded,
                       label: '$trackedGames games played',
-                      color: theme.colorScheme.secondary,
+                      color: theme.colorScheme.primary,
                     ),
                     _buildPill(
                       context,
@@ -243,7 +247,15 @@ class _RADashboardHubState extends State<RADashboardHub> {
             ),
           ),
           IconButton(
-            onPressed: () {
+            onPressed: () async {
+              final confirmed = await ConfirmActionDialog.show(
+                context,
+                title: AppLocale.disconnectRaConfirm.getString(context),
+                body: AppLocale.disconnectRaConfirmBody.getString(context),
+                confirmLabel: AppLocale.logout.getString(context),
+                icon: Symbols.logout_rounded,
+              );
+              if (!confirmed || !context.mounted) return;
               raProvider.disconnect(clearSavedUser: true);
               if (!context.mounted) return;
               AppNotification.showNotification(
@@ -272,8 +284,9 @@ class _RADashboardHubState extends State<RADashboardHub> {
     final gotw = raProvider.gotw;
     final owned = raProvider.ownedWeekGame;
     final earned = raProvider.gotwEarned;
+    final isLightTheme = theme.brightness == Brightness.light;
     final accent = earned
-        ? const Color(0xFFFFD700)
+        ? (isLightTheme ? const Color(0xFFB8860B) : const Color(0xFFFFD700))
         : owned != null
         ? theme.colorScheme.secondary
         : theme.colorScheme.primary;
@@ -438,14 +451,14 @@ class _RADashboardHubState extends State<RADashboardHub> {
                     icon: Symbols.groups_rounded,
                     label:
                         '${gotw.totalPlayers} ${AppLocale.players.getString(context)}',
-                    color: theme.colorScheme.tertiary,
+                    color: accent,
                   ),
                   _buildPill(
                     context,
                     icon: Symbols.trophy_rounded,
                     label:
                         '${gotw.unlocksCount} ${AppLocale.unlocks.getString(context)}',
-                    color: theme.colorScheme.tertiary,
+                    color: accent,
                   ),
                 ],
               ),
@@ -526,7 +539,10 @@ class _RADashboardHubState extends State<RADashboardHub> {
     BuildContext context,
     RetroAchievementsProvider raProvider,
   ) {
-    final showCompletions = raProvider.user?.isSoftcore ?? false;
+    final showCompletions = raProvider.user?.isCasual ?? false;
+    // Darken the gold/silver accent on light themes for legibility (see the
+    // profile chip highlightColor above).
+    final isLightTheme = Theme.of(context).brightness == Brightness.light;
     final items =
         (showCompletions
                 ? raProvider.recentCompletions
@@ -557,8 +573,8 @@ class _RADashboardHubState extends State<RADashboardHub> {
             ? AppLocale.raCompletionLabel.getString(context)
             : AppLocale.raMasteryLabel.getString(context),
         accentLabelColor: showCompletions
-            ? const Color(0xFFC0C0C0)
-            : const Color(0xFFFFD700),
+            ? (isLightTheme ? const Color(0xFF757575) : const Color(0xFFC0C0C0))
+            : (isLightTheme ? const Color(0xFFB8860B) : const Color(0xFFFFD700)),
       ),
     );
   }

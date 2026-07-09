@@ -3,7 +3,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
-import '../../settings_screen/new_settings_options/settings_title.dart';
 
 class AccountContent extends StatelessWidget {
   final bool isContentFocused;
@@ -67,28 +66,8 @@ class AccountContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SettingsTitle(title: AppLocale.screenscraper.getString(context)),
-          SizedBox(height: 12.r),
-
-          // Row for Username (50%) and Max Threads (50%)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User Information (50%)
-              Expanded(flex: 1, child: _buildCompactUserHeader(context, theme)),
-              SizedBox(width: 12.r),
-              // Max Threads (50%)
-              Expanded(
-                flex: 1,
-                child: _buildCompactStatTile(
-                  theme,
-                  AppLocale.maxThreads.getString(context),
-                  userInfo!['maxthreads'] ?? '1',
-                  Symbols.lan_rounded,
-                ),
-              ),
-            ],
-          ),
+          // Full-width member header pill (avatar + name + chips + logout)
+          _buildMemberHeader(context, theme),
 
           SizedBox(height: 12.h),
 
@@ -103,175 +82,132 @@ class AccountContent extends StatelessWidget {
             ),
             SizedBox(height: 16.h),
           ],
-
-          // Disconnect Button
-          Padding(
-            padding: EdgeInsets.only(bottom: 24.r),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color: isContentFocused && selectedContentIndex == 0
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2.r,
-                ),
-              ),
-              child: ElevatedButton.icon(
-                onPressed: onLogout,
-                icon: Icon(
-                  Symbols.logout_rounded,
-                  size: 14.r,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  AppLocale.disconnectAccount.getString(context),
-                  style: TextStyle(
-                    fontSize: 10.r,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.error,
-                  foregroundColor: theme.colorScheme.error,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.r,
-                    vertical: 16.r,
-                  ),
-                  side: BorderSide(color: theme.colorScheme.error),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildCompactUserHeader(BuildContext context, ThemeData theme) {
+  Widget _buildMemberHeader(BuildContext context, ThemeData theme) {
     return Container(
-      padding: EdgeInsets.all(12.r),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
-        ),
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 12.r),
+      decoration: _cardDecoration(theme),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 18.r,
+            radius: 24.r,
             backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.2),
             child: Text(
               (userInfo!['username'] ?? 'U').substring(0, 1).toUpperCase(),
               style: TextStyle(
-                fontSize: 14.r,
+                fontSize: 18.r,
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.primary,
               ),
             ),
           ),
-          SizedBox(width: 10.r),
+          SizedBox(width: 12.r),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   userInfo!['username'] ??
                       AppLocale.unknownUser.getString(context),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12.r,
-                  ),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14.r,
+                  ),
                 ),
-                SizedBox(height: 2.r),
-                _buildBadge(
-                  _getContributionLevel(context, userInfo!['contribution']),
-                  _getContributionColor(userInfo!['contribution']),
+                SizedBox(height: 4.r),
+                Wrap(
+                  spacing: 8.r,
+                  runSpacing: 6.r,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _buildPill(
+                      icon: Symbols.workspace_premium_rounded,
+                      label: _getContributionLevel(
+                        context,
+                        userInfo!['contribution'],
+                      ),
+                      color: _getContributionColor(userInfo!['contribution']),
+                    ),
+                    _buildPill(
+                      icon: Symbols.lan_rounded,
+                      label:
+                          '${AppLocale.maxThreads.getString(context)}: ${userInfo!['maxthreads'] ?? '1'}',
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+          SizedBox(width: 8.r),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: isContentFocused && selectedContentIndex == 0
+                    ? theme.colorScheme.primary
+                    : Colors.transparent,
+                width: 2.r,
+              ),
+            ),
+            child: IconButton(
+              onPressed: onLogout,
+              icon: Icon(
+                Symbols.logout_rounded,
+                size: 20.r,
+                color: theme.colorScheme.error,
+              ),
+              tooltip: AppLocale.disconnectAccount.getString(context),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCompactStatTile(
-    ThemeData theme,
-    String label,
-    String value,
-    IconData icon,
-  ) {
+  BoxDecoration _cardDecoration(ThemeData theme) {
+    return BoxDecoration(
+      color: theme.cardColor.withValues(alpha: 0.25),
+      borderRadius: BorderRadius.circular(12.r),
+      border: Border.all(
+        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+        width: 1.r,
+      ),
+    );
+  }
+
+  Widget _buildPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
     return Container(
-      padding: EdgeInsets.all(12.r),
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
       decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
-        ),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999.r),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: EdgeInsets.all(12.r),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+          Icon(icon, size: 10.r, color: color),
+          SizedBox(width: 4.r),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 8.r,
+              fontWeight: FontWeight.w700,
             ),
-            child: Icon(icon, color: theme.colorScheme.secondary, size: 14.r),
-          ),
-          SizedBox(width: 8.r),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12.r,
-                ),
-              ),
-              Text(
-                value,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11.sp,
-                ),
-              ),
-            ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBadge(String label, Color color) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4.r),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 8.sp,
-          fontWeight: FontWeight.bold,
-        ),
       ),
     );
   }

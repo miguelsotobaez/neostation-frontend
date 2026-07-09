@@ -553,6 +553,9 @@ mixin AppLocale {
   static const String letsGetSetup = 'lets_get_setup';
   static const String storagePermission = 'storage_permission';
   static const String storagePermissionDesc = 'storage_permission_desc';
+  static const String screenReturnAccess = 'screen_return_access';
+  static const String screenReturnAccessDesc = 'screen_return_access_desc';
+  static const String screenReturnAccessHint = 'screen_return_access_hint';
   static const String selectRomFolder = 'select_rom_folder';
   static const String romFolderSelected = 'rom_folder_selected';
   static const String chooseRomFolderDesc = 'choose_rom_folder_desc';
@@ -827,6 +830,14 @@ mixin AppLocale {
   static const String romDirectories = 'rom_directories';
   static const String addRomFolder = 'add_rom_folder';
   static const String removeRomFolder = 'remove_rom_folder';
+
+  // Destructive-action confirmation prompts
+  static const String resetPlayTimeConfirm = 'reset_play_time_confirm';
+  static const String resetPlayTimeConfirmBody = 'reset_play_time_confirm_body';
+  static const String removeRomFolderConfirmBody = 'remove_rom_folder_confirm_body';
+  static const String disconnectRaConfirm = 'disconnect_ra_confirm';
+  static const String disconnectRaConfirmBody = 'disconnect_ra_confirm_body';
+  static const String neoSyncLogoutConfirmBody = 'neo_sync_logout_confirm_body';
 
   // RetroAchievements dashboard & achievement comments
   static const String raCompletionsLabel = 'ra_completions_label';
