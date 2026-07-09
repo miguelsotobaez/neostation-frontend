@@ -43,6 +43,17 @@ class GamesGrid extends StatefulWidget {
   final List<RomFolderEntry> folderEntries;
   final void Function(int folderIndex)? onFolderActivated;
 
+  /// Resolves on-disk cover files for the games beneath a folder, for the
+  /// folder-tile preview mosaic. [imageType] follows the current card style
+  /// ('fanarts' vs 'box2d'). Falls back to screenshots. Provided by the parent
+  /// because it owns the full game list and subfolder roots.
+  final List<File> Function(
+    String folderRelPath, {
+    required int max,
+    required String imageType,
+  })?
+  folderCoverResolver;
+
   const GamesGrid({
     super.key,
     required this.system,
@@ -61,6 +72,7 @@ class GamesGrid extends StatefulWidget {
     this.folderCount = 0,
     this.folderEntries = const [],
     this.onFolderActivated,
+    this.folderCoverResolver,
   });
 
   @override
@@ -89,6 +101,11 @@ class _GamesGridState extends State<GamesGrid> {
 
   // Image dimension cache
   static final Map<String, Size?> _imageSizeCache = {};
+
+  /// Folder preview covers, keyed by "relPath|imageType" so box/fanart styles
+  /// cache independently. Resolving walks the game list and stats the disk, so
+  /// each folder tile is computed once.
+  final Map<String, List<File>> _folderCoverCache = {};
 
   // Visible index tracking for lazy dimension loading
   final Set<int> _loadedDims = {};
@@ -1061,6 +1078,22 @@ class _GamesGridState extends State<GamesGrid> {
 
   Widget _buildFolderCard(int index, ThemeData theme) {
     final folder = widget.folderEntries[index];
+
+    // Preview the folder with up to four covers of the games it contains,
+    // filling the tile edge-to-edge; fall back to the folder glyph when none
+    // have art on disk. The image type follows the current card style so the
+    // mosaic matches the surrounding cards. Cached per folder+style.
+    final imageType = _isFanart ? 'fanarts' : 'box2d';
+    final cacheKey = '${folder.relPath}|$imageType';
+    final covers =
+        _folderCoverCache[cacheKey] ??=
+            widget.folderCoverResolver?.call(
+              folder.relPath,
+              max: 4,
+              imageType: imageType,
+            ) ??
+            const [];
+
     return GestureDetector(
       key: ValueKey('folder_${folder.relPath}'),
       onTap: () {
@@ -1073,45 +1106,45 @@ class _GamesGridState extends State<GamesGrid> {
           borderRadius: BorderRadius.circular(12.r),
           child: Container(
             color: theme.colorScheme.surfaceContainerHighest,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Symbols.folder_rounded,
-                    size: 40.r,
-                    fill: 1,
-                    color: widget.system.colorAsColor,
-                  ),
-                  SizedBox(height: 6.r),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6.r),
-                    child: Text(
-                      folder.name,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 9.r,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface,
-                      ),
+            child: covers.isEmpty
+                ? Center(
+                    child: Icon(
+                      Symbols.folder_rounded,
+                      size: 40.r,
+                      fill: 1,
+                      color: widget.system.colorAsColor,
                     ),
-                  ),
-                  SizedBox(height: 2.r),
-                  Text(
-                    '${folder.gameCount}',
-                    style: TextStyle(
-                      fontSize: 8.r,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                  )
+                : _buildCoverMosaic(covers),
           ),
         ),
       ),
+    );
+  }
+
+  /// Fills the folder tile with 1–4 cover images: a single cover fills the
+  /// whole tile, two split it into columns, three/four stack into rows so the
+  /// mosaic always covers the entire space edge-to-edge.
+  Widget _buildCoverMosaic(List<File> covers) {
+    Widget tile(File file) => Image.file(
+      file,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    );
+
+    Widget row(List<File> files) => Row(
+      children: [for (final f in files) Expanded(child: tile(f))],
+    );
+
+    if (covers.length == 1) return tile(covers.first);
+    if (covers.length == 2) return row(covers);
+
+    return Column(
+      children: [
+        Expanded(child: row(covers.sublist(0, 2))),
+        Expanded(child: row(covers.sublist(2))),
+      ],
     );
   }
 

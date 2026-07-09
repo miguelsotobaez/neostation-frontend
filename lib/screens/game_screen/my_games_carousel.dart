@@ -41,6 +41,17 @@ class GamesCarousel extends StatefulWidget {
   final List<RomFolderEntry> folderEntries;
   final void Function(int folderIndex)? onFolderActivated;
 
+  /// Resolves on-disk cover files for the games beneath a folder, for the
+  /// folder-card preview mosaic. [imageType] follows the current card style
+  /// ('fanarts' vs 'box2d'). Falls back to screenshots. Provided by the parent
+  /// because it owns the full game list and subfolder roots.
+  final List<File> Function(
+    String folderRelPath, {
+    required int max,
+    required String imageType,
+  })?
+  folderCoverResolver;
+
   const GamesCarousel({
     super.key,
     required this.system,
@@ -59,6 +70,7 @@ class GamesCarousel extends StatefulWidget {
     this.folderCount = 0,
     this.folderEntries = const [],
     this.onFolderActivated,
+    this.folderCoverResolver,
   });
 
   @override
@@ -73,6 +85,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
   late GamepadNavigation _gamepadNav;
   final Map<String, double> _letterWidthCache = {};
   final Map<String, bool> _fileExistsCache = {};
+
+  /// Folder preview covers, keyed by "relPath|imageType" so box/fanart styles
+  /// cache independently. Resolving walks the game list and stats the disk, so
+  /// each folder card is computed once.
+  final Map<String, List<File>> _folderCoverCache = {};
   int _lastBgIndex = -1;
 
   static final Map<String, Size?> _imgSizeCache = {};
@@ -681,8 +698,24 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
   }
 
-  Widget _buildFolderCard(RomFolderEntry folder, int index) {
+  Widget _buildFolderCard(RomFolderEntry folder, int index, bool isFanart) {
     final theme = Theme.of(context);
+
+    // Preview the folder with up to four covers of the games it contains,
+    // falling back to the folder glyph when none have art on disk. The image
+    // type follows the current card style so the mosaic matches the surrounding
+    // cards (fanart vs box art). Cached per folder+style.
+    final imageType = isFanart ? 'fanarts' : 'box2d';
+    final cacheKey = '${folder.relPath}|$imageType';
+    final covers =
+        _folderCoverCache[cacheKey] ??=
+            widget.folderCoverResolver?.call(
+              folder.relPath,
+              max: 4,
+              imageType: imageType,
+            ) ??
+            const [];
+
     return GestureDetector(
       onTap: () {
         SfxService().playNavSound();
@@ -695,45 +728,45 @@ class _GamesCarouselState extends State<GamesCarousel> {
             width: 220.r,
             height: 220.r,
             color: theme.colorScheme.surfaceContainerHighest,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Symbols.folder_rounded,
-                    size: 96.r,
-                    fill: 1,
-                    color: widget.system.colorAsColor,
-                  ),
-                  SizedBox(height: 12.r),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.r),
-                    child: Text(
-                      folder.name,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurface,
-                        fontSize: 16.r,
-                        fontWeight: FontWeight.w700,
-                      ),
+            child: covers.isEmpty
+                ? Center(
+                    child: Icon(
+                      Symbols.folder_rounded,
+                      size: 96.r,
+                      fill: 1,
+                      color: widget.system.colorAsColor,
                     ),
-                  ),
-                  SizedBox(height: 4.r),
-                  Text(
-                    '${folder.gameCount}',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: 13.r,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                  )
+                : _buildCoverMosaic(covers),
           ),
         ),
       ),
+    );
+  }
+
+  /// Fills the folder card with 1–4 cover images: a single cover fills the
+  /// whole card, two split it into columns, three/four stack into rows so the
+  /// mosaic always covers the entire space edge-to-edge.
+  Widget _buildCoverMosaic(List<File> covers) {
+    Widget tile(File file) => Image.file(
+      file,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    );
+
+    Widget row(List<File> files) => Row(
+      children: [for (final f in files) Expanded(child: tile(f))],
+    );
+
+    if (covers.length == 1) return tile(covers.first);
+    if (covers.length == 2) return row(covers);
+
+    return Column(
+      children: [
+        Expanded(child: row(covers.sublist(0, 2))),
+        Expanded(child: row(covers.sublist(2))),
+      ],
     );
   }
 
@@ -949,7 +982,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                     final folder = widget.folderEntries[index];
                     return KeyedSubtree(
                       key: ValueKey('folder_${folder.relPath}'),
-                      child: _buildFolderCard(folder, index),
+                      child: _buildFolderCard(folder, index, isFanart),
                     );
                   }
                   final game = widget.games[index];

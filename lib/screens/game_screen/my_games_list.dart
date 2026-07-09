@@ -2943,6 +2943,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       folderCount: _folderCount,
       folderEntries: _currentFolderEntries,
       onFolderActivated: _descendToFolderIndex,
+      folderCoverResolver: (relPath, {required max, required imageType}) =>
+          _folderCoverFiles(relPath, max: max, imageType: imageType),
     );
   }
 
@@ -2972,6 +2974,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       folderCount: _folderCount,
       folderEntries: _currentFolderEntries,
       onFolderActivated: _descendToFolderIndex,
+      folderCoverResolver: (relPath, {required max, required imageType}) =>
+          _folderCoverFiles(relPath, max: max, imageType: imageType),
     );
   }
 
@@ -3134,7 +3138,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// mosaic. The contained games are shuffled with a seed derived from the
   /// folder path, so the sample varies between folders but is stable for a
   /// given folder across selections. Games without any art are skipped.
-  List<File> _folderCoverFiles(String folderRelPath, {required int max}) {
+  List<File> _folderCoverFiles(
+    String folderRelPath, {
+    required int max,
+    String imageType = 'box2d',
+  }) {
     final systemFolder = widget.system.primaryFolderName;
     final games =
         gamesUnderFolder(
@@ -3144,9 +3152,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
         ).toList()..shuffle(Random(folderRelPath.hashCode));
     final covers = <File>[];
     for (final game in games) {
-      final box = game.getImagePath(systemFolder, 'box2d', _fileProvider);
-      if (File(box).existsSync()) {
-        covers.add(File(box));
+      final art = game.getImagePath(systemFolder, imageType, _fileProvider);
+      if (File(art).existsSync()) {
+        covers.add(File(art));
       } else {
         final shot = game.getScreenshotPath(systemFolder, _fileProvider);
         if (File(shot).existsSync()) covers.add(File(shot));
