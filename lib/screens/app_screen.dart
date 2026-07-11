@@ -82,7 +82,17 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    // Attach the secondary-display theme sync here (not in initState): the
+    // provider isn't resolvable until didChangeDependencies runs, so an
+    // initState addListener would silently no-op on a null _themeProvider and
+    // the secondary display would never pick up theme changes until an
+    // unrelated re-push. Re-bind if the provider instance ever changes.
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (!identical(themeProvider, _themeProvider)) {
+      _themeProvider?.removeListener(_onThemeChanged);
+      _themeProvider = themeProvider;
+      _themeProvider!.addListener(_onThemeChanged);
+    }
   }
 
   @override
@@ -127,8 +137,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
       _runUpdateSequence();
     });
 
-    // Synchronize theme changes with secondary displays (e.g., dual-screen hardware).
-    _themeProvider?.addListener(_onThemeChanged);
+    // Secondary-display theme sync is attached in didChangeDependencies, where
+    // the ThemeProvider is first resolvable (see note there).
   }
 
   /// Runs the sequenced update flow: updates first, then one ROM scan.
