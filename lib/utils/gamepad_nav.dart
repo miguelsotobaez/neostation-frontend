@@ -67,7 +67,9 @@ class GamepadNavigation {
   static final _log = LoggerService.instance;
 
   /// When true, all raw input events are logged for diagnostic purposes.
-  static bool _debugLogging = false;
+  // TODO(gameinput): temporarily defaulted to true to verify the Windows
+  // GameInput mapping on-hardware; revert to false before merge.
+  static bool _debugLogging = true;
   static bool get debugLogging => _debugLogging;
   static void setDebugLogging(bool enabled) {
     _debugLogging = enabled;
