@@ -37,15 +37,16 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.directories: 'Directories',
   AppLocale.themes: 'Themes',
   AppLocale.systemArt: 'System Art',
-  AppLocale.systemArtSubtitle: 'Customize system card backgrounds and logos',
+  AppLocale.systemArtSubtitle:
+      'Customize system card backgrounds and logos with System Art packs',
   AppLocale.systemArtNone: 'None',
   AppLocale.systemArtNoneSubtitle: 'Default appearance',
-  AppLocale.systemArtLoading: 'Loading themes...',
-  AppLocale.systemArtError: 'Could not load themes',
-  AppLocale.systemArtApplyTitle: 'Apply theme?',
+  AppLocale.systemArtLoading: 'Loading System Art...',
+  AppLocale.systemArtError: 'Could not load System Art',
+  AppLocale.systemArtApplyTitle: 'Apply System Art?',
   AppLocale.systemArtApplyBody:
-      'The theme assets will be downloaded for all systems. This may take a moment.',
-  AppLocale.systemArtDownloading: 'Downloading theme assets...',
+      'The System Art pack will be downloaded for all systems. This may take a moment.',
+  AppLocale.systemArtDownloading: 'Downloading System Art pack...',
   AppLocale.about: 'About',
   AppLocale.exit: 'Exit',
   AppLocale.launcher: 'Launcher',
@@ -769,7 +770,7 @@ const Map<String, dynamic> appLocaleEn = {
 
   AppLocale.userDataLocation: 'User Data Location',
   AppLocale.userDataLocationSubtitle:
-      'Choose where scraped media, themes, and app data are stored',
+      'Choose where scraped media, system art packs, and app data are stored',
   AppLocale.userDataLocationDefault: 'Default location',
   AppLocale.selectUserDataFolder: 'Select User Data Folder',
   AppLocale.folderNotEmptyTitle: 'Folder Not Empty',

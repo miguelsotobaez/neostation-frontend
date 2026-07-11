@@ -38,15 +38,15 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.themes: 'Temi',
   AppLocale.systemArt: 'System Art',
   AppLocale.systemArtSubtitle:
-      'Personalizza sfondi e loghi delle schede di sistema',
+      'Personalizza sfondi e loghi delle schede di sistema con i pacchetti System Art',
   AppLocale.systemArtNone: 'Nessuno',
   AppLocale.systemArtNoneSubtitle: 'Aspetto predefinito',
-  AppLocale.systemArtLoading: 'Caricamento temi...',
-  AppLocale.systemArtError: 'Impossibile caricare i temi',
-  AppLocale.systemArtApplyTitle: 'Applicare il tema?',
+  AppLocale.systemArtLoading: 'Caricamento System Art...',
+  AppLocale.systemArtError: 'Impossibile caricare System Art',
+  AppLocale.systemArtApplyTitle: 'Applicare System Art?',
   AppLocale.systemArtApplyBody:
-      'Le risorse del tema verranno scaricate per tutti i sistemi. Potrebbe richiedere alcuni istanti.',
-  AppLocale.systemArtDownloading: 'Download delle risorse del tema...',
+      'Il pacchetto System Art verrà scaricato per tutti i sistemi. Potrebbe richiedere alcuni istanti.',
+  AppLocale.systemArtDownloading: 'Download del pacchetto System Art...',
   AppLocale.about: 'Informazioni',
   AppLocale.exit: 'Esci',
   AppLocale.launcher: 'Launcher',
@@ -789,7 +789,7 @@ const Map<String, dynamic> appLocaleIt = {
 
   AppLocale.userDataLocation: 'Posizione dei dati',
   AppLocale.userDataLocationSubtitle:
-      'Scegli dove vengono archiviati i media, i temi e i dati dell\'app',
+      'Scegli dove vengono archiviati i media, i pacchetti System Art e i dati dell\'app',
   AppLocale.userDataLocationDefault: 'Posizione predefinita',
   AppLocale.selectUserDataFolder: 'Seleziona cartella dati',
   AppLocale.folderNotEmptyTitle: 'Cartella non vuota',

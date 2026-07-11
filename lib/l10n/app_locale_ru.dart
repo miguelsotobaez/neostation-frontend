@@ -37,15 +37,16 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.directories: 'Директории',
   AppLocale.themes: 'Темы',
   AppLocale.systemArt: 'System Art',
-  AppLocale.systemArtSubtitle: 'Настройте фоны и логотипы карточек систем',
+  AppLocale.systemArtSubtitle:
+      'Настройте фоны и логотипы карточек систем с помощью пакетов System Art',
   AppLocale.systemArtNone: 'Нет',
   AppLocale.systemArtNoneSubtitle: 'Внешний вид по умолчанию',
-  AppLocale.systemArtLoading: 'Загрузка тем...',
-  AppLocale.systemArtError: 'Не удалось загрузить темы',
-  AppLocale.systemArtApplyTitle: 'Применить тему?',
+  AppLocale.systemArtLoading: 'Загрузка System Art...',
+  AppLocale.systemArtError: 'Не удалось загрузить System Art',
+  AppLocale.systemArtApplyTitle: 'Применить System Art?',
   AppLocale.systemArtApplyBody:
-      'Ассеты темы будут загружены для всех систем. Это может занять некоторое время.',
-  AppLocale.systemArtDownloading: 'Загрузка ассетов темы...',
+      'Пакет System Art будет загружен для всех систем. Это может занять некоторое время.',
+  AppLocale.systemArtDownloading: 'Загрузка пакета System Art...',
   AppLocale.about: 'О программе',
   AppLocale.exit: 'Выход',
   AppLocale.launcher: 'Лаунчер',
@@ -767,7 +768,7 @@ const Map<String, dynamic> appLocaleRu = {
 
   AppLocale.userDataLocation: 'Расположение данных',
   AppLocale.userDataLocationSubtitle:
-      'Выберите, где хранятся медиафайлы, темы и данные приложения',
+      'Выберите, где хранятся медиафайлы, пакеты System Art и данные приложения',
   AppLocale.userDataLocationDefault: 'Стандартное расположение',
   AppLocale.selectUserDataFolder: 'Выбрать папку данных',
   AppLocale.folderNotEmptyTitle: 'Папка не пуста',

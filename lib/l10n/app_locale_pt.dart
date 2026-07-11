@@ -38,15 +38,15 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.themes: 'Themes',
   AppLocale.systemArt: 'System Art',
   AppLocale.systemArtSubtitle:
-      'Personalize fundos e logos dos cards de sistemas',
+      'Personalize fundos e logos dos cards de sistemas com pacotes de System Art',
   AppLocale.systemArtNone: 'Nenhum',
   AppLocale.systemArtNoneSubtitle: 'Aparência padrão',
-  AppLocale.systemArtLoading: 'Carregando themes...',
-  AppLocale.systemArtError: 'Não foi possível carregar os themes',
-  AppLocale.systemArtApplyTitle: 'Aplicar theme?',
+  AppLocale.systemArtLoading: 'Carregando System Art...',
+  AppLocale.systemArtError: 'Não foi possível carregar System Art',
+  AppLocale.systemArtApplyTitle: 'Aplicar System Art?',
   AppLocale.systemArtApplyBody:
-      'Os assets do theme serão baixados para todos os sistemas. Isso pode levar alguns instantes.',
-  AppLocale.systemArtDownloading: 'Baixando assets do theme...',
+      'O pacote de System Art será baixado para todos os sistemas. Isso pode levar alguns instantes.',
+  AppLocale.systemArtDownloading: 'Baixando o pacote de System Art...',
   AppLocale.about: 'Sobre',
   AppLocale.exit: 'Sair',
   AppLocale.launcher: 'Launcher',
@@ -778,7 +778,7 @@ const Map<String, dynamic> appLocalePt = {
 
   AppLocale.userDataLocation: 'Localização dos Dados',
   AppLocale.userDataLocationSubtitle:
-      'Escolha onde mídias, temas e dados do aplicativo são armazenados',
+      'Escolha onde mídias, pacotes de System Art e dados do aplicativo são armazenados',
   AppLocale.userDataLocationDefault: 'Localização padrão',
   AppLocale.selectUserDataFolder: 'Selecionar Pasta de Dados',
   AppLocale.folderNotEmptyTitle: 'Pasta não vazia',

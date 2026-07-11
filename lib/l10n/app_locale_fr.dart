@@ -38,15 +38,15 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.themes: 'Thèmes',
   AppLocale.systemArt: 'System Art',
   AppLocale.systemArtSubtitle:
-      'Personnalisez les arrière-plans et logos des cartes de systèmes',
+      'Personnalisez les arrière-plans et logos des cartes de systèmes avec des packs System Art',
   AppLocale.systemArtNone: 'Aucun',
   AppLocale.systemArtNoneSubtitle: 'Apparence par défaut',
-  AppLocale.systemArtLoading: 'Chargement des thèmes...',
-  AppLocale.systemArtError: 'Impossible de charger les thèmes',
-  AppLocale.systemArtApplyTitle: 'Appliquer le thème ?',
+  AppLocale.systemArtLoading: 'Chargement de System Art...',
+  AppLocale.systemArtError: 'Impossible de charger System Art',
+  AppLocale.systemArtApplyTitle: 'Appliquer System Art ?',
   AppLocale.systemArtApplyBody:
-      'Les ressources du thème seront téléchargées pour tous les systèmes. Cela peut prendre quelques instants.',
-  AppLocale.systemArtDownloading: 'Téléchargement des ressources du thème...',
+      'Le pack System Art sera téléchargé pour tous les systèmes. Cela peut prendre quelques instants.',
+  AppLocale.systemArtDownloading: 'Téléchargement du pack System Art...',
   AppLocale.about: 'À propos',
   AppLocale.exit: 'Quitter',
   AppLocale.launcher: 'Lanceur',
@@ -797,7 +797,7 @@ const Map<String, dynamic> appLocaleFr = {
 
   AppLocale.userDataLocation: 'Emplacement des données',
   AppLocale.userDataLocationSubtitle:
-      'Choisissez où sont stockés les médias, thèmes et données de l\'application',
+      'Choisissez où sont stockés les médias, les packs System Art et données de l\'application',
   AppLocale.userDataLocationDefault: 'Emplacement par défaut',
   AppLocale.selectUserDataFolder: 'Sélectionner le dossier de données',
   AppLocale.folderNotEmptyTitle: 'Dossier non vide',

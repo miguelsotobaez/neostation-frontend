@@ -37,15 +37,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.directories: 'Direktori',
   AppLocale.themes: 'Tema',
   AppLocale.systemArt: 'System Art',
-  AppLocale.systemArtSubtitle: 'Sesuaikan latar belakang dan logo kartu sistem',
+  AppLocale.systemArtSubtitle:
+      'Sesuaikan latar belakang dan logo kartu sistem dengan paket System Art',
   AppLocale.systemArtNone: 'Tidak Ada',
   AppLocale.systemArtNoneSubtitle: 'Tampilan default',
-  AppLocale.systemArtLoading: 'Memuat tema...',
-  AppLocale.systemArtError: 'Tidak dapat memuat tema',
-  AppLocale.systemArtApplyTitle: 'Terapkan tema?',
+  AppLocale.systemArtLoading: 'Memuat System Art...',
+  AppLocale.systemArtError: 'Tidak dapat memuat System Art',
+  AppLocale.systemArtApplyTitle: 'Terapkan System Art?',
   AppLocale.systemArtApplyBody:
-      'Aset tema akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
-  AppLocale.systemArtDownloading: 'Mengunduh aset tema...',
+      'Paket System Art akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
+  AppLocale.systemArtDownloading: 'Mengunduh paket System Art...',
   AppLocale.about: 'Tentang',
   AppLocale.exit: 'Keluar',
   AppLocale.launcher: 'Launcher',
@@ -771,7 +772,7 @@ const Map<String, dynamic> appLocaleId = {
 
   AppLocale.userDataLocation: 'Lokasi Data',
   AppLocale.userDataLocationSubtitle:
-      'Pilih di mana media, tema, dan data aplikasi disimpan',
+      'Pilih di mana media, paket System Art, dan data aplikasi disimpan',
   AppLocale.userDataLocationDefault: 'Lokasi default',
   AppLocale.selectUserDataFolder: 'Pilih Folder Data',
   AppLocale.folderNotEmptyTitle: 'Folder Tidak Kosong',

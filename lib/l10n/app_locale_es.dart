@@ -38,15 +38,15 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.themes: 'Themes',
   AppLocale.systemArt: 'System Art',
   AppLocale.systemArtSubtitle:
-      'Personaliza fondos y logos de las cards de sistemas',
+      'Personaliza fondos y logos de las cards de sistemas con paquetes de System Art',
   AppLocale.systemArtNone: 'Ninguno',
   AppLocale.systemArtNoneSubtitle: 'Apariencia predeterminada',
-  AppLocale.systemArtLoading: 'Cargando themes...',
-  AppLocale.systemArtError: 'No se pudieron cargar los themes',
-  AppLocale.systemArtApplyTitle: '¿Aplicar theme?',
+  AppLocale.systemArtLoading: 'Cargando System Art...',
+  AppLocale.systemArtError: 'No se pudo cargar System Art',
+  AppLocale.systemArtApplyTitle: '¿Aplicar System Art?',
   AppLocale.systemArtApplyBody:
-      'Se descargará el theme para todos los sistemas. Esto puede tardar algunos momentos.',
-  AppLocale.systemArtDownloading: 'Descargando assets del theme...',
+      'Se descargará el paquete de System Art para todos los sistemas. Esto puede tardar algunos momentos.',
+  AppLocale.systemArtDownloading: 'Descargando el paquete de System Art...',
   AppLocale.about: 'Acerca de',
   AppLocale.exit: 'Salir',
   AppLocale.launcher: 'Lanzador',
@@ -794,7 +794,7 @@ const Map<String, dynamic> appLocaleEs = {
 
   AppLocale.userDataLocation: 'Ubicación de Datos',
   AppLocale.userDataLocationSubtitle:
-      'Elige dónde se almacenan los medios, temas y datos de la aplicación',
+      'Elige dónde se almacenan los medios, los paquetes de System Art y datos de la aplicación',
   AppLocale.userDataLocationDefault: 'Ubicación predeterminada',
   AppLocale.selectUserDataFolder: 'Seleccionar Carpeta de Datos',
   AppLocale.folderNotEmptyTitle: 'La carpeta no está vacía',
