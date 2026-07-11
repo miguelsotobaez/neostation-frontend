@@ -27,14 +27,11 @@ class GamepadsWindowsPlugin : public flutter::Plugin {
   static inline std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       channel{};
 
-  int window_proc_id = -1;
-  HDEVNOTIFY hDevNotify;
-
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
-  void emit_gamepad_event(Gamepad* gamepad, const Event& event);
+  void emit_gamepad_event(GamepadData* gamepad, const Event& event);
 };
 
 }  // namespace gamepads_windows
