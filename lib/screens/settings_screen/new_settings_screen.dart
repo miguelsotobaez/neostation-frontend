@@ -408,6 +408,9 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     final bool shouldShutdown = config.bartopExitPoweroff;
 
     if (Platform.isAndroid) {
+      // The secondary display's persisted artwork is neutralised by
+      // SqliteConfigProvider.didChangeAppLifecycleState on the detached that
+      // follows this pop, so no explicit clear is needed here.
       SystemNavigator.pop();
     } else {
       if (shouldShutdown) {

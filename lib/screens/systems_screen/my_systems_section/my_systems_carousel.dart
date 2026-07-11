@@ -143,6 +143,9 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   }
 
   bool _prevIsSecondaryActive = false;
+  // Tracks the scan-active state across builds so we can re-push the settled
+  // selection to the secondary display exactly when the initial scan finishes.
+  bool _wasScanning = false;
 
   // When secondary display signals it's active (startup or reconnect),
   // immediately push current system state so default logo never shows.
@@ -826,11 +829,32 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     final neoThemeFolder = context.select<NeoAssetsProvider, String>(
       (p) => p.activeThemeFolder,
     );
+    final isScanning = context.select<SqliteConfigProvider, bool>(
+      (p) => p.isScanning,
+    );
     if (neoThemeFolder != _lastThemeFolder) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadThemeAssetsForSystems();
+        // Theme assets (and thus _themeBackgrounds) have only just resolved.
+        // Re-push the current selection so the secondary display picks up the
+        // now-available background — otherwise the initially-settled system
+        // (e.g. the 'All' virtual system) stays blank on the secondary until
+        // the user navigates and triggers a push via onPageChanged.
+        // Skip while scanning so the background doesn't pop in over the scan
+        // display; the scan-settle branch below re-pushes once the scan ends.
+        if (!isScanning) _updateSecondaryScreenName();
       });
     }
+    // When the initial scan settles, re-push the settled selection so the
+    // secondary display reveals its background at the same moment the primary
+    // screen settles — not partway through the scan.
+    if (_wasScanning && !isScanning) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadThemeAssetsForSystems();
+        _updateSecondaryScreenName();
+      });
+    }
+    _wasScanning = isScanning;
 
     final theme = Theme.of(context);
 

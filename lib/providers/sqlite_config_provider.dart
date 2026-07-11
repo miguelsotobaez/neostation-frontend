@@ -28,7 +28,7 @@ import '../services/game_session_persistence.dart';
 /// Coordinates filesystem scanning for ROMs, system metadata synchronization,
 /// user preferences persistence, and secondary display state management.
 /// Replaces the legacy JSON-based configuration provider.
-class SqliteConfigProvider extends ChangeNotifier {
+class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   ConfigModel _config = ConfigModel.empty;
   List<SystemModel> _detectedSystems = [];
   List<SystemModel> _availableSystems = [];
@@ -47,6 +47,7 @@ class SqliteConfigProvider extends ChangeNotifier {
   bool _isFastScan = false;
   bool _initialized = false;
   SecondaryDisplayState? _secondaryDisplayState;
+  bool _lifecycleObserverAdded = false;
   int _lastMuteToggleTrigger = 0;
   int _lastScreenshotTrigger = 0;
   int _lastDockEditTrigger = 0;
@@ -162,6 +163,28 @@ class SqliteConfigProvider extends ChangeNotifier {
     _error = null;
 
     try {
+      if (Platform.isAndroid) {
+        // The secondary display's engine persists across a main-engine restart
+        // (its cached engine group survives), so the second screen keeps showing
+        // the LAST session's system artwork. Clear it FIRST — before the DB open,
+        // system-JSON sync, data load and permission checks below — so the stale
+        // art is gone within a frame of the restart instead of lingering while
+        // those finish. Must run after initialSync so we overwrite the retained
+        // shared state rather than racing it; every later seed/dock push
+        // copyWith's from this cleared state, so the art stays cleared until the
+        // systems carousel/grid settles on 'All'.
+        _secondaryDisplayState = SecondaryDisplayState.instance;
+        if (_secondaryDisplayState!.value == null) {
+          await _secondaryDisplayState!.initialSync;
+        }
+        _secondaryDisplayState!.updateState(
+          systemName: 'WELCOME',
+          clearSystemBackground: true,
+          clearSystemLogo: true,
+          useShader: true,
+        );
+      }
+
       // Initialize SQLite
       await SqliteService.getDatabase(); // This initializes the DB
 
@@ -194,6 +217,19 @@ class SqliteConfigProvider extends ChangeNotifier {
         // second init can't accumulate a duplicate listener.
         _secondaryDisplayState!.removeListener(_onSecondaryStateChanged);
         _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
+
+        // Observe app lifecycle so we can neutralise the secondary display's
+        // persisted system artwork on the way OUT (see didChangeAppLifecycleState).
+        // The secondary engine's cached engine group and the native shared-state
+        // store both survive a main-engine restart, so clearing on teardown is
+        // what actually gives a stale-art-free relaunch — the on-launch early
+        // clear can only fire ~half a second after the secondary re-attaches and
+        // has already read the retained art. Guard against a duplicate add since
+        // reinitialize() can re-run this block on the same singleton provider.
+        if (!_lifecycleObserverAdded) {
+          WidgetsBinding.instance.addObserver(this);
+          _lifecycleObserverAdded = true;
+        }
 
         _secondaryDisplayChannel.setMethodCallHandler(
           _handleSecondaryDisplayCall,
@@ -276,6 +312,30 @@ class SqliteConfigProvider extends ChangeNotifier {
       _log.e('$_error');
     } finally {
       _setLoading(false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (!Platform.isAndroid) return;
+    // Neutralise the secondary display's persisted system artwork when the
+    // activity is being torn down (explicit exit, SystemNavigator.pop, or the
+    // OS reclaiming the activity). The native shared-state store survives a
+    // main-engine restart, so writing the cleared state here means the next
+    // launch's secondary re-attach reads neutral art instead of the last
+    // session's — eliminating the stale-art flash on a warm relaunch.
+    //
+    // Only `detached` (not `paused`/`inactive`) triggers this: launching a game
+    // backgrounds the app with the activity still alive (paused), and we must
+    // keep the current system art so it's still there on resume.
+    if (state == AppLifecycleState.detached) {
+      _secondaryDisplayState?.updateState(
+        systemName: 'WELCOME',
+        clearSystemBackground: true,
+        clearSystemLogo: true,
+        useShader: true,
+      );
     }
   }
 
