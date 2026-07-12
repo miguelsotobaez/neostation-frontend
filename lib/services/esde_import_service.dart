@@ -133,6 +133,28 @@ class EsdeImportService {
     return result;
   }
 
+  /// Clears all ES-DE-imported data so the import can be re-run from scratch.
+  /// Deletes fill-gaps metadata rows (`is_fully_scraped = 0`, i.e. rows never
+  /// upgraded by a NeoStation scrape) and clears every system's
+  /// `esde_media_dir` so the read-time media fallback stops. The picked ES-DE
+  /// folder path is kept so the import can be re-run with one tap;
+  /// favorites / last-played are left untouched (indistinguishable from the
+  /// user's own). Returns the number of metadata rows removed.
+  static Future<int> reset() async {
+    final db = await SqliteService.getDatabase();
+    final deleted = await db.delete(
+      'user_screenscraper_metadata',
+      where: 'is_fully_scraped = 0',
+    );
+    await db.update(
+      'user_system_settings',
+      {'esde_media_dir': null},
+      where: 'esde_media_dir IS NOT NULL',
+    );
+    _log.i('ES-DE reset: cleared $deleted metadata rows and media dirs');
+    return deleted;
+  }
+
   static Future<EsdeImportResult> _importSystem({
     required String esdeRoot,
     required String esdeDirName,
@@ -155,12 +177,18 @@ class EsdeImportService {
     for (final game in doc.findAllElements('game')) {
       final rawPath = _text(game, 'path');
       if (rawPath == null || rawPath.isEmpty) continue;
-      final filename = path.basename(rawPath.replaceAll('\\', '/'));
+      final normalizedPath = rawPath.replaceAll('\\', '/');
+      final filename = path.basename(normalizedPath);
+      // ES-DE mirrors the ROM's subfolder (relative to the system's ROM dir)
+      // inside downloaded_media, e.g. `<sys>/covers/<subdir>/<base>.png`. Capture
+      // that subdir (empty when the ROM sits directly in the system folder) so
+      // the read-time fallback can find nested artwork.
+      final mediaSubdir = _mediaSubdir(normalizedPath);
 
       // Only import for ROMs NeoStation has already scanned.
       final rom = await db.query(
         'user_roms',
-        columns: ['id', 'is_favorite', 'last_played'],
+        columns: ['is_favorite', 'last_played'],
         where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
         whereArgs: [appSystemId, filename],
         limit: 1,
@@ -187,6 +215,7 @@ class EsdeImportService {
         appSystemId,
         filename,
         esdeMeta,
+        mediaSubdir: mediaSubdir,
       );
       if (wroteMeta) result = result._add(gamesImported: 1);
 
@@ -272,12 +301,14 @@ class EsdeImportService {
     return supported.contains(code) ? 'description_$code' : 'description_en';
   }
 
-  /// ES-DE stores rating as a 0..1 float string (same scale NeoStation uses).
+  /// ES-DE stores rating as a 0..1 float string; NeoStation stores it on
+  /// ScreenScraper's 0..20 scale (displayed as `rating / 2` out of 10), so
+  /// scale the ES-DE value up by 20.
   static double? _parseRating(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     final v = double.tryParse(raw.trim());
     if (v == null) return null;
-    return v.clamp(0.0, 1.0);
+    return v.clamp(0.0, 1.0) * 20.0;
   }
 
   /// Parses ES-DE's basic ISO datetime (`yyyyMMddTHHmmss`, e.g.
@@ -304,6 +335,19 @@ class EsdeImportService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Extracts the ES-DE media subfolder from a gamelist `<path>` — the ROM's
+  /// directory relative to the system folder, with a leading `./` stripped.
+  /// Returns `''` when the ROM sits directly in the system folder.
+  static String _mediaSubdir(String normalizedPath) {
+    var p = normalizedPath;
+    while (p.startsWith('./')) {
+      p = p.substring(2);
+    }
+    final dir = path.dirname(p);
+    if (dir == '.' || dir == '/' || dir.isEmpty) return '';
+    return dir.startsWith('/') ? dir.substring(1) : dir;
   }
 
   static String? _text(XmlElement parent, String tag) {

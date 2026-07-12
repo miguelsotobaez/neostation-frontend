@@ -300,6 +300,9 @@ class SqliteMigrations {
       case 98:
         await _migrateToVersion98(db);
         break;
+      case 99:
+        await _migrateToVersion99(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4792,6 +4795,30 @@ class SqliteMigrations {
       _log.i('Migration v98 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v98: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion99(Database db) async {
+    _log.i('Migration v99: Adding ES-DE media subfolder column');
+    try {
+      final metaColumns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!metaColumns.contains('esde_media_subdir')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN esde_media_subdir TEXT',
+        );
+        _log.i(
+          'Column esde_media_subdir added to user_screenscraper_metadata via v99',
+        );
+      }
+
+      _log.i('Migration v99 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v99: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

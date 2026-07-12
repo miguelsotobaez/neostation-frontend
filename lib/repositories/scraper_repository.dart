@@ -503,8 +503,9 @@ class ScraperRepository {
   static Future<bool> mergeEsdeMetadata(
     String appSystemId,
     String filename,
-    Map<String, dynamic> esde,
-  ) async {
+    Map<String, dynamic> esde, {
+    String? mediaSubdir,
+  }) async {
     try {
       final db = await SqliteService.getDatabase();
       final existing = await db.query(
@@ -523,6 +524,15 @@ class ScraperRepository {
         final curEmpty = cur == null || (cur is String && cur.trim().isEmpty);
         if (curEmpty) toWrite[col] = val;
       });
+
+      // Media subfolder is ES-DE bookkeeping (mirrors the ROM's subfolder inside
+      // downloaded_media), not user-visible metadata — always keep it current so
+      // read-time fallback can resolve nested artwork, even when nothing else
+      // needs filling.
+      if (mediaSubdir != null &&
+          (row == null || row['esde_media_subdir'] != mediaSubdir)) {
+        toWrite['esde_media_subdir'] = mediaSubdir;
+      }
 
       if (toWrite.isEmpty) return false;
       toWrite['updated_at'] = DateTime.now().toIso8601String();

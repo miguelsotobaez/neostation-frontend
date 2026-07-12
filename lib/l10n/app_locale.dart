@@ -810,6 +810,9 @@ mixin AppLocale {
   static const String esdeImporting = 'esde_importing';
   static const String esdeImportComplete = 'esde_import_complete';
   static const String esdeImportNoFolder = 'esde_import_no_folder';
+  static const String esdeReset = 'esde_reset';
+  static const String esdeResetSubtitle = 'esde_reset_subtitle';
+  static const String esdeResetComplete = 'esde_reset_complete';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
   static const String folderNotEmptyTitle = 'folder_not_empty_title';

@@ -875,4 +875,8 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.esdeImporting: 'Importing from ES-DE',
   AppLocale.esdeImportComplete: 'ES-DE import complete',
   AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
 };

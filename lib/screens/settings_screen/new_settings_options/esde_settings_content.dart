@@ -37,16 +37,17 @@ class EsdeSettingsContent extends StatefulWidget {
 class EsdeSettingsContentState extends State<EsdeSettingsContent> {
   static final _log = LoggerService.instance;
 
-  // Navigable items: 0 = select folder, 1 = run import.
+  // Navigable items: 0 = select folder, 1 = run import, 2 = reset.
   static const int _itemSelectFolder = 0;
   static const int _itemRunImport = 1;
+  static const int _itemReset = 2;
 
   bool _isImporting = false;
   double _importProgress = 0.0;
   String _importLabel = '';
   EsdeImportResult? _lastResult;
 
-  int getItemCount() => 2;
+  int getItemCount() => 3;
 
   void selectItem(int index) {
     switch (index) {
@@ -55,6 +56,9 @@ class EsdeSettingsContentState extends State<EsdeSettingsContent> {
         break;
       case _itemRunImport:
         _runImport();
+        break;
+      case _itemReset:
+        _resetImport();
         break;
     }
   }
@@ -187,6 +191,34 @@ class EsdeSettingsContentState extends State<EsdeSettingsContent> {
         '${result.gamesImported} games, ${result.systemsMatched} systems',
         type: NotificationType.info,
       );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reset
+  // ---------------------------------------------------------------------------
+
+  Future<void> _resetImport() async {
+    if (_isImporting) return;
+    try {
+      final cleared = await EsdeImportService.reset();
+      if (mounted) await context.read<FileProvider>().refreshEsde();
+      if (!mounted) return;
+      setState(() => _lastResult = null);
+      AppNotification.showNotification(
+        context,
+        '${AppLocale.esdeResetComplete.getString(context)} ($cleared)',
+        type: NotificationType.info,
+      );
+    } catch (e) {
+      _log.e('ES-DE reset failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          '$e',
+          type: NotificationType.error,
+        );
+      }
     }
   }
 
@@ -456,6 +488,13 @@ class EsdeSettingsContentState extends State<EsdeSettingsContent> {
                 icon: Symbols.download_rounded,
                 title: AppLocale.esdeRunImport.getString(context),
                 subtitle: AppLocale.esdeRunImportSubtitle.getString(context),
+              ),
+              _buildActionRow(
+                theme,
+                index: _itemReset,
+                icon: Symbols.restart_alt_rounded,
+                title: AppLocale.esdeReset.getString(context),
+                subtitle: AppLocale.esdeResetSubtitle.getString(context),
               ),
             ],
           ),
