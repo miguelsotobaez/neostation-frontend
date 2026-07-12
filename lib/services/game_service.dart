@@ -1066,7 +1066,15 @@ class GameService {
                       defaultEmu.androidPackageName != null &&
                       defaultEmu.androidPackageName!.isNotEmpty) {
                     final userPackage = defaultEmu.androidPackageName!;
-                    if (userPackage != packageName) {
+                    // Only substitute the RetroArch package when the chosen
+                    // default emulator is itself a RetroArch variant (e.g. the
+                    // user prefers com.retroarch.aarch64 over com.retroarch).
+                    // If the system default is a standalone emulator (e.g.
+                    // DuckStation), substituting its package here produces a
+                    // Frankenstein intent — standalone package + RetroArch
+                    // activity — that fails to resolve (ActivityNotFound).
+                    if (userPackage != packageName &&
+                        userPackage.startsWith('com.retroarch')) {
                       packageName = userPackage;
                     }
                   }
@@ -1148,6 +1156,17 @@ class GameService {
               GamepadNavigationManager.reactivate();
               const platform = MethodChannel('com.neogamelab.neostation/game');
               await platform.invokeMethod('setGamepadBlock', {'block': false});
+              // The user's chosen emulator was resolved from its JSON config and
+              // the launch was actually attempted, so a failure here (e.g. the
+              // emulator is not installed, or its activity could not be resolved)
+              // is real. Surface it instead of silently falling through to the
+              // generic standalone fallback below, which would launch a
+              // *different* emulator and mask the misconfiguration.
+              if (!context.mounted) return GameLaunchResult.failure('', '');
+              return GameLaunchResult.failure(
+                AppLocale.launchFailed.getString(context),
+                AppLocale.error.getString(context),
+              );
             }
           }
 
