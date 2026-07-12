@@ -10,6 +10,7 @@ import '../models/game_model.dart';
 import '../models/database_game_model.dart';
 import '../models/system_model.dart';
 import '../models/emulator_model.dart';
+import '../models/core_emulator_model.dart';
 import '../providers/file_provider.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/system_repository.dart';
@@ -1043,47 +1044,35 @@ class GameService {
           if (Platform.isAndroid &&
               launchCmd.containsKey('package') &&
               launchCmd.containsKey('activity')) {
+            const platform = MethodChannel('com.neogamelab.neostation/game');
+
+            // Cleanup + real failure surfaced to the user. A failure in this
+            // branch means the user's *chosen* emulator (resolved from its JSON
+            // config) was actually attempted and could not launch — surface it
+            // instead of falling through to the generic standalone fallback
+            // below, which would launch a *different* emulator and mask the
+            // misconfiguration.
+            Future<GameLaunchResult> failLaunch() async {
+              GamepadNavigationManager.reactivate();
+              await platform.invokeMethod('setGamepadBlock', {'block': false});
+              if (!context.mounted) return GameLaunchResult.failure('', '');
+              return GameLaunchResult.failure(
+                AppLocale.launchFailed.getString(context),
+                AppLocale.error.getString(context),
+              );
+            }
+
             try {
               GamepadNavigationManager.reactivate();
-
-              const platform = MethodChannel('com.neogamelab.neostation/game');
               await platform.invokeMethod('setGamepadBlock', {'block': true});
 
-              var packageName = launchCmd['package'];
               final activityName = launchCmd['activity'];
               final action = launchCmd['action'];
               final category = launchCmd['category'];
               final data = launchCmd['data'];
               final type = launchCmd['type'];
 
-              if (packageName.toString().startsWith('com.retroarch')) {
-                try {
-                  final defaultEmu =
-                      await EmulatorRepository.getDefaultEmulatorForSystem(
-                        system.id!,
-                      );
-                  if (defaultEmu != null &&
-                      defaultEmu.androidPackageName != null &&
-                      defaultEmu.androidPackageName!.isNotEmpty) {
-                    final userPackage = defaultEmu.androidPackageName!;
-                    // Only substitute the RetroArch package when the chosen
-                    // default emulator is itself a RetroArch variant (e.g. the
-                    // user prefers com.retroarch.aarch64 over com.retroarch).
-                    // If the system default is a standalone emulator (e.g.
-                    // DuckStation), substituting its package here produces a
-                    // Frankenstein intent — standalone package + RetroArch
-                    // activity — that fails to resolve (ActivityNotFound).
-                    if (userPackage != packageName &&
-                        userPackage.startsWith('com.retroarch')) {
-                      packageName = userPackage;
-                    }
-                  }
-                } catch (e) {
-                  _log.e('Error overriding RetroArch package: $e');
-                }
-              }
-
-              List<Map<String, dynamic>> extrasList = [];
+              final List<Map<String, dynamic>> extrasList = [];
 
               if (launchCmd.containsKey('extras') &&
                   launchCmd['extras'] is List) {
@@ -1105,21 +1094,11 @@ class GameService {
                 }
               }
 
-              if (packageName.toString() != 'com.retroarch' &&
-                  packageName.toString().startsWith('com.retroarch')) {
-                for (var extra in extrasList) {
-                  if (extra['key'] == 'CONFIGFILE') {
-                    final String currentPath = extra['value'].toString();
-                    if (currentPath.contains('/com.retroarch/')) {
-                      final newPath = currentPath.replaceAll(
-                        '/com.retroarch/',
-                        '/$packageName/',
-                      );
-                      extra['value'] = newPath;
-                    }
-                  }
-                }
-              }
+              final packageName = await _resolveRetroArchVariant(
+                launchCmd['package'].toString(),
+                extrasList,
+                system,
+              );
 
               final result = await platform
                   .invokeMethod('launchGenericIntent', {
@@ -1140,33 +1119,11 @@ class GameService {
                 _registerGameLaunch(system, game);
                 await recordGamePlayed(game);
                 return GameLaunchResult.success();
-              } else {
-                GamepadNavigationManager.reactivate();
-                await platform.invokeMethod('setGamepadBlock', {
-                  'block': false,
-                });
-                if (!context.mounted) return GameLaunchResult.failure('', '');
-                return GameLaunchResult.failure(
-                  AppLocale.launchFailed.getString(context),
-                  AppLocale.error.getString(context),
-                );
               }
+              return await failLaunch();
             } catch (e) {
               _log.e('JSON Launch Error: $e');
-              GamepadNavigationManager.reactivate();
-              const platform = MethodChannel('com.neogamelab.neostation/game');
-              await platform.invokeMethod('setGamepadBlock', {'block': false});
-              // The user's chosen emulator was resolved from its JSON config and
-              // the launch was actually attempted, so a failure here (e.g. the
-              // emulator is not installed, or its activity could not be resolved)
-              // is real. Surface it instead of silently falling through to the
-              // generic standalone fallback below, which would launch a
-              // *different* emulator and mask the misconfiguration.
-              if (!context.mounted) return GameLaunchResult.failure('', '');
-              return GameLaunchResult.failure(
-                AppLocale.launchFailed.getString(context),
-                AppLocale.error.getString(context),
-              );
+              return await failLaunch();
             }
           }
 
@@ -1835,6 +1792,59 @@ class GameService {
   }
 
   /// Parses a command-line argument string into an Android Intent extras map.
+  /// Resolves the concrete RetroArch package variant for a JSON launch.
+  ///
+  /// The system JSON hardcodes the base `com.retroarch` package, but the user
+  /// may have a different variant installed (e.g. `com.retroarch.aarch64`),
+  /// stored on their default emulator record. All RetroArch variants share the
+  /// same launch activity, so only the package and the `CONFIGFILE` extra's
+  /// path need patching — substituting a *standalone* emulator's package here
+  /// would instead produce an unresolvable intent (standalone package +
+  /// RetroArch activity → ActivityNotFound), so the substitution is gated on
+  /// the default emulator itself being a RetroArch variant.
+  ///
+  /// Returns the package to launch and mutates [extras] in place. For non-
+  /// RetroArch intents it returns [package] unchanged and leaves [extras] alone.
+  static Future<String> _resolveRetroArchVariant(
+    String package,
+    List<Map<String, dynamic>> extras,
+    SystemModel system,
+  ) async {
+    if (!package.startsWith(CoreEmulatorModel.retroArchPackagePrefix)) {
+      return package;
+    }
+
+    var resolved = package;
+    try {
+      final defaultEmu = await EmulatorRepository.getDefaultEmulatorForSystem(
+        system.id!,
+      );
+      if (defaultEmu != null && defaultEmu.isRetroArch) {
+        resolved = defaultEmu.androidPackageName!;
+      }
+    } catch (e) {
+      _log.e('Error resolving RetroArch package variant: $e');
+    }
+
+    // Point the RetroArch CONFIGFILE extra at the resolved variant's config
+    // directory (only the non-base variants live under their own package dir).
+    if (resolved != CoreEmulatorModel.retroArchPackagePrefix) {
+      for (final extra in extras) {
+        if (extra['key'] == 'CONFIGFILE') {
+          final currentPath = extra['value'].toString();
+          if (currentPath.contains('/com.retroarch/')) {
+            extra['value'] = currentPath.replaceAll(
+              '/com.retroarch/',
+              '/$resolved/',
+            );
+          }
+        }
+      }
+    }
+
+    return resolved;
+  }
+
   static Map<String, dynamic> _parseArgsToExtras(String argsStr) {
     if (argsStr.isEmpty) return {};
 
