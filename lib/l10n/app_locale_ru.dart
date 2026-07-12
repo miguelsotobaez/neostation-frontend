@@ -841,4 +841,17 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.raNoRecentUnlocks: 'Нет недавних достижений за последние 30 дней',
   AppLocale.raRecentlyPlayedTitle: 'Недавно сыгранные',
   AppLocale.raNoRecentlyPlayed: 'Нет недавно сыгранных игр',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
 };

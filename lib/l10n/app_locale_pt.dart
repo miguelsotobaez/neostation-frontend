@@ -851,4 +851,17 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.raNoRecentUnlocks: 'Nenhum desbloqueio recente nos últimos 30 dias',
   AppLocale.raRecentlyPlayedTitle: 'Jogados Recentemente',
   AppLocale.raNoRecentlyPlayed: 'Nenhum jogo jogado recentemente',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
 };

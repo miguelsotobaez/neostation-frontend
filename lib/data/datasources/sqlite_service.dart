@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 97;
+  static const int _databaseVersion = 98;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1637,7 +1637,8 @@ class SqliteService {
         dock_slot_count INTEGER DEFAULT 3,
         now_playing_dim_delay INTEGER DEFAULT 3,
         now_playing_dim_level INTEGER DEFAULT 100,
-        fanart_dim_level INTEGER DEFAULT 25
+        fanart_dim_level INTEGER DEFAULT 25,
+        esde_folder_path TEXT DEFAULT ''
       );
       ''',
       '''
@@ -1787,6 +1788,7 @@ class SqliteService {
         custom_logo_path TEXT,
         hide_logo INTEGER DEFAULT 0,
         prefer_file_name INTEGER DEFAULT 0,
+        esde_media_dir TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
         UNIQUE(app_system_id)
@@ -2365,6 +2367,7 @@ class SqliteService {
     int? nowPlayingDimDelay,
     int? nowPlayingDimLevel,
     int? fanartDimLevel,
+    String? esdeFolderPath,
   }) async {
     final db = await instance.database;
 
@@ -2466,6 +2469,9 @@ class SqliteService {
     }
     if (fanartDimLevel != null) {
       newConfig['fanart_dim_level'] = fanartDimLevel;
+    }
+    if (esdeFolderPath != null) {
+      newConfig['esde_folder_path'] = esdeFolderPath;
     }
 
     await db.insert(

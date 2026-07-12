@@ -1100,6 +1100,14 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Persists the user's ES-DE application folder path (used by ES-DE import
+  /// and read-time fallback artwork resolution).
+  Future<void> updateEsdeFolderPath(String path) async {
+    _config = _config.copyWith(esdeFolderPath: path);
+    await SqliteConfigService.saveConfig(_config);
+    notifyListeners();
+  }
+
   /// Manually triggers a re-scan for a specific system's ROMs.
   Future<void> rescanSystem(SystemModel system) async {
     if (_config.romFolders.isEmpty) return;

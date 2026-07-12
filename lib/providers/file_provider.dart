@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -40,6 +41,23 @@ class FileProvider extends ChangeNotifier {
 
   /// Cached map of supported file extensions per system, loaded from the database.
   Map<String, Set<String>> _systemExtensions = {};
+
+  /// Absolute path to the user's ES-DE application folder, or null if the ES-DE
+  /// import is not configured. Used for read-time fallback artwork resolution.
+  String? _esdeRoot;
+
+  /// NeoStation system folder name -> ES-DE `downloaded_media` subfolder name,
+  /// captured during ES-DE import.
+  Map<String, String> _esdeSystemDirs = {};
+
+  /// NeoStation media-type folder -> ES-DE `downloaded_media` category.
+  static const Map<String, String> _esdeMediaCategories = {
+    'box2d': 'covers',
+    'wheels': 'marquees',
+    'screenshots': 'screenshots',
+    'fanarts': 'fanart',
+    'videos': 'videos',
+  };
 
   // Getters
   String? get userDataPath => _userDataPath;
@@ -93,6 +111,7 @@ class FileProvider extends ChangeNotifier {
       }
 
       _systemExtensions = await SystemRepository.getSystemExtensionsMap();
+      await _loadEsdeConfig();
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -354,11 +373,99 @@ class FileProvider extends ChangeNotifier {
     return path.join(_mediaPath!, mediaFolder);
   }
 
+  /// Loads ES-DE fallback configuration (root path + per-system media dirs)
+  /// from the database. Safe to call repeatedly.
+  Future<void> _loadEsdeConfig() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final cfg = await db.query(
+        'user_config',
+        columns: ['esde_folder_path'],
+        limit: 1,
+      );
+      final rootRaw = cfg.isNotEmpty
+          ? cfg.first['esde_folder_path']?.toString()
+          : null;
+      _esdeRoot = (rootRaw != null && rootRaw.trim().isNotEmpty)
+          ? rootRaw.trim()
+          : null;
+
+      final map = <String, String>{};
+      if (_esdeRoot != null) {
+        final rows = await db.rawQuery('''
+          SELECT s.folder_name AS folder_name, ss.esde_media_dir AS esde_media_dir
+          FROM user_system_settings ss
+          JOIN app_systems s ON s.id = ss.app_system_id
+          WHERE ss.esde_media_dir IS NOT NULL AND ss.esde_media_dir != ''
+        ''');
+        for (final r in rows) {
+          final fn = r['folder_name']?.toString();
+          final ed = r['esde_media_dir']?.toString();
+          if (fn != null && ed != null && ed.isNotEmpty) map[fn] = ed;
+        }
+      }
+      _esdeSystemDirs = map;
+    } catch (e) {
+      _esdeRoot = null;
+      _esdeSystemDirs = {};
+    }
+  }
+
+  /// Reloads ES-DE fallback configuration after an import and notifies
+  /// listeners so views re-resolve artwork.
+  Future<void> refreshEsde() async {
+    await _loadEsdeConfig();
+    notifyListeners();
+  }
+
+  /// Resolves the read-time fallback path for a media asset inside the user's
+  /// ES-DE `downloaded_media` tree, or null if ES-DE is not configured for this
+  /// system / media type. Does NOT check existence.
+  String? getEsdeMediaPath(
+    String systemFolderName,
+    String imageType,
+    String romName,
+    String extension,
+  ) {
+    if (_esdeRoot == null) return null;
+    final esdeDir = _esdeSystemDirs[systemFolderName];
+    if (esdeDir == null) return null;
+    final category = _esdeMediaCategories[imageType];
+    if (category == null) return null;
+    final baseName = _stripRomExtension(romName, systemFolderName);
+    return path.join(
+      _esdeRoot!,
+      'downloaded_media',
+      esdeDir,
+      category,
+      '$baseName.$extension',
+    );
+  }
+
+  /// Resolves the read-time fallback path for a preview video inside the user's
+  /// ES-DE `downloaded_media` tree, or null if ES-DE is not configured for this
+  /// system. Does NOT check existence.
+  String? getEsdeVideoPath(String systemFolderName, String romName) {
+    if (_esdeRoot == null) return null;
+    final esdeDir = _esdeSystemDirs[systemFolderName];
+    if (esdeDir == null) return null;
+    final baseName = _stripRomExtension(romName, systemFolderName);
+    return path.join(
+      _esdeRoot!,
+      'downloaded_media',
+      esdeDir,
+      'videos',
+      '$baseName.mp4',
+    );
+  }
+
   /// Resets the internal state of the provider.
   void reset() {
     _userDataPath = null;
     _mediaPath = null;
     _documentsPath = null;
+    _esdeRoot = null;
+    _esdeSystemDirs = {};
     _isInitialized = false;
     notifyListeners();
   }

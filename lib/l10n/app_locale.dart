@@ -797,6 +797,19 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   static const String userDataLocation = 'user_data_location';
   static const String userDataLocationSubtitle = 'user_data_location_subtitle';
+
+  // ---------------------------------------------------------------------------
+  // ES-DE import
+  // ---------------------------------------------------------------------------
+  static const String esdeImport = 'esde_import';
+  static const String esdeImportSubtitle = 'esde_import_subtitle';
+  static const String esdeSelectFolder = 'esde_select_folder';
+  static const String esdeSelectFolderSubtitle = 'esde_select_folder_subtitle';
+  static const String esdeRunImport = 'esde_run_import';
+  static const String esdeRunImportSubtitle = 'esde_run_import_subtitle';
+  static const String esdeImporting = 'esde_importing';
+  static const String esdeImportComplete = 'esde_import_complete';
+  static const String esdeImportNoFolder = 'esde_import_no_folder';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
   static const String folderNotEmptyTitle = 'folder_not_empty_title';

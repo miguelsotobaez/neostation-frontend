@@ -319,6 +319,28 @@ class GameModel {
         return jpgPathOriginal;
       }
 
+      // ES-DE read-time fallback: use the user's ES-DE downloaded_media art
+      // when NeoStation has no art of its own. A later NeoStation scrape writes
+      // into NeoStation's media folder (checked above) and takes precedence.
+      final esdePng = fileProvider.getEsdeMediaPath(
+        systemFolderName,
+        imageType,
+        romname,
+        'png',
+      );
+      if (esdePng != null && File(esdePng).existsSync()) {
+        return esdePng;
+      }
+      final esdeJpg = fileProvider.getEsdeMediaPath(
+        systemFolderName,
+        imageType,
+        romname,
+        'jpg',
+      );
+      if (esdeJpg != null && File(esdeJpg).existsSync()) {
+        return esdeJpg;
+      }
+
       return pngPath;
     }
 
@@ -421,7 +443,12 @@ class GameModel {
   /// Resolves the absolute path to the game's preview video.
   String getVideoPath(String systemFolderName, [FileProvider? fileProvider]) {
     if (fileProvider != null && fileProvider.isInitialized) {
-      return fileProvider.getVideoPath(systemFolderName, romname);
+      final master = fileProvider.getVideoPath(systemFolderName, romname);
+      if (File(master).existsSync()) return master;
+      // ES-DE read-time fallback video.
+      final esde = fileProvider.getEsdeVideoPath(systemFolderName, romname);
+      if (esde != null && File(esde).existsSync()) return esde;
+      return master;
     }
     final baseName = _stripRomExtension(romname);
     return path.join('media', systemFolderName, 'videos', '$baseName.mp4');

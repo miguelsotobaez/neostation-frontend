@@ -491,6 +491,103 @@ class ScraperRepository {
     }
   }
 
+  /// Merges ES-DE-imported metadata into `user_screenscraper_metadata`,
+  /// writing only columns that are currently empty (fill-gaps precedence).
+  ///
+  /// [esde] maps column names (`real_name`, `description_en`, `rating`, …) to
+  /// candidate values; null / blank values are ignored. Existing non-empty
+  /// NeoStation-scraped values are never overwritten. `is_fully_scraped` is
+  /// left at 0 so a later NeoStation scrape still upgrades the entry.
+  ///
+  /// Returns true if a row was created or at least one column was filled.
+  static Future<bool> mergeEsdeMetadata(
+    String appSystemId,
+    String filename,
+    Map<String, dynamic> esde,
+  ) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final existing = await db.query(
+        'user_screenscraper_metadata',
+        where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+        whereArgs: [appSystemId, filename],
+        limit: 1,
+      );
+      final row = existing.isNotEmpty ? existing.first : null;
+
+      final toWrite = <String, dynamic>{};
+      esde.forEach((col, val) {
+        if (val == null) return;
+        if (val is String && val.trim().isEmpty) return;
+        final cur = row?[col];
+        final curEmpty = cur == null || (cur is String && cur.trim().isEmpty);
+        if (curEmpty) toWrite[col] = val;
+      });
+
+      if (toWrite.isEmpty) return false;
+      toWrite['updated_at'] = DateTime.now().toIso8601String();
+
+      if (row == null) {
+        toWrite['app_system_id'] = appSystemId;
+        toWrite['filename'] = filename;
+        toWrite['is_fully_scraped'] = 0;
+        await db.insert(
+          'user_screenscraper_metadata',
+          toWrite,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        await db.update(
+          'user_screenscraper_metadata',
+          toWrite,
+          where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+          whereArgs: [appSystemId, filename],
+        );
+      }
+      return true;
+    } catch (e) {
+      _log.e('Error merging ES-DE metadata: $e');
+      return false;
+    }
+  }
+
+  /// Resolves an ES-DE system folder name (e.g. `psx`, `megadrive`) to a
+  /// NeoStation system. Checks the ES-DE/LaunchBox alias table first
+  /// (`app_system_folders`), then falls back to a direct `app_systems`
+  /// folder-name match. Returns `{app_system_id, folder_name}` or null.
+  static Future<Map<String, String>?> resolveSystemByFolderName(
+    String folderName,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    final aliased = await db.rawQuery(
+      '''SELECT s.id AS id, s.folder_name AS folder_name
+         FROM app_system_folders f
+         JOIN app_systems s ON s.id = f.system_id
+         WHERE f.folder_name = ? COLLATE NOCASE LIMIT 1''',
+      [folderName],
+    );
+    if (aliased.isNotEmpty) {
+      return {
+        'app_system_id': aliased.first['id'].toString(),
+        'folder_name': aliased.first['folder_name'].toString(),
+      };
+    }
+    final direct = await db.query(
+      'app_systems',
+      columns: ['id', 'folder_name'],
+      where: 'folder_name = ? COLLATE NOCASE',
+      whereArgs: [folderName],
+      limit: 1,
+    );
+    if (direct.isNotEmpty) {
+      return {
+        'app_system_id': direct.first['id'].toString(),
+        'folder_name': direct.first['folder_name'].toString(),
+      };
+    }
+    return null;
+  }
+
   /// Marks a game's metadata as fully scraped.
   static Future<void> markGameFullyScraped(String filename) async {
     final db = await SqliteService.getDatabase();

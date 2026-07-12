@@ -297,6 +297,9 @@ class SqliteMigrations {
       case 97:
         await _migrateToVersion97(db);
         break;
+      case 98:
+        await _migrateToVersion98(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4750,6 +4753,45 @@ class SqliteMigrations {
       _log.i('Migration v97 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v97: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v98: ES-DE import support.
+  ///
+  /// Adds `esde_folder_path` to `user_config` (the ES-DE application folder the
+  /// user selected) and `esde_media_dir` to `user_system_settings` (the ES-DE
+  /// `downloaded_media` subfolder name captured for that system at import time,
+  /// used to resolve read-time fallback artwork). Idempotent.
+  static Future<void> _migrateToVersion98(Database db) async {
+    _log.i('Migration v98: Adding ES-DE import columns');
+    try {
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!configColumns.contains('esde_folder_path')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN esde_folder_path TEXT DEFAULT ''",
+        );
+        _log.i('Column esde_folder_path added to user_config via v98');
+      }
+
+      final settingsColumns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!settingsColumns.contains('esde_media_dir')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN esde_media_dir TEXT',
+        );
+        _log.i('Column esde_media_dir added to user_system_settings via v98');
+      }
+
+      _log.i('Migration v98 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v98: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
