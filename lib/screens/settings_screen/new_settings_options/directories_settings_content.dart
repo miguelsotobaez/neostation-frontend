@@ -181,18 +181,8 @@ class DirectoriesSettingsContentState
 
   Future<void> _handleItemTap(Map<String, dynamic> item) async {
     final action = item['action'] as String;
-    // ES-DE actions are inert until their prerequisites are met.
-    if (_isEsdeDisabled(action)) {
-      AppNotification.showNotification(
-        context,
-        (!_esdeEnabled
-                ? AppLocale.esdeRequiresRomFolder
-                : AppLocale.esdeImportNoFolder)
-            .getString(context),
-        type: NotificationType.info,
-      );
-      return;
-    }
+    // Disabled ES-DE actions are inert — no toast, no sound, no work.
+    if (_isEsdeDisabled(action)) return;
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
@@ -919,10 +909,12 @@ class DirectoriesSettingsContentState
                           ),
                           margin: EdgeInsets.only(bottom: 8.r),
                           child: InkWell(
-                            onTap: () {
-                              SfxService().playNavSound();
-                              _handleItemTap(item);
-                            },
+                            onTap: isEsdeDisabled
+                                ? null
+                                : () {
+                                    SfxService().playNavSound();
+                                    _handleItemTap(item);
+                                  },
                             borderRadius: BorderRadius.circular(12.r),
                             canRequestFocus: false,
                             focusColor: Colors.transparent,

@@ -858,8 +858,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
-  AppLocale.esdeRequiresRomFolder:
-      'Add a ROM folder before importing from ES-DE',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
