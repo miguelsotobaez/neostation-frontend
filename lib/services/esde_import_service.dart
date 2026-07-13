@@ -153,10 +153,11 @@ class EsdeImportService {
   /// (`esde_imported = 1`) that a later NeoStation scrape hasn't upgraded
   /// (`is_fully_scraped = 0`) — never NeoStation's own partially-scraped rows,
   /// which also sit at `is_fully_scraped = 0`. Clears every system's
-  /// `esde_media_dir` so the read-time media fallback stops. The picked ES-DE
-  /// folder path is kept so the import can be re-run with one tap;
-  /// favorites / last-played are left untouched (indistinguishable from the
-  /// user's own). Returns the number of metadata rows removed.
+  /// `esde_media_dir` so the read-time media fallback stops. The selected ES-DE
+  /// folder path lives in `user_config` / SqliteConfigProvider and is cleared by
+  /// the caller (so the cached config and UI update too); favorites /
+  /// last-played are left untouched (indistinguishable from the user's own).
+  /// Returns the number of metadata rows removed.
   static Future<int> reset() async {
     final db = await SqliteService.getDatabase();
     final deleted = await db.delete(

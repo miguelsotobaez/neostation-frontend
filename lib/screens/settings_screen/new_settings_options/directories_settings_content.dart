@@ -321,9 +321,18 @@ class DirectoriesSettingsContentState
     }
 
     if (!mounted) return;
+    // Only surface the result summary for an import that actually ran against a
+    // real ES-DE folder and touched something — not for an exception, a
+    // "not an ES-DE folder" bail-out, or a matched-nothing no-op (those get a
+    // notification instead, so a zeroed summary box would just be noise).
+    final showSummary =
+        error == null &&
+        result != null &&
+        result.gamelistsDirFound &&
+        (result.gamesImported > 0 || result.systemsMatched > 0);
     setState(() {
       _isImporting = false;
-      _lastEsdeResult = result;
+      _lastEsdeResult = showSummary ? result : null;
     });
 
     if (error != null) {
@@ -363,6 +372,12 @@ class DirectoriesSettingsContentState
     if (_isImporting) return;
     try {
       final cleared = await EsdeImportService.reset();
+      // Fully disconnect ES-DE: also clear the selected folder so the section
+      // returns to its initial "Select ES-DE Folder" state. Goes through the
+      // provider (not the DB directly) so the cached config + UI update too.
+      if (mounted) {
+        await context.read<SqliteConfigProvider>().updateEsdeFolderPath('');
+      }
       if (mounted) await context.read<FileProvider>().refreshEsde();
       if (!mounted) return;
       setState(() => _lastEsdeResult = null);
