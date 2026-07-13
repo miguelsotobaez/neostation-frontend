@@ -252,7 +252,10 @@ class _ProviderCardState extends State<_ProviderCard>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.secondary;
+    // Use the theme's primary as the active accent: secondary is a pale/washed
+    // colour on several themes (retro mint, coffee, cyberpunk) and reads badly
+    // as a highlight. Text still uses onSurface below for guaranteed contrast.
+    final accent = theme.colorScheme.primary;
     final bool showActive = _isSelected && widget.isActive;
     final base = theme.scaffoldBackgroundColor;
 
@@ -332,9 +335,7 @@ class _ProviderCardState extends State<_ProviderCard>
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                             fontSize: 12.r,
-                            color: showActive
-                                ? accent
-                                : theme.colorScheme.onSurface,
+                            color: theme.colorScheme.onSurface,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -389,7 +390,7 @@ class _ProviderCardState extends State<_ProviderCard>
                               'Select',
                               style: TextStyle(
                                 fontSize: 8.r,
-                                color: accent,
+                                color: theme.colorScheme.onSurface,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
