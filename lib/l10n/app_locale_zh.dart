@@ -775,4 +775,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeRequiresRomFolder:
+      'Add a ROM folder before importing from ES-DE',
 };

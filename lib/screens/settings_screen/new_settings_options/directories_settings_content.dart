@@ -142,6 +142,25 @@ class DirectoriesSettingsContentState
   // "ES-DE Import" section header at the right position.
   int _esdeSectionStart = -1;
 
+  // ES-DE import requires at least one ROM directory to match games against,
+  // so the whole section is disabled until one is configured.
+  bool get _esdeEnabled => _currentRomFolders.isNotEmpty;
+
+  static const Set<String> _esdeActions = {
+    'esde_select_folder',
+    'esde_run_import',
+    'esde_reset',
+  };
+
+  /// Whether an ES-DE action is currently disabled. Requires a ROM directory
+  /// for the whole section, plus a selected ES-DE folder for the import action.
+  bool _isEsdeDisabled(String action) {
+    if (!_esdeActions.contains(action)) return false;
+    if (!_esdeEnabled) return true;
+    if (action == 'esde_run_import' && _esdePath.trim().isEmpty) return true;
+    return false;
+  }
+
   Future<void> _loadCurrentPaths() async {
     try {
       final foldersFuture = ConfigRepository.getUserRomFolders();
@@ -161,6 +180,19 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _handleItemTap(Map<String, dynamic> item) async {
+    final action = item['action'] as String;
+    // ES-DE actions are inert until their prerequisites are met.
+    if (_isEsdeDisabled(action)) {
+      AppNotification.showNotification(
+        context,
+        (!_esdeEnabled
+                ? AppLocale.esdeRequiresRomFolder
+                : AppLocale.esdeImportNoFolder)
+            .getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
@@ -845,208 +877,223 @@ class DirectoriesSettingsContentState
 
                       final isRemoveItem = item['action'] == 'remove_rom';
                       final isUserData = item['action'] == 'user_data';
+                      final isEsdeDisabled = _isEsdeDisabled(
+                        item['action'] as String,
+                      );
                       final borderColor = isSelected
                           ? (isRemoveItem
                                 ? theme.colorScheme.error
                                 : theme.colorScheme.primary)
                           : theme.colorScheme.outline.withValues(alpha: 0);
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: isSelected && isRemoveItem
-                              ? theme.colorScheme.error.withValues(alpha: 0.08)
-                              : theme.cardColor.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(12.r),
-                          border: Border.all(
-                            color: borderColor,
-                            width: isSelected ? 2.r : 1.r,
-                          ),
-                        ),
-                        margin: EdgeInsets.only(bottom: 8.r),
-                        child: InkWell(
-                          onTap: () {
-                            SfxService().playNavSound();
-                            _handleItemTap(item);
-                          },
-                          borderRadius: BorderRadius.circular(12.r),
-                          canRequestFocus: false,
-                          focusColor: Colors.transparent,
-                          hoverColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          splashColor: Colors.transparent,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 12.r,
-                              vertical: 8.r,
+                      return Opacity(
+                        opacity: isEsdeDisabled ? 0.4 : 1.0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected && isRemoveItem
+                                ? theme.colorScheme.error.withValues(
+                                    alpha: 0.08,
+                                  )
+                                : theme.cardColor.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(12.r),
+                            border: Border.all(
+                              color: borderColor,
+                              width: isSelected ? 2.r : 1.r,
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      _iconFor(item['action'] as String),
-                                      color: isSelected
-                                          ? (isRemoveItem
-                                                ? theme.colorScheme.error
-                                                : theme.colorScheme.primary)
-                                          : theme.colorScheme.onSurface,
-                                      size: 20.r,
-                                    ),
-                                    SizedBox(width: 12.r),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                          ),
+                          margin: EdgeInsets.only(bottom: 8.r),
+                          child: InkWell(
+                            onTap: () {
+                              SfxService().playNavSound();
+                              _handleItemTap(item);
+                            },
+                            borderRadius: BorderRadius.circular(12.r),
+                            canRequestFocus: false,
+                            focusColor: Colors.transparent,
+                            hoverColor: Colors.transparent,
+                            highlightColor: Colors.transparent,
+                            splashColor: Colors.transparent,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12.r,
+                                vertical: 8.r,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _iconFor(item['action'] as String),
+                                        color: isSelected
+                                            ? (isRemoveItem
+                                                  ? theme.colorScheme.error
+                                                  : theme.colorScheme.primary)
+                                            : theme.colorScheme.onSurface,
+                                        size: 20.r,
+                                      ),
+                                      SizedBox(width: 12.r),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              isRemoveItem
+                                                  ? (item['title'] as String)
+                                                  : (item['title'] as String)
+                                                        .getString(context),
+                                              style: theme.textTheme.titleSmall
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: isRemoveItem
+                                                        ? 10.r
+                                                        : 12.r,
+                                                    color: isSelected
+                                                        ? (isRemoveItem
+                                                              ? theme
+                                                                    .colorScheme
+                                                                    .error
+                                                              : theme
+                                                                    .colorScheme
+                                                                    .primary)
+                                                        : theme
+                                                              .colorScheme
+                                                              .onSurface,
+                                                    fontFamily: isRemoveItem
+                                                        ? 'monospace'
+                                                        : null,
+                                                  ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            SizedBox(height: 2.r),
+                                            Text(
+                                              (item['subtitle'] as String)
+                                                  .getString(context),
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                    color:
+                                                        isSelected &&
+                                                            isRemoveItem
+                                                        ? theme
+                                                              .colorScheme
+                                                              .error
+                                                              .withValues(
+                                                                alpha: 0.7,
+                                                              )
+                                                        : theme
+                                                              .colorScheme
+                                                              .onSurface
+                                                              .withValues(
+                                                                alpha: 0.6,
+                                                              ),
+                                                    fontSize: 9.r,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isRemoveItem)
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.delete_outline_rounded,
+                                          isDestructive: true,
+                                        )
+                                      else if (item['action'] == 'add_rom')
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.add_rounded,
+                                        )
+                                      else if (item['action'] == 'rescan')
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.refresh_rounded,
+                                        )
+                                      else if (isUserData)
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.edit_rounded,
+                                        )
+                                      else if (item['action'] ==
+                                          'esde_select_folder')
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.folder_special_rounded,
+                                        )
+                                      else if (item['action'] ==
+                                          'esde_run_import')
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.download_rounded,
+                                        )
+                                      else if (item['action'] == 'esde_reset')
+                                        _buildActionButton(
+                                          theme,
+                                          isSelected,
+                                          Symbols.restart_alt_rounded,
+                                          isDestructive: true,
+                                        ),
+                                    ],
+                                  ),
+                                  // Show current ES-DE folder under its select item
+                                  if (item['action'] == 'esde_select_folder' &&
+                                      _esdePath.trim().isNotEmpty) ...[
+                                    SizedBox(height: 6.r),
+                                    _buildPathChip(theme, _esdePath),
+                                  ],
+                                  // Show current path under user_data item
+                                  if (isUserData &&
+                                      _currentUserDataPath != null) ...[
+                                    SizedBox(height: 6.r),
+                                    Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8.r,
+                                        vertical: 4.r,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary
+                                            .withValues(alpha: 0.06),
+                                        borderRadius: BorderRadius.circular(
+                                          6.r,
+                                        ),
+                                      ),
+                                      child: Row(
                                         children: [
-                                          Text(
-                                            isRemoveItem
-                                                ? (item['title'] as String)
-                                                : (item['title'] as String)
-                                                      .getString(context),
-                                            style: theme.textTheme.titleSmall
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: isRemoveItem
-                                                      ? 10.r
-                                                      : 12.r,
-                                                  color: isSelected
-                                                      ? (isRemoveItem
-                                                            ? theme
-                                                                  .colorScheme
-                                                                  .error
-                                                            : theme
-                                                                  .colorScheme
-                                                                  .primary)
-                                                      : theme
-                                                            .colorScheme
-                                                            .onSurface,
-                                                  fontFamily: isRemoveItem
-                                                      ? 'monospace'
-                                                      : null,
-                                                ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
+                                          Icon(
+                                            Symbols.folder_rounded,
+                                            size: 11.r,
+                                            color: theme.colorScheme.primary
+                                                .withValues(alpha: 0.5),
                                           ),
-                                          SizedBox(height: 2.r),
-                                          Text(
-                                            (item['subtitle'] as String)
-                                                .getString(context),
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                                  color:
-                                                      isSelected && isRemoveItem
-                                                      ? theme.colorScheme.error
-                                                            .withValues(
-                                                              alpha: 0.7,
-                                                            )
-                                                      : theme
-                                                            .colorScheme
-                                                            .onSurface
-                                                            .withValues(
-                                                              alpha: 0.6,
-                                                            ),
-                                                  fontSize: 9.r,
-                                                ),
+                                          SizedBox(width: 6.r),
+                                          Expanded(
+                                            child: Text(
+                                              _currentUserDataPath!,
+                                              style: TextStyle(
+                                                fontSize: 9.r,
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.55),
+                                                fontFamily: 'monospace',
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    if (isRemoveItem)
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.delete_outline_rounded,
-                                        isDestructive: true,
-                                      )
-                                    else if (item['action'] == 'add_rom')
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.add_rounded,
-                                      )
-                                    else if (item['action'] == 'rescan')
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.refresh_rounded,
-                                      )
-                                    else if (isUserData)
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.edit_rounded,
-                                      )
-                                    else if (item['action'] ==
-                                        'esde_select_folder')
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.folder_special_rounded,
-                                      )
-                                    else if (item['action'] ==
-                                        'esde_run_import')
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.download_rounded,
-                                      )
-                                    else if (item['action'] == 'esde_reset')
-                                      _buildActionButton(
-                                        theme,
-                                        isSelected,
-                                        Symbols.restart_alt_rounded,
-                                        isDestructive: true,
-                                      ),
                                   ],
-                                ),
-                                // Show current ES-DE folder under its select item
-                                if (item['action'] == 'esde_select_folder' &&
-                                    _esdePath.trim().isNotEmpty) ...[
-                                  SizedBox(height: 6.r),
-                                  _buildPathChip(theme, _esdePath),
                                 ],
-                                // Show current path under user_data item
-                                if (isUserData &&
-                                    _currentUserDataPath != null) ...[
-                                  SizedBox(height: 6.r),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 8.r,
-                                      vertical: 4.r,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary
-                                          .withValues(alpha: 0.06),
-                                      borderRadius: BorderRadius.circular(6.r),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Symbols.folder_rounded,
-                                          size: 11.r,
-                                          color: theme.colorScheme.primary
-                                              .withValues(alpha: 0.5),
-                                        ),
-                                        SizedBox(width: 6.r),
-                                        Expanded(
-                                          child: Text(
-                                            _currentUserDataPath!,
-                                            style: TextStyle(
-                                              fontSize: 9.r,
-                                              color: theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.55),
-                                              fontFamily: 'monospace',
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
