@@ -883,4 +883,12 @@ const Map<String, dynamic> appLocaleIt = {
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
       'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Sistemi corrispondenti',
+  AppLocale.esdeSummaryUnmatched: 'senza corrispondenza',
+  AppLocale.esdeSummarySkipped: 'saltati (illeggibili)',
+  AppLocale.esdeSummaryGamesImported: 'Giochi importati',
+  AppLocale.esdeSummaryNoRomMatch: 'nessuna corrispondenza ROM',
+  AppLocale.esdeSummaryStatsUpdated: 'Preferiti / statistiche aggiornati',
+  AppLocale.esdeSummaryGames: 'giochi',
+  AppLocale.esdeSummarySystems: 'sistemi',
 };

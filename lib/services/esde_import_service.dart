@@ -75,17 +75,6 @@ class EsdeImportResult {
 class EsdeImportService {
   static final _log = LoggerService.instance;
 
-  /// NeoStation media-type folder -> ES-DE `downloaded_media` category.
-  /// (Reference for the read-time fallback in FileProvider; kept here so the
-  /// mapping lives with the rest of the ES-DE knowledge.)
-  static const Map<String, String> mediaTypeToEsdeCategory = {
-    'box2d': 'covers',
-    'wheels': 'marquees',
-    'screenshots': 'screenshots',
-    'fanarts': 'fanart',
-    'videos': 'videos',
-  };
-
   /// Runs the import against [esdeRoot] (the ES-DE application folder that
   /// contains `gamelists/` and `downloaded_media/`).
   ///
@@ -131,6 +120,7 @@ class EsdeImportService {
 
       // systemsMatched / systemsSkipped are tallied inside _importSystem so a
       // system with an unreadable gamelist.xml counts as skipped, not matched.
+      final matchedBefore = result.systemsMatched;
       result = await _importSystem(
         esdeRoot: esdeRoot,
         esdeDirName: esdeDirName,
@@ -140,7 +130,12 @@ class EsdeImportService {
         accumulator: result,
       );
 
-      await _recordEsdeMediaDir(esdeRoot, esdeDirName, appSystemId);
+      // Only wire up the read-time media fallback for systems that actually
+      // imported (a corrupt/unparseable gamelist.xml is skipped, not matched);
+      // otherwise we'd record an esde_media_dir with no matching metadata rows.
+      if (result.systemsMatched > matchedBefore) {
+        await _recordEsdeMediaDir(esdeRoot, esdeDirName, appSystemId);
+      }
     }
 
     onProgress?.call(1.0, '');
@@ -154,8 +149,10 @@ class EsdeImportService {
   }
 
   /// Clears all ES-DE-imported data so the import can be re-run from scratch.
-  /// Deletes fill-gaps metadata rows (`is_fully_scraped = 0`, i.e. rows never
-  /// upgraded by a NeoStation scrape) and clears every system's
+  /// Deletes only metadata rows the ES-DE import itself created
+  /// (`esde_imported = 1`) that a later NeoStation scrape hasn't upgraded
+  /// (`is_fully_scraped = 0`) — never NeoStation's own partially-scraped rows,
+  /// which also sit at `is_fully_scraped = 0`. Clears every system's
   /// `esde_media_dir` so the read-time media fallback stops. The picked ES-DE
   /// folder path is kept so the import can be re-run with one tap;
   /// favorites / last-played are left untouched (indistinguishable from the
@@ -164,7 +161,7 @@ class EsdeImportService {
     final db = await SqliteService.getDatabase();
     final deleted = await db.delete(
       'user_screenscraper_metadata',
-      where: 'is_fully_scraped = 0',
+      where: 'esde_imported = 1 AND is_fully_scraped = 0',
     );
     await db.update('user_system_settings', {
       'esde_media_dir': null,
@@ -208,7 +205,7 @@ class EsdeImportService {
       // Only import for ROMs NeoStation has already scanned.
       final rom = await db.query(
         'user_roms',
-        columns: ['is_favorite', 'last_played'],
+        columns: ['filename', 'is_favorite', 'last_played'],
         where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
         whereArgs: [appSystemId, filename],
         limit: 1,
@@ -217,6 +214,16 @@ class EsdeImportService {
         result = result._add(gamesUnmatched: 1);
         continue;
       }
+
+      // The gamelist basename can differ in case from the scanned ROM filename.
+      // Match happens case-insensitively above, but metadata is written and
+      // later joined case-sensitively (user_roms.filename = metadata.filename),
+      // so key everything on the actual scanned filename to avoid orphaning the
+      // imported row and its media subdir.
+      final canonicalFilename =
+          (rom.first['filename'] as String?)?.trim().isNotEmpty == true
+          ? rom.first['filename'] as String
+          : filename;
 
       // --- Metadata (fill-gaps merge into user_screenscraper_metadata) ---
       final esdeMeta = <String, dynamic>{
@@ -233,7 +240,7 @@ class EsdeImportService {
       };
       final wroteMeta = await ScraperRepository.mergeEsdeMetadata(
         appSystemId,
-        filename,
+        canonicalFilename,
         esdeMeta,
         mediaSubdir: mediaSubdir,
       );
@@ -261,7 +268,7 @@ class EsdeImportService {
           'user_roms',
           update,
           where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
-          whereArgs: [appSystemId, filename],
+          whereArgs: [appSystemId, canonicalFilename],
         );
         result = result._add(statsUpdated: 1);
       }

@@ -383,50 +383,11 @@ class GameModel {
   }
 
   /// Sanitizes a ROM filename by stripping common extensions while preserving
-  /// potential version strings (e.g., 'v1.2').
-  static String _stripRomExtension(String name) {
-    if (!name.contains('.')) return name;
-
-    final lastDot = name.lastIndexOf('.');
-    final ext = name.substring(lastDot + 1).toLowerCase();
-
-    // Preserve versioning strings like '.v1' or '.123'.
-    final isVersion =
-        RegExp(r'^\d+$').hasMatch(ext) || RegExp(r'^v\d+').hasMatch(ext);
-
-    if (isVersion) return name;
-
-    const commonRomExts = {
-      'zip',
-      '7z',
-      'rar',
-      'nes',
-      'sfc',
-      'smc',
-      'gba',
-      'gbc',
-      'gb',
-      'iso',
-      'bin',
-      'cue',
-      'chd',
-      'n64',
-      'z64',
-      'v64',
-      'nds',
-      '3ds',
-      'cia',
-      'nsp',
-      'xci',
-    };
-
-    if (commonRomExts.contains(ext) ||
-        (ext.length >= 2 && ext.length <= 4 && !ext.contains(' '))) {
-      return name.substring(0, lastDot);
-    }
-
-    return name;
-  }
+  /// potential version strings (e.g., 'v1.2'). Delegates to the single canonical
+  /// implementation in [FileProvider] so extension handling stays consistent
+  /// between the two (diverging copies would desync ES-DE media keys).
+  static String _stripRomExtension(String name) =>
+      FileProvider.stripRomExtension(name);
 
   /// Verifies if a screenshot exists for this game.
   Future<bool> hasScreenshot(
@@ -444,10 +405,15 @@ class GameModel {
   String getVideoPath(String systemFolderName, [FileProvider? fileProvider]) {
     if (fileProvider != null && fileProvider.isInitialized) {
       final master = fileProvider.getVideoPath(systemFolderName, romname);
-      if (File(master).existsSync()) return master;
-      // ES-DE read-time fallback video.
+      // ES-DE read-time fallback video (cheap in-memory lookup, no I/O).
       final esde = fileProvider.getEsdeVideoPath(systemFolderName, romname);
-      if (esde != null && File(esde).existsSync()) return esde;
+      // No ES-DE fallback for this system: return the master path without any
+      // filesystem stat — getVideoPath is called on the scroll hot path and
+      // there is nothing to fall back to anyway.
+      if (esde == null) return master;
+      // Prefer the master video; only fall back to ES-DE when it's missing.
+      if (File(master).existsSync()) return master;
+      if (File(esde).existsSync()) return esde;
       return master;
     }
     final baseName = _stripRomExtension(romname);

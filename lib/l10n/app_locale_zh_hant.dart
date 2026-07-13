@@ -779,4 +779,12 @@ const Map<String, dynamic> appLocaleZhHant = {
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
       'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: '已比對系統',
+  AppLocale.esdeSummaryUnmatched: '未比對',
+  AppLocale.esdeSummarySkipped: '已略過（無法讀取）',
+  AppLocale.esdeSummaryGamesImported: '已匯入遊戲',
+  AppLocale.esdeSummaryNoRomMatch: '無相符 ROM',
+  AppLocale.esdeSummaryStatsUpdated: '我的最愛 / 統計已更新',
+  AppLocale.esdeSummaryGames: '遊戲',
+  AppLocale.esdeSummarySystems: '系統',
 };

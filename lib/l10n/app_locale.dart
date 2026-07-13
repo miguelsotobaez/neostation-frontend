@@ -815,6 +815,14 @@ mixin AppLocale {
   static const String esdeResetComplete = 'esde_reset_complete';
   static const String esdeImportNotEsdeFolder = 'esde_import_not_esde_folder';
   static const String esdeImportNothingFound = 'esde_import_nothing_found';
+  static const String esdeSummarySystemsMatched = 'esde_summary_systems_matched';
+  static const String esdeSummaryUnmatched = 'esde_summary_unmatched';
+  static const String esdeSummarySkipped = 'esde_summary_skipped';
+  static const String esdeSummaryGamesImported = 'esde_summary_games_imported';
+  static const String esdeSummaryNoRomMatch = 'esde_summary_no_rom_match';
+  static const String esdeSummaryStatsUpdated = 'esde_summary_stats_updated';
+  static const String esdeSummaryGames = 'esde_summary_games';
+  static const String esdeSummarySystems = 'esde_summary_systems';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
   static const String folderNotEmptyTitle = 'folder_not_empty_title';

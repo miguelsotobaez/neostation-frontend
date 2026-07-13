@@ -791,4 +791,12 @@ const Map<String, dynamic> appLocaleJa = {
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
       'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: '一致したシステム',
+  AppLocale.esdeSummaryUnmatched: '一致なし',
+  AppLocale.esdeSummarySkipped: 'スキップ（読み取り不可）',
+  AppLocale.esdeSummaryGamesImported: 'インポートしたゲーム',
+  AppLocale.esdeSummaryNoRomMatch: 'ROMの一致なし',
+  AppLocale.esdeSummaryStatsUpdated: 'お気に入り／統計を更新',
+  AppLocale.esdeSummaryGames: 'ゲーム',
+  AppLocale.esdeSummarySystems: 'システム',
 };

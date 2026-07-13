@@ -78,8 +78,14 @@ class DirectoriesSettingsContentState
 
   void scrollToIndex(int index) {
     if (!_scrollController.hasClients) return;
+    // The visual list interleaves section-header rows among the nav items
+    // ("ROM Directories" before nav 2, "ES-DE Import" before _esdeSectionStart),
+    // so a nav item's on-screen row is offset by the headers that precede it.
+    var headersBefore = 0;
+    if (index >= 2) headersBefore++;
+    if (_esdeSectionStart >= 0 && index >= _esdeSectionStart) headersBefore++;
     _scrollController.animateTo(
-      index * 60.h,
+      (index + headersBefore) * 60.h,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
     );
@@ -345,7 +351,8 @@ class DirectoriesSettingsContentState
         AppNotification.showNotification(
           context,
           '${AppLocale.esdeImportComplete.getString(context)}: '
-          '${result.gamesImported} games, ${result.systemsMatched} systems',
+          '${result.gamesImported} ${AppLocale.esdeSummaryGames.getString(context)}, '
+          '${result.systemsMatched} ${AppLocale.esdeSummarySystems.getString(context)}',
           type: NotificationType.success,
         );
       }
@@ -1261,12 +1268,12 @@ class DirectoriesSettingsContentState
           ),
           SizedBox(height: 4.r),
           Text(
-            'Systems matched: ${r.systemsMatched}   '
-            'unmatched: ${r.systemsUnmatched}   '
-            'skipped (unreadable): ${r.systemsSkipped}\n'
-            'Games imported: ${r.gamesImported}   '
-            'no ROM match: ${r.gamesUnmatched}\n'
-            'Favorites / stats updated: ${r.statsUpdated}',
+            '${AppLocale.esdeSummarySystemsMatched.getString(context)}: ${r.systemsMatched}   '
+            '${AppLocale.esdeSummaryUnmatched.getString(context)}: ${r.systemsUnmatched}   '
+            '${AppLocale.esdeSummarySkipped.getString(context)}: ${r.systemsSkipped}\n'
+            '${AppLocale.esdeSummaryGamesImported.getString(context)}: ${r.gamesImported}   '
+            '${AppLocale.esdeSummaryNoRomMatch.getString(context)}: ${r.gamesUnmatched}\n'
+            '${AppLocale.esdeSummaryStatsUpdated.getString(context)}: ${r.statsUpdated}',
             style: theme.textTheme.bodySmall?.copyWith(
               fontSize: 9.5.r,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.7),

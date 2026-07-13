@@ -866,4 +866,12 @@ const Map<String, dynamic> appLocaleId = {
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
       'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Sistem cocok',
+  AppLocale.esdeSummaryUnmatched: 'tidak cocok',
+  AppLocale.esdeSummarySkipped: 'dilewati (tidak terbaca)',
+  AppLocale.esdeSummaryGamesImported: 'Gim diimpor',
+  AppLocale.esdeSummaryNoRomMatch: 'tidak ada ROM cocok',
+  AppLocale.esdeSummaryStatsUpdated: 'Favorit / statistik diperbarui',
+  AppLocale.esdeSummaryGames: 'gim',
+  AppLocale.esdeSummarySystems: 'sistem',
 };

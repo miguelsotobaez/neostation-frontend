@@ -303,6 +303,9 @@ class SqliteMigrations {
       case 99:
         await _migrateToVersion99(db);
         break;
+      case 100:
+        await _migrateToVersion100(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4819,6 +4822,35 @@ class SqliteMigrations {
       _log.i('Migration v99 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v99: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v100: Adds `esde_imported` to `user_screenscraper_metadata`, a
+  /// provenance flag marking rows the ES-DE import created from scratch. Lets
+  /// the ES-DE reset target only those rows instead of every `is_fully_scraped`
+  /// = 0 row (which also includes NeoStation's own partially-scraped rows).
+  /// Idempotent.
+  static Future<void> _migrateToVersion100(Database db) async {
+    _log.i('Migration v100: Adding esde_imported column');
+    try {
+      final metaColumns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!metaColumns.contains('esde_imported')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN esde_imported INTEGER DEFAULT 0',
+        );
+        _log.i(
+          'Column esde_imported added to user_screenscraper_metadata via v100',
+        );
+      }
+
+      _log.i('Migration v100 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v100: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

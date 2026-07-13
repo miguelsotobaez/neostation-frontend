@@ -541,6 +541,11 @@ class ScraperRepository {
         toWrite['app_system_id'] = appSystemId;
         toWrite['filename'] = filename;
         toWrite['is_fully_scraped'] = 0;
+        // Provenance marker so reset() can remove ES-DE-created rows without
+        // touching NeoStation's own partially-scraped rows. Only set on insert
+        // (rows the import creates from scratch); gap-fills into pre-existing
+        // NeoStation rows are left unmarked so reset() won't delete them.
+        toWrite['esde_imported'] = 1;
         await db.insert(
           'user_screenscraper_metadata',
           toWrite,
@@ -568,34 +573,39 @@ class ScraperRepository {
   static Future<Map<String, String>?> resolveSystemByFolderName(
     String folderName,
   ) async {
-    final db = await SqliteService.getDatabase();
-    final aliased = await db.rawQuery(
-      '''SELECT s.id AS id, s.folder_name AS folder_name
-         FROM app_system_folders f
-         JOIN app_systems s ON s.id = f.system_id
-         WHERE f.folder_name = ? COLLATE NOCASE LIMIT 1''',
-      [folderName],
-    );
-    if (aliased.isNotEmpty) {
-      return {
-        'app_system_id': aliased.first['id'].toString(),
-        'folder_name': aliased.first['folder_name'].toString(),
-      };
+    try {
+      final db = await SqliteService.getDatabase();
+      final aliased = await db.rawQuery(
+        '''SELECT s.id AS id, s.folder_name AS folder_name
+           FROM app_system_folders f
+           JOIN app_systems s ON s.id = f.system_id
+           WHERE f.folder_name = ? COLLATE NOCASE LIMIT 1''',
+        [folderName],
+      );
+      if (aliased.isNotEmpty) {
+        return {
+          'app_system_id': aliased.first['id'].toString(),
+          'folder_name': aliased.first['folder_name'].toString(),
+        };
+      }
+      final direct = await db.query(
+        'app_systems',
+        columns: ['id', 'folder_name'],
+        where: 'folder_name = ? COLLATE NOCASE',
+        whereArgs: [folderName],
+        limit: 1,
+      );
+      if (direct.isNotEmpty) {
+        return {
+          'app_system_id': direct.first['id'].toString(),
+          'folder_name': direct.first['folder_name'].toString(),
+        };
+      }
+      return null;
+    } catch (e) {
+      _log.e('Error resolving system for folder "$folderName": $e');
+      return null;
     }
-    final direct = await db.query(
-      'app_systems',
-      columns: ['id', 'folder_name'],
-      where: 'folder_name = ? COLLATE NOCASE',
-      whereArgs: [folderName],
-      limit: 1,
-    );
-    if (direct.isNotEmpty) {
-      return {
-        'app_system_id': direct.first['id'].toString(),
-        'folder_name': direct.first['folder_name'].toString(),
-      };
-    }
-    return null;
   }
 
   /// Marks a game's metadata as fully scraped.
