@@ -7,7 +7,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
+import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/services/esde_import_service.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -49,6 +51,12 @@ class DirectoriesSettingsContentState
   bool _isMigrating = false;
   double _migrationProgress = 0.0;
   String _migrationFile = '';
+
+  // ES-DE import progress state (shown inline, no dialog).
+  bool _isImporting = false;
+  double _importProgress = 0.0;
+  String _importLabel = '';
+  EsdeImportResult? _lastEsdeResult;
 
   static final _log = LoggerService.instance;
 
@@ -110,7 +118,29 @@ class DirectoriesSettingsContentState
         'path': path,
       });
     }
+
+    // ES-DE import actions (grouped under their own section header in build).
+    _esdeSectionStart = _directoryItems.length;
+    _directoryItems.add({
+      'title': AppLocale.esdeSelectFolder,
+      'subtitle': AppLocale.esdeSelectFolderSubtitle,
+      'action': 'esde_select_folder',
+    });
+    _directoryItems.add({
+      'title': AppLocale.esdeRunImport,
+      'subtitle': AppLocale.esdeRunImportSubtitle,
+      'action': 'esde_run_import',
+    });
+    _directoryItems.add({
+      'title': AppLocale.esdeReset,
+      'subtitle': AppLocale.esdeResetSubtitle,
+      'action': 'esde_reset',
+    });
   }
+
+  // Index of the first ES-DE item in [_directoryItems]; used to insert the
+  // "ES-DE Import" section header at the right position.
+  int _esdeSectionStart = -1;
 
   Future<void> _loadCurrentPaths() async {
     try {
@@ -148,6 +178,163 @@ class DirectoriesSettingsContentState
       case 'remove_rom':
         await _removeRomFolder(item['path'] as String);
         break;
+      case 'esde_select_folder':
+        await _selectEsdeFolder();
+        break;
+      case 'esde_run_import':
+        await _runEsdeImport();
+        break;
+      case 'esde_reset':
+        await _resetEsdeImport();
+        break;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ES-DE import
+  // ---------------------------------------------------------------------------
+
+  String get _esdePath =>
+      context.read<SqliteConfigProvider>().config.esdeFolderPath;
+
+  Future<void> _selectEsdeFolder() async {
+    try {
+      String? selected;
+
+      if (Platform.isAndroid) {
+        final isTV = await PermissionService.isTelevision();
+        if (!mounted) return;
+        if (isTV) {
+          selected = await TvDirectoryPicker.show(context);
+        } else {
+          try {
+            final uri = await PermissionService.requestFolderAccess();
+            if (uri != null) {
+              final uriStr = uri.toString();
+              final hasFiles = await PermissionService.hasAllFilesAccess();
+              selected =
+                  await UserDataLocationService.resolveAndroidUserDataPath(
+                    uriStr,
+                    hasAllFilesAccess: hasFiles,
+                  ) ??
+                  UserDataLocationService.safUriToRealPath(uriStr);
+            }
+          } on PlatformException catch (e) {
+            if (e.code == 'PICKER_FAILED' && mounted) {
+              selected = await TvDirectoryPicker.show(context);
+            }
+          }
+        }
+      } else {
+        selected = await FilePicker.getDirectoryPath(
+          dialogTitle: AppLocale.esdeSelectFolder.getString(context),
+        );
+      }
+
+      if (selected == null || !mounted) return;
+      if (selected.endsWith(Platform.pathSeparator)) {
+        selected = selected.substring(0, selected.length - 1);
+      }
+
+      await context.read<SqliteConfigProvider>().updateEsdeFolderPath(selected);
+      // Refresh the fallback map so any already-recorded systems resolve.
+      if (mounted) await context.read<FileProvider>().refreshEsde();
+      if (mounted) setState(() {});
+    } catch (e) {
+      _log.e('ES-DE folder selection failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          '$e',
+          type: NotificationType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _runEsdeImport() async {
+    final root = _esdePath;
+    if (root.trim().isEmpty) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.esdeImportNoFolder.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
+    if (_isImporting) return;
+
+    setState(() {
+      _isImporting = true;
+      _importProgress = 0.0;
+      _importLabel = '';
+      _lastEsdeResult = null;
+    });
+
+    EsdeImportResult? result;
+    String? error;
+    try {
+      result = await EsdeImportService.import(
+        root,
+        onProgress: (p, label) {
+          if (mounted) {
+            setState(() {
+              _importProgress = p;
+              _importLabel = label;
+            });
+          }
+        },
+      );
+      // Rebuild the fallback map now that esde_media_dir rows exist.
+      if (mounted) await context.read<FileProvider>().refreshEsde();
+    } catch (e) {
+      error = e.toString();
+      _log.e('ES-DE import failed: $e');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isImporting = false;
+      _lastEsdeResult = result;
+    });
+
+    if (error != null) {
+      AppNotification.showNotification(
+        context,
+        error,
+        type: NotificationType.error,
+      );
+    } else if (result != null) {
+      AppNotification.showNotification(
+        context,
+        '${AppLocale.esdeImportComplete.getString(context)}: '
+        '${result.gamesImported} games, ${result.systemsMatched} systems',
+        type: NotificationType.info,
+      );
+    }
+  }
+
+  Future<void> _resetEsdeImport() async {
+    if (_isImporting) return;
+    try {
+      final cleared = await EsdeImportService.reset();
+      if (mounted) await context.read<FileProvider>().refreshEsde();
+      if (!mounted) return;
+      setState(() => _lastEsdeResult = null);
+      AppNotification.showNotification(
+        context,
+        '${AppLocale.esdeResetComplete.getString(context)} ($cleared)',
+        type: NotificationType.info,
+      );
+    } catch (e) {
+      _log.e('ES-DE reset failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          '$e',
+          type: NotificationType.error,
+        );
+      }
     }
   }
 
@@ -612,202 +799,259 @@ class DirectoriesSettingsContentState
             SizedBox(height: 12.r),
             _buildMigrationProgress(theme),
             _buildScanProgress(theme, configProvider),
+            _buildEsdeProgress(theme),
+            _buildEsdeResultSummary(theme),
             Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                physics: const ClampingScrollPhysics(),
-                // Visual items = navigable items + 1 section header after index 1
-                itemCount: _directoryItems.length + 1,
-                itemBuilder: (context, visualIndex) {
-                  // Insert "ROM Directories" section header after user_data + rescan (nav indices 0,1)
-                  // Visual index 2 = section header; visual index > 2 maps to nav index - 1
-                  if (visualIndex == 2) {
-                    return _buildSectionHeader(
-                      theme,
-                      AppLocale.romDirectories.getString(context),
-                    );
+              child: Builder(
+                builder: (context) {
+                  // Precompute visual rows: either a section header or a
+                  // navigable item, so header insertion stays robust as the
+                  // ROM-folder count changes.
+                  final visualRows = <Map<String, dynamic>>[];
+                  for (var i = 0; i < _directoryItems.length; i++) {
+                    // "ROM Directories" header before add_rom (nav index 2).
+                    if (i == 2) {
+                      visualRows.add({
+                        'header': AppLocale.romDirectories.getString(context),
+                      });
+                    }
+                    // "ES-DE Import" header before the first ES-DE item.
+                    if (i == _esdeSectionStart) {
+                      visualRows.add({
+                        'header': AppLocale.esdeImport.getString(context),
+                      });
+                    }
+                    visualRows.add({'nav': i});
                   }
 
-                  final navIndex = visualIndex > 2
-                      ? visualIndex - 1
-                      : visualIndex;
-                  final item = _directoryItems[navIndex];
-                  final isSelected =
-                      widget.isContentFocused &&
-                      widget.selectedContentIndex == navIndex;
+                  return ListView.builder(
+                    controller: _scrollController,
+                    physics: const ClampingScrollPhysics(),
+                    itemCount: visualRows.length,
+                    itemBuilder: (context, visualIndex) {
+                      final row = visualRows[visualIndex];
+                      if (row.containsKey('header')) {
+                        return _buildSectionHeader(
+                          theme,
+                          row['header'] as String,
+                        );
+                      }
 
-                  final isRemoveItem = item['action'] == 'remove_rom';
-                  final isUserData = item['action'] == 'user_data';
-                  final borderColor = isSelected
-                      ? (isRemoveItem
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.primary)
-                      : theme.colorScheme.outline.withValues(alpha: 0);
+                      final navIndex = row['nav'] as int;
+                      final item = _directoryItems[navIndex];
+                      final isSelected =
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == navIndex;
 
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: isSelected && isRemoveItem
-                          ? theme.colorScheme.error.withValues(alpha: 0.08)
-                          : theme.cardColor.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(
-                        color: borderColor,
-                        width: isSelected ? 2.r : 1.r,
-                      ),
-                    ),
-                    margin: EdgeInsets.only(bottom: 8.r),
-                    child: InkWell(
-                      onTap: () {
-                        SfxService().playNavSound();
-                        _handleItemTap(item);
-                      },
-                      borderRadius: BorderRadius.circular(12.r),
-                      canRequestFocus: false,
-                      focusColor: Colors.transparent,
-                      hoverColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      splashColor: Colors.transparent,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12.r,
-                          vertical: 8.r,
+                      final isRemoveItem = item['action'] == 'remove_rom';
+                      final isUserData = item['action'] == 'user_data';
+                      final borderColor = isSelected
+                          ? (isRemoveItem
+                                ? theme.colorScheme.error
+                                : theme.colorScheme.primary)
+                          : theme.colorScheme.outline.withValues(alpha: 0);
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: isSelected && isRemoveItem
+                              ? theme.colorScheme.error.withValues(alpha: 0.08)
+                              : theme.cardColor.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: borderColor,
+                            width: isSelected ? 2.r : 1.r,
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  _iconFor(item['action'] as String),
-                                  color: isSelected
-                                      ? (isRemoveItem
-                                            ? theme.colorScheme.error
-                                            : theme.colorScheme.primary)
-                                      : theme.colorScheme.onSurface,
-                                  size: 20.r,
-                                ),
-                                SizedBox(width: 12.r),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        isRemoveItem
-                                            ? (item['title'] as String)
-                                            : (item['title'] as String)
-                                                  .getString(context),
-                                        style: theme.textTheme.titleSmall
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: isRemoveItem
-                                                  ? 10.r
-                                                  : 12.r,
-                                              color: isSelected
-                                                  ? (isRemoveItem
-                                                        ? theme
-                                                              .colorScheme
-                                                              .error
-                                                        : theme
-                                                              .colorScheme
-                                                              .primary)
-                                                  : theme.colorScheme.onSurface,
-                                              fontFamily: isRemoveItem
-                                                  ? 'monospace'
-                                                  : null,
-                                            ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      SizedBox(height: 2.r),
-                                      Text(
-                                        (item['subtitle'] as String).getString(
-                                          context,
-                                        ),
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: isSelected && isRemoveItem
-                                                  ? theme.colorScheme.error
-                                                        .withValues(alpha: 0.7)
-                                                  : theme.colorScheme.onSurface
-                                                        .withValues(alpha: 0.6),
-                                              fontSize: 9.r,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (isRemoveItem)
-                                  _buildActionButton(
-                                    theme,
-                                    isSelected,
-                                    Symbols.delete_outline_rounded,
-                                    isDestructive: true,
-                                  )
-                                else if (item['action'] == 'add_rom')
-                                  _buildActionButton(
-                                    theme,
-                                    isSelected,
-                                    Symbols.add_rounded,
-                                  )
-                                else if (item['action'] == 'rescan')
-                                  _buildActionButton(
-                                    theme,
-                                    isSelected,
-                                    Symbols.refresh_rounded,
-                                  )
-                                else if (isUserData)
-                                  _buildActionButton(
-                                    theme,
-                                    isSelected,
-                                    Symbols.edit_rounded,
-                                  ),
-                              ],
+                        margin: EdgeInsets.only(bottom: 8.r),
+                        child: InkWell(
+                          onTap: () {
+                            SfxService().playNavSound();
+                            _handleItemTap(item);
+                          },
+                          borderRadius: BorderRadius.circular(12.r),
+                          canRequestFocus: false,
+                          focusColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          splashColor: Colors.transparent,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12.r,
+                              vertical: 8.r,
                             ),
-                            // Show current path under user_data item
-                            if (isUserData && _currentUserDataPath != null) ...[
-                              SizedBox(height: 6.r),
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 8.r,
-                                  vertical: 4.r,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(
-                                    alpha: 0.06,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6.r),
-                                ),
-                                child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
                                     Icon(
-                                      Symbols.folder_rounded,
-                                      size: 11.r,
-                                      color: theme.colorScheme.primary
-                                          .withValues(alpha: 0.5),
+                                      _iconFor(item['action'] as String),
+                                      color: isSelected
+                                          ? (isRemoveItem
+                                                ? theme.colorScheme.error
+                                                : theme.colorScheme.primary)
+                                          : theme.colorScheme.onSurface,
+                                      size: 20.r,
                                     ),
-                                    SizedBox(width: 6.r),
+                                    SizedBox(width: 12.r),
                                     Expanded(
-                                      child: Text(
-                                        _currentUserDataPath!,
-                                        style: TextStyle(
-                                          fontSize: 9.r,
-                                          color: theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.55),
-                                          fontFamily: 'monospace',
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            isRemoveItem
+                                                ? (item['title'] as String)
+                                                : (item['title'] as String)
+                                                      .getString(context),
+                                            style: theme.textTheme.titleSmall
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: isRemoveItem
+                                                      ? 10.r
+                                                      : 12.r,
+                                                  color: isSelected
+                                                      ? (isRemoveItem
+                                                            ? theme
+                                                                  .colorScheme
+                                                                  .error
+                                                            : theme
+                                                                  .colorScheme
+                                                                  .primary)
+                                                      : theme
+                                                            .colorScheme
+                                                            .onSurface,
+                                                  fontFamily: isRemoveItem
+                                                      ? 'monospace'
+                                                      : null,
+                                                ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          SizedBox(height: 2.r),
+                                          Text(
+                                            (item['subtitle'] as String)
+                                                .getString(context),
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                                  color:
+                                                      isSelected && isRemoveItem
+                                                      ? theme.colorScheme.error
+                                                            .withValues(
+                                                              alpha: 0.7,
+                                                            )
+                                                      : theme
+                                                            .colorScheme
+                                                            .onSurface
+                                                            .withValues(
+                                                              alpha: 0.6,
+                                                            ),
+                                                  fontSize: 9.r,
+                                                ),
+                                          ),
+                                        ],
                                       ),
                                     ),
+                                    if (isRemoveItem)
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.delete_outline_rounded,
+                                        isDestructive: true,
+                                      )
+                                    else if (item['action'] == 'add_rom')
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.add_rounded,
+                                      )
+                                    else if (item['action'] == 'rescan')
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.refresh_rounded,
+                                      )
+                                    else if (isUserData)
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.edit_rounded,
+                                      )
+                                    else if (item['action'] ==
+                                        'esde_select_folder')
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.folder_special_rounded,
+                                      )
+                                    else if (item['action'] ==
+                                        'esde_run_import')
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.download_rounded,
+                                      )
+                                    else if (item['action'] == 'esde_reset')
+                                      _buildActionButton(
+                                        theme,
+                                        isSelected,
+                                        Symbols.restart_alt_rounded,
+                                        isDestructive: true,
+                                      ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ],
+                                // Show current ES-DE folder under its select item
+                                if (item['action'] == 'esde_select_folder' &&
+                                    _esdePath.trim().isNotEmpty) ...[
+                                  SizedBox(height: 6.r),
+                                  _buildPathChip(theme, _esdePath),
+                                ],
+                                // Show current path under user_data item
+                                if (isUserData &&
+                                    _currentUserDataPath != null) ...[
+                                  SizedBox(height: 6.r),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 8.r,
+                                      vertical: 4.r,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary
+                                          .withValues(alpha: 0.06),
+                                      borderRadius: BorderRadius.circular(6.r),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Symbols.folder_rounded,
+                                          size: 11.r,
+                                          color: theme.colorScheme.primary
+                                              .withValues(alpha: 0.5),
+                                        ),
+                                        SizedBox(width: 6.r),
+                                        Expanded(
+                                          child: Text(
+                                            _currentUserDataPath!,
+                                            style: TextStyle(
+                                              fontSize: 9.r,
+                                              color: theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.55),
+                                              fontFamily: 'monospace',
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   );
                 },
               ),
@@ -828,8 +1072,152 @@ class DirectoriesSettingsContentState
         return Symbols.folder_rounded;
       case 'remove_rom':
         return Symbols.folder_rounded;
+      case 'esde_select_folder':
+        return Symbols.folder_special_rounded;
+      case 'esde_run_import':
+        return Symbols.download_rounded;
+      case 'esde_reset':
+        return Symbols.restart_alt_rounded;
       default:
         return Symbols.folder_rounded;
     }
+  }
+
+  Widget _buildPathChip(ThemeData theme, String path) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(6.r),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Symbols.folder_rounded,
+            size: 11.r,
+            color: theme.colorScheme.primary.withValues(alpha: 0.5),
+          ),
+          SizedBox(width: 6.r),
+          Expanded(
+            child: Text(
+              path,
+              style: TextStyle(
+                fontSize: 9.r,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                fontFamily: 'monospace',
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEsdeProgress(ThemeData theme) {
+    if (!_isImporting) return const SizedBox.shrink();
+    final pct = _importProgress;
+    return Container(
+      margin: EdgeInsets.only(bottom: 12.r),
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1.r,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                AppLocale.esdeImporting.getString(context),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10.r,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              Text(
+                '${(pct * 100).toInt()}%',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10.r,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8.r),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4.r),
+            child: LinearProgressIndicator(
+              value: pct > 0 ? pct : null,
+              minHeight: 6.r,
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          if (_importLabel.isNotEmpty) ...[
+            SizedBox(height: 4.r),
+            Text(
+              _importLabel,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 9.r,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                fontFamily: 'monospace',
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEsdeResultSummary(ThemeData theme) {
+    final r = _lastEsdeResult;
+    if (r == null || _isImporting) return const SizedBox.shrink();
+    return Container(
+      margin: EdgeInsets.only(bottom: 12.r),
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppLocale.esdeImportComplete.getString(context),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              fontSize: 11.r,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          SizedBox(height: 4.r),
+          Text(
+            'Systems matched: ${r.systemsMatched}   '
+            'unmatched: ${r.systemsUnmatched}\n'
+            'Games imported: ${r.gamesImported}   '
+            'no ROM match: ${r.gamesUnmatched}\n'
+            'Favorites / stats updated: ${r.statsUpdated}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 9.5.r,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
