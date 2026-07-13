@@ -814,6 +814,8 @@ mixin AppLocale {
   static const String esdeResetSubtitle = 'esde_reset_subtitle';
   static const String esdeResetComplete = 'esde_reset_complete';
   static const String esdeRequiresRomFolder = 'esde_requires_rom_folder';
+  static const String esdeImportNotEsdeFolder = 'esde_import_not_esde_folder';
+  static const String esdeImportNothingFound = 'esde_import_nothing_found';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
   static const String folderNotEmptyTitle = 'folder_not_empty_title';

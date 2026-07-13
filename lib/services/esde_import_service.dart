@@ -15,6 +15,10 @@ class EsdeImportResult {
   /// Number of ES-DE system folders that could not be mapped and were skipped.
   final int systemsUnmatched;
 
+  /// Number of ES-DE system folders that mapped to a NeoStation system but
+  /// whose `gamelist.xml` could not be read or parsed (skipped).
+  final int systemsSkipped;
+
   /// Number of `<game>` entries whose metadata was created or filled.
   final int gamesImported;
 
@@ -24,17 +28,24 @@ class EsdeImportResult {
   /// Number of games whose favorite / last-played flags were updated.
   final int statsUpdated;
 
+  /// Whether a `gamelists/` directory was found under the picked folder. When
+  /// false, the selected folder is almost certainly not an ES-DE installation.
+  final bool gamelistsDirFound;
+
   const EsdeImportResult({
     this.systemsMatched = 0,
     this.systemsUnmatched = 0,
+    this.systemsSkipped = 0,
     this.gamesImported = 0,
     this.gamesUnmatched = 0,
     this.statsUpdated = 0,
+    this.gamelistsDirFound = true,
   });
 
   EsdeImportResult _add({
     int systemsMatched = 0,
     int systemsUnmatched = 0,
+    int systemsSkipped = 0,
     int gamesImported = 0,
     int gamesUnmatched = 0,
     int statsUpdated = 0,
@@ -42,9 +53,11 @@ class EsdeImportResult {
     return EsdeImportResult(
       systemsMatched: this.systemsMatched + systemsMatched,
       systemsUnmatched: this.systemsUnmatched + systemsUnmatched,
+      systemsSkipped: this.systemsSkipped + systemsSkipped,
       gamesImported: this.gamesImported + gamesImported,
       gamesUnmatched: this.gamesUnmatched + gamesUnmatched,
       statsUpdated: this.statsUpdated + statsUpdated,
+      gamelistsDirFound: gamelistsDirFound,
     );
   }
 }
@@ -86,7 +99,7 @@ class EsdeImportService {
     final gamelistsDir = Directory(path.join(esdeRoot, 'gamelists'));
     if (!gamelistsDir.existsSync()) {
       _log.w('ES-DE import: no gamelists/ dir at $esdeRoot');
-      return result;
+      return const EsdeImportResult(gamelistsDirFound: false);
     }
 
     final systemDirs = gamelistsDir
@@ -115,8 +128,9 @@ class EsdeImportService {
       }
 
       final appSystemId = system['app_system_id']!;
-      result = result._add(systemsMatched: 1);
 
+      // systemsMatched / systemsSkipped are tallied inside _importSystem so a
+      // system with an unreadable gamelist.xml counts as skipped, not matched.
       result = await _importSystem(
         esdeRoot: esdeRoot,
         esdeDirName: esdeDirName,
@@ -130,6 +144,12 @@ class EsdeImportService {
     }
 
     onProgress?.call(1.0, '');
+    _log.i(
+      'ES-DE import done: systems matched=${result.systemsMatched} '
+      'unmatched=${result.systemsUnmatched} skipped=${result.systemsSkipped}, '
+      'games imported=${result.gamesImported} noRomMatch=${result.gamesUnmatched}, '
+      'stats updated=${result.statsUpdated}',
+    );
     return result;
   }
 
@@ -146,11 +166,9 @@ class EsdeImportService {
       'user_screenscraper_metadata',
       where: 'is_fully_scraped = 0',
     );
-    await db.update(
-      'user_system_settings',
-      {'esde_media_dir': null},
-      where: 'esde_media_dir IS NOT NULL',
-    );
+    await db.update('user_system_settings', {
+      'esde_media_dir': null,
+    }, where: 'esde_media_dir IS NOT NULL');
     _log.i('ES-DE reset: cleared $deleted metadata rows and media dirs');
     return deleted;
   }
@@ -169,12 +187,14 @@ class EsdeImportService {
       doc = XmlDocument.parse(await gamelistFile.readAsString());
     } catch (e) {
       _log.e('ES-DE import: failed to parse ${gamelistFile.path}: $e');
-      return result;
+      return result._add(systemsSkipped: 1);
     }
+    // gamelist.xml read and parsed: this system counts as matched.
+    result = result._add(systemsMatched: 1);
 
     final db = await SqliteService.getDatabase();
 
-    for (final game in doc.findAllElements('game')) {
+    for (final game in _selectGames(doc, esdeRoot, esdeDirName)) {
       final rawPath = _text(game, 'path');
       if (rawPath == null || rawPath.isEmpty) continue;
       final normalizedPath = rawPath.replaceAll('\\', '/');
@@ -340,6 +360,80 @@ class EsdeImportService {
   /// Extracts the ES-DE media subfolder from a gamelist `<path>` — the ROM's
   /// directory relative to the system folder, with a leading `./` stripped.
   /// Returns `''` when the ROM sits directly in the system folder.
+  /// De-duplicates a gamelist's `<game>` entries by ROM filename.
+  ///
+  /// ES-DE can list the same filename in several subfolders of one system
+  /// (e.g. a base ROM plus copies under `Hacks/`, `Translations/`, or
+  /// `All but the Best (…)/`). They all collapse onto a single NeoStation
+  /// metadata row keyed by `(app_system_id, filename)`, so importing every one
+  /// makes them fight over `esde_media_subdir` on each run (the churn behind the
+  /// "N games imported" count never dropping to zero). Keep one entry per
+  /// filename, preferring whichever subfolder actually holds downloaded media so
+  /// the artwork fallback resolves correctly; otherwise keep the first seen.
+  static List<XmlElement> _selectGames(
+    XmlDocument doc,
+    String esdeRoot,
+    String esdeDirName,
+  ) {
+    final chosen = <String, XmlElement>{};
+    for (final game in doc.findAllElements('game')) {
+      final rawPath = _text(game, 'path');
+      if (rawPath == null || rawPath.isEmpty) continue;
+      final normalized = rawPath.replaceAll('\\', '/');
+      final key = path.basename(normalized).toLowerCase();
+
+      final existing = chosen[key];
+      if (existing == null) {
+        chosen[key] = game;
+        continue;
+      }
+
+      final filename = path.basename(normalized);
+      final existingSubdir = _mediaSubdir(
+        (_text(existing, 'path') ?? '').replaceAll('\\', '/'),
+      );
+      final newSubdir = _mediaSubdir(normalized);
+      if (!_esdeMediaExists(esdeRoot, esdeDirName, filename, existingSubdir) &&
+          _esdeMediaExists(esdeRoot, esdeDirName, filename, newSubdir)) {
+        chosen[key] = game;
+      }
+    }
+    return chosen.values.toList();
+  }
+
+  /// Whether any `downloaded_media/<system>/<category>/<subdir>/` folder holds a
+  /// file whose name (sans extension) matches [filename]'s base — i.e. ES-DE
+  /// scraped artwork for this ROM under [subdir].
+  static bool _esdeMediaExists(
+    String esdeRoot,
+    String esdeDirName,
+    String filename,
+    String subdir,
+  ) {
+    final dot = filename.lastIndexOf('.');
+    final base = (dot > 0 ? filename.substring(0, dot) : filename)
+        .toLowerCase();
+    for (final category in const [
+      'covers',
+      'screenshots',
+      'marquees',
+      'fanart',
+    ]) {
+      final dir = Directory(
+        path.join(esdeRoot, 'downloaded_media', esdeDirName, category, subdir),
+      );
+      if (!dir.existsSync()) continue;
+      for (final entry in dir.listSync()) {
+        if (entry is! File) continue;
+        final name = path.basename(entry.path);
+        final d = name.lastIndexOf('.');
+        final nameBase = (d > 0 ? name.substring(0, d) : name).toLowerCase();
+        if (nameBase == base) return true;
+      }
+    }
+    return false;
+  }
+
   static String _mediaSubdir(String normalizedPath) {
     var p = normalizedPath;
     while (p.startsWith('./')) {

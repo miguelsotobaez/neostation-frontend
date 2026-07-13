@@ -337,12 +337,28 @@ class DirectoriesSettingsContentState
         type: NotificationType.error,
       );
     } else if (result != null) {
-      AppNotification.showNotification(
-        context,
-        '${AppLocale.esdeImportComplete.getString(context)}: '
-        '${result.gamesImported} games, ${result.systemsMatched} systems',
-        type: NotificationType.info,
-      );
+      if (!result.gamelistsDirFound) {
+        // No gamelists/ dir — the picked folder isn't an ES-DE installation.
+        AppNotification.showNotification(
+          context,
+          AppLocale.esdeImportNotEsdeFolder.getString(context),
+          type: NotificationType.error,
+        );
+      } else if (result.gamesImported == 0 && result.systemsMatched == 0) {
+        // Valid ES-DE folder, but nothing here mapped to a NeoStation system.
+        AppNotification.showNotification(
+          context,
+          AppLocale.esdeImportNothingFound.getString(context),
+          type: NotificationType.info,
+        );
+      } else {
+        AppNotification.showNotification(
+          context,
+          '${AppLocale.esdeImportComplete.getString(context)}: '
+          '${result.gamesImported} games, ${result.systemsMatched} systems',
+          type: NotificationType.success,
+        );
+      }
     }
   }
 
@@ -1254,7 +1270,8 @@ class DirectoriesSettingsContentState
           SizedBox(height: 4.r),
           Text(
             'Systems matched: ${r.systemsMatched}   '
-            'unmatched: ${r.systemsUnmatched}\n'
+            'unmatched: ${r.systemsUnmatched}   '
+            'skipped (unreadable): ${r.systemsSkipped}\n'
             'Games imported: ${r.gamesImported}   '
             'no ROM match: ${r.gamesUnmatched}\n'
             'Favorites / stats updated: ${r.statsUpdated}',

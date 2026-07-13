@@ -860,4 +860,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeRequiresRomFolder:
       'Add a ROM folder before importing from ES-DE',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
 };
