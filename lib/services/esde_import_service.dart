@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:xml/xml.dart';
 
@@ -458,4 +459,26 @@ class EsdeImportService {
     final t = el.innerText.trim();
     return t.isEmpty ? null : t;
   }
+
+  // ── Test seams ──────────────────────────────────────────────────────────
+  // Thin wrappers so unit tests can exercise the pure parsing/selection logic
+  // without going through a full on-disk import.
+
+  @visibleForTesting
+  static double? parseRatingForTest(String? raw) => _parseRating(raw);
+
+  @visibleForTesting
+  static DateTime? parseEsdeDateTimeForTest(String? raw) =>
+      _parseEsdeDateTime(raw);
+
+  @visibleForTesting
+  static String mediaSubdirForTest(String normalizedPath) =>
+      _mediaSubdir(normalizedPath);
+
+  @visibleForTesting
+  static List<XmlElement> selectGamesForTest(
+    XmlDocument doc,
+    String esdeRoot,
+    String esdeDirName,
+  ) => _selectGames(doc, esdeRoot, esdeDirName);
 }

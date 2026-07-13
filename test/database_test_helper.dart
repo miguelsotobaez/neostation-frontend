@@ -177,6 +177,7 @@ class DatabaseTestHelper {
         prefer_file_name INTEGER DEFAULT 0,
         custom_background_path TEXT,
         custom_logo_path TEXT,
+        esde_media_dir TEXT,
         updated_at TEXT
       )
     ''');
@@ -253,6 +254,8 @@ class DatabaseTestHelper {
         genre TEXT,
         players TEXT,
         is_fully_scraped INTEGER DEFAULT 0,
+        esde_media_subdir TEXT,
+        esde_imported INTEGER DEFAULT 0,
         updated_at TEXT,
         UNIQUE(app_system_id, filename)
       )
