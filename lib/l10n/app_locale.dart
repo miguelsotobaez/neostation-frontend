@@ -823,6 +823,16 @@ mixin AppLocale {
   static const String esdeSummaryStatsUpdated = 'esde_summary_stats_updated';
   static const String esdeSummaryGames = 'esde_summary_games';
   static const String esdeSummarySystems = 'esde_summary_systems';
+  // Setup wizard: ES-DE import & system art pack steps.
+  static const String wizardScanComplete = 'wizard_scan_complete';
+  static const String wizardTapNextToContinue = 'wizard_tap_next_to_continue';
+  static const String wizardEsdeStepTitle = 'wizard_esde_step_title';
+  static const String wizardEsdeStepDesc = 'wizard_esde_step_desc';
+  static const String wizardArtPackTitle = 'wizard_art_pack_title';
+  static const String wizardArtPackDesc = 'wizard_art_pack_desc';
+  static const String wizardDownloadArtPack = 'wizard_download_art_pack';
+  static const String wizardArtPackInstalled = 'wizard_art_pack_installed';
+  static const String wizardArtPackUnavailable = 'wizard_art_pack_unavailable';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
   static const String folderNotEmptyTitle = 'folder_not_empty_title';

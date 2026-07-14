@@ -148,6 +148,40 @@ class NeoAssetsTheme {
     );
     return uri.replace(path: newPath).toString();
   }
+
+  /// Public preview-URL normalizer shared by the UIs (system-art settings grid
+  /// and the setup wizard) so they render the exact same image. Handles legacy
+  /// embedded-GitHub URLs, GitHub blob→raw translation, and WebP conversion.
+  static String normalizePreviewUrl(String value) {
+    var url = value.trim();
+    if (url.isEmpty) return '';
+
+    // Legacy malformed URLs like:
+    // https://raw.../https://github.com/owner/repo/blob/main/file.webp
+    final embeddedGithub = RegExp(
+      r'https?://github\.com/[^\s]+',
+    ).firstMatch(url);
+    if (embeddedGithub != null) {
+      url = embeddedGithub.group(0)!;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return url;
+
+    if (uri.host == 'github.com' &&
+        uri.pathSegments.length >= 5 &&
+        uri.pathSegments[2] == 'blob') {
+      final owner = uri.pathSegments[0];
+      final repo = uri.pathSegments[1];
+      final branch = uri.pathSegments[3];
+      final filePath = uri.pathSegments.sublist(4).join('/');
+      return _forceWebpPreviewUrl(
+        'https://raw.githubusercontent.com/$owner/$repo/$branch/$filePath',
+      );
+    }
+
+    return _forceWebpPreviewUrl(url);
+  }
 }
 
 /// Service responsible for fetching, downloading, and caching remote assets

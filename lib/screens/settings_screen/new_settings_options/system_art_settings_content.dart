@@ -4,6 +4,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
+import 'package:neostation/services/neo_assets_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/responsive.dart';
 import 'package:neostation/services/game_service.dart'
@@ -476,7 +477,9 @@ class _NeoThemeCard extends StatelessWidget {
   }
 
   Widget _buildPreview(BuildContext context, ThemeData theme) {
-    final normalizedPreviewUrl = _normalizePreviewUrl(item.previewUrl);
+    final normalizedPreviewUrl = NeoAssetsTheme.normalizePreviewUrl(
+      item.previewUrl,
+    );
 
     if (normalizedPreviewUrl.isNotEmpty) {
       final normalizationKey =
@@ -511,55 +514,6 @@ class _NeoThemeCard extends StatelessWidget {
     return _buildPlaceholder(theme);
   }
 
-  String _normalizePreviewUrl(String value) {
-    var url = value.trim();
-    if (url.isEmpty) return '';
-
-    // Handle legacy malformed URLs like:
-    // https://raw.../https://github.com/owner/repo/blob/main/file.webp
-    final embeddedGithub = RegExp(
-      r'https?://github\.com/[^\s]+',
-    ).firstMatch(url);
-    if (embeddedGithub != null) {
-      url = embeddedGithub.group(0)!;
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) return url;
-
-    if (uri.host == 'github.com' &&
-        uri.pathSegments.length >= 5 &&
-        uri.pathSegments[2] == 'blob') {
-      final owner = uri.pathSegments[0];
-      final repo = uri.pathSegments[1];
-      final branch = uri.pathSegments[3];
-      final filePath = uri.pathSegments.sublist(4).join('/');
-      return _forceWebpPreviewUrl(
-        'https://raw.githubusercontent.com/$owner/$repo/$branch/$filePath',
-      );
-    }
-
-    return _forceWebpPreviewUrl(url);
-  }
-
-  String _forceWebpPreviewUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) return url;
-
-    final path = uri.path;
-    final lowerPath = path.toLowerCase();
-    if (!lowerPath.endsWith('.jpg') &&
-        !lowerPath.endsWith('.jpeg') &&
-        !lowerPath.endsWith('.png')) {
-      return url;
-    }
-
-    final webpPath = path.replaceFirst(
-      RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false),
-      '.webp',
-    );
-    return uri.replace(path: webpPath).toString();
-  }
 
   Widget _buildPlaceholder(ThemeData theme) {
     return Container(
