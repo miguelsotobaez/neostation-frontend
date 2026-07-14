@@ -106,8 +106,6 @@ class GameDetailsCardList extends StatefulWidget {
   final bool isNavigatingFast;
   final VoidCallback? onBack;
 
- 
-
   const GameDetailsCardList({
     super.key,
     required this.game,
@@ -785,89 +783,89 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     return Card(
       color: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0.r)),
-        shadowColor: Colors.transparent,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Header Layer: Tab navigation and system status.
-            Positioned(
-              left: 0.r,
-              right: 0.r,
-              top: 0.r,
-              child: GameDetailsTabsHeader(
-                isGameInfoHidden: _isGameInfoHidden,
-                hasRetroAchievements: _hasRetroAchievements,
-                showSettings: _effectiveSystem.folderName != 'android',
-                currentTab: _currentTab,
-                onTabChanged: (tab) => _setTab(tab),
-              ),
+      shadowColor: Colors.transparent,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Header Layer: Tab navigation and system status.
+          Positioned(
+            left: 0.r,
+            right: 0.r,
+            top: 0.r,
+            child: GameDetailsTabsHeader(
+              isGameInfoHidden: _isGameInfoHidden,
+              hasRetroAchievements: _hasRetroAchievements,
+              showSettings: _effectiveSystem.folderName != 'android',
+              currentTab: _currentTab,
+              onTabChanged: (tab) => _setTab(tab),
             ),
+          ),
 
-            // Footer Layer: Action bar and synchronization status.
-            GameDetailsFooter(
+          // Footer Layer: Action bar and synchronization status.
+          GameDetailsFooter(
+            system: _effectiveSystem,
+            game: _game,
+            isMusicSystem: _effectiveSystem.folderName == 'music',
+            hasScreenScraper: _hasScreenScraper,
+            isSecondaryScreenActive: widget.isSecondaryScreenActive,
+            cloudSyncEnabled: _cloudSyncEnabled,
+            syncProvider: widget.syncProvider,
+            syncIconController: _syncIconController,
+            onPlayGame: () => widget.onPlayGame?.call(),
+            onShowAchievements: () => _setTab(DetailTab.achievements),
+            hasRetroAchievements: _hasRetroAchievements,
+            isLoadingAchievements: _isLoadingAchievements,
+            currentGameInfo: _currentGameInfo,
+          ),
+
+          // Dynamic Content Layer: Selected Tab View.
+          if (_currentTab == DetailTab.general)
+            GameDetailsGeneralTab(
               system: _effectiveSystem,
               game: _game,
-              isMusicSystem: _effectiveSystem.folderName == 'music',
-              hasScreenScraper: _hasScreenScraper,
-              isSecondaryScreenActive: widget.isSecondaryScreenActive,
-              cloudSyncEnabled: _cloudSyncEnabled,
-              syncProvider: widget.syncProvider,
-              syncIconController: _syncIconController,
-              onPlayGame: () => widget.onPlayGame?.call(),
-              onShowAchievements: () => _setTab(DetailTab.achievements),
-              hasRetroAchievements: _hasRetroAchievements,
-              isLoadingAchievements: _isLoadingAchievements,
-              currentGameInfo: _currentGameInfo,
+              fileProvider: widget.fileProvider,
+              androidAppIconFuture: _androidAppIconFuture,
             ),
-
-            // Dynamic Content Layer: Selected Tab View.
-            if (_currentTab == DetailTab.general)
-              GameDetailsGeneralTab(
-                system: _effectiveSystem,
-                game: _game,
-                fileProvider: widget.fileProvider,
-                androidAppIconFuture: _androidAppIconFuture,
-              ),
-            if (_currentTab == DetailTab.gameInfo)
-              GameDetailsGameInfoTab(
-                system: _effectiveSystem,
-                game: _game,
-                fileProvider: widget.fileProvider,
-                description:
-                    widget.localizedDescription ??
-                    (_game.getDescriptionForLanguage('en').isEmpty
-                        ? AppLocale.noDescription.getString(context)
-                        : _game.getDescriptionForLanguage('en')),
-                screenshotPath: screenshotPath,
-                isScrapingGame: _isScrapingGame || widget.isExternallyScraping,
-                scrapeProgress: _scrapeProgress,
-                scrapeStatus: _scrapeStatus,
-                isSecondaryScreenActive: widget.isSecondaryScreenActive,
-                isVideoDelayActive: _isVideoDelayActive,
-                videoController: widget.videoController,
-                imageVersion: _imageVersion,
-                onToggleVideoMute: _toggleVideoMute,
-                onScrapeGame: _onScrapeGameCompact,
-              ),
-            if (_currentTab == DetailTab.settings)
-              GameDetailsSettingsTab(
-                key: _settingsTabKey,
-                game: _game,
-                system: _effectiveSystem,
-                syncProvider: widget.syncProvider,
-                isAllMode: widget.isAllMode,
-                onGameUpdated: widget.onGameUpdated,
-                onGameDeleted: widget.onGameDeleted,
-              ),
-            if (_currentTab == DetailTab.achievements)
-              GameDetailsAchievementsTab(
-                key: _achievementsTabKey,
-                gameInfo: _currentGameInfo,
-                isLoading: _isLoadingAchievements,
-                onRefresh: refreshAchievements,
-              ),
-          ],
-        ),
+          if (_currentTab == DetailTab.gameInfo)
+            GameDetailsGameInfoTab(
+              system: _effectiveSystem,
+              game: _game,
+              fileProvider: widget.fileProvider,
+              description:
+                  widget.localizedDescription ??
+                  (_game.getDescriptionForLanguage('en').isEmpty
+                      ? AppLocale.noDescription.getString(context)
+                      : _game.getDescriptionForLanguage('en')),
+              screenshotPath: screenshotPath,
+              isScrapingGame: _isScrapingGame || widget.isExternallyScraping,
+              scrapeProgress: _scrapeProgress,
+              scrapeStatus: _scrapeStatus,
+              isSecondaryScreenActive: widget.isSecondaryScreenActive,
+              isVideoDelayActive: _isVideoDelayActive,
+              videoController: widget.videoController,
+              imageVersion: _imageVersion,
+              onToggleVideoMute: _toggleVideoMute,
+              onScrapeGame: _onScrapeGameCompact,
+            ),
+          if (_currentTab == DetailTab.settings)
+            GameDetailsSettingsTab(
+              key: _settingsTabKey,
+              game: _game,
+              system: _effectiveSystem,
+              syncProvider: widget.syncProvider,
+              isAllMode: widget.isAllMode,
+              onGameUpdated: widget.onGameUpdated,
+              onGameDeleted: widget.onGameDeleted,
+            ),
+          if (_currentTab == DetailTab.achievements)
+            GameDetailsAchievementsTab(
+              key: _achievementsTabKey,
+              gameInfo: _currentGameInfo,
+              isLoading: _isLoadingAchievements,
+              onRefresh: refreshAchievements,
+            ),
+        ],
+      ),
     );
   }
 
@@ -892,7 +890,6 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   }
 
   /// Renders the background fanart with smooth cross-fades and scale animations.
-  
 
   /// Directs primary gamepad inputs (A Button) based on the currently active tab.
   void _handleTriggerAction() {

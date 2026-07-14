@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/responsive.dart';
@@ -21,6 +20,9 @@ import '../../../providers/file_provider.dart';
 import '../../../widgets/system_scan_progress_widget.dart';
 import '../../game_screen/my_games_list.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'grid_geometry.dart';
+import 'widgets/grid_loading_state.dart';
+import 'widgets/grid_empty_state.dart';
 import 'my_systems_carousel.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
@@ -69,12 +71,12 @@ class MySystems extends StatelessWidget {
           // PHASE 1: Blocking Initialization.
           // If a high-priority system scan is active (e.g., first run), show a blocking status.
           if (configProvider.isGlobalScanning) {
-            return _buildLoadingState(context);
+            return const GridLoadingState();
           }
 
           // PHASE 2: Empty Library State.
           if (!configProvider.hasDetectedSystems) {
-            return _buildEmptyState(context, configProvider);
+            return GridEmptyState(configProvider: configProvider);
           }
 
           // PHASE 3: Content Presentation.
@@ -129,232 +131,6 @@ class MySystems extends StatelessWidget {
 
           return systemsWidget;
         },
-      ),
-    );
-  }
-
-  /// Renders a premium loading interface for the initial library setup.
-  Widget _buildLoadingState(BuildContext context) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.surface,
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 0.15),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 16.r,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Dynamic branding icon with atmospheric glow.
-            Container(
-              padding: EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius:
-                    Theme.of(
-                      context,
-                    ).extension<CornerRadii>()?.radiusInternal ??
-                    BorderRadius.circular(12.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Symbols.sync_rounded,
-                color: Colors.white,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              AppLocale.settingUpLibrary.getString(context),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              AppLocale.detectingSystems.getString(context),
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            SystemScanProgressWidget(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Renders the 'Empty State' view with clear CTA for library configuration.
-  Widget _buildEmptyState(
-    BuildContext context,
-    SqliteConfigProvider configProvider,
-  ) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.surface,
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: Image.asset(
-                  'assets/images/icons/folder-add-bulk.png',
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              configProvider.hasRomFolders
-                  ? AppLocale.noSystemsFoundTitle.getString(context)
-                  : AppLocale.welcomeNeoStation.getString(context),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              configProvider.hasRomFolders
-                  ? AppLocale.noSystemsFoundDesc.getString(context)
-                  : AppLocale.selectRomFolderDescShort.getString(context),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            // Primary Call to Action Button.
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(8.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  canRequestFocus: false,
-                  focusColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                  splashColor: Colors.transparent,
-                  borderRadius: BorderRadius.circular(8.r),
-                  onTap: () {
-                    SfxService().playEnterSound();
-                    configProvider.selectRomFolder(context: context);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Symbols.folder_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          AppLocale.selectRomFolderButton.getString(context),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1154,6 +930,9 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   /// directional navigation across items with varying spans.
   ///
   /// Returns a matrix where each cell [row][col] points to the item index.
+  /// Memoized wrapper around the pure [buildVirtualGrid]: caches the last
+  /// packed grid so repeated navigation/scroll passes over an unchanged card
+  /// set skip the recompute.
   List<List<int>> _buildVirtualGrid(List<SystemInfo> cards, int cols) {
     if (_cachedVirtualGrid != null &&
         _cachedGridCols == cols &&
@@ -1161,61 +940,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
       return _cachedVirtualGrid!;
     }
 
-    final List<List<int>> grid = [];
-
-    // 'Recent Games' cards expand to 3x2 on high-resolution displays.
-    int getSpanW(SystemInfo card) => (card.isGame && cols >= 3) ? 3 : 1;
-    int getSpanH(SystemInfo card) => (card.isGame && cols >= 3) ? 2 : 1;
-
-    for (int i = 0; i < cards.length; i++) {
-      final card = cards[i];
-      final w = getSpanW(card);
-      final h = getSpanH(card);
-
-      // Recursive scan for the first available spatial slot that fits the component spans.
-      int foundRow = 0;
-      int foundCol = 0;
-      bool fits = false;
-
-      while (!fits) {
-        while (grid.length <= foundRow + h - 1) {
-          grid.add(List<int>.filled(cols, -1));
-        }
-
-        if (foundCol + w <= cols) {
-          bool overlap = false;
-          for (int r = foundRow; r < foundRow + h; r++) {
-            for (int c = foundCol; c < foundCol + w; c++) {
-              if (grid[r][c] != -1) {
-                overlap = true;
-                break;
-              }
-            }
-            if (overlap) break;
-          }
-
-          if (!overlap) {
-            fits = true;
-          } else {
-            foundCol++;
-            if (foundCol >= cols) {
-              foundCol = 0;
-              foundRow++;
-            }
-          }
-        } else {
-          foundCol = 0;
-          foundRow++;
-        }
-      }
-
-      // Commit the spatial allocation to the grid matrix.
-      for (int r = foundRow; r < foundRow + h; r++) {
-        for (int c = foundCol; c < foundCol + w; c++) {
-          grid[r][c] = i;
-        }
-      }
-    }
+    final grid = buildVirtualGrid(cards, cols);
 
     _cachedVirtualGrid = grid;
     _cachedGridCols = cols;
@@ -1256,7 +981,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           targetRow = (targetRow - 1 + grid.length) % grid.length;
           idx = grid[targetRow][curCol.clamp(0, cols - 1)];
           if (idx == -1) {
-            idx = _findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
+            idx = findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
           }
           safety++;
         }
@@ -1269,7 +994,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           targetRow = (targetRow + 1) % grid.length;
           idx = grid[targetRow][curCol.clamp(0, cols - 1)];
           if (idx == -1) {
-            idx = _findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
+            idx = findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
           }
           safety++;
         }
@@ -1315,50 +1040,17 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     }
   }
 
-  /// Spatial search for the nearest neighbor in a row with potential layout gaps.
-  int _findNearestInRow(List<List<int>> grid, int row, int col) {
-    final rowItems = grid[row];
-    final cols = rowItems.length;
-
-    for (int dist = 1; dist < cols; dist++) {
-      if (col - dist >= 0 && rowItems[col - dist] != -1) {
-        return rowItems[col - dist];
-      }
-      if (col + dist < cols && rowItems[col + dist] != -1) {
-        return rowItems[col + dist];
-      }
-    }
-    return -1;
-  }
-
-  /// Dynamically computes grid layout dimensions based on viewport constraints.
+  /// Resolves the live viewport width (net of the outer inset) and delegates to
+  /// the pure [calculateGridDimensions]. [customWidth], when supplied (e.g. from
+  /// a `LayoutBuilder`'s constraints), is used as-is without the inset.
   Map<String, double> _calculateGridDimensions([double? customWidth]) {
     final screenWidth =
         customWidth ?? (MediaQuery.of(context).size.width - 12.0.r);
-    final crossAxisSpacing = 6.0.r;
-    final mainAxisSpacing = 6.0.r;
-
-    final totalSpacing = crossAxisSpacing * (_cols - 1);
-    final availableWidth = screenWidth - totalSpacing;
-    final itemWidth = availableWidth / _cols;
-
-    // For game cards (childAspectRatio = 1) use traditional square calculation.
-    // For system cards (childAspectRatio != 1) add extra height for logo footer.
-    final double itemHeight;
-    if (widget.childAspectRatio != 1) {
-      itemHeight = itemWidth + 32.r;
-    } else {
-      itemHeight = itemWidth / widget.childAspectRatio;
-    }
-    final rowHeight = itemHeight + mainAxisSpacing;
-
-    return {
-      'itemWidth': itemWidth,
-      'itemHeight': itemHeight,
-      'rowHeight': rowHeight,
-      'crossAxisSpacing': crossAxisSpacing,
-      'mainAxisSpacing': mainAxisSpacing,
-    };
+    return calculateGridDimensions(
+      screenWidth: screenWidth,
+      cols: _cols,
+      childAspectRatio: widget.childAspectRatio,
+    );
   }
 
   /// Automatically adjusts scroll position to keep the selected item centered in the viewport.

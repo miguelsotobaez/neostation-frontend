@@ -64,7 +64,9 @@ class GameDetailsGeneralTab extends StatelessWidget {
                           filterQuality: FilterQuality.low,
                           cacheWidth: 256,
                           isAntiAlias: false,
-                          color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.5),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.shadow.withValues(alpha: 0.5),
                           height: 140.r,
                           width: 280.r,
                         )
@@ -80,7 +82,9 @@ class GameDetailsGeneralTab extends StatelessWidget {
                                 snapshot.data!,
                                 fit: BoxFit.contain,
                                 filterQuality: FilterQuality.low,
-                                color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.7),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.shadow.withValues(alpha: 0.7),
                                 cacheWidth: 32,
                                 height: 60.r,
                                 width: 60.r,

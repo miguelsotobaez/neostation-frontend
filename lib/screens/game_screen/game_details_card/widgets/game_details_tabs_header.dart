@@ -65,11 +65,16 @@ class GameDetailsTabsHeader extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: 8.r),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
-                borderRadius: Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
-                BorderRadius.circular(12.r),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(12.r),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.25),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.25),
                     blurRadius: 2.r,
                     offset: Offset(2.0.r, 2.0.r),
                   ),
@@ -103,8 +108,10 @@ class GameDetailsTabsHeader extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: theme.colorScheme.primary,
                                 borderRadius:
-                                  Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                                  BorderRadius.circular(14.r),
+                                    Theme.of(context)
+                                        .extension<CornerRadii>()
+                                        ?.radiusInternal ??
+                                    BorderRadius.circular(14.r),
                               ),
                             ),
                           ),
