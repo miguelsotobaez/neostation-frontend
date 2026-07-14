@@ -75,6 +75,7 @@ mixin AppLocale {
   static const String systemTheme = 'system_theme';
   static const String importTheme = 'import_theme';
   static const String importThemeSuccess = 'import_theme_success';
+  static const String importThemeExists = 'import_theme_exists';
   static const String importThemeError = 'import_theme_error';
   static const String deleteThemeTitle = 'delete_theme_title';
   static const String deleteThemeConfirm = 'delete_theme_confirm';

@@ -62,6 +62,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.systemTheme: 'Системная',
   AppLocale.importTheme: 'Импорт темы',
   AppLocale.importThemeSuccess: 'Тема «%s» импортирована',
+  AppLocale.importThemeExists: 'Тема «%s» уже импортирована',
   AppLocale.importThemeError: 'Не удалось импортировать тему — неверный файл',
   AppLocale.deleteThemeTitle: 'Удалить тему?',
   AppLocale.deleteThemeConfirm: 'Удалить импортированную тему «%s»?',

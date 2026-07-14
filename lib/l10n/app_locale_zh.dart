@@ -58,6 +58,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.systemTheme: '系统默认',
   AppLocale.importTheme: '导入主题',
   AppLocale.importThemeSuccess: '已导入主题“%s”',
+  AppLocale.importThemeExists: '主题“%s”已导入',
   AppLocale.importThemeError: '无法导入主题 — 文件无效',
   AppLocale.deleteThemeTitle: '删除主题？',
   AppLocale.deleteThemeConfirm: '移除导入的主题“%s”？',

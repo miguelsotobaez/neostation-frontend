@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:neostation/themes/corner_radii.dart';
 
@@ -61,6 +63,11 @@ class CustomTheme {
   /// The original daisyUI JSON, kept verbatim so it can be re-persisted.
   final Map<String, dynamic> rawJson;
 
+  /// Canonical fingerprint of the resolved palette + brightness, used to detect
+  /// re-imports of an identical theme regardless of source colour notation
+  /// (hex vs oklch) or id/name differences.
+  final String signature;
+
   const CustomTheme({
     required this.id,
     required this.name,
@@ -68,13 +75,16 @@ class CustomTheme {
     required this.themeData,
     required this.customColors,
     required this.rawJson,
+    required this.signature,
   });
 
   /// Builds a [CustomTheme] from a daisyUI theme JSON map.
   ///
   /// Mirrors the `dartExport()` mapping in the theme designer
   /// (`~/dev/neostation-theme-designer/index.html`) so an imported theme looks
-  /// identical to the designer's live preview.
+  /// identical to the designer's live preview. Accepts both hex (`#rrggbb`) and
+  /// daisyUI-native `oklch(...)` colour values, and honours the `effects` corner
+  /// radii when present.
   ///
   /// Throws [FormatException] when required keys are missing or malformed.
   factory CustomTheme.fromDaisyJson(Map<String, dynamic> json) {
@@ -90,14 +100,14 @@ class CustomTheme {
       if (raw is! String) {
         throw FormatException('Missing or invalid colour token: "$token".');
       }
-      return _parseHex(raw, token);
+      return _parseColor(raw, token);
     }
 
     // Optional token: fall back to another colour when absent.
     Color readOr(String token, Color fallback) {
       final raw = colors[token];
       if (raw is! String) return fallback;
-      return _parseHex(raw, token);
+      return _parseColor(raw, token);
     }
 
     final rawScheme = (json['scheme'] as String?)?.toLowerCase();
@@ -121,8 +131,14 @@ class CustomTheme {
     final warning = read('warning');
     final info = read('info');
 
-    // daisyUI JSON has no dedicated on-success/on-info/on-warning or a distinct
-    // "tertiary fixed"; derive sensible defaults so nothing renders unreadable.
+    // daisyUI's `neutral` maps onto Material's tertiaryFixed — the app uses it
+    // for the systems-grid footer and sort dropdown. Fall back to base-300 when
+    // absent so those surfaces stay legible.
+    final neutral = readOr('neutral', outline);
+    final onNeutral = readOr('neutral-content', onSurface);
+
+    // daisyUI JSON has no dedicated on-success/on-info/on-warning; derive
+    // sensible defaults so nothing renders unreadable.
     final onSuccess = readOr('success-content', onSurface);
     final onWarning = readOr('warning-content', onSurface);
     final onInfo = readOr('info-content', onSurface);
@@ -132,12 +148,12 @@ class CustomTheme {
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
-            tertiaryFixed: outline,
+            tertiaryFixed: neutral,
             surface: surface,
             onPrimary: onPrimary,
             onSecondary: onSecondary,
             onTertiary: onTertiary,
-            onTertiaryFixed: onSurface,
+            onTertiaryFixed: onNeutral,
             onSurface: onSurface,
             error: error,
             onError: onError,
@@ -148,12 +164,12 @@ class CustomTheme {
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
-            tertiaryFixed: outline,
+            tertiaryFixed: neutral,
             surface: surface,
             onPrimary: onPrimary,
             onSecondary: onSecondary,
             onTertiary: onTertiary,
-            onTertiaryFixed: onSurface,
+            onTertiaryFixed: onNeutral,
             onSurface: onSurface,
             error: error,
             onError: onError,
@@ -166,7 +182,7 @@ class CustomTheme {
       colorScheme: colorScheme,
       cardColor: card,
       scaffoldBackgroundColor: surface,
-      extensions: [CornerRadii.xl()],
+      extensions: [_radiiFromEffects(json['effects'])],
       textTheme: TextTheme(
         displayLarge: TextStyle(
           color: onSurface,
@@ -214,6 +230,17 @@ class CustomTheme {
     final id = _sanitizeId(json['id'] ?? json['name']);
     final name = (json['name'] as String?)?.trim();
 
+    // Fingerprint of the resolved palette (order-stable, notation-independent).
+    final sig = StringBuffer(isDark ? 'd|' : 'l|');
+    for (final c in [
+      primary, onPrimary, secondary, onSecondary, tertiary, onTertiary,
+      surface, onSurface, card, outline, neutral, onNeutral,
+      error, onError, success, onSuccess, warning, onWarning, info, onInfo,
+    ]) {
+      // ignore: deprecated_member_use
+      sig.write('${c.value.toRadixString(16)};');
+    }
+
     return CustomTheme(
       id: id,
       name: (name != null && name.isNotEmpty) ? name : id,
@@ -221,7 +248,53 @@ class CustomTheme {
       themeData: themeData,
       customColors: customColors,
       rawJson: Map<String, dynamic>.from(json),
+      signature: sig.toString(),
     );
+  }
+
+  /// Returns a copy with a different [id]/[name] but the same resolved palette,
+  /// used when an import collides with an existing id.
+  CustomTheme withId(String newId) {
+    final json = Map<String, dynamic>.from(rawJson)..['id'] = newId;
+    return CustomTheme.fromDaisyJson(json);
+  }
+
+  /// Builds a [CornerRadii] from the daisyUI `effects` block, honouring
+  /// `radius-box` (external) and `radius-field` (internal). Falls back to the
+  /// app-default `xl` radii when effects are missing or unparseable.
+  static CornerRadii _radiiFromEffects(Object? effects) {
+    if (effects is! Map) return CornerRadii.xl();
+    final ext = _lengthToPx(effects['radius-box']);
+    final inner = _lengthToPx(effects['radius-field']);
+    if (ext == null && inner == null) return CornerRadii.xl();
+    return CornerRadii(
+      radiusExternal: ext ?? 24,
+      radiusInternal: inner ?? (ext ?? 20),
+    );
+  }
+
+  /// Parses a CSS length (`1rem`, `0.5rem`, `8px`, `0`) into logical pixels.
+  static double? _lengthToPx(Object? raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is! String) return null;
+    final s = raw.trim().toLowerCase();
+    if (s.isEmpty) return null;
+    final match = RegExp(r'^(-?\d*\.?\d+)\s*(rem|px)?$').firstMatch(s);
+    if (match == null) return null;
+    final value = double.tryParse(match.group(1)!);
+    if (value == null) return null;
+    final unit = match.group(2);
+    return unit == 'rem' ? value * 16.0 : value; // 1rem == 16 logical px
+  }
+
+  /// Parses a colour value in hex (`#rrggbb`, `rrggbbaa`) or CSS `oklch(...)`
+  /// notation into a [Color].
+  static Color _parseColor(String input, String token) {
+    final s = input.trim();
+    if (s.toLowerCase().startsWith('oklch')) {
+      return _parseOklch(s, token);
+    }
+    return _parseHex(s, token);
   }
 
   /// Parses a `#rrggbb` / `#aarrggbb` / `rrggbb` hex string into a [Color].
@@ -236,6 +309,90 @@ class CustomTheme {
       throw FormatException('Colour "$token" is not a hex value: "$input".');
     }
     return Color(value);
+  }
+
+  /// Parses `oklch(L C H)` / `oklch(L C H / A)` (daisyUI's native notation) and
+  /// converts it to an sRGB [Color]. `L` accepts `0..1` or a percentage.
+  static Color _parseOklch(String input, String token) {
+    final inner = RegExp(
+      r'oklch\(\s*([^)]*)\)',
+      caseSensitive: false,
+    ).firstMatch(input)?.group(1);
+    if (inner == null) {
+      throw FormatException('Colour "$token" is not valid oklch: "$input".');
+    }
+
+    // Split components on whitespace/commas, isolating an optional "/ alpha".
+    final slash = inner.split('/');
+    final parts = slash[0]
+        .trim()
+        .split(RegExp(r'[\s,]+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.length < 3) {
+      throw FormatException('Colour "$token" is not valid oklch: "$input".');
+    }
+
+    double comp(String raw) {
+      final t = raw.trim();
+      if (t.endsWith('%')) {
+        final v = double.tryParse(t.substring(0, t.length - 1));
+        if (v == null) throw FormatException('Bad oklch component "$raw".');
+        return v / 100.0;
+      }
+      final v = double.tryParse(t);
+      if (v == null) throw FormatException('Bad oklch component "$raw".');
+      return v;
+    }
+
+    try {
+      final l = comp(parts[0]);
+      final c = comp(parts[1]);
+      final h = comp(parts[2]);
+      var alpha = 1.0;
+      if (slash.length > 1) {
+        final a = slash[1].trim();
+        alpha = a.endsWith('%')
+            ? (double.tryParse(a.substring(0, a.length - 1)) ?? 100) / 100.0
+            : (double.tryParse(a) ?? 1.0);
+      }
+      return _oklchToColor(l, c, h, alpha.clamp(0.0, 1.0));
+    } on FormatException {
+      throw FormatException('Colour "$token" is not valid oklch: "$input".');
+    }
+  }
+
+  /// Oklch -> sRGB using Björn Ottosson's reference transform.
+  static Color _oklchToColor(double L, double C, double hDeg, double alpha) {
+    final hRad = hDeg * math.pi / 180.0;
+    final a = C * math.cos(hRad);
+    final b = C * math.sin(hRad);
+
+    final l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    final m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    final s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+    final l = l_ * l_ * l_;
+    final m = m_ * m_ * m_;
+    final s = s_ * s_ * s_;
+
+    final r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    final g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    final bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+
+    int channel(double linear) {
+      final v = linear <= 0.0031308
+          ? 12.92 * linear
+          : 1.055 * math.pow(linear, 1 / 2.4) - 0.055;
+      return (v.clamp(0.0, 1.0) * 255.0).round();
+    }
+
+    return Color.fromARGB(
+      (alpha * 255).round(),
+      channel(r),
+      channel(g),
+      channel(bl),
+    );
   }
 
   /// Normalizes a raw id/name into a safe snake-case identifier.

@@ -191,13 +191,20 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
 
       if (filePath == null) return;
 
-      final name = await themeProvider.importTheme(File(filePath));
+      final result = await themeProvider.importTheme(File(filePath));
       if (mounted) setState(() {});
       if (mounted) {
+        final name = result.theme.name;
         AppNotification.showNotification(
           context,
-          AppLocale.importThemeSuccess.getString(context).replaceAll('%s', name),
-          type: NotificationType.success,
+          (result.created
+                  ? AppLocale.importThemeSuccess
+                  : AppLocale.importThemeExists)
+              .getString(context)
+              .replaceAll('%s', name),
+          type: result.created
+              ? NotificationType.success
+              : NotificationType.info,
         );
       }
     } on FormatException catch (e) {
@@ -336,6 +343,9 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                     selectItem(index);
                   },
                   onLongPress: isCustom
+                      ? () => _deleteTheme(t['name']!, t['displayName']!)
+                      : null,
+                  onDelete: isCustom
                       ? () => _deleteTheme(t['name']!, t['displayName']!)
                       : null,
                 ),

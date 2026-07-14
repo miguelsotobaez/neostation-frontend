@@ -58,6 +58,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.systemTheme: '系統預設',
   AppLocale.importTheme: '匯入主題',
   AppLocale.importThemeSuccess: '已匯入主題「%s」',
+  AppLocale.importThemeExists: '主題「%s」已匯入',
   AppLocale.importThemeError: '無法匯入主題 — 檔案無效',
   AppLocale.deleteThemeTitle: '刪除主題？',
   AppLocale.deleteThemeConfirm: '移除匯入的主題「%s」？',

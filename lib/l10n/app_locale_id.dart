@@ -62,6 +62,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemTheme: 'Tema Sistem',
   AppLocale.importTheme: 'Impor Tema',
   AppLocale.importThemeSuccess: 'Tema "%s" diimpor',
+  AppLocale.importThemeExists: 'Tema "%s" sudah diimpor',
   AppLocale.importThemeError: 'Tidak dapat mengimpor tema — file tidak valid',
   AppLocale.deleteThemeTitle: 'Hapus Tema?',
   AppLocale.deleteThemeConfirm: 'Hapus tema impor "%s"?',

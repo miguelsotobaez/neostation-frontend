@@ -6,6 +6,16 @@ import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/themes/custom_theme.dart';
 
+/// Outcome of an import attempt.
+class ThemeImportResult {
+  final CustomTheme theme;
+
+  /// False when an identical palette was already imported (no new file written).
+  final bool created;
+
+  const ThemeImportResult(this.theme, {required this.created});
+}
+
 /// Persists and loads user-imported color themes as daisyUI JSON files under
 /// `<userDataPath>/custom_themes/<id>.json`.
 ///
@@ -13,27 +23,6 @@ import 'package:neostation/themes/custom_theme.dart';
 /// service is the single source of truth for them across restarts.
 class CustomThemeService {
   static final _log = LoggerService.instance;
-
-  /// Ids that must never be shadowed by an imported theme (built-ins + the
-  /// synthetic 'system' entry). Kept here to avoid a dependency cycle with
-  /// ThemeProvider; callers may also pass extra reserved ids to [importFromFile].
-  static const Set<String> _reservedIds = {
-    'system',
-    'dark',
-    'light',
-    'oled',
-    'valentine',
-    'dracula',
-    'nord',
-    'coffee',
-    'tokyo_night',
-    'retro',
-    'abyss',
-    'cyberpunk',
-    'aqua',
-    'palenight',
-    'horizon',
-  };
 
   static Future<Directory> _dir() async {
     final base = await ConfigService.getUserDataPath();
@@ -74,14 +63,18 @@ class CustomThemeService {
 
   /// Reads, parses and persists a daisyUI theme JSON file.
   ///
-  /// [reservedIds] lets the caller add already-loaded custom ids so a fresh
-  /// import never collides with them; the parsed id is suffixed (`_2`, `_3`, …)
-  /// on collision. Returns the stored [CustomTheme].
+  /// [reservedIds] are ids that must not be shadowed (built-ins + 'system');
+  /// [existing] are already-loaded custom themes, used to (a) detect an exact
+  /// re-import via palette signature and (b) avoid id collisions. On a signature
+  /// match the existing theme is returned unchanged (`created: false`) and no
+  /// file is written. Otherwise the parsed theme's id is suffixed (`_2`, `_3`, …)
+  /// on collision, the file is written, and `created: true` is returned.
   ///
   /// Throws [FormatException] on malformed input.
-  static Future<CustomTheme> importFromFile(
+  static Future<ThemeImportResult> importFromFile(
     String filePath, {
     Set<String> reservedIds = const {},
+    Iterable<CustomTheme> existing = const [],
   }) async {
     final raw = await File(filePath).readAsString();
     final decoded = jsonDecode(raw);
@@ -91,7 +84,14 @@ class CustomThemeService {
 
     var parsed = CustomTheme.fromDaisyJson(decoded);
 
-    final taken = {..._reservedIds, ...reservedIds};
+    // Exact re-import: same resolved palette already on disk.
+    for (final e in existing) {
+      if (e.signature == parsed.signature) {
+        return ThemeImportResult(e, created: false);
+      }
+    }
+
+    final taken = {...reservedIds, ...existing.map((e) => e.id)};
     if (taken.contains(parsed.id)) {
       var i = 2;
       var candidate = '${parsed.id}_$i';
@@ -99,15 +99,14 @@ class CustomThemeService {
         i++;
         candidate = '${parsed.id}_$i';
       }
-      final json = Map<String, dynamic>.from(parsed.rawJson)..['id'] = candidate;
-      parsed = CustomTheme.fromDaisyJson(json);
+      parsed = parsed.withId(candidate);
     }
 
     final dir = await _dir();
     final out = File(path.join(dir.path, '${parsed.id}.json'));
     await out.writeAsString(jsonEncode(parsed.rawJson));
     _log.i('CustomThemeService: imported theme "${parsed.id}".');
-    return parsed;
+    return ThemeImportResult(parsed, created: true);
   }
 
   /// Deletes the on-disk file backing [id]. No-op if it is already gone.

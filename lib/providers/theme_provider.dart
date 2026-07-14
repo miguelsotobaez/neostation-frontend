@@ -216,18 +216,20 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool isCustomTheme(String themeName) =>
       AppThemes.customThemes.containsKey(themeName);
 
-  /// Imports a daisyUI theme JSON [file], registers it, applies it, and returns
-  /// the new theme's id. Throws [FormatException] on malformed input.
-  Future<String> importTheme(File file) async {
-    final reserved = AppThemes.customThemes.keys.toSet();
-    final imported = await CustomThemeService.importFromFile(
+  /// Imports a daisyUI theme JSON [file], registers it, and applies it. Throws
+  /// [FormatException] on malformed input. Reserved ids (built-ins + 'system')
+  /// come from [availableThemes] so the guard stays in sync automatically.
+  Future<ThemeImportResult> importTheme(File file) async {
+    final reserved = {...availableThemes.keys, 'system'};
+    final result = await CustomThemeService.importFromFile(
       file.path,
       reservedIds: reserved,
+      existing: AppThemes.customThemes.values.toList(),
     );
-    AppThemes.customThemes[imported.id] = imported;
+    AppThemes.customThemes[result.theme.id] = result.theme;
     notifyListeners();
-    await setTheme(imported.id);
-    return imported.id;
+    await setTheme(result.theme.id);
+    return result;
   }
 
   /// Deletes an imported theme. If it is currently applied, falls back to

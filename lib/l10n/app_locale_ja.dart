@@ -59,6 +59,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.systemTheme: 'システムテーマ',
   AppLocale.importTheme: 'テーマをインポート',
   AppLocale.importThemeSuccess: 'テーマ「%s」をインポートしました',
+  AppLocale.importThemeExists: 'テーマ「%s」はすでにインポートされています',
   AppLocale.importThemeError: 'テーマをインポートできませんでした — 無効なファイルです',
   AppLocale.deleteThemeTitle: 'テーマを削除しますか？',
   AppLocale.deleteThemeConfirm: 'インポートしたテーマ「%s」を削除しますか？',

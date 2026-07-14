@@ -11,6 +11,7 @@ class ThemeCard extends StatefulWidget {
     required this.displayName,
     this.onTap,
     this.onLongPress,
+    this.onDelete,
     this.isSelected = false,
     this.isFocused = false,
   });
@@ -21,6 +22,10 @@ class ThemeCard extends StatefulWidget {
 
   /// Optional long-press handler, used to delete imported (custom) themes.
   final VoidCallback? onLongPress;
+
+  /// When set, a small ✕ badge is shown on the card to delete the theme (used
+  /// for imported/custom themes). Complements [onLongPress] and gamepad delete.
+  final VoidCallback? onDelete;
   final bool isSelected;
   final bool isFocused;
 
@@ -143,6 +148,33 @@ class _ThemeCardState extends State<ThemeCard> {
                       ),
                     ),
                   ),
+                  // Delete badge for imported themes (on top of the InkWell so
+                  // it receives its own taps).
+                  if (widget.onDelete != null)
+                    Positioned(
+                      top: 4.r,
+                      right: 4.r,
+                      child: Material(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          canRequestFocus: false,
+                          onTap: () {
+                            SfxService().playEnterSound();
+                            widget.onDelete!.call();
+                          },
+                          child: Padding(
+                            padding: EdgeInsets.all(3.r),
+                            child: Icon(
+                              Symbols.close_rounded,
+                              color: Colors.white,
+                              size: 16.r,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

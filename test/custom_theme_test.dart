@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/themes/custom_theme.dart';
+import 'package:neostation/themes/corner_radii.dart';
 
 // A minimal but complete daisyUI theme JSON, matching the shape exported by the
 // NeoStation theme designer (hex values, daisyUI-named tokens).
@@ -49,6 +50,7 @@ void main() {
       expect(scheme.surface, const Color(0xFF282A36)); // base-100
       expect(scheme.onSurface, const Color(0xFFF8F8F3)); // base-content
       expect(scheme.outline, const Color(0xFF303241)); // base-300
+      expect(scheme.tertiaryFixed, const Color(0xFF414558)); // neutral
       expect(scheme.error, const Color(0xFFFF5555));
       expect(theme.themeData.cardColor, const Color(0xFF1F202A)); // base-200
       expect(theme.themeData.scaffoldBackgroundColor, scheme.surface);
@@ -115,9 +117,43 @@ void main() {
       expect(() => CustomTheme.fromDaisyJson(json), throwsFormatException);
     });
 
-    test('throws FormatException on a non-hex value', () {
+    test('parses oklch colour notation (daisyUI native)', () {
       final colors = Map<String, dynamic>.from(_daisyJson['colors'] as Map)
-        ..['primary'] = 'oklch(75% 0.1 200)';
+        ..['primary'] = 'oklch(0% 0 0)' // pure black
+        ..['secondary'] = 'oklch(100% 0 0)'; // pure white
+      final json = Map<String, dynamic>.from(_daisyJson)..['colors'] = colors;
+      final theme = CustomTheme.fromDaisyJson(json);
+      expect(theme.themeData.colorScheme.primary, const Color(0xFF000000));
+      expect(theme.themeData.colorScheme.secondary, const Color(0xFFFFFFFF));
+    });
+
+    test('honours corner radii from the effects block', () {
+      final json = Map<String, dynamic>.from(_daisyJson)
+        ..['effects'] = {'radius-box': '2rem', 'radius-field': '0rem'};
+      final theme = CustomTheme.fromDaisyJson(json);
+      final radii = theme.themeData.extension<CornerRadii>()!;
+      expect(radii.radiusExternalRaw, 32.0); // 2rem * 16
+      expect(radii.radiusInternalRaw, 0.0);
+    });
+
+    test('identical palettes share a signature; different ones do not', () {
+      final a = CustomTheme.fromDaisyJson(_daisyJson);
+      final renamed = Map<String, dynamic>.from(_daisyJson)
+        ..['id'] = 'other_id'
+        ..['name'] = 'Other Name';
+      final b = CustomTheme.fromDaisyJson(renamed);
+      expect(a.signature, b.signature); // same palette, different id/name
+
+      final tweaked = Map<String, dynamic>.from(_daisyJson);
+      final tc = Map<String, dynamic>.from(tweaked['colors'] as Map)
+        ..['primary'] = '#000000';
+      tweaked['colors'] = tc;
+      expect(CustomTheme.fromDaisyJson(tweaked).signature, isNot(a.signature));
+    });
+
+    test('throws FormatException on a non-colour value', () {
+      final colors = Map<String, dynamic>.from(_daisyJson['colors'] as Map)
+        ..['primary'] = 'rgb(1,2,3)';
       final json = Map<String, dynamic>.from(_daisyJson)..['colors'] = colors;
       expect(() => CustomTheme.fromDaisyJson(json), throwsFormatException);
     });

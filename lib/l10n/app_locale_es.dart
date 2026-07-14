@@ -62,6 +62,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.systemTheme: 'Sistema',
   AppLocale.importTheme: 'Importar tema',
   AppLocale.importThemeSuccess: 'Tema "%s" importado',
+  AppLocale.importThemeExists: 'El tema "%s" ya está importado',
   AppLocale.importThemeError: 'No se pudo importar el tema: archivo no válido',
   AppLocale.deleteThemeTitle: '¿Eliminar tema?',
   AppLocale.deleteThemeConfirm: '¿Quitar el tema importado "%s"?',
