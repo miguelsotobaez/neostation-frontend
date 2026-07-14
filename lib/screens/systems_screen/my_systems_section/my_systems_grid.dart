@@ -21,6 +21,7 @@ import '../../../providers/file_provider.dart';
 import '../../../widgets/system_scan_progress_widget.dart';
 import '../../game_screen/my_games_list.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'grid_geometry.dart';
 import 'my_systems_carousel.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
@@ -1154,6 +1155,9 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   /// directional navigation across items with varying spans.
   ///
   /// Returns a matrix where each cell [row][col] points to the item index.
+  /// Memoized wrapper around the pure [buildVirtualGrid]: caches the last
+  /// packed grid so repeated navigation/scroll passes over an unchanged card
+  /// set skip the recompute.
   List<List<int>> _buildVirtualGrid(List<SystemInfo> cards, int cols) {
     if (_cachedVirtualGrid != null &&
         _cachedGridCols == cols &&
@@ -1161,61 +1165,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
       return _cachedVirtualGrid!;
     }
 
-    final List<List<int>> grid = [];
-
-    // 'Recent Games' cards expand to 3x2 on high-resolution displays.
-    int getSpanW(SystemInfo card) => (card.isGame && cols >= 3) ? 3 : 1;
-    int getSpanH(SystemInfo card) => (card.isGame && cols >= 3) ? 2 : 1;
-
-    for (int i = 0; i < cards.length; i++) {
-      final card = cards[i];
-      final w = getSpanW(card);
-      final h = getSpanH(card);
-
-      // Recursive scan for the first available spatial slot that fits the component spans.
-      int foundRow = 0;
-      int foundCol = 0;
-      bool fits = false;
-
-      while (!fits) {
-        while (grid.length <= foundRow + h - 1) {
-          grid.add(List<int>.filled(cols, -1));
-        }
-
-        if (foundCol + w <= cols) {
-          bool overlap = false;
-          for (int r = foundRow; r < foundRow + h; r++) {
-            for (int c = foundCol; c < foundCol + w; c++) {
-              if (grid[r][c] != -1) {
-                overlap = true;
-                break;
-              }
-            }
-            if (overlap) break;
-          }
-
-          if (!overlap) {
-            fits = true;
-          } else {
-            foundCol++;
-            if (foundCol >= cols) {
-              foundCol = 0;
-              foundRow++;
-            }
-          }
-        } else {
-          foundCol = 0;
-          foundRow++;
-        }
-      }
-
-      // Commit the spatial allocation to the grid matrix.
-      for (int r = foundRow; r < foundRow + h; r++) {
-        for (int c = foundCol; c < foundCol + w; c++) {
-          grid[r][c] = i;
-        }
-      }
-    }
+    final grid = buildVirtualGrid(cards, cols);
 
     _cachedVirtualGrid = grid;
     _cachedGridCols = cols;
@@ -1256,7 +1206,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           targetRow = (targetRow - 1 + grid.length) % grid.length;
           idx = grid[targetRow][curCol.clamp(0, cols - 1)];
           if (idx == -1) {
-            idx = _findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
+            idx = findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
           }
           safety++;
         }
@@ -1269,7 +1219,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           targetRow = (targetRow + 1) % grid.length;
           idx = grid[targetRow][curCol.clamp(0, cols - 1)];
           if (idx == -1) {
-            idx = _findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
+            idx = findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
           }
           safety++;
         }
@@ -1315,50 +1265,17 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     }
   }
 
-  /// Spatial search for the nearest neighbor in a row with potential layout gaps.
-  int _findNearestInRow(List<List<int>> grid, int row, int col) {
-    final rowItems = grid[row];
-    final cols = rowItems.length;
-
-    for (int dist = 1; dist < cols; dist++) {
-      if (col - dist >= 0 && rowItems[col - dist] != -1) {
-        return rowItems[col - dist];
-      }
-      if (col + dist < cols && rowItems[col + dist] != -1) {
-        return rowItems[col + dist];
-      }
-    }
-    return -1;
-  }
-
-  /// Dynamically computes grid layout dimensions based on viewport constraints.
+  /// Resolves the live viewport width (net of the outer inset) and delegates to
+  /// the pure [calculateGridDimensions]. [customWidth], when supplied (e.g. from
+  /// a `LayoutBuilder`'s constraints), is used as-is without the inset.
   Map<String, double> _calculateGridDimensions([double? customWidth]) {
     final screenWidth =
         customWidth ?? (MediaQuery.of(context).size.width - 12.0.r);
-    final crossAxisSpacing = 6.0.r;
-    final mainAxisSpacing = 6.0.r;
-
-    final totalSpacing = crossAxisSpacing * (_cols - 1);
-    final availableWidth = screenWidth - totalSpacing;
-    final itemWidth = availableWidth / _cols;
-
-    // For game cards (childAspectRatio = 1) use traditional square calculation.
-    // For system cards (childAspectRatio != 1) add extra height for logo footer.
-    final double itemHeight;
-    if (widget.childAspectRatio != 1) {
-      itemHeight = itemWidth + 32.r;
-    } else {
-      itemHeight = itemWidth / widget.childAspectRatio;
-    }
-    final rowHeight = itemHeight + mainAxisSpacing;
-
-    return {
-      'itemWidth': itemWidth,
-      'itemHeight': itemHeight,
-      'rowHeight': rowHeight,
-      'crossAxisSpacing': crossAxisSpacing,
-      'mainAxisSpacing': mainAxisSpacing,
-    };
+    return calculateGridDimensions(
+      screenWidth: screenWidth,
+      cols: _cols,
+      childAspectRatio: widget.childAspectRatio,
+    );
   }
 
   /// Automatically adjusts scroll position to keep the selected item centered in the viewport.
