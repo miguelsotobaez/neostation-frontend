@@ -2802,11 +2802,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         return Stack(
           fit: StackFit.expand,
           alignment: Alignment.center,
-          // ignore: use_null_aware_elements
-          children: [
-            ...previousChildren,
-            if (currentChild != null) currentChild,
-          ],
+          children: [...previousChildren, ?currentChild],
         );
       },
       transitionBuilder: (child, animation) {
