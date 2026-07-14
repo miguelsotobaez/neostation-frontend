@@ -15,40 +15,10 @@ import 'config_service.dart';
 import 'game_service.dart';
 import '../utils/gamepad_nav.dart';
 import '../utils/optimized_md5_utils.dart';
+import '../utils/semaphore.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
-
-/// Simple semaphore to control concurrency for HTTP requests and background tasks.
-class _Semaphore {
-  final int maxCount;
-  int _currentCount = 0;
-  final List<Completer<void>> _waitQueue = [];
-
-  _Semaphore(this.maxCount);
-
-  /// Acquires a slot in the semaphore, waiting if the [maxCount] is reached.
-  Future<void> acquire() async {
-    if (_currentCount < maxCount) {
-      _currentCount++;
-      return;
-    }
-
-    final completer = Completer<void>();
-    _waitQueue.add(completer);
-    await completer.future;
-  }
-
-  /// Releases a slot in the semaphore and notifies the next waiting task.
-  void release() {
-    if (_waitQueue.isNotEmpty) {
-      final completer = _waitQueue.removeAt(0);
-      completer.complete();
-    } else {
-      _currentCount--;
-    }
-  }
-}
 
 /// Service responsible for scraping game metadata and media from the
 /// ScreenScraper.fr API.
@@ -146,7 +116,7 @@ class ScreenScraperService {
     return IOClient(client);
   }();
 
-  static _Semaphore _requestSemaphore = _Semaphore(5);
+  static Semaphore _requestSemaphore = Semaphore(5);
 
   static int _dailyRequestsCount = 0;
   static DateTime? _lastRequestDate;
@@ -158,7 +128,7 @@ class ScreenScraperService {
   /// Updates the request semaphore concurrency limit.
   static void _updateRequestSemaphore(int maxThreads) {
     if (_requestSemaphore.maxCount != maxThreads) {
-      _requestSemaphore = _Semaphore(maxThreads);
+      _requestSemaphore = Semaphore(maxThreads);
     }
   }
 
