@@ -18,6 +18,7 @@ import '../../services/retro_achievements_service.dart';
 import '../../utils/no_glow_scroll_behavior.dart';
 import 'background_builders.dart';
 import 'now_playing_helpers.dart';
+import 'widgets/achievement_panel.dart';
 import 'widgets/app_dock.dart';
 import 'widgets/now_playing_panel.dart';
 
@@ -1035,7 +1036,19 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
               child: page == 2
                   ? _buildAchievementCommentsPage(_selectedAchievement!)
                   : page == 1
-                  ? _buildAchievementPanel(value)
+                  ? AchievementPanel(
+                      value: value,
+                      listView: _achievementListView,
+                      celebrate: _celebrate,
+                      l10nContext: _l10nContext,
+                      onToggleListView: () {
+                        SfxService().playNavSound();
+                        setState(
+                          () => _achievementListView = !_achievementListView,
+                        );
+                      },
+                      onSelectAchievement: _selectAchievement,
+                    )
                   : NowPlayingPanel(
                       value: value,
                       sessionRunning: _sessionWatch.isRunning,
@@ -1247,401 +1260,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     return '${m}m ${s.toString().padLeft(2, '0')}s';
   }
 
-  /// Renders the in-game RetroAchievements panel: a progress header plus an
-  /// unlocked-first grid of achievement badges. View-only (no gamepad input
-  /// reaches the secondary engine), so there is no selection/scroll affordance.
-  Widget _buildAchievementPanel(SecondaryDisplayStateData value) {
-    final achievements =
-        List<SecondaryAchievementItem>.from(value.achievements!)..sort((a, b) {
-          if (a.earned != b.earned) return a.earned ? -1 : 1;
-          return a.displayOrder.compareTo(b.displayOrder);
-        });
-
-    final newlyEarned = value.newlyEarnedIds?.toSet() ?? const <int>{};
-    final progress = value.raTotal > 0 ? value.raEarned / value.raTotal : 0.0;
-    final title = (value.raGameTitle != null && value.raGameTitle!.isNotEmpty)
-        ? value.raGameTitle!
-        : value.systemName;
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      // Opaque background so the underlying game screenshot doesn't bleed
-      // through; matches the secondary display's themed background color.
-      color: value.backgroundColor != null
-          ? Color(value.backgroundColor!)
-          : Colors.black,
-      padding: EdgeInsets.symmetric(horizontal: 24.r, vertical: 20.r),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header: title + earned/total + points.
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(
-                    Symbols.trophy_rounded,
-                    color: const Color(0xFFFFC107),
-                    size: 26.r,
-                  ),
-                  SizedBox(width: 10.r),
-                  Expanded(
-                    child: Text(
-                      title.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18.r,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5.r,
-                        fontFamily: 'Anta',
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12.r),
-                  Text(
-                    '${value.raEarned}/${value.raTotal}',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18.r,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Anta',
-                    ),
-                  ),
-                  SizedBox(width: 12.r),
-                  Text(
-                    '${value.raPoints}/${value.raPointsTotal}p',
-                    style: TextStyle(
-                      color: const Color(0xFFFFC107),
-                      fontSize: 16.r,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Anta',
-                    ),
-                  ),
-                  SizedBox(width: 14.r),
-                  // Touch toggle: grid <-> list. Shows the icon of the view
-                  // you'll switch to. The bottom screen is touch-only since
-                  // the gamepad is driving the game on the main screen.
-                  GestureDetector(
-                    onTap: () {
-                      SfxService().playNavSound();
-                      setState(
-                        () => _achievementListView = !_achievementListView,
-                      );
-                    },
-                    child: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10.r),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Icon(
-                        _achievementListView
-                            ? Symbols.grid_view_rounded
-                            : Symbols.view_list_rounded,
-                        color: Colors.white,
-                        size: 22.r,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12.r),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4.r),
-                child: LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  minHeight: 6.r,
-                  backgroundColor: Colors.white10,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFFFC107),
-                  ),
-                ),
-              ),
-              SizedBox(height: 16.r),
-              // Content: badge grid or list, both touch-scrollable. Unlocked
-              // achievements are sorted first.
-              Expanded(
-                child: _achievementListView
-                    ? _buildAchievementListView(achievements, newlyEarned)
-                    : SingleChildScrollView(
-                        child: Wrap(
-                          spacing: 8.r,
-                          runSpacing: 8.r,
-                          children: [
-                            for (final a in achievements)
-                              _buildAchievementBadge(
-                                a,
-                                isNew: newlyEarned.contains(a.id),
-                                onTap: () => _selectAchievement(a),
-                              ),
-                          ],
-                        ),
-                      ),
-              ),
-            ],
-          ),
-
-          // Celebration banner for freshly-earned achievements.
-          if (_celebrate && newlyEarned.isNotEmpty)
-            Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                margin: EdgeInsets.only(top: 2.r),
-                padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 10.r),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFC107),
-                  borderRadius: BorderRadius.circular(20.r),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFC107).withValues(alpha: 0.5),
-                      blurRadius: 24.r,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Symbols.celebration_rounded,
-                      color: Colors.black,
-                      size: 22.r,
-                    ),
-                    SizedBox(width: 8.r),
-                    Text(
-                      '+${newlyEarned.length} this session',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 16.r,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Anta',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Touch-scrollable list of achievements: badge + title + description, with
-  /// points and an earned/locked indicator. Shows detail the grid can't.
-  Widget _buildAchievementListView(
-    List<SecondaryAchievementItem> achievements,
-    Set<int> newlyEarned,
-  ) {
-    return ListView.separated(
-      padding: EdgeInsets.only(bottom: 8.r),
-      itemCount: achievements.length,
-      separatorBuilder: (_, _) => SizedBox(height: 8.r),
-      itemBuilder: (context, i) {
-        final a = achievements[i];
-        final isNew = newlyEarned.contains(a.id);
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _selectAchievement(a),
-          child: Container(
-            padding: EdgeInsets.all(8.r),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: a.earned ? 0.08 : 0.03),
-              borderRadius: BorderRadius.circular(10.r),
-              border: isNew
-                  ? Border.all(color: const Color(0xFFFFC107), width: 1.5.r)
-                  : null,
-            ),
-            child: Row(
-              children: [
-                _buildAchievementBadge(a, isNew: false),
-                SizedBox(width: 12.r),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              a.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15.r,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'Anta',
-                              ),
-                            ),
-                          ),
-                          if (a.isMissable) ...[
-                            SizedBox(width: 6.r),
-                            Center(child: _buildMissablePill()),
-                          ],
-                        ],
-                      ),
-                      if (a.description.isNotEmpty) ...[
-                        SizedBox(height: 2.r),
-                        Text(
-                          a.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12.r,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                SizedBox(width: 10.r),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${a.points}p',
-                      style: TextStyle(
-                        color: const Color(0xFFFFC107),
-                        fontSize: 13.r,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Anta',
-                      ),
-                    ),
-                    SizedBox(height: 4.r),
-                    Icon(
-                      a.earned
-                          ? Symbols.check_circle_rounded
-                          : Symbols.lock_rounded,
-                      color: a.earned
-                          ? const Color(0xFF66BB6A)
-                          : Colors.white24,
-                      size: 18.r,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// A single achievement badge: full-color when earned, dimmed locked icon
-  /// otherwise, with a gold glow when earned during the current session.
-  Widget _buildAchievementBadge(
-    SecondaryAchievementItem a, {
-    required bool isNew,
-    VoidCallback? onTap,
-  }) {
-    final double size = 46.r;
-    final url = a.earned
-        ? 'https://media.retroachievements.org/Badge/${a.badgeName}.png'
-        : 'https://media.retroachievements.org/Badge/${a.badgeName}_lock.png';
-
-    Widget badge = ClipRRect(
-      borderRadius: BorderRadius.circular(8.r),
-      child: Image.network(
-        url,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: size,
-          height: size,
-          color: Colors.white10,
-          child: Icon(
-            Symbols.trophy_rounded,
-            color: Colors.white24,
-            size: 24.r,
-          ),
-        ),
-      ),
-    );
-
-    if (!a.earned) {
-      badge = Opacity(opacity: 0.45, child: badge);
-    }
-
-    Widget result = Container(
-      decoration: isNew
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(10.r),
-              border: Border.all(color: const Color(0xFFFFC107), width: 2.r),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFFC107).withValues(alpha: 0.6),
-                  blurRadius: 12.r,
-                ),
-              ],
-            )
-          : null,
-      padding: EdgeInsets.all(isNew ? 2.r : 0),
-      child: badge,
-    );
-    if (a.isMissable) {
-      result = Stack(
-        clipBehavior: Clip.none,
-        children: [
-          result,
-          Positioned(
-            top: -4.r,
-            right: -4.r,
-            child: Container(
-              padding: EdgeInsets.all(2.r),
-              decoration: const BoxDecoration(
-                color: Color(0xFFE65100),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Symbols.warning_rounded,
-                color: Colors.white,
-                size: 13.r,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    return onTap == null
-        ? result
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Padding(padding: EdgeInsets.all(3.r), child: result),
-          );
-  }
-
-  Widget _buildMissablePill() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 2.r),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE65100),
-        borderRadius: BorderRadius.circular(8.r),
-      ),
-      child: Text(
-        AppLocale.raMissable.getString(_l10nContext ?? context),
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 9.r,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.6.r,
-          fontFamily: 'Anta',
-        ),
-      ),
-    );
-  }
-
   Widget _buildAchievementCommentsPage(SecondaryAchievementItem achievement) {
     final state = _commentsCache[achievement.id];
     final comments = (state?.comments ?? const <RetroAchievementComment>[])
@@ -1658,7 +1276,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAchievementBadge(achievement, isNew: false),
+              buildAchievementBadge(achievement, isNew: false),
               SizedBox(width: 14.r),
               Expanded(
                 child: Column(
@@ -1678,7 +1296,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                           ),
                         ),
                         if (achievement.isMissable)
-                          Center(child: _buildMissablePill()),
+                          Center(
+                            child: buildMissablePill(
+                              context,
+                              l10nContext: _l10nContext,
+                            ),
+                          ),
                         SizedBox(width: 10.r),
                         Text(
                           '${achievement.points}p',
