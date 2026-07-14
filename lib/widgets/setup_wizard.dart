@@ -12,6 +12,7 @@ import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
+import 'package:neostation/services/neo_assets_service.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/services/esde_import_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
@@ -1262,14 +1263,16 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Smaller icon + tighter spacing so the compact thumbnail below
+              // fits without scrolling.
               Icon(
                 hasTheme
                     ? Symbols.check_circle_rounded
                     : Symbols.palette_rounded,
-                size: iconSize,
+                size: iconSize * 0.7,
                 color: hasTheme ? Colors.green : theme.colorScheme.primary,
               ),
-              SizedBox(height: isLandscape ? 16.r : 24.r),
+              SizedBox(height: isLandscape ? 10.r : 16.r),
 
               Text(
                 AppLocale.wizardArtPackTitle.getString(context),
@@ -1280,7 +1283,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
                 ),
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: isLandscape ? 8.r : 16.r),
+              SizedBox(height: isLandscape ? 6.r : 12.r),
 
               Text(
                 hasTheme
@@ -1295,6 +1298,62 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
                 ),
                 textAlign: TextAlign.center,
               ),
+
+              // Small preview thumbnail of the recommended pack.
+              if (!hasTheme && !unavailable && !neoAssets.downloading) ...[
+                Builder(
+                  builder: (context) {
+                    final recommended = neoAssets.themes.firstWhere(
+                      (t) => !t.isAi,
+                      orElse: () => neoAssets.themes.first,
+                    );
+                    final previewUrl = NeoAssetsTheme.normalizePreviewUrl(
+                      recommended.previewUrl,
+                    );
+                    if (previewUrl.isEmpty) return const SizedBox.shrink();
+                    final thumbWidth = isLandscape ? 120.r : 150.r;
+                    return Padding(
+                      padding: EdgeInsets.only(top: isLandscape ? 10.r : 16.r),
+                      child: Container(
+                        width: thumbWidth,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10.r),
+                          border: Border.all(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.3,
+                            ),
+                            width: 1.r,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(9.r),
+                          child: AspectRatio(
+                            aspectRatio: 4 / 3,
+                            child: Image.network(
+                              previewUrl,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (_, child, progress) =>
+                                  progress == null
+                                  ? child
+                                  : Container(color: theme.colorScheme.surface),
+                              errorBuilder: (_, _, _) => Container(
+                                color: theme.colorScheme.surface,
+                                child: Icon(
+                                  Symbols.image_rounded,
+                                  size: 24.r,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
 
               // Live download progress.
               if (neoAssets.downloading) ...[
@@ -1472,7 +1531,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     } catch (e) {
       _log.e('Wizard art pack download failed: $e');
     }
-    if (mounted) setState(() => _isDownloadingArt = false);
+    if (!mounted) return;
+    setState(() => _isDownloadingArt = false);
+    // Downloading the pack is the final action — finish setup directly instead
+    // of making the user press Finish on a redundant "installed" screen.
+    await _finishSetup();
   }
 
   Widget _buildNavigationButtons(ThemeData theme) {

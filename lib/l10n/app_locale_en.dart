@@ -880,8 +880,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.wizardArtPackTitle: 'Get the NeoStation Art Pack',
   AppLocale.wizardArtPackDesc:
       'We strongly recommend downloading the NeoStation system art pack for '
-      'beautiful console backgrounds across your library. It only takes a '
-      'moment and can be changed later in Settings.',
+      'beautiful console backgrounds across your library. It can be changed '
+      'later in Settings.',
   AppLocale.wizardDownloadArtPack: 'Download Art Pack',
   AppLocale.wizardArtPackInstalled:
       'Art pack installed! You can explore more themes later in Settings.',
