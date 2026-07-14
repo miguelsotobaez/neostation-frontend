@@ -73,6 +73,11 @@ mixin AppLocale {
   static const String launcher = 'launcher';
   static const String themesSubtitle = 'themes_subtitle';
   static const String systemTheme = 'system_theme';
+  static const String importTheme = 'import_theme';
+  static const String importThemeSuccess = 'import_theme_success';
+  static const String importThemeError = 'import_theme_error';
+  static const String deleteThemeTitle = 'delete_theme_title';
+  static const String deleteThemeConfirm = 'delete_theme_confirm';
   static const String emulators = 'emulators';
   static const String appearance = 'appearance';
   static const String systemsSettings = 'systems_settings';

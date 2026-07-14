@@ -1,10 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
+import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/widgets/theme_card.dart';
+import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
+import 'package:neostation/widgets/tv_directory_picker.dart';
 import 'package:neostation/responsive.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -31,6 +40,7 @@ class ThemesSettingsContent extends StatefulWidget {
 }
 
 class ThemesSettingsContentState extends State<ThemesSettingsContent> {
+  final _log = LoggerService.instance;
   final ScrollController _scrollController = ScrollController();
 
   /// Keys used for calculating viewport alignment during grid-based navigation.
@@ -46,8 +56,8 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   void _initializeKeys() {
     _itemKeys.clear();
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    // Total Items: Native System Theme + Registered Theme Variants.
-    final count = themeProvider.getThemeList().length + 1;
+    // Total Items: Native System Theme + Registered Theme Variants + Import tile.
+    final count = themeProvider.getThemeList().length + 2;
     for (int i = 0; i < count; i++) {
       _itemKeys.add(GlobalKey());
     }
@@ -62,7 +72,8 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Resolves the total theme count.
   int getItemCount(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    return themeProvider.getThemeList().length + 1;
+    // System theme + registered variants + Import tile.
+    return themeProvider.getThemeList().length + 2;
   }
 
   /// Dynamic Grid Resolution: Column count based on display geometry.
@@ -136,20 +147,109 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Persistence Protocol: Updates the active application theme.
   void selectItem(int index) async {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final themes = themeProvider.getThemeList();
 
     if (index == 0) {
       // Index 0: Native System/Dynamic theme resolution.
       await themeProvider.setTheme('system');
-    } else {
+    } else if (index - 1 < themes.length) {
       // Indices >0: Specific registered theme variants.
-      final themes = themeProvider.getThemeList();
-      final themeIndex = index - 1;
-      if (themeIndex >= 0 && themeIndex < themes.length) {
-        await themeProvider.setTheme(themes[themeIndex]['name']!);
-      }
+      await themeProvider.setTheme(themes[index - 1]['name']!);
+    } else {
+      // Last item: the "Import theme" tile.
+      await _importTheme();
+      return;
     }
     if (mounted) setState(() {});
     widget.onSelectionChanged?.call(index);
+  }
+
+  /// Opens a file picker, imports the selected daisyUI theme JSON, and applies
+  /// it. Surfaces success/failure via [AppNotification].
+  Future<void> _importTheme() async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final pickerTitle = AppLocale.importTheme.getString(context);
+    try {
+      String? filePath;
+
+      if (Platform.isAndroid && await PermissionService.isTelevision()) {
+        // Android TV has no system file picker; use the in-app one.
+        if (mounted) {
+          filePath = await TvDirectoryPicker.showFilePicker(
+            context,
+            extensions: ['json'],
+          );
+        }
+      } else {
+        final result = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          dialogTitle: pickerTitle,
+        );
+        filePath = result?.files.single.path;
+      }
+
+      if (filePath == null) return;
+
+      final name = await themeProvider.importTheme(File(filePath));
+      if (mounted) setState(() {});
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.importThemeSuccess.getString(context).replaceAll('%s', name),
+          type: NotificationType.success,
+        );
+      }
+    } on FormatException catch (e) {
+      _log.e('Theme import failed (malformed): $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.importThemeError.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } catch (e) {
+      _log.e('Theme import failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.importThemeError.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    }
+  }
+
+  /// Gamepad entry point: deletes the theme at [index] if it is a custom
+  /// (imported) one. No-op for built-ins, 'system', or the Import tile.
+  void deleteFocusedTheme(int index) {
+    if (index <= 0) return;
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final themes = themeProvider.getThemeList();
+    final themeIndex = index - 1;
+    if (themeIndex >= themes.length) return; // Import tile.
+    final t = themes[themeIndex];
+    if (!themeProvider.isCustomTheme(t['name']!)) return;
+    _deleteTheme(t['name']!, t['displayName']!);
+  }
+
+  /// Confirms and deletes a user-imported theme.
+  Future<void> _deleteTheme(String themeName, String displayName) async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.deleteThemeTitle.getString(context),
+      body: AppLocale.deleteThemeConfirm
+          .getString(context)
+          .replaceAll('%s', displayName),
+      confirmLabel: AppLocale.delete.getString(context),
+      icon: Symbols.delete_rounded,
+    );
+    if (!confirmed) return;
+
+    await themeProvider.deleteTheme(themeName);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -165,8 +265,8 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
       ...themeProvider.getThemeList(),
     ];
 
-    // Synchronization of GlobalKeys with the dynamic theme list.
-    if (_itemKeys.length != allThemes.length) {
+    // Synchronization of GlobalKeys with the dynamic theme list (+1 = Import tile).
+    if (_itemKeys.length != allThemes.length + 1) {
       _initializeKeys();
     }
 
@@ -185,7 +285,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: allThemes.length,
+            itemCount: allThemes.length + 1,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: _gridColumns,
               crossAxisSpacing: 8.r,
@@ -193,6 +293,27 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
               childAspectRatio: 1.05,
             ),
             itemBuilder: (context, index) {
+              // Focus Resolution: Determines if the item is currently highlighted via gamepad.
+              final isFocused =
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index;
+
+              // Last item: the "Import theme" tile.
+              if (index == allThemes.length) {
+                return Container(
+                  key: _itemKeys[index],
+                  child: ImportThemeCard(
+                    label: AppLocale.importTheme.getString(context),
+                    isFocused: isFocused,
+                    onTap: () {
+                      SfxService().playNavSound();
+                      widget.onSelectionChanged?.call(index);
+                      selectItem(index);
+                    },
+                  ),
+                );
+              }
+
               final t = allThemes[index];
 
               // State Resolution: Determines if the theme is currently active.
@@ -200,10 +321,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                   themeProvider.currentThemeName == t['name'] ||
                   (index == 0 && themeProvider.currentThemeName == 'system');
 
-              // Focus Resolution: Determines if the item is currently highlighted via gamepad.
-              final isFocused =
-                  widget.isContentFocused &&
-                  widget.selectedContentIndex == index;
+              final isCustom = themeProvider.isCustomTheme(t['name']!);
 
               return Container(
                 key: _itemKeys[index],
@@ -217,6 +335,9 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                     widget.onSelectionChanged?.call(index);
                     selectItem(index);
                   },
+                  onLongPress: isCustom
+                      ? () => _deleteTheme(t['name']!, t['displayName']!)
+                      : null,
                 ),
               );
             },

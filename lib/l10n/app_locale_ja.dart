@@ -57,6 +57,11 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.hideRecentCardSubtitle: 'システムグリッドに最近プレイしたカードを表示する',
   AppLocale.themesSubtitle: 'NeoStationの外観をカスタマイズ',
   AppLocale.systemTheme: 'システムテーマ',
+  AppLocale.importTheme: 'テーマをインポート',
+  AppLocale.importThemeSuccess: 'テーマ「%s」をインポートしました',
+  AppLocale.importThemeError: 'テーマをインポートできませんでした — 無効なファイルです',
+  AppLocale.deleteThemeTitle: 'テーマを削除しますか？',
+  AppLocale.deleteThemeConfirm: 'インポートしたテーマ「%s」を削除しますか？',
 
   AppLocale.generalSettings: '全般設定',
   AppLocale.alwaysShowRomName: '常にROM名を表示',

@@ -10,6 +10,7 @@ class ThemeCard extends StatefulWidget {
     required this.themeName,
     required this.displayName,
     this.onTap,
+    this.onLongPress,
     this.isSelected = false,
     this.isFocused = false,
   });
@@ -17,6 +18,9 @@ class ThemeCard extends StatefulWidget {
   final String themeName;
   final String displayName;
   final VoidCallback? onTap;
+
+  /// Optional long-press handler, used to delete imported (custom) themes.
+  final VoidCallback? onLongPress;
   final bool isSelected;
   final bool isFocused;
 
@@ -135,6 +139,7 @@ class _ThemeCardState extends State<ThemeCard> {
                           SfxService().playEnterSound();
                           widget.onTap?.call();
                         },
+                        onLongPress: widget.onLongPress,
                       ),
                     ),
                   ),
@@ -327,4 +332,93 @@ class _AppMockupPainter extends CustomPainter {
       old.surface != surface ||
       old.primary != primary ||
       old.secondary != secondary;
+}
+
+/// Grid tile that triggers the "import custom theme" flow. Rendered as the last
+/// item in the theme grid, styled to match [ThemeCard] (same footprint, focus
+/// border and label) but with a dashed "+" placeholder instead of a preview.
+class ImportThemeCard extends StatelessWidget {
+  const ImportThemeCard({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.isFocused = false,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final bool isFocused;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Container(
+            margin: EdgeInsets.symmetric(vertical: 4.h),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: isFocused
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                width: 2.r,
+              ),
+              boxShadow: isFocused
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.3),
+                        blurRadius: 8.r,
+                        spreadRadius: 1.r,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6.r),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  canRequestFocus: false,
+                  onTap: () {
+                    SfxService().playEnterSound();
+                    onTap?.call();
+                  },
+                  child: Center(
+                    child: Icon(
+                      Symbols.add_rounded,
+                      color: isFocused
+                          ? accent
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      size: 32.r,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: 4.r),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: isFocused
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12.r,
+          ),
+        ),
+      ],
+    );
+  }
 }

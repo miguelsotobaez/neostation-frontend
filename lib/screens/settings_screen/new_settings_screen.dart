@@ -38,6 +38,7 @@ class NewSettingsScreen extends StatefulWidget {
   static void navigateLeft() => _currentInstance?._navigateLeft();
   static void navigateRight() => _currentInstance?._navigateRight();
   static void selectCurrent() => _currentInstance?._selectItem();
+  static void deleteCurrent() => _currentInstance?._deleteCurrentItem();
 
   static _NewSettingsScreenState? _currentInstance;
 }
@@ -348,6 +349,16 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _onMenuItemSelected(_selectedMenuIndex);
     } else {
       _selectContentItem();
+    }
+  }
+
+  /// Delete Protocol: routes the X button to a delete action on the focused
+  /// content item. Currently only the Themes category (imported themes) uses it.
+  void _deleteCurrentItem() {
+    if (_focusOnMenu) return;
+    final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
+    if (selectedKey == AppLocale.themes) {
+      _themesSettingsKey.currentState?.deleteFocusedTheme(_selectedContentIndex);
     }
   }
 

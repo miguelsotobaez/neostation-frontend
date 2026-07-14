@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:neostation/services/logger_service.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/themes/app_themes.dart';
+import 'package:neostation/services/custom_theme_service.dart';
 import 'package:neostation/repositories/config_repository.dart';
 
 /// Provider responsible for managing the application's visual theme.
@@ -109,9 +112,26 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         : availableThemes['light']!;
   }
 
+  /// Loads user-imported themes from disk into [AppThemes.customThemes] so they
+  /// resolve like built-ins. Safe to call more than once.
+  Future<void> _loadCustomThemes() async {
+    try {
+      final themes = await CustomThemeService.loadAll();
+      AppThemes.customThemes
+        ..clear()
+        ..addEntries(themes.map((t) => MapEntry(t.id, t)));
+    } catch (e) {
+      _log.e('Error loading custom themes: $e');
+    }
+  }
+
   /// Loads the persisted theme name from the database and applies it.
   Future<void> _loadSavedTheme() async {
     try {
+      // Imported themes must be registered before we resolve the saved id, so a
+      // persisted custom theme survives restarts.
+      await _loadCustomThemes();
+
       final savedThemeName = await ConfigRepository.getThemeName();
       if (savedThemeName == 'system') {
         _currentThemeName = 'system';
@@ -119,6 +139,10 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       } else if (availableThemes.containsKey(savedThemeName)) {
         _currentTheme = availableThemes[savedThemeName]!;
+        _currentThemeName = savedThemeName;
+        notifyListeners();
+      } else if (AppThemes.customThemes.containsKey(savedThemeName)) {
+        _currentTheme = AppThemes.customThemes[savedThemeName]!.themeData;
         _currentThemeName = savedThemeName;
         notifyListeners();
       } else {
@@ -155,8 +179,11 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    if (availableThemes.containsKey(themeName)) {
-      _currentTheme = availableThemes[themeName]!;
+    ThemeData? resolved = availableThemes[themeName];
+    resolved ??= AppThemes.customThemes[themeName]?.themeData;
+
+    if (resolved != null) {
+      _currentTheme = resolved;
       _currentThemeName = themeName;
 
       try {
@@ -172,9 +199,49 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Returns a metadata list for all available themes, excluding the 'system' option.
   ///
   /// Used for populating theme selection UIs with display names and preview icons.
+  /// Built-in themes come first, followed by any user-imported themes.
   List<Map<String, String>> getThemeList() {
-    return availableThemes.keys.map((key) {
+    final list = availableThemes.keys.map((key) {
       return {'name': key, 'displayName': themeDisplayNames[key] ?? key};
     }).toList();
+
+    for (final custom in AppThemes.customThemes.values) {
+      list.add({'name': custom.id, 'displayName': custom.name});
+    }
+
+    return list;
+  }
+
+  /// Whether [themeName] is a user-imported (deletable) theme.
+  bool isCustomTheme(String themeName) =>
+      AppThemes.customThemes.containsKey(themeName);
+
+  /// Imports a daisyUI theme JSON [file], registers it, applies it, and returns
+  /// the new theme's id. Throws [FormatException] on malformed input.
+  Future<String> importTheme(File file) async {
+    final reserved = AppThemes.customThemes.keys.toSet();
+    final imported = await CustomThemeService.importFromFile(
+      file.path,
+      reservedIds: reserved,
+    );
+    AppThemes.customThemes[imported.id] = imported;
+    notifyListeners();
+    await setTheme(imported.id);
+    return imported.id;
+  }
+
+  /// Deletes an imported theme. If it is currently applied, falls back to
+  /// 'system'. No-op for built-in themes.
+  Future<void> deleteTheme(String themeName) async {
+    if (!AppThemes.customThemes.containsKey(themeName)) return;
+
+    await CustomThemeService.delete(themeName);
+    AppThemes.customThemes.remove(themeName);
+
+    if (_currentThemeName == themeName) {
+      await setTheme('system');
+    } else {
+      notifyListeners();
+    }
   }
 }

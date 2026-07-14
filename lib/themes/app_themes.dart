@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
+import 'package:neostation/themes/custom_theme.dart';
 
 // Import all individual themes
 import 'dark_theme.dart' as dark;
@@ -19,6 +20,12 @@ import 'palenight_theme.dart' as palenight;
 import 'horizon_theme.dart' as horizon;
 
 class AppThemes {
+  /// Registry of user-imported themes, keyed by id. Populated at startup by
+  /// [ThemeProvider] from disk. Mutable because imported themes are only known
+  /// at runtime; consulted by [getThemeDataByName] and [getCustomColors] so
+  /// previews and applied colors resolve just like the built-ins.
+  static final Map<String, CustomTheme> customThemes = {};
+
   static String getLogoPath() {
     return 'assets/images/logo_transparent.png';
   }
@@ -68,6 +75,11 @@ class AppThemes {
         final brightness =
             WidgetsBinding.instance.platformDispatcher.platformBrightness;
         resolvedThemeName = brightness == Brightness.dark ? 'dark' : 'light';
+      }
+
+      final custom = customThemes[resolvedThemeName];
+      if (custom != null) {
+        return custom.customColors;
       }
 
       switch (resolvedThemeName) {
@@ -154,6 +166,11 @@ class AppThemes {
   }
 
   static ThemeData getThemeDataByName(String themeName) {
+    final custom = customThemes[themeName];
+    if (custom != null) {
+      return custom.themeData;
+    }
+
     switch (themeName) {
       case 'dark':
         return darkTheme;

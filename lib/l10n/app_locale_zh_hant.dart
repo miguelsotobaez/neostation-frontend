@@ -56,6 +56,11 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.hideRecentCardSubtitle: '在系統網格中顯示最近遊玩卡片',
   AppLocale.themesSubtitle: '個人化您的 NeoStation 外觀',
   AppLocale.systemTheme: '系統預設',
+  AppLocale.importTheme: '匯入主題',
+  AppLocale.importThemeSuccess: '已匯入主題「%s」',
+  AppLocale.importThemeError: '無法匯入主題 — 檔案無效',
+  AppLocale.deleteThemeTitle: '刪除主題？',
+  AppLocale.deleteThemeConfirm: '移除匯入的主題「%s」？',
 
   AppLocale.generalSettings: '一般設定',
   AppLocale.alwaysShowRomName: '一律顯示 ROM 檔案名稱',

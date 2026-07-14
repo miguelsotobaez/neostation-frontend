@@ -59,6 +59,11 @@ const Map<String, dynamic> appLocaleEn = {
       'Show the recently played card in the systems grid',
   AppLocale.themesSubtitle: 'Personalize the appearance of your NeoStation',
   AppLocale.systemTheme: 'System',
+  AppLocale.importTheme: 'Import Theme',
+  AppLocale.importThemeSuccess: 'Imported "%s"',
+  AppLocale.importThemeError: 'Couldn\'t import theme — invalid file',
+  AppLocale.deleteThemeTitle: 'Delete Theme?',
+  AppLocale.deleteThemeConfirm: 'Remove the imported theme "%s"?',
 
   AppLocale.generalSettings: 'General Settings',
   AppLocale.alwaysShowRomName: 'Always show ROM file name',
