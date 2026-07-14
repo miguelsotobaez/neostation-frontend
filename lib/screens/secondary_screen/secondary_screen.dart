@@ -18,6 +18,7 @@ import '../../services/retro_achievements_service.dart';
 import '../../utils/no_glow_scroll_behavior.dart';
 import 'background_builders.dart';
 import 'now_playing_helpers.dart';
+import 'widgets/achievement_comments.dart';
 import 'widgets/achievement_panel.dart';
 import 'widgets/app_dock.dart';
 import 'widgets/now_playing_panel.dart';
@@ -27,27 +28,6 @@ class SecondaryScreen extends StatefulWidget {
 
   @override
   State<SecondaryScreen> createState() => _SecondaryScreenState();
-}
-
-class _AchievementCommentsState {
-  final List<RetroAchievementComment> comments;
-  final int total;
-
-  /// Number of *raw* API results consumed so far (system comments included).
-  /// The API pages over the unfiltered set, so the next fetch offset must be
-  /// based on this, not on the filtered [comments] length — otherwise paging
-  /// re-requests already-seen rows and "load more" appears to do nothing.
-  final int loadedRaw;
-  final bool isLoading;
-  final String? error;
-
-  const _AchievementCommentsState({
-    required this.comments,
-    required this.total,
-    this.loadedRaw = 0,
-    this.isLoading = false,
-    this.error,
-  });
 }
 
 class _SecondaryScreenState extends State<SecondaryScreen> {
@@ -80,7 +60,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// resets to 0 on each new launch.
   int _inGamePanelPage = 0;
   SecondaryAchievementItem? _selectedAchievement;
-  final Map<int, _AchievementCommentsState> _commentsCache = {};
+  final Map<int, AchievementCommentsState> _commentsCache = {};
   int _commentsRequestGeneration = 0;
   bool _wasNowPlayingActive = false;
   String? _panelGameId;
@@ -290,7 +270,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     final rateLimitedMessage = AppLocale.raRateLimited.getString(ctx);
     final couldNotLoadMessage = AppLocale.raCommentsCouldNotLoad.getString(ctx);
     setState(() {
-      _commentsCache[achievementId] = _AchievementCommentsState(
+      _commentsCache[achievementId] = AchievementCommentsState(
         comments: reset ? const [] : (current?.comments ?? const []),
         total: reset ? 0 : (current?.total ?? 0),
         loadedRaw: reset ? 0 : (current?.loadedRaw ?? 0),
@@ -327,7 +307,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       final loadedRaw = offset + consumedRaw;
       final reachedEnd = consumedRaw < pageSize;
       setState(() {
-        _commentsCache[achievementId] = _AchievementCommentsState(
+        _commentsCache[achievementId] = AchievementCommentsState(
           comments: byKey.values.toList(),
           total: reachedEnd ? loadedRaw : page.total,
           loadedRaw: loadedRaw,
@@ -343,7 +323,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           ? rateLimitedMessage
           : couldNotLoadMessage;
       setState(() {
-        _commentsCache[achievementId] = _AchievementCommentsState(
+        _commentsCache[achievementId] = AchievementCommentsState(
           comments: reset ? const [] : (current?.comments ?? const []),
           total: reset ? 0 : (current?.total ?? 0),
           loadedRaw: reset ? 0 : (current?.loadedRaw ?? 0),
@@ -1034,7 +1014,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             child: KeyedSubtree(
               key: ValueKey('in-game-page-$page'),
               child: page == 2
-                  ? _buildAchievementCommentsPage(_selectedAchievement!)
+                  ? AchievementCommentsPage(
+                      achievement: _selectedAchievement!,
+                      state: _commentsCache[_selectedAchievement!.id],
+                      l10nContext: _l10nContext,
+                      onLoadComments: _loadAchievementComments,
+                    )
                   : page == 1
                   ? AchievementPanel(
                       value: value,
@@ -1258,211 +1243,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           '${s.toString().padLeft(2, '0')}s';
     }
     return '${m}m ${s.toString().padLeft(2, '0')}s';
-  }
-
-  Widget _buildAchievementCommentsPage(SecondaryAchievementItem achievement) {
-    final state = _commentsCache[achievement.id];
-    final comments = (state?.comments ?? const <RetroAchievementComment>[])
-        .where((comment) => !comment.isSystemComment)
-        .toList();
-    final hasMore = state != null && state.loadedRaw < state.total;
-
-    return Container(
-      color: Colors.black,
-      padding: EdgeInsets.fromLTRB(58.r, 20.r, 24.r, 20.r),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              buildAchievementBadge(achievement, isNew: false),
-              SizedBox(width: 14.r),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            achievement.title,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18.r,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Anta',
-                            ),
-                          ),
-                        ),
-                        if (achievement.isMissable)
-                          Center(
-                            child: buildMissablePill(
-                              context,
-                              l10nContext: _l10nContext,
-                            ),
-                          ),
-                        SizedBox(width: 10.r),
-                        Text(
-                          '${achievement.points}p',
-                          style: TextStyle(
-                            color: const Color(0xFFFFC107),
-                            fontSize: 15.r,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Anta',
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (achievement.description.isNotEmpty) ...[
-                      SizedBox(height: 4.r),
-                      Text(
-                        achievement.description,
-                        style: TextStyle(color: Colors.white60, fontSize: 12.r),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16.r),
-          Text(
-            AppLocale.raComments.getString(_l10nContext ?? context),
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12.r,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2.r,
-              fontFamily: 'Anta',
-            ),
-          ),
-          SizedBox(height: 8.r),
-          Expanded(
-            child: state == null || (state.isLoading && comments.isEmpty)
-                ? const Center(child: CircularProgressIndicator())
-                : state.error != null && comments.isEmpty
-                ? _buildCommentsMessage(
-                    AppLocale.raCommentsCouldNotLoad.getString(
-                      _l10nContext ?? context,
-                    ),
-                    actionLabel: AppLocale.retry
-                        .getString(_l10nContext ?? context)
-                        .toUpperCase(),
-                    onAction: () =>
-                        _loadAchievementComments(achievement.id, reset: true),
-                  )
-                : comments.isEmpty
-                ? _buildCommentsMessage(
-                    AppLocale.raNoCommentsYet.getString(
-                      _l10nContext ?? context,
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: comments.length + (hasMore ? 1 : 0),
-                    separatorBuilder: (_, _) => SizedBox(height: 8.r),
-                    itemBuilder: (context, index) {
-                      if (index == comments.length) {
-                        return _buildLoadMoreComments(achievement.id, state);
-                      }
-                      return _buildCommentCard(comments[index]);
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommentCard(RetroAchievementComment comment) {
-    return Container(
-      padding: EdgeInsets.all(10.r),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  comment.user.isEmpty
-                      ? AppLocale.unknownUser.getString(_l10nContext ?? context)
-                      : comment.user,
-                  style: TextStyle(
-                    color: const Color(0xFFFFC107),
-                    fontSize: 12.r,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (comment.submitted != null)
-                Text(
-                  _formatCommentDate(comment.submitted!),
-                  style: TextStyle(color: Colors.white38, fontSize: 10.r),
-                ),
-            ],
-          ),
-          SizedBox(height: 5.r),
-          Text(
-            comment.commentText,
-            style: TextStyle(color: Colors.white70, fontSize: 12.r),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadMoreComments(
-    int achievementId,
-    _AchievementCommentsState state,
-  ) {
-    if (state.isLoading) {
-      return Padding(
-        padding: EdgeInsets.all(12.r),
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return _buildCommentsMessage(
-      state.error ??
-          AppLocale.raOlderCommentsAvailable.getString(_l10nContext ?? context),
-      actionLabel: state.error == null
-          ? AppLocale.raLoadMore.getString(_l10nContext ?? context)
-          : AppLocale.retry.getString(_l10nContext ?? context).toUpperCase(),
-      onAction: () => _loadAchievementComments(achievementId, reset: false),
-    );
-  }
-
-  Widget _buildCommentsMessage(
-    String message, {
-    String? actionLabel,
-    VoidCallback? onAction,
-  }) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            message,
-            style: TextStyle(color: Colors.white54, fontSize: 13.r),
-          ),
-          if (actionLabel != null && onAction != null) ...[
-            SizedBox(height: 10.r),
-            TextButton(onPressed: onAction, child: Text(actionLabel)),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatCommentDate(DateTime date) {
-    final local = date.toLocal();
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
   }
 
   Widget _buildScrapingOverlay(SecondaryDisplayStateData value) {
