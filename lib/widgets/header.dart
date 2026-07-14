@@ -70,7 +70,9 @@ class HeaderState extends State<Header> {
   /// Subscribes to real-time battery state changes (charging/discharging/full).
   void _listenToBatteryState() {
     try {
-      _batteryStateSubscription = _battery.onBatteryStateChanged.listen((state) {
+      _batteryStateSubscription = _battery.onBatteryStateChanged.listen((
+        state,
+      ) {
         if (mounted) {
           setState(() => _batteryState = state);
         }

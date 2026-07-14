@@ -461,10 +461,9 @@ class GameDetailsFooter extends StatelessWidget {
         ? theme.colorScheme.onSurface
         : Colors.orange;
 
-    final String? gameIconUrl =
-        currentGameInfo?.imageIcon.isNotEmpty == true
-            ? 'https://media.retroachievements.org${currentGameInfo!.imageIcon}'
-            : null;
+    final String? gameIconUrl = currentGameInfo?.imageIcon.isNotEmpty == true
+        ? 'https://media.retroachievements.org${currentGameInfo!.imageIcon}'
+        : null;
 
     return Material(
       color: Colors.transparent,
@@ -546,8 +545,9 @@ class GameDetailsFooter extends StatelessWidget {
                           minHeight: 5.r,
                           backgroundColor: theme.colorScheme.onSurface
                               .withValues(alpha: 0.1),
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(statusColor),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            statusColor,
+                          ),
                         ),
                       ),
                     ],
