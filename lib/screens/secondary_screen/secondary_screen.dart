@@ -7,7 +7,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../l10n/app_locale.dart';
-import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/secondary_apps_service.dart';
 import 'package:video_player/video_player.dart';
@@ -19,6 +18,7 @@ import '../../repositories/retro_achievements_repository.dart';
 import '../../services/retro_achievements_service.dart';
 import '../../utils/no_glow_scroll_behavior.dart';
 import 'background_builders.dart';
+import 'now_playing_helpers.dart';
 
 class SecondaryScreen extends StatefulWidget {
   const SecondaryScreen({super.key});
@@ -610,7 +610,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       builder: (_, child) => ValueListenableBuilder<SecondaryDisplayStateData?>(
         valueListenable: _secondaryDisplayState ?? ValueNotifier(null),
         builder: (context, value, child) {
-          final theme = _resolveTheme(value?.themeName);
+          final theme = resolveTheme(value?.themeName);
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             localizationsDelegates:
@@ -1090,52 +1090,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
   /// Renders the "Now Playing" page: boxart, title, system, total play time
   /// and last-played. Shown for every launched game (page 0). View-only.
-  /// Resolves the full user-selected theme for the secondary display from the
-  /// theme name pushed by the main engine. The secondary display runs in the
-  /// same isolate as the main app, so [ThemeProvider.availableThemes] is the
-  /// source of truth. Falls back to the brightness-appropriate neostation
-  /// theme for 'system' mode or an unknown/absent name.
-  ThemeData _resolveTheme(String? themeName) {
-    final themes = ThemeProvider.availableThemes;
-    final direct = themeName != null ? themes[themeName] : null;
-    if (direct != null) return direct;
-    final brightness =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    return brightness == Brightness.dark ? themes['dark']! : themes['light']!;
-  }
-
-  /// WCAG contrast ratio between two opaque colors (1.0 = identical, 21.0 =
-  /// black-on-white).
-  double _contrastRatio(Color a, Color b) {
-    final la = a.computeLuminance();
-    final lb = b.computeLuminance();
-    final hi = la > lb ? la : lb;
-    final lo = la > lb ? lb : la;
-    return (hi + 0.05) / (lo + 0.05);
-  }
-
-  /// Builds the effective color scheme for the Now Playing panel. Text colors
-  /// are derived from the *actual* painted background luminance (not the
-  /// theme's own on-colors, which can mismatch the pushed background and
-  /// collapse contrast on light themes), while the theme's primary accent is
-  /// preserved as long as it stays legible on that background.
-  ColorScheme _panelScheme(SecondaryDisplayStateData value) {
-    final base = _resolveTheme(value.themeName).colorScheme;
-    final bg = value.backgroundColor != null
-        ? Color(value.backgroundColor!)
-        : base.surface;
-    final fg = bg.computeLuminance() > 0.5
-        ? const Color(0xFF14161A)
-        : Colors.white;
-    final accent = _contrastRatio(base.primary, bg) >= 3.0 ? base.primary : fg;
-    return base.copyWith(surface: bg, onSurface: fg, primary: accent);
-  }
-
   Widget _buildNowPlayingPanel(SecondaryDisplayStateData value) {
     final title = (value.gameTitle != null && value.gameTitle!.isNotEmpty)
         ? value.gameTitle!
         : value.systemName;
-    final scheme = _panelScheme(value);
+    final scheme = panelScheme(value);
 
     return Container(
       width: double.infinity,
@@ -1148,7 +1107,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _buildNowPlayingBoxart(value.gameBoxart),
+                buildNowPlayingBoxart(value.gameBoxart),
                 SizedBox(width: 32.r),
                 Expanded(
                   child: Column(
@@ -1187,15 +1146,15 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                         ),
                       ),
                       SizedBox(height: 26.r),
-                      _buildNowPlayingStat(
+                      buildNowPlayingStat(
                         scheme: scheme,
                         icon: Symbols.schedule_rounded,
                         label: 'PLAY TIME',
-                        text: _formatPlayTime(value.playTimeSeconds),
+                        text: formatPlayTime(value.playTimeSeconds),
                       ),
                       if (_sessionWatch.isRunning) ...[
                         SizedBox(height: 12.r),
-                        _buildNowPlayingStat(
+                        buildNowPlayingStat(
                           scheme: scheme,
                           icon: Symbols.timer_rounded,
                           label: 'SESSION',
@@ -1203,11 +1162,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                         ),
                       ],
                       SizedBox(height: 12.r),
-                      _buildNowPlayingStat(
+                      buildNowPlayingStat(
                         scheme: scheme,
                         icon: Symbols.history_rounded,
                         label: 'LAST PLAYED',
-                        text: _formatLastPlayed(value.lastPlayedMillis),
+                        text: formatLastPlayed(value.lastPlayedMillis),
                       ),
                       if (value.screenshotAccessEnabled) ...[
                         SizedBox(height: 28.r),
@@ -1275,7 +1234,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   Widget _buildAppDock(SecondaryDisplayStateData value) {
     if (!value.dockEnabled) return const SizedBox.shrink();
     final apps = ConfigModel.normalizeDock(value.dockApps);
-    final scheme = _panelScheme(value);
+    final scheme = panelScheme(value);
     final visibleSlots = value.dockSlotCount.clamp(
       ConfigModel.dockMinSlotCount,
       ConfigModel.dockMaxSlotCount,
@@ -1311,7 +1270,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// launching an app without that service would strand the user with no way
   /// back to Now Playing.
   Widget _buildLauncherButton(SecondaryDisplayStateData value) {
-    final scheme = _panelScheme(value);
+    final scheme = panelScheme(value);
     final accessOk = value.screenshotAccessEnabled;
     return GestureDetector(
       onTap: accessOk ? _openAppLauncher : _openAccessibilitySettings,
@@ -1551,75 +1510,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
-  Widget _buildNowPlayingBoxart(String? path) {
-    Widget placeholder() => Container(
-      width: 184.r,
-      height: 264.r,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Icon(
-        Symbols.videogame_asset_rounded,
-        color: Colors.white24,
-        size: 64.r,
-      ),
-    );
-
-    if (path == null) return placeholder();
-    final file = File(path);
-    if (!file.existsSync()) return placeholder();
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12.r),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: 360.r, maxWidth: 200.r),
-        child: Image.file(
-          file,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => placeholder(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNowPlayingStat({
-    required ColorScheme scheme,
-    required IconData icon,
-    required String label,
-    required String text,
-  }) {
-    final muted = scheme.onSurface.withValues(alpha: 0.55);
-    return Row(
-      children: [
-        Icon(icon, color: muted, size: 20.r),
-        SizedBox(width: 10.r),
-        Text(
-          '$label  ',
-          style: TextStyle(color: muted, fontSize: 14.r, letterSpacing: 1.r),
-        ),
-        Text(
-          text,
-          style: TextStyle(
-            color: scheme.onSurface,
-            fontSize: 16.r,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatPlayTime(int? seconds) {
-    if (seconds == null || seconds <= 0) return '—';
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    if (h > 0) return '${h}h ${m}m';
-    if (m > 0) return '${m}m';
-    return '<1m';
-  }
-
   /// The running session length, formatted down to the second so the per-second
   /// tick is visible. Shown alongside the (static) total PLAY TIME while a game
   /// is active.
@@ -1633,19 +1523,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           '${s.toString().padLeft(2, '0')}s';
     }
     return '${m}m ${s.toString().padLeft(2, '0')}s';
-  }
-
-  String _formatLastPlayed(int? millis) {
-    if (millis == null) return 'Never';
-    final then = DateTime.fromMillisecondsSinceEpoch(millis);
-    final diff = DateTime.now().difference(then);
-    if (diff.inDays >= 1) {
-      final d = diff.inDays;
-      return d == 1 ? 'Yesterday' : '$d days ago';
-    }
-    if (diff.inHours >= 1) return '${diff.inHours}h ago';
-    if (diff.inMinutes >= 1) return '${diff.inMinutes}m ago';
-    return 'Just now';
   }
 
   /// Renders the in-game RetroAchievements panel: a progress header plus an
