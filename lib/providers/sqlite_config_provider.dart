@@ -212,6 +212,22 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (Platform.isAndroid) {
         _secondaryDisplayState = SecondaryDisplayState.instance;
+        // Seed the edge-trigger baselines from the restored state BEFORE the
+        // listener is attached. The secondary display's shared state (including
+        // the screenshot/mute/dock triggers) survives a main-engine restart via
+        // the native shared-state store, but these baselines reset to 0 each
+        // launch. Without this seed, the first _onSecondaryStateChanged after a
+        // restart sees the restored trigger (> 0) as an increment and fires the
+        // action unprompted — most visibly an automatic screenshot on every
+        // relaunch. The earlier clear-stale-art block already awaited
+        // initialSync, so value holds the restored triggers here; only genuine
+        // NEW increments after launch should fire.
+        final restored = _secondaryDisplayState!.value;
+        if (restored != null) {
+          _lastScreenshotTrigger = restored.screenshotTrigger;
+          _lastMuteToggleTrigger = restored.muteToggleTrigger;
+          _lastDockEditTrigger = restored.dockEditTrigger;
+        }
         // Idempotent: reinitialize() can re-run initialize() (first-launch
         // custom data dir). Since the state is now a shared singleton that is
         // never disposed, remove any prior registration before re-adding so a
