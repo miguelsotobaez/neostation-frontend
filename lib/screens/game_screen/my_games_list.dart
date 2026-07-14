@@ -23,7 +23,6 @@ import '../../repositories/game_repository.dart';
 import '../../services/screenscraper_service.dart';
 import '../../services/secondary_achievements_controller.dart';
 import '../../utils/gamepad_nav.dart';
-import '../../utils/centered_scroll_controller.dart';
 import '../../providers/file_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
@@ -33,81 +32,15 @@ import 'game_details_card/game_details_card_list.dart';
 import 'game_details_card/random_game_dialog.dart';
 import 'my_games_grid.dart';
 import 'my_games_carousel.dart';
+import 'game_list_view.dart';
 import 'music/music_list.dart';
 import 'music/music_player.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '../../utils/game_utils.dart';
 import '../../providers/system_background_provider.dart';
-import '../../widgets/marquee_text.dart';
 import '../../models/secondary_display_state.dart';
 import '../../widgets/game_view_mode_dropdown.dart';
 import '../../constants/system_folder_names.dart';
-
-/// Transfer object for background game save detection tasks.
-class GameSaveDetectionData {
-  final String gameRomname;
-  final String systemFolderName;
-
-  GameSaveDetectionData({
-    required this.gameRomname,
-    required this.systemFolderName,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'gameRomname': gameRomname,
-    'systemFolderName': systemFolderName,
-  };
-
-  factory GameSaveDetectionData.fromJson(Map<String, dynamic> json) =>
-      GameSaveDetectionData(
-        gameRomname: (json['gameRomname'] ?? '').toString(),
-        systemFolderName: (json['systemFolderName'] ?? '').toString(),
-      );
-}
-
-/// Dispatches a background isolate task to detect game saves without blocking the UI thread.
-Future<void> detectGameSavesInBackground(GameSaveDetectionData data) async {
-  try {
-    // Current implementation placeholder for future isolate offloading.
-    // Real-time detection logic resides in [_performBackgroundOperationsForSelectedGame].
-    await Future.delayed(const Duration(milliseconds: 50));
-  } catch (e) {
-    LoggerService.instance.e('Background save detection failed: $e');
-  }
-}
-
-/// Metadata container for localized description retrieval tasks.
-class LocalizedDescriptionData {
-  final String gameName;
-  final String? preferredLanguage;
-
-  LocalizedDescriptionData({required this.gameName, this.preferredLanguage});
-
-  Map<String, dynamic> toJson() => {
-    'gameName': gameName,
-    'preferredLanguage': preferredLanguage,
-  };
-
-  factory LocalizedDescriptionData.fromJson(Map<String, dynamic> json) =>
-      LocalizedDescriptionData(
-        gameName: (json['gameName'] ?? '').toString(),
-        preferredLanguage: json['preferredLanguage']?.toString(),
-      );
-}
-
-/// Offloads localized description processing to a background task.
-Future<String?> loadLocalizedDescriptionInBackground(
-  LocalizedDescriptionData data,
-) async {
-  try {
-    // Implementation placeholder for ScreenScraperService integration in isolates.
-    await Future.delayed(const Duration(milliseconds: 50));
-    return 'Description for ${data.gameName} in ${data.preferredLanguage ?? 'default'} language';
-  } catch (e) {
-    LoggerService.instance.e('Background description loading failed: $e');
-    return null;
-  }
-}
+import '../../themes/corner_radii.dart';
 
 /// A high-fidelity list component for browsing games within a specific system.
 ///
@@ -173,8 +106,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
   bool _canPop = false;
 
   // View keys for scroll synchronization.
-  final GlobalKey<_GameListViewState> _gameListKey =
-      GlobalKey<_GameListViewState>();
+  final GlobalKey<GameListViewState> _gameListKey =
+      GlobalKey<GameListViewState>();
 
   // Multimedia preview orchestration.
   Timer? _videoTimer;
@@ -2688,30 +2621,310 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Main layout orchestrator.
   /// Divides the viewport into a specialized browsing panel (left) and a detailed
-  /// info/preview panel (right).
+  /// info/preview panel (right). The selected game's fanart is rendered behind
+  /// the entire viewport so it peeks through both panels.
   Widget _buildGamesList() {
     final availableHeight =
         MediaQuery.of(context).size.height -
         MediaQuery.of(context).padding.top -
         MediaQuery.of(context).padding.bottom;
+    final isMusic = widget.system.folderName == 'music';
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        // Sidebar: Interactive list of games or music tracks.
-        SizedBox(
-          width: 160.r,
-          height: availableHeight,
-          child: _buildGamesListPanel(),
+        // Full-screen ambient fanart + overlay combined in a single layer
+        // to avoid flickering caused by separate Positioned.fill compositing.
+        if (!isMusic && _selectedGame != null)
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildGameFanartBackground(_selectedGame!),
+                  Container(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Main content row: list panel + details panel.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sidebar: Interactive list of games or music tracks.
+            Container(
+              width: 180.r,
+              height: availableHeight,
+              margin: EdgeInsets.only(left: 58.r, top: 12.r, bottom: 12.r),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: 0.90),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(14.r),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 1.r,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.5),
+                    blurRadius: 3.r,
+                    offset: Offset(2.r, 2.r),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusInternal ??
+                    BorderRadius.circular(9.r),
+                child: SizedBox(
+                  width: 180.r,
+                  height: availableHeight,
+                  child: _buildGamesListPanel(),
+                ),
+              ),
+            ),
+            // Main Viewport: Rich metadata, video previews, and launch controls.
+            Expanded(
+              child: SizedBox(
+                height: availableHeight,
+                child: _buildGameDetailsPanel(),
+              ),
+            ),
+          ],
         ),
-        // Main Viewport: Rich metadata, video previews, and launch controls.
-        Expanded(
-          child: SizedBox(
-            height: availableHeight,
-            child: _buildGameDetailsPanel(),
+
+        // Floating action buttons on the left side of the game list.
+        if (!isMusic)
+          Positioned(
+            top: 12.r,
+            left: 12.r,
+            child: _buildGameListActionButtons(),
+          ),
+      ],
+    );
+  }
+
+  /// Renders the selected game's fanart as a full-screen background.
+  Widget _buildGameFanartBackground(GameModel game) {
+    final imageSystemFolder =
+        game.systemFolderName ?? widget.system.primaryFolderName;
+
+    final fanartPath = game.getImagePath(
+      imageSystemFolder,
+      'fanarts',
+      _fileProvider,
+    );
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 512),
+      switchInCurve: Curves.easeOutExpo,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          fit: StackFit.expand,
+          alignment: Alignment.center,
+          children: [...previousChildren, ?currentChild],
+        );
+      },
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 1.0, end: 1.1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: Builder(
+        key: ValueKey('list_fanart_${game.romPath ?? game.romname}'),
+        builder: (context) {
+          final file = File(fanartPath);
+          if (file.existsSync()) {
+            return Image.file(
+              file,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              cacheWidth: 1920,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+
+  /// Floating action buttons for the game list (back, view mode, random,
+  /// favorite, scrape). Arranged vertically on the left side of the game list.
+  Widget _buildGameListActionButtons() {
+    final dropdownState = GameViewModeDropdown.globalKey.currentState;
+    final viewModeKey = GlobalKey();
+    final selectedGame = _selectedGame;
+
+    final isFavorite = selectedGame?.isFavorite ?? false;
+    final hasScreenScraper =
+        widget.system.screenscraperId != null &&
+        widget.system.screenscraperId != 0;
+    final isScraping =
+        selectedGame != null &&
+        _scrapingGameRomnames.contains(selectedGame.romname);
+
+    final description =
+        _localizedDescription ??
+        (selectedGame?.getDescriptionForLanguage('en').isEmpty == true
+            ? AppLocale.noDescription.getString(context)
+            : selectedGame?.getDescriptionForLanguage('en') ?? '');
+    final isDescriptionMissing =
+        description.isEmpty ||
+        description == AppLocale.noDescription.getString(context) ||
+        description.trim().isEmpty;
+
+    return Container(
+      padding: EdgeInsets.all(6.r),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10.r),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildIconButton(
+            iconPath: 'assets/images/gamepad/Xbox_B_button.png',
+            symbol: Symbols.arrow_back_rounded,
+            color: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+            onTap: _goBack,
+          ),
+          SizedBox(height: 6.r),
+          _buildIconButton(
+            iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
+            symbol: isFavorite
+                ? Symbols.favorite_rounded
+                : Symbols.favorite_border_rounded,
+            color: isFavorite
+                ? Colors.redAccent
+                : Theme.of(context).colorScheme.tertiary,
+            foregroundColor: isFavorite
+                ? Colors.white
+                : Theme.of(context).colorScheme.onPrimary,
+            onTap: selectedGame != null ? _toggleFavorite : () {},
+          ),
+          SizedBox(height: 6.r),
+          if (hasScreenScraper && selectedGame != null) ...[
+            _buildIconButton(
+              iconPath: 'assets/images/gamepad/Xbox_View_button.png',
+              symbol: isDescriptionMissing
+                  ? Symbols.search_rounded
+                  : Symbols.refresh_rounded,
+              color: Theme.of(context).colorScheme.tertiary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              onTap: _onScrapeCurrentGame,
+              isLoading: isScraping,
+            ),
+            SizedBox(height: 6.r),
+          ],
+          _buildIconButton(
+            key: viewModeKey,
+            iconPath: 'assets/images/gamepad/Xbox_X_button.png',
+            symbol: Symbols.grid_view_rounded,
+            color: Theme.of(context).colorScheme.tertiary,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            onTap: () {
+              SfxService().playNavSound();
+              dropdownState?.showDropdownFrom(viewModeKey);
+            },
+          ),
+          SizedBox(height: 6.r),
+          _buildIconButton(
+            iconPath: 'assets/images/gamepad/Left Stick Click.png',
+            symbol: Symbols.casino_rounded,
+            color: Theme.of(context).colorScheme.tertiary,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            onTap: _showRandomGameDialog,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Square action button (1:1 aspect ratio) with a gamepad hint icon and
+  /// a Material Symbols icon stacked vertically. Optionally shows a loading
+  /// indicator and disables taps while an async operation is in progress.
+  Widget _buildIconButton({
+    Key? key,
+    required String iconPath,
+    required IconData symbol,
+    required Color color,
+    Color? foregroundColor,
+    required VoidCallback onTap,
+    bool isLoading = false,
+  }) {
+    final fg = foregroundColor ?? Colors.white;
+    const double buttonSize = 28.0;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: key,
+        onTap: isLoading ? null : onTap,
+        borderRadius: BorderRadius.circular(6.r),
+        child: Container(
+          width: buttonSize.r,
+          height: buttonSize.r,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isLoading ? 0.5 : 0.85),
+            borderRadius: BorderRadius.circular(6.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 2.r,
+                offset: Offset(1.r, 1.r),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: isLoading
+                ? [
+                    SizedBox(
+                      width: 14.r,
+                      height: 14.r,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.r,
+                        color: fg,
+                      ),
+                    ),
+                  ]
+                : [
+                    Image.asset(
+                      iconPath,
+                      width: 11.r,
+                      height: 11.r,
+                      color: fg,
+                      colorBlendMode: BlendMode.srcIn,
+                    ),
+                    SizedBox(height: 1.r),
+                    Icon(symbol, size: 11.r, color: fg),
+                  ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -2748,8 +2961,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       widget.system.folderName == SystemFolderNames.favorites,
                   isNavigatingFast: _isNavigatingFast,
                   onGamepadReactivated: _reactivateGamepadNavigation,
-                  onBack: _goBack,
-                  onRandom: _showRandomGameDialog,
                 ),
         ),
       ],
@@ -2981,470 +3192,5 @@ class _SystemGamesListState extends State<SystemGamesList> {
     } catch (e) {
       _log.e('Error updating game in list: $e');
     }
-  }
-}
-
-/// A high-performance list view specialized for game browsing with gamepad support.
-///
-/// Features a centered scroll mechanism and smooth highlight animations
-/// to emulate console-like library navigation.
-class GameListView extends StatefulWidget {
-  final SystemModel system;
-  final List<GameModel> games;
-  final int selectedIndex;
-  final Color systemColor;
-  final Function(GameModel) onGameSelected;
-  final bool isAllMode;
-  final bool isNavigatingFast;
-  final VoidCallback? onGamepadReactivated;
-  final VoidCallback onBack;
-  final VoidCallback onRandom;
-
-  const GameListView({
-    super.key,
-    required this.system,
-    required this.games,
-    required this.selectedIndex,
-    required this.systemColor,
-    required this.onGameSelected,
-    this.isAllMode = false,
-    this.isNavigatingFast = false,
-    this.onGamepadReactivated,
-    required this.onBack,
-    required this.onRandom,
-  });
-
-  @override
-  State<GameListView> createState() => _GameListViewState();
-}
-
-class _GameListViewState extends State<GameListView>
-    with WidgetsBindingObserver, TickerProviderStateMixin {
-  late final CenteredScrollController _centeredScrollController;
-  late List<FocusNode> _gameFocusNodes;
-  late AnimationController _selectionController;
-  late Animation<double> _selectionAnimation;
-
-  // Constants for pixel-perfect highlight positioning.
-  static const double _itemHeightBase = 26.0;
-
-  /// Public API to trigger list scrolling from the parent widget.
-  void scrollToIndex(
-    int index, {
-    bool immediate = false,
-    Duration? duration,
-    Curve? curve,
-  }) {
-    _centeredScrollController.scrollToIndex(
-      index,
-      immediate: immediate,
-      duration: duration,
-      curve: curve,
-    );
-  }
-
-  /// Immediately jumps to center on the item at [index] without animation.
-  /// Unlike [scrollToIndex], this executes synchronously.
-  void jumpToIndex(int index) {
-    _centeredScrollController.jumpToIndex(index);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-
-    _centeredScrollController = CenteredScrollController(centerPosition: 0.5);
-
-    _selectionController = AnimationController(
-      duration: const Duration(milliseconds: 120),
-      vsync: this,
-    );
-    _selectionAnimation = AlwaysStoppedAnimation(
-      widget.selectedIndex.toDouble(),
-    );
-
-    _gameFocusNodes = List.generate(
-      widget.games.length,
-      (_) => FocusNode(skipTraversal: true),
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _centeredScrollController.initialize(
-          context: context,
-          initialIndex: widget.selectedIndex,
-          totalItems: widget.games.length,
-        );
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(GameListView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.games.length != widget.games.length) {
-      _centeredScrollController.updateTotalItems(widget.games.length);
-      _updateFocusNodes();
-    }
-
-    if (oldWidget.selectedIndex != widget.selectedIndex) {
-      // Dynamic duration adjustment based on navigation speed (isNavigatingFast).
-      final animationDuration = widget.isNavigatingFast
-          ? const Duration(milliseconds: 120)
-          : const Duration(milliseconds: 250);
-
-      final scrollDuration = widget.isNavigatingFast
-          ? const Duration(milliseconds: 180)
-          : const Duration(milliseconds: 360);
-
-      const curve = Curves.easeOutQuart;
-
-      final double begin = _selectionAnimation.value;
-      final double end = widget.selectedIndex.toDouble();
-
-      _selectionController.duration = animationDuration;
-      _selectionAnimation = Tween<double>(
-        begin: begin,
-        end: end,
-      ).animate(CurvedAnimation(parent: _selectionController, curve: curve));
-
-      _selectionController.forward(from: 0);
-
-      _centeredScrollController.updateSelectedIndex(widget.selectedIndex);
-      _centeredScrollController.scrollToIndex(
-        widget.selectedIndex,
-        duration: scrollDuration,
-        curve: curve,
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _centeredScrollController.dispose();
-    _selectionController.dispose();
-    for (final node in _gameFocusNodes) {
-      node.dispose();
-    }
-    super.dispose();
-  }
-
-  void _updateFocusNodes() {
-    final newCount = widget.games.length;
-    if (newCount < _gameFocusNodes.length) {
-      for (int i = newCount; i < _gameFocusNodes.length; i++) {
-        _gameFocusNodes[i].dispose();
-      }
-      _gameFocusNodes.removeRange(newCount, _gameFocusNodes.length);
-    } else {
-      for (int i = _gameFocusNodes.length; i < newCount; i++) {
-        _gameFocusNodes.add(FocusNode(skipTraversal: true));
-      }
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-
-    if (state == AppLifecycleState.resumed) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          // Suppress premature reactivation during external emulator handoff (Linux specific).
-          if (!GameService.isGameLaunched) {
-            widget.onGamepadReactivated?.call();
-          }
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final itemHeight = _itemHeightBase.r;
-    final totalItemHeight = itemHeight;
-    _centeredScrollController.setItemExtent(totalItemHeight, paddingTop: 2.r);
-
-    return Column(
-      children: [
-        _buildHeader(),
-
-        Expanded(
-          child: Stack(
-            children: [
-              // Highlight Layer: Dynamically follows the selected index with smooth interpolation.
-              AnimatedBuilder(
-                animation: Listenable.merge([
-                  _selectionController,
-                  _centeredScrollController.scrollController,
-                ]),
-                builder: (context, child) {
-                  if (!_centeredScrollController.scrollController.hasClients) {
-                    return const SizedBox.shrink();
-                  }
-
-                  final double scrollOffset =
-                      _centeredScrollController.scrollController.offset;
-                  final double currentSelection = _selectionAnimation.value;
-
-                  // Absolute viewport positioning: (Index * ItemHeight) + Padding - ScrollOffset.
-                  final double topPosition =
-                      (currentSelection * totalItemHeight) + 2.r - scrollOffset;
-
-                  final highlightColor = theme.colorScheme.secondary;
-
-                  return Positioned(
-                    top: topPosition,
-                    left: 8.r,
-                    right: 0.r,
-                    height: itemHeight,
-                    child: RepaintBoundary(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: highlightColor,
-                          borderRadius: BorderRadius.circular(8.r),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // Foreground Content: The actual game list items.
-              ValueListenableBuilder<int>(
-                valueListenable: _centeredScrollController.rebuildNotifier,
-                builder: (context, rebuildCount, _) {
-                  return ListView.builder(
-                    key: ValueKey('games_list_rebuild_$rebuildCount'),
-                    controller: _centeredScrollController.scrollController,
-                    padding: EdgeInsets.symmetric(
-                      vertical: 2.r,
-                      horizontal: 8.r,
-                    ),
-                    itemCount: widget.games.length,
-                    itemBuilder: (context, index) {
-                      final game = widget.games[index];
-                      final isSelected = index == widget.selectedIndex;
-
-                      return GestureDetector(
-                        onTap: () {
-                          SfxService().playNavSound();
-                          widget.onGameSelected(game);
-                        },
-                        child: Container(
-                          height: totalItemHeight,
-                          color: Colors.transparent,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8.r,
-                              vertical: 2.r,
-                            ),
-                            alignment: Alignment.centerLeft,
-                            child: Row(
-                              children: [
-                                if (game.isFavorite == true)
-                                  Container(
-                                    margin: EdgeInsets.only(right: 4.r),
-                                    child: Icon(
-                                      Symbols.favorite_rounded,
-                                      size: 11.r,
-                                      color: isSelected
-                                          ? theme.colorScheme.onPrimary
-                                          : Colors.redAccent,
-                                    ),
-                                  ),
-                                Expanded(
-                                  child: RepaintBoundary(
-                                    child: AnimatedDefaultTextStyle(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      curve: Curves.easeOut,
-                                      style: TextStyle(
-                                        fontWeight: isSelected
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        fontSize: 11.r,
-                                        color: isSelected
-                                            ? theme.colorScheme.onPrimary
-                                            : theme.colorScheme.onSurface,
-                                        fontFamily: theme
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.fontFamily,
-                                      ),
-                                      child: MarqueeText(
-                                        text: GameUtils.formatGameName(
-                                          game.name.isNotEmpty
-                                              ? game.name
-                                              : game.romname,
-                                        ),
-                                        isActive: isSelected,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// System Branding Header: Dynamically resolves hardware logos.
-  Widget _buildHeader() {
-    final dropdownState = GameViewModeDropdown.globalKey.currentState;
-    final viewModeKey = GlobalKey();
-
-    SystemModel displaySystem = widget.system;
-
-    if (widget.isAllMode && widget.selectedIndex < widget.games.length) {
-      final selectedGame = widget.games[widget.selectedIndex];
-      final systemFolderName = selectedGame.systemFolderName;
-      if (systemFolderName != null) {
-        final availableSystems = context
-            .read<SqliteConfigProvider>()
-            .availableSystems;
-        displaySystem = availableSystems.firstWhere(
-          (sys) => sys.folderName == systemFolderName,
-          orElse: () => widget.system,
-        );
-      }
-    }
-
-    final shortName =
-        (displaySystem.shortName != null && displaySystem.shortName!.isNotEmpty)
-        ? displaySystem.shortName!
-        : displaySystem.realName;
-
-    return Container(
-      margin: EdgeInsets.only(left: 4.r, right: 4.r, top: 8.r),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildIconButton(
-                iconPath: 'assets/images/gamepad/Xbox_B_button.png',
-                symbol: Symbols.arrow_back_rounded,
-                color: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
-                onTap: widget.onBack,
-              ),
-              SizedBox(width: 6.r),
-              _buildIconButton(
-                key: viewModeKey,
-                iconPath: 'assets/images/gamepad/Xbox_X_button.png',
-                symbol: Symbols.grid_view_rounded,
-                color: Theme.of(context).colorScheme.tertiary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                onTap: () {
-                  SfxService().playNavSound();
-                  dropdownState?.showDropdownFrom(viewModeKey);
-                },
-              ),
-              SizedBox(width: 6.r),
-              _buildIconButton(
-                iconPath: 'assets/images/gamepad/Left Stick Click.png',
-                symbol: Symbols.casino_rounded,
-                color: Theme.of(context).colorScheme.tertiary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                onTap: widget.onRandom,
-              ),
-            ],
-          ),
-          SizedBox(height: 4.r),
-          Center(
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 3.r),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.4),
-                  width: 1.r,
-                ),
-              ),
-              child: Text(
-                shortName,
-                style: TextStyle(
-                  fontSize: 11.r,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.primary,
-                  letterSpacing: 0.5.r,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          SizedBox(height: 4.r),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIconButton({
-    Key? key,
-    required String iconPath,
-    required IconData symbol,
-    required Color color,
-    Color? foregroundColor,
-    required VoidCallback onTap,
-  }) {
-    final fg = foregroundColor ?? Colors.white;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: key,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6.r),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 4.r, vertical: 3.r),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(6.r),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 2.r,
-                offset: Offset(1.r, 1.r),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                iconPath,
-                width: 14.r,
-                height: 14.r,
-                color: fg,
-                colorBlendMode: BlendMode.srcIn,
-              ),
-              SizedBox(width: 3.r),
-              Icon(symbol, size: 14.r, color: fg),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

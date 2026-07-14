@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/sfx_service.dart';
 
+import '../../../../themes/corner_radii.dart';
+
 /// Defines the navigable sections within the game details card.
 enum DetailTab { general, gameInfo, achievements, settings }
 
@@ -52,7 +54,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
     return ClipRRect(
       child: Container(
         height: 46.r,
-        padding: EdgeInsets.symmetric(horizontal: 12.r),
+        padding: EdgeInsets.only(top: 4.r, right: 8.r),
         child: Row(
           children: [
             const Spacer(),
@@ -63,10 +65,11 @@ class GameDetailsTabsHeader extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: 8.r),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(8.r),
+                borderRadius: Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                BorderRadius.circular(12.r),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
+                    color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.25),
                     blurRadius: 2.r,
                     offset: Offset(2.0.r, 2.0.r),
                   ),
@@ -98,8 +101,10 @@ class GameDetailsTabsHeader extends StatelessWidget {
                             width: tabWidth,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.secondary,
-                                borderRadius: BorderRadius.circular(4.r),
+                                color: theme.colorScheme.primary,
+                                borderRadius:
+                                  Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+                                  BorderRadius.circular(14.r),
                               ),
                             ),
                           ),

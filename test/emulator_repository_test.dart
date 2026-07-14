@@ -70,17 +70,19 @@ void main() {
       expect(path, 'C:/retroarch/retroarch.exe');
     });
 
-    test('saveDetectedEmulatorPath persists RetroArch path under ra unique id',
-        () async {
-      await EmulatorRepository.saveDetectedEmulatorPath(
-        emulatorName: 'RetroArch',
-        emulatorPath: '/usr/bin/retroarch',
-      );
+    test(
+      'saveDetectedEmulatorPath persists RetroArch path under ra unique id',
+      () async {
+        await EmulatorRepository.saveDetectedEmulatorPath(
+          emulatorName: 'RetroArch',
+          emulatorPath: '/usr/bin/retroarch',
+        );
 
-      final detected = await EmulatorRepository.getUserDetectedEmulators();
-      expect(detected['RetroArch'], isNotNull);
-      expect(detected['RetroArch']!.path, '/usr/bin/retroarch');
-    });
+        final detected = await EmulatorRepository.getUserDetectedEmulators();
+        expect(detected['RetroArch'], isNotNull);
+        expect(detected['RetroArch']!.path, '/usr/bin/retroarch');
+      },
+    );
 
     test(
       'saveDetectedEmulatorPath updates an existing RetroArch path',

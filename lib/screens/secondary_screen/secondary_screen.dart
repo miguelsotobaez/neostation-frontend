@@ -19,6 +19,7 @@ import '../../repositories/retro_achievements_repository.dart';
 import '../../services/retro_achievements_service.dart';
 import '../../widgets/shaders/shader_gif_widget.dart';
 import '../../utils/image_utils.dart' as image_utils;
+import '../../utils/no_glow_scroll_behavior.dart';
 
 class SecondaryScreen extends StatefulWidget {
   const SecondaryScreen({super.key});
@@ -619,7 +620,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             // Suppress Android's overscroll glow/stretch: on this display a
             // slight drag near the edge would flash white arcs at the screen
             // border, which looks like a rendering glitch on a static panel.
-            scrollBehavior: const _NoGlowScrollBehavior(),
+            scrollBehavior: const NoGlowScrollBehavior(),
             theme: theme.copyWith(
               scaffoldBackgroundColor: value?.backgroundColor != null
                   ? Color(value!.backgroundColor!)
@@ -2487,21 +2488,5 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         ],
       ),
     );
-  }
-}
-
-/// Scroll behavior that removes the Android overscroll glow/stretch indicator
-/// while leaving scrolling itself intact. Applied to the secondary display so a
-/// stray edge drag doesn't flash white arcs at the screen border.
-class _NoGlowScrollBehavior extends MaterialScrollBehavior {
-  const _NoGlowScrollBehavior();
-
-  @override
-  Widget buildOverscrollIndicator(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) {
-    return child;
   }
 }

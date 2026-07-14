@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "sat",
+    "multidisc": true,
     "name": "Sega Saturn",
     "short_name": "Saturn",
     "details": {

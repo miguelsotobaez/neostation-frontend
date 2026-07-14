@@ -17,6 +17,7 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
+import 'widgets/setting_row.dart';
 import '../../../services/permission_service.dart';
 
 /// A specialized content panel for system-wide configuration, including platform-specific orchestration (Windows/Android/Linux).
@@ -328,68 +329,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           // Setting: Scan on Startup.
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.scanOnStartup.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.scanOnStartupSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.scanOnStartup,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateScanOnStartup(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.scanOnStartup.getString(context),
+              subtitle: AppLocale.scanOnStartupSubtitle.getString(context),
+              trailing: CustomToggleSwitch(
+                value: config.scanOnStartup,
+                onChanged: (value) {
+                  context.read<SqliteConfigProvider>().updateScanOnStartup(
+                    value,
+                  );
+                },
+                activeColor: theme.colorScheme.primary,
               ),
             );
           }(),
@@ -398,70 +352,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           SizedBox(height: 12.r),
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.ignoreHiddenFiles.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.ignoreHiddenFilesSubtitle.getString(
-                            context,
-                          ),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.ignoreHiddenFiles,
-                    onChanged: (value) {
-                      context
-                          .read<SqliteConfigProvider>()
-                          .updateIgnoreHiddenFiles(value);
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.ignoreHiddenFiles.getString(context),
+              subtitle: AppLocale.ignoreHiddenFilesSubtitle.getString(context),
+              trailing: CustomToggleSwitch(
+                value: config.ignoreHiddenFiles,
+                onChanged: (value) {
+                  context.read<SqliteConfigProvider>().updateIgnoreHiddenFiles(
+                    value,
+                  );
+                },
+                activeColor: theme.colorScheme.primary,
               ),
             );
           }(),
@@ -470,68 +375,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           SizedBox(height: 12.r),
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.autoUpdateApp.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.autoUpdateAppSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.autoUpdateApp,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateAutoUpdateApp(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.autoUpdateApp.getString(context),
+              subtitle: AppLocale.autoUpdateAppSubtitle.getString(context),
+              trailing: CustomToggleSwitch(
+                value: config.autoUpdateApp,
+                onChanged: (value) {
+                  context.read<SqliteConfigProvider>().updateAutoUpdateApp(
+                    value,
+                  );
+                },
+                activeColor: theme.colorScheme.primary,
               ),
             );
           }(),
@@ -540,70 +398,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           SizedBox(height: 12.r),
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.autoUpdateSystems.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.autoUpdateSystemsSubtitle.getString(
-                            context,
-                          ),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.autoUpdateSystems,
-                    onChanged: (value) {
-                      context
-                          .read<SqliteConfigProvider>()
-                          .updateAutoUpdateSystems(value);
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.autoUpdateSystems.getString(context),
+              subtitle: AppLocale.autoUpdateSystemsSubtitle.getString(context),
+              trailing: CustomToggleSwitch(
+                value: config.autoUpdateSystems,
+                onChanged: (value) {
+                  context.read<SqliteConfigProvider>().updateAutoUpdateSystems(
+                    value,
+                  );
+                },
+                activeColor: theme.colorScheme.primary,
               ),
             );
           }(),
@@ -612,68 +421,19 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           SizedBox(height: 12.r),
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.sfxSounds.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.sfxSoundsSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.sfxEnabled,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateSfxEnabled(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.sfxSounds.getString(context),
+              subtitle: AppLocale.sfxSoundsSubtitle.getString(context),
+              trailing: CustomToggleSwitch(
+                value: config.sfxEnabled,
+                onChanged: (value) {
+                  context.read<SqliteConfigProvider>().updateSfxEnabled(value);
+                },
+                activeColor: theme.colorScheme.primary,
               ),
             );
           }(),
@@ -682,68 +442,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           SizedBox(height: 12.r),
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.use12HourClock.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.use12HourClockSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.use12HourClock,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateUse12HourClock(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.use12HourClock.getString(context),
+              subtitle: AppLocale.use12HourClockSubtitle.getString(context),
+              trailing: CustomToggleSwitch(
+                value: config.use12HourClock,
+                onChanged: (value) {
+                  context.read<SqliteConfigProvider>().updateUse12HourClock(
+                    value,
+                  );
+                },
+                activeColor: theme.colorScheme.primary,
               ),
             );
           }(),
@@ -752,100 +465,49 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           SizedBox(height: 12.r),
           () {
             final index = currentItemIdx++;
-            return Container(
+            return SettingRow(
               key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
+              focused:
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index,
+              title: AppLocale.language.getString(context),
+              subtitle: AppLocale.languageSub.getString(context),
+              trailing: GestureDetector(
+                onTap: () => _showLanguagePicker(context, _itemKeys[index]),
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 10.r,
+                    vertical: 6.r,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6.r),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                      width: 0.5.r,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        AppLocale.supportedLanguages[config.appLanguage] ??
+                            config.appLanguage,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 9.r,
+                          fontWeight: FontWeight.w400,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      SizedBox(width: 2.r),
+                      Icon(
+                        Symbols.arrow_drop_down_rounded,
+                        size: 14.r,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.language.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.languageSub.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _showLanguagePicker(context, _itemKeys[index]),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 10.r,
-                        vertical: 6.r,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: 0.15,
-                        ),
-                        borderRadius: BorderRadius.circular(6.r),
-                        border: Border.all(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.4,
-                          ),
-                          width: 0.5.r,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocale.supportedLanguages[config.appLanguage] ??
-                                config.appLanguage,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              fontWeight: FontWeight.w400,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          SizedBox(width: 2.r),
-                          Icon(
-                            Symbols.arrow_drop_down_rounded,
-                            size: 14.r,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ),
             );
           }(),
@@ -856,62 +518,18 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
             SizedBox(height: 12.r),
             () {
               final index = currentItemIdx++;
-              return Container(
+              return SettingRow(
                 key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.fullscreenMode.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.fullscreenModeSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    CustomToggleSwitch(
-                      value: provider.isFullscreen,
-                      onChanged: _toggleFullscreen,
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
+                expandTitle: false,
+                focused:
+                    widget.isContentFocused &&
+                    widget.selectedContentIndex == index,
+                title: AppLocale.fullscreenMode.getString(context),
+                subtitle: AppLocale.fullscreenModeSubtitle.getString(context),
+                trailing: CustomToggleSwitch(
+                  value: provider.isFullscreen,
+                  onChanged: _toggleFullscreen,
+                  activeColor: theme.colorScheme.primary,
                 ),
               );
             }(),
@@ -1002,68 +620,19 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
             () {
               final index = currentItemIdx++;
-              return Container(
+              return SettingRow(
                 key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.defaultLauncher.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            _isDefaultLauncher
-                                ? AppLocale.isDefaultLauncher.getString(context)
-                                : AppLocale.setAsDefaultLauncher.getString(
-                                    context,
-                                  ),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    CustomToggleSwitch(
-                      value: _isDefaultLauncher,
-                      onChanged: _toggleLauncher,
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
+                focused:
+                    widget.isContentFocused &&
+                    widget.selectedContentIndex == index,
+                title: AppLocale.defaultLauncher.getString(context),
+                subtitle: _isDefaultLauncher
+                    ? AppLocale.isDefaultLauncher.getString(context)
+                    : AppLocale.setAsDefaultLauncher.getString(context),
+                trailing: CustomToggleSwitch(
+                  value: _isDefaultLauncher,
+                  onChanged: _toggleLauncher,
+                  activeColor: theme.colorScheme.primary,
                 ),
               );
             }(),
@@ -1074,72 +643,24 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           if (Platform.isAndroid) ...[
             () {
               final index = currentItemIdx++;
-              return Container(
+              return SettingRow(
                 key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
+                focused:
+                    widget.isContentFocused &&
+                    widget.selectedContentIndex == index,
+                title: AppLocale.disableSecondaryScreen.getString(context),
+                subtitle: AppLocale.disableSecondaryScreenSub.getString(
+                  context,
                 ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.disableSecondaryScreen.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            AppLocale.disableSecondaryScreenSub.getString(
-                              context,
-                            ),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    CustomToggleSwitch(
-                      value: config.hideBottomScreen,
-                      onChanged: (value) {
-                        provider.updateHideBottomScreen(
-                          value,
-                          backgroundColor: theme.scaffoldBackgroundColor
-                              .toARGB32(),
-                        );
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
+                trailing: CustomToggleSwitch(
+                  value: config.hideBottomScreen,
+                  onChanged: (value) {
+                    provider.updateHideBottomScreen(
+                      value,
+                      backgroundColor: theme.scaffoldBackgroundColor.toARGB32(),
+                    );
+                  },
+                  activeColor: theme.colorScheme.primary,
                 ),
               );
             }(),
@@ -1150,69 +671,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
             SizedBox(height: 12.r),
             () {
               final index = currentItemIdx++;
-              return Container(
+              return SettingRow(
                 key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                    strokeAlign: BorderSide.strokeAlignInside,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.bartopShutdown.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            AppLocale.bartopShutdownSubtitle.getString(context),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    CustomToggleSwitch(
-                      value: config.bartopExitPoweroff,
-                      onChanged: (value) {
-                        context
-                            .read<SqliteConfigProvider>()
-                            .updateBartopExitPoweroff(value);
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
+                focused:
+                    widget.isContentFocused &&
+                    widget.selectedContentIndex == index,
+                title: AppLocale.bartopShutdown.getString(context),
+                subtitle: AppLocale.bartopShutdownSubtitle.getString(context),
+                trailing: CustomToggleSwitch(
+                  value: config.bartopExitPoweroff,
+                  onChanged: (value) {
+                    context
+                        .read<SqliteConfigProvider>()
+                        .updateBartopExitPoweroff(value);
+                  },
+                  activeColor: theme.colorScheme.primary,
                 ),
               );
             }(),

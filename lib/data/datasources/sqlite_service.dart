@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 100;
+  static const int _databaseVersion = 101;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -530,6 +530,7 @@ class SqliteService {
               'type': jsonSystem.type,
               'color1': jsonSystem.color1,
               'color2': jsonSystem.color2,
+              'multidisc': jsonSystem.multiDisc ? 1 : 0,
             },
             where: 'id = ?',
             whereArgs: [systemId],
@@ -549,6 +550,7 @@ class SqliteService {
             'type': jsonSystem.type,
             'color1': jsonSystem.color1,
             'color2': jsonSystem.color2,
+            'multidisc': jsonSystem.multiDisc ? 1 : 0,
             'neosync_json': json.encode(jsonSystem.neosync.toJson()),
           });
         }
@@ -1552,6 +1554,7 @@ class SqliteService {
           type TEXT,
           color1 TEXT,
           color2 TEXT,
+          multidisc INTEGER NOT NULL DEFAULT 0,
           neosync_json TEXT
       );
       ''',

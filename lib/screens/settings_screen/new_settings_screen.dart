@@ -9,6 +9,7 @@ import 'package:neostation/utils/adaptive_scroll.dart';
 import 'new_settings_options/general_settings_content.dart';
 import 'new_settings_options/secondary_settings_content.dart';
 import 'new_settings_options/directories_settings_content.dart';
+import 'new_settings_options/tools_settings_content.dart';
 import 'new_settings_options/systems_settings_content.dart';
 import 'new_settings_options/launcher_settings_content.dart';
 import 'new_settings_options/about_settings_content.dart';
@@ -80,6 +81,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       GlobalKey<SystemArtSettingsContentState>();
   final GlobalKey<DirectoriesSettingsContentState> _directoriesSettingsKey =
       GlobalKey<DirectoriesSettingsContentState>();
+  final GlobalKey<ToolsSettingsContentState> _toolsSettingsKey =
+      GlobalKey<ToolsSettingsContentState>();
   final GlobalKey<SystemsSettingsContentState> _systemsSettingsKey =
       GlobalKey<SystemsSettingsContentState>();
   final GlobalKey<AboutSettingsContentState> _aboutSettingsKey =
@@ -131,6 +134,15 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         title: '',
         localeKey: AppLocale.directories,
         icon: Symbols.folder_rounded,
+        isVisible: true,
+      ),
+    );
+
+    _menuItems.add(
+      SettingsMenuItem(
+        title: '',
+        localeKey: AppLocale.tools,
+        icon: Symbols.build_rounded,
         isVisible: true,
       ),
     );
@@ -255,6 +267,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _directoriesSettingsKey.currentState?.scrollToIndex(
         _selectedContentIndex,
       );
+    } else if (selectedKey == AppLocale.tools) {
+      _toolsSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.systemsSettings) {
       _systemsSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.about) {
@@ -364,6 +378,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       return _systemArtSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.directories) {
       return _directoriesSettingsKey.currentState?.getItemCount() ?? 0;
+    } else if (selectedKey == AppLocale.tools) {
+      return _toolsSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.systemsSettings) {
       final provider = context.read<SqliteConfigProvider>();
       return _systemsSettingsKey.currentState?.getItemCount(provider) ?? 0;
@@ -387,6 +403,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _systemArtSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.directories) {
       _directoriesSettingsKey.currentState?.selectItem(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.tools) {
+      _toolsSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.secondaryDisplay) {
       _secondarySettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.systemsSettings) {
@@ -565,6 +583,12 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     } else if (selectedKey == AppLocale.directories) {
       return DirectoriesSettingsContent(
         key: _directoriesSettingsKey,
+        isContentFocused: !_focusOnMenu,
+        selectedContentIndex: _selectedContentIndex,
+      );
+    } else if (selectedKey == AppLocale.tools) {
+      return ToolsSettingsContent(
+        key: _toolsSettingsKey,
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
       );

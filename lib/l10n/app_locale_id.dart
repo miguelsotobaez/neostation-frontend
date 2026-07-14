@@ -171,6 +171,21 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.confirmExit: 'Konfirmasi Keluar',
   AppLocale.rescanAllFolders: 'Pindai ulang semua folder ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Cari sistem dan ROM baru secara manual',
+  AppLocale.organizeMultiDiscGames: 'Atur game multi-disk',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Secara otomatis membuat file .m3u untuk game multi-disk dan mengaturnya ke dalam folder',
+  AppLocale.organizeMultiDiscScanning:
+      'Memindai folder ROM untuk game multi-disk...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Belum ada folder ROM yang dikonfigurasi.',
+  AppLocale.organizeMultiDiscSkippedSuffix: ' ({count} jalur folder dilewati)',
+  AppLocale.organizeMultiDiscDone:
+      'Selesai: {groups} set diatur, {files} file dipindahkan, {playlists} playlist dibuat{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Tidak ada set multi-disk yang ditemukan untuk diatur{skipped}.',
+  AppLocale.organizeMultiDiscFailed: 'Gagal mengatur game multi-disk: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Ini akan memindahkan file ROM yang cocok ke folder game baru dan membuat playlist .m3u di penyimpanan Anda. Tindakan ini tidak dapat dibatalkan secara otomatis.',
   AppLocale.romsFolderSubtitle: 'Tambahkan folder yang berisi file ROM Anda',
   AppLocale.pressToRemoveFolder: 'Tekan Konfirmasi untuk menghapus folder ini',
   AppLocale.maxRomFoldersReached: 'Maksimal 5 folder ROM diizinkan',
@@ -795,6 +810,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.userDataLocationUpdated: 'Lokasi data diperbarui',
   AppLocale.resetToDefault: 'Setel Ulang ke Default',
   AppLocale.romDirectories: 'Direktori ROM',
+  AppLocale.tools: 'Alat',
+  AppLocale.toolsSubtitle: 'Alat untuk membantu mengatur ROM Anda',
   AppLocale.addRomFolder: 'Tambah Folder ROM',
   AppLocale.removeRomFolder: 'Hapus',
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',

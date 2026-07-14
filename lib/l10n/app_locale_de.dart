@@ -176,6 +176,23 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rescanAllFolders: 'Alle ROM-Ordner erneut scannen',
   AppLocale.rescanAllFoldersSubtitle:
       'Manuell nach neuen Systemen und ROMs suchen',
+  AppLocale.organizeMultiDiscGames: 'Mehrdisc-Spiele organisieren',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Erstellt automatisch .m3u-Dateien für Mehrdisc-Spiele und organisiert sie in Ordnern',
+  AppLocale.organizeMultiDiscScanning:
+      'ROM-Ordner werden nach Mehrdisc-Spielen durchsucht ...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Keine ROM-Ordner konfiguriert.',
+  AppLocale.organizeMultiDiscSkippedSuffix:
+      ' ({count} Ordnerpfad(e) übersprungen)',
+  AppLocale.organizeMultiDiscDone:
+      'Fertig: {groups} Set(s) organisiert, {files} Datei(en) verschoben, {playlists} Playlist(s) erstellt{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Keine Multi-Disc-Sets zum Organisieren gefunden{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Multi-Disc-Spiele konnten nicht organisiert werden: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Dadurch werden passende ROM-Dateien in neue Spielordner verschoben und .m3u-Wiedergabelisten auf dem Speicher erstellt. Dies kann nicht automatisch rückgängig gemacht werden.',
   AppLocale.romsFolderSubtitle:
       'Füge die Ordner hinzu, die deine ROM-Dateien enthalten',
   AppLocale.pressToRemoveFolder:
@@ -818,6 +835,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.userDataLocationUpdated: 'Datenspeicherort aktualisiert',
   AppLocale.resetToDefault: 'Standard wiederherstellen',
   AppLocale.romDirectories: 'ROM-Verzeichnisse',
+  AppLocale.tools: 'Werkzeuge',
+  AppLocale.toolsSubtitle: 'Werkzeuge zur Organisation deiner ROMs',
   AppLocale.addRomFolder: 'ROM-Ordner hinzufügen',
   AppLocale.removeRomFolder: 'Entfernen',
   AppLocale.resetPlayTimeConfirm: 'Spielzeit zurücksetzen',

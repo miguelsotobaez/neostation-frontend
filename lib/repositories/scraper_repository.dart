@@ -3,6 +3,16 @@ import 'dart:convert';
 import '../data/datasources/sqlite_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
+class MetadataTransferResult {
+  final String appSystemId;
+  final bool metadataTransferred;
+
+  const MetadataTransferResult({
+    required this.appSystemId,
+    required this.metadataTransferred,
+  });
+}
+
 /// Repository for ScreenScraper system configuration data access.
 class ScraperRepository {
   static final _log = LoggerService.instance;
@@ -617,6 +627,119 @@ class ScraperRepository {
       where: 'filename = ?',
       whereArgs: [filename],
     );
+  }
+
+  /// Transfers scraped metadata from the first matching source ROM to a newly
+  /// created multi-disc playlist. Source paths keep the update scoped to the
+  /// correct system, even where different systems contain identically named
+  /// files. Existing playlist metadata is never overwritten.
+  static Future<MetadataTransferResult?> transferMetadataToPlaylist({
+    required List<String> sourceRomPaths,
+    required List<String> sourceFilenames,
+    required String playlistFilename,
+  }) async {
+    if (sourceRomPaths.isEmpty && sourceFilenames.isEmpty) return null;
+
+    try {
+      final db = await SqliteService.getDatabase();
+      return await db.transaction((txn) async {
+        for (var index = 0; index < sourceRomPaths.length; index++) {
+          final sourceRomPath = sourceRomPaths[index];
+          final sourceFilename = index < sourceFilenames.length
+              ? sourceFilenames[index]
+              : null;
+          var sourceRows = await txn.rawQuery(
+            '''
+            SELECT ur.app_system_id, ur.filename
+            FROM user_roms ur
+            INNER JOIN user_screenscraper_metadata usm
+              ON usm.app_system_id = ur.app_system_id
+              AND usm.filename = ur.filename
+            WHERE ur.rom_path = ?
+            ''',
+            [sourceRomPath],
+          );
+
+          if (sourceRows.isEmpty && sourceFilename != null) {
+            final filenameMatches = await txn.rawQuery(
+              '''
+              SELECT ur.app_system_id, ur.filename
+              FROM user_roms ur
+              INNER JOIN user_screenscraper_metadata usm
+                ON usm.app_system_id = ur.app_system_id
+                AND usm.filename = ur.filename
+              WHERE ur.filename = ?
+              ''',
+              [sourceFilename],
+            );
+
+            if (filenameMatches.length == 1) {
+              sourceRows = filenameMatches;
+              _log.i(
+                'Transferring metadata for $sourceFilename using filename fallback.',
+              );
+            } else if (filenameMatches.length > 1) {
+              _log.w(
+                'Metadata transfer skipped for $sourceFilename: filename matches multiple systems.',
+              );
+            }
+          }
+
+          for (final source in sourceRows) {
+            final appSystemId = source['app_system_id'].toString();
+            final matchedFilename = source['filename'].toString();
+            final updated = await txn.rawUpdate(
+              '''
+              UPDATE user_screenscraper_metadata
+              SET filename = ?, updated_at = ?
+              WHERE app_system_id = ? AND filename = ?
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM user_screenscraper_metadata
+                  WHERE app_system_id = ? AND filename = ?
+                )
+              ''',
+              [
+                playlistFilename,
+                DateTime.now().toIso8601String(),
+                appSystemId,
+                matchedFilename,
+                appSystemId,
+                playlistFilename,
+              ],
+            );
+            if (updated > 0) {
+              _log.i(
+                'Transferred metadata from $matchedFilename to $playlistFilename.',
+              );
+              return MetadataTransferResult(
+                appSystemId: appSystemId,
+                metadataTransferred: true,
+              );
+            }
+
+            final targetExists = await txn.query(
+              'user_screenscraper_metadata',
+              columns: ['filename'],
+              where: 'app_system_id = ? AND filename = ?',
+              whereArgs: [appSystemId, playlistFilename],
+              limit: 1,
+            );
+            if (targetExists.isNotEmpty) {
+              return MetadataTransferResult(
+                appSystemId: appSystemId,
+                metadataTransferred: false,
+              );
+            }
+          }
+        }
+        _log.i('No scraped metadata found to transfer to $playlistFilename.');
+        return null;
+      });
+    } catch (e) {
+      _log.e('Error transferring metadata to playlist: $e');
+      return null;
+    }
   }
 
   // ── Bulk scraping ─────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "scd",
+    "multidisc": true,
     "name": "Sega CD",
     "short_name": "SCD",
     "details": {

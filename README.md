@@ -22,6 +22,7 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 
 - **Modern & customizable UI**: Designed for both large screens and handheld devices, with themes and animations.
 - **Collection management**: Intuitively organize your ROMs and platforms.
+- **Multi-disc ROM organization**: Automatically create `.m3u` playlists for your multi-disc games and organize them into game folders.
 - **RetroArch & standalone emulator integration**: Easy configuration and auto-detection.
 - **Multi-platform support**: Windows, Linux, macOS, and Android.
 - **Lightweight & fast**: Built with web and native technologies for maximum performance.
@@ -31,6 +32,17 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 - **ScreenScraper integration**: Automatic metadata and media scraping.
 - **Gamepad & keyboard navigation**: Full controller support across all platforms.
 - **10 languages supported**: English, Spanish, Portuguese, Russian, Chinese, French, German, Italian, Indonesian, Japanese.
+
+## Multi-disc ROM Organization
+
+The built-in organizer helps prepare multi-disc games for emulators that use `.m3u` playlists:
+
+1. Open **Settings > Tools**.
+2. Select **Organize Multi-Disc Games**.
+3. NeoStation recursively scans all configured ROM folders and detects disc sets using `Disc`, `Disk`, or `CD` filename markers.
+4. Each detected set is placed in a game folder with an `.m3u` playlist. Existing playlists are reused rather than duplicated.
+
+Folders that already contain `.m3u` playlists are skipped during the scan.
 
 ## Supported Platforms
 

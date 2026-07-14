@@ -42,6 +42,7 @@ class DatabaseTestHelper {
         type TEXT,
         color1 TEXT,
         color2 TEXT,
+        multidisc INTEGER NOT NULL DEFAULT 0,
         neosync_json TEXT
       )
     ''');
