@@ -167,6 +167,16 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       return;
     }
 
+    // Device asleep (lid closed / screen off): tear down the preview so its
+    // audio output device stops and the CPU can deep-sleep. This engine never
+    // receives Android lifecycle callbacks, so deviceScreenOn (bridged from the
+    // native ACTION_SCREEN_ON/OFF receiver) is the only reliable signal.
+    if (!state.deviceScreenOn) {
+      _stopVideo();
+      _currentVideoPath = null; // force a fresh start when the screen wakes
+      return;
+    }
+
     if (state.gameVideo != _currentVideoPath) {
       _currentVideoPath = state.gameVideo;
       _stopVideo();
