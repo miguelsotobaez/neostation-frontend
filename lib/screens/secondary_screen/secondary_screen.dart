@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../l10n/app_locale.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -19,6 +18,7 @@ import '../../services/retro_achievements_service.dart';
 import '../../utils/no_glow_scroll_behavior.dart';
 import 'background_builders.dart';
 import 'now_playing_helpers.dart';
+import 'widgets/app_dock.dart';
 
 class SecondaryScreen extends StatefulWidget {
   const SecondaryScreen({super.key});
@@ -1178,7 +1178,17 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
               ],
             ),
           ),
-          Positioned(left: 0, right: 0, bottom: 0, child: _buildAppDock(value)),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AppDock(
+              value: value,
+              onLaunchApp: _launchDockApp,
+              onPickSlot: _openAppPicker,
+              onClearSlot: _clearSlot,
+            ),
+          ),
           // All-apps launcher pinned to the bottom-left corner.
           if (value.dockEnabled)
             Positioned(
@@ -1231,38 +1241,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// of [SecondaryDisplayStateData.dockSlotCount] slots (user setting). Tap a
   /// filled slot to launch it, tap an empty slot to pick an app, long-press a
   /// filled slot to clear it. Hidden entirely when the dock is disabled.
-  Widget _buildAppDock(SecondaryDisplayStateData value) {
-    if (!value.dockEnabled) return const SizedBox.shrink();
-    final apps = ConfigModel.normalizeDock(value.dockApps);
-    final scheme = panelScheme(value);
-    final visibleSlots = value.dockSlotCount.clamp(
-      ConfigModel.dockMinSlotCount,
-      ConfigModel.dockMaxSlotCount,
-    );
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 12.r),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            scheme.shadow.withValues(alpha: 0.55),
-            scheme.shadow.withValues(alpha: 0.0),
-          ],
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < visibleSlots; i++) ...[
-            if (i > 0) SizedBox(width: 14.r),
-            _buildDockSlot(i, apps[i], scheme),
-          ],
-        ],
-      ),
-    );
-  }
-
   /// The all-apps launcher, pinned to the bottom-left of the Now Playing
   /// screen. Normally opens the app picker in launch mode. When the Screen
   /// Return accessibility service isn't enabled, it's highlighted with an
@@ -1330,59 +1308,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _wakeInGamePanel();
     SfxService().playNavSound();
     SecondaryAppsService.openAccessibilitySettings();
-  }
-
-  /// A single dock slot. [package] empty = free slot.
-  Widget _buildDockSlot(int index, String package, ColorScheme scheme) {
-    final filled = package.isNotEmpty;
-    return GestureDetector(
-      onTap: () => filled ? _launchDockApp(package) : _openAppPicker(index),
-      onLongPress: filled ? () => _clearSlot(index) : null,
-      child: Container(
-        width: 56.r,
-        height: 56.r,
-        decoration: BoxDecoration(
-          color: scheme.onSurface.withValues(alpha: filled ? 0.10 : 0.05),
-          borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(
-            color: scheme.onSurface.withValues(alpha: filled ? 0.22 : 0.14),
-          ),
-        ),
-        child: filled
-            ? Padding(
-                padding: EdgeInsets.all(8.r),
-                child: _buildDockIcon(package),
-              )
-            : Icon(
-                Symbols.add_rounded,
-                color: scheme.onSurface.withValues(alpha: 0.45),
-                size: 26.r,
-              ),
-      ),
-    );
-  }
-
-  /// Lazily loads and renders a docked app's launcher icon (cached in
-  /// [SecondaryAppsService]).
-  Widget _buildDockIcon(String package) {
-    return FutureBuilder<Uint8List?>(
-      future: SecondaryAppsService.getAppIcon(package),
-      builder: (context, snapshot) {
-        final bytes = snapshot.data;
-        if (bytes != null) {
-          return Image.memory(
-            bytes,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-          );
-        }
-        return Icon(
-          Symbols.android_rounded,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-          size: 24.r,
-        );
-      },
-    );
   }
 
   /// Full-panel overlay for choosing an app for the pending dock slot. Tapping
@@ -1495,7 +1420,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
               borderRadius: BorderRadius.circular(18.r),
             ),
             padding: EdgeInsets.all(12.r),
-            child: _buildDockIcon(package),
+            child: buildDockIcon(package),
           ),
           SizedBox(height: 8.r),
           Text(
