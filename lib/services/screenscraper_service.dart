@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -10,9 +9,8 @@ import 'package:http/io_client.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../repositories/scraper_repository.dart';
 import 'screenscraper/region_config.dart';
-import '../repositories/system_repository.dart';
+import 'screenscraper/rom_hasher.dart';
 import 'config_service.dart';
-import '../utils/optimized_md5_utils.dart';
 import '../utils/semaphore.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
@@ -184,13 +182,6 @@ class ScreenScraperService {
     throw Exception('HTTP request failed after $maxRetries attempts');
   }
 
-  /// Computes the file MD5 hash in a background isolate to keep the UI responsive.
-  static Future<String> _calculateMd5InIsolate(String filePath) async {
-    return await Isolate.run(() async {
-      return await OptimizedMd5Utils.calculateFileMd5(filePath);
-    });
-  }
-
   /// Validates if a new request can be made based on user's daily quota limits.
   static Future<bool> _canMakeRequest(
     int currentRequests,
@@ -224,38 +215,6 @@ class ScreenScraperService {
     _cachedMediaDirectory = mediaDir.path;
 
     return _cachedMediaDirectory!;
-  }
-
-  /// Sanitizes a ROM filename by removing system-specific extensions.
-  static Future<String> _getCleanRomName(
-    String romName,
-    String? appSystemId,
-  ) async {
-    if (appSystemId != null) {
-      try {
-        final extensions = await SystemRepository.getExtensionsForSystem(
-          appSystemId,
-        );
-        for (final ext in extensions) {
-          final dotExt = '.$ext';
-          if (romName.toLowerCase().endsWith(dotExt.toLowerCase())) {
-            return romName.substring(0, romName.length - dotExt.length);
-          }
-        }
-      } catch (e) {
-        _log.w('Error getting extensions for app system $appSystemId: $e');
-      }
-    }
-
-    final lastDot = romName.lastIndexOf('.');
-    if (lastDot != -1) {
-      final ext = romName.substring(lastDot + 1);
-      if (!ext.contains(' ') && ext.length <= 10) {
-        return romName.substring(0, lastDot);
-      }
-    }
-
-    return romName;
   }
 
   /// Authenticates user credentials against the ScreenScraper API.
@@ -549,7 +508,7 @@ class ScreenScraperService {
         } catch (_) {}
       }
 
-      final cleanRomName = await _getCleanRomName(
+      final cleanRomName = await ScreenscraperRomHasher.getCleanRomName(
         gameName ?? romName,
         targetAppSystemId,
       );
@@ -934,7 +893,10 @@ class ScreenScraperService {
       );
       if (bestMedia != null) {
         final folderName = _mapMediaTypeToFolder(mediaType);
-        final romBaseName = await _getCleanRomName(romName, appSystemId);
+        final romBaseName = await ScreenscraperRomHasher.getCleanRomName(
+          romName,
+          appSystemId,
+        );
         final fileName =
             '$romBaseName.${bestMedia['format']?.toString() ?? 'png'}';
         final relativePath = '$systemFolder/$folderName/$fileName';
@@ -1361,7 +1323,9 @@ class ScreenScraperService {
       if (gameInfo == null &&
           systemFolder != 'android' &&
           File(romPath).existsSync()) {
-        final hash = await _calculateMd5InIsolate(romPath);
+        final hash = await ScreenscraperRomHasher.calculateMd5InIsolate(
+          romPath,
+        );
         final resWithHash = await fetchGameInfo(
           screenscraperSystemId.toString(),
           filename,
@@ -1456,7 +1420,10 @@ class ScreenScraperService {
         'box2d',
         'videos',
       ];
-      final romBaseName = await _getCleanRomName(romName, appSystemId);
+      final romBaseName = await ScreenscraperRomHasher.getCleanRomName(
+        romName,
+        appSystemId,
+      );
       final missing = <String>[];
       final existing = <String>[];
 
