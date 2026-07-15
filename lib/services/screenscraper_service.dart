@@ -2,16 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
-import 'package:http/io_client.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../repositories/scraper_repository.dart';
 import 'screenscraper/region_config.dart';
 import 'screenscraper/rom_hasher.dart';
 import 'screenscraper/media_resolver.dart';
-import '../utils/semaphore.dart';
+import 'screenscraper/screenscraper_client.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
 import '../widgets/scraping_summary_dialog.dart';
@@ -43,162 +40,8 @@ class ScreenScraperService {
     return Platform.environment['SCREENSCRAPER_DEV_PASSWORD'] ?? '';
   }
 
-  static String? _appVersion;
-
-  /// Retrieves the application version and platform to identify requests to the API.
-  static Future<String> _getSoftname() async {
-    if (_appVersion != null) return _appVersion!;
-
-    try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final name = packageInfo.appName.isNotEmpty
-          ? packageInfo.appName
-          : 'neostation';
-      final version = packageInfo.version;
-
-      String platform = '';
-      if (Platform.isAndroid) {
-        platform = 'android';
-      } else if (Platform.isIOS) {
-        platform = 'ios';
-      } else if (Platform.isWindows) {
-        platform = 'windows';
-      } else if (Platform.isLinux) {
-        platform = 'linux';
-      } else if (Platform.isMacOS) {
-        platform = 'macos';
-      }
-      _appVersion = '$name-$version-$platform';
-      return _appVersion!;
-    } catch (e) {
-      _appVersion = 'neostation';
-      return _appVersion!;
-    }
-  }
-
-  /// Persistent HTTP client with SSL certificate validation bypass for legacy compatibility.
-  static final http.Client _httpClient = () {
-    final client = HttpClient()
-      ..badCertificateCallback =
-          ((X509Certificate cert, String host, int port) => true);
-    return IOClient(client);
-  }();
-
-  static Semaphore _requestSemaphore = Semaphore(5);
-
-  static int _dailyRequestsCount = 0;
-  static DateTime? _lastRequestDate;
-
   static Map<String, dynamic>? _cachedCredentials;
   static bool _isMetadataScrapingRunning = false;
-
-  /// Updates the request semaphore concurrency limit.
-  static void _updateRequestSemaphore(int maxThreads) {
-    if (_requestSemaphore.maxCount != maxThreads) {
-      _requestSemaphore = Semaphore(maxThreads);
-    }
-  }
-
-  /// Resets or initializes the daily request counter based on the current date.
-  static void _initializeDailyCounter(int currentRequests) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    if (_lastRequestDate == null ||
-        !_lastRequestDate!.isAtSameMomentAs(today)) {
-      _dailyRequestsCount = currentRequests;
-      _lastRequestDate = today;
-    }
-  }
-
-  /// Performs an HTTP GET request with exponential backoff and timeout management.
-  static Future<http.Response> _httpGetWithRetry(
-    Uri url, {
-    Map<String, String>? headers,
-    int maxRetries = 2,
-    Duration timeout = const Duration(seconds: 40),
-    int? maxDailyRequests,
-  }) async {
-    if (maxDailyRequests != null && maxDailyRequests > 0) {
-      if (!await _canMakeRequest(_dailyRequestsCount, maxDailyRequests)) {
-        throw Exception(
-          'Daily request limit reached: $_dailyRequestsCount/$maxDailyRequests',
-        );
-      }
-    }
-
-    int attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        await _requestSemaphore.acquire();
-
-        final response = await _httpClient
-            .get(url, headers: headers)
-            .timeout(timeout);
-
-        _requestSemaphore.release();
-
-        if (response.statusCode == 200 || response.statusCode == 403) {
-          _dailyRequestsCount++;
-          return response;
-        } else if (response.statusCode >= 500) {
-          if (attempt < maxRetries - 1) {
-            final delay = Duration(milliseconds: 500 * (attempt + 1));
-            _log.w(
-              'Server error ${response.statusCode}, retrying in ${delay.inMilliseconds}ms...',
-            );
-            await Future.delayed(delay);
-            attempt++;
-            continue;
-          }
-        }
-
-        return response;
-      } on TimeoutException {
-        _requestSemaphore.release();
-        if (attempt < maxRetries - 1) {
-          final delay = Duration(milliseconds: 500 * (attempt + 1));
-          await Future.delayed(delay);
-          attempt++;
-          continue;
-        }
-        rethrow;
-      } catch (e) {
-        _requestSemaphore.release();
-        if (attempt < maxRetries - 1) {
-          final delay = Duration(milliseconds: 500 * (attempt + 1));
-          _log.e(
-            'Request failed, retrying in ${delay.inMilliseconds}ms... (${e.toString()})',
-          );
-          await Future.delayed(delay);
-          attempt++;
-          continue;
-        }
-        rethrow;
-      }
-    }
-
-    throw Exception('HTTP request failed after $maxRetries attempts');
-  }
-
-  /// Validates if a new request can be made based on user's daily quota limits.
-  static Future<bool> _canMakeRequest(
-    int currentRequests,
-    int maxDailyRequests,
-  ) async {
-    if (maxDailyRequests <= 0) return true;
-
-    final bufferLimit = (maxDailyRequests * 0.9).round();
-
-    if (currentRequests >= bufferLimit) {
-      _log.e(
-        'Daily limit reached: $currentRequests/$maxDailyRequests (buffer: $bufferLimit)',
-      );
-      return false;
-    }
-
-    return true;
-  }
 
   /// Authenticates user credentials against the ScreenScraper API.
   static Future<Map<String, dynamic>?> verifyCredentials(
@@ -206,7 +49,7 @@ class ScreenScraperService {
     String password,
   ) async {
     try {
-      final softname = await _getSoftname();
+      final softname = await ScreenscraperClient.getSoftname();
       final url = Uri.parse('$_baseUrl/ssuserInfos.php').replace(
         queryParameters: {
           'devid': _devId,
@@ -218,7 +61,7 @@ class ScreenScraperService {
         },
       );
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         url,
         headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
       );
@@ -360,7 +203,7 @@ class ScreenScraperService {
         return null;
       }
 
-      final softname = await _getSoftname();
+      final softname = await ScreenscraperClient.getSoftname();
       final url = Uri.parse('$_baseUrl/systemesListe.php').replace(
         queryParameters: {
           'devid': _devId,
@@ -372,7 +215,7 @@ class ScreenScraperService {
         },
       );
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         url,
         headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
       );
@@ -480,7 +323,7 @@ class ScreenScraperService {
       }
 
       _cachedCredentials ??= credentials;
-      final softname = await _getSoftname();
+      final softname = await ScreenscraperClient.getSoftname();
 
       String? targetAppSystemId = appSystemId;
       if (targetAppSystemId == null) {
@@ -521,7 +364,7 @@ class ScreenScraperService {
         '$_baseUrl/jeuInfos.php',
       ).replace(queryParameters: queryParameters);
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         url,
         headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
         maxDailyRequests: maxDailyRequests,
@@ -734,7 +577,7 @@ class ScreenScraperService {
         return true;
       }
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         Uri.parse(url),
         timeout: const Duration(seconds: 60),
         maxRetries: 2,
@@ -1006,9 +849,9 @@ class ScreenScraperService {
       final credentials = await getSavedCredentials();
       if (credentials == null) return false;
 
-      _initializeDailyCounter(0);
+      ScreenscraperClient.initializeDailyCounter(0);
       final maxThreads = int.tryParse(credentials['maxthreads'] ?? '4') ?? 4;
-      _updateRequestSemaphore(maxThreads);
+      ScreenscraperClient.updateRequestSemaphore(maxThreads);
 
       final preferredLanguage = credentials['preferred_language'] ?? 'en';
       final scraperConfig = await getScraperConfig();
