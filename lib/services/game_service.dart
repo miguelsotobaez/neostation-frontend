@@ -11,16 +11,14 @@ import '../models/system_model.dart';
 import '../models/emulator_model.dart';
 import '../models/core_emulator_model.dart';
 import '../providers/file_provider.dart';
-import '../repositories/game_repository.dart';
-import '../repositories/system_repository.dart';
 import '../repositories/emulator_repository.dart';
 import 'config_service.dart';
-import 'game_session_persistence.dart';
 import 'android_service.dart';
 import 'music_player_service.dart';
 import 'launcher_service.dart';
 import 'game/game_list_service.dart';
 import 'game/favorites_service.dart';
+import 'game/game_session_manager.dart';
 import 'gamepad/gamepad_navigation_manager.dart';
 export 'gamepad/gamepad_navigation_manager.dart'
     show GamepadNavigationManager, NavLayer;
@@ -52,57 +50,29 @@ class GameLaunchResult {
 /// process monitoring.
 class GameService {
   /// Whether a game process is currently active.
-  static bool _isGameLaunched = false;
-  static bool get isGameLaunched => _isGameLaunched;
-
-  /// True from the moment a launch is initiated (Now Playing pushed) until the
-  /// launch resolves — i.e. [_registerGameLaunch] flips [_isGameLaunched], or
-  /// the launch fails. Covers the ~2s dialog+handoff window during which
-  /// [_isGameLaunched] is still false, so a transient resume in that window
-  /// can't clear the Now Playing state we just pushed.
-  static bool _launchPending = false;
+  /// Delegates to [GameSessionManager].
+  static bool get isGameLaunched => GameSessionManager.isGameLaunched;
 
   /// Whether a game is running OR a launch is in progress. Callers reacting to
   /// an app resume should use this (not [isGameLaunched]) before clearing
   /// secondary-display in-game state, to avoid a launch-window race.
-  static bool get isGameLaunchInProgress => _isGameLaunched || _launchPending;
+  /// Delegates to [GameSessionManager].
+  static bool get isGameLaunchInProgress =>
+      GameSessionManager.isGameLaunchInProgress;
 
   /// Opens the launch-pending window. Call when a launch is initiated, before
-  /// the emulator handoff. Cleared by [_registerGameLaunch] on success or
-  /// [clearLaunchPending] on failure.
-  static void beginLaunchPending() => _launchPending = true;
+  /// the emulator handoff.
+  /// Delegates to [GameSessionManager].
+  static void beginLaunchPending() => GameSessionManager.beginLaunchPending();
 
   /// Closes the launch-pending window (e.g. on launch failure).
-  static void clearLaunchPending() => _launchPending = false;
-
-  /// Timestamp when the current game session was initiated.
-  static DateTime? _gameLaunchTime;
-
-  /// Filename of the standalone emulator executable currently running.
-  static String? _launchedEmulatorExe;
-
-  /// Metadata for the system associated with the current game.
-  static SystemModel? _currentGameSystem;
-
-  /// Metadata for the currently active game.
-  static GameModel? _currentGame;
-
-  /// Callback triggered when a game session terminates on Android.
-  static Function(int)? _onGameReturnedCallback;
+  /// Delegates to [GameSessionManager].
+  static void clearLaunchPending() => GameSessionManager.clearLaunchPending();
 
   /// Callback for raw device screen on/off, registered by a context-aware
   /// widget so context-only services (e.g. NotificationService) can be
   /// suspended while locked. `true` = screen on, `false` = screen off.
   static void Function(bool screenOn)? onScreenStateChanged;
-
-  /// Callback triggered when the game process exits on desktop platforms.
-  static Function()? _onProcessExitCallback;
-
-  /// Periodic timer for persisting playtime statistics to the database.
-  static Timer? _playtimeTimer;
-
-  /// Timestamp of the last successful playtime persistence operation.
-  static DateTime? _lastPlaytimeSave;
 
   static final _log = LoggerService.instance;
 
@@ -117,8 +87,8 @@ class GameService {
             int.tryParse(call.arguments['elapsedSeconds']?.toString() ?? '0') ??
             0;
 
-        if (_onGameReturnedCallback != null) {
-          _onGameReturnedCallback!(elapsedSeconds);
+        if (GameSessionManager.onGameReturnedCallback != null) {
+          GameSessionManager.onGameReturnedCallback!(elapsedSeconds);
         }
       } else if (call.method == 'onDeviceScreenOff') {
         // As a HOME launcher we are not paused on lock, so this is the only
@@ -130,7 +100,7 @@ class GameService {
         // (lifecycle resumed) path re-opens everything. Restoring here would
         // reopen the audio engine (and restart music/websocket) behind the
         // running emulator.
-        if (!_isGameLaunched) {
+        if (!GameSessionManager.isGameLaunched) {
           MusicPlayerService().appResumed();
           onScreenStateChanged?.call(true);
         }
@@ -142,57 +112,21 @@ class GameService {
   ///
   /// Handles cases where the application was terminated by the OS (Android)
   /// while a game was running.
-  static Future<void> checkPendingGameSession() async {
-    try {
-      final session = await GameSessionPersistence.getActiveGameSession();
+  /// Delegates to [GameSessionManager].
+  static Future<void> checkPendingGameSession() =>
+      GameSessionManager.checkPendingGameSession();
 
-      if (session == null) {
-        return;
-      }
+  static void setOnGameReturnedCallback(Function(int) callback) =>
+      GameSessionManager.setOnGameReturnedCallback(callback);
 
-      final systemFolderName = session['systemFolderName'].toString();
-      final filename = session['filename'].toString();
-      final startTimestamp =
-          int.tryParse(session['startTimestamp']?.toString() ?? '0') ?? 0;
+  static void clearOnGameReturnedCallback() =>
+      GameSessionManager.clearOnGameReturnedCallback();
 
-      final currentTimestamp = DateTime.now().millisecondsSinceEpoch;
-      final elapsedSeconds = ((currentTimestamp - startTimestamp) / 1000)
-          .round();
+  static void setOnProcessExitCallback(Function() callback) =>
+      GameSessionManager.setOnProcessExitCallback(callback);
 
-      // Only process sessions that lasted at least 5 seconds to filter out launch failures
-      if (elapsedSeconds >= 5) {
-        final system = await SystemRepository.getSystemByFolderName(
-          systemFolderName,
-        );
-        if (system == null) return;
-        final game = await GameRepository.getSingleGame(system.id!, filename);
-
-        if (game != null && game.romPath.isNotEmpty) {
-          await GameRepository.updatePlayTime(game.romPath, elapsedSeconds);
-        }
-      }
-
-      await GameSessionPersistence.clearGameSession();
-    } catch (e) {
-      _log.e('Error checking pending game session: $e');
-    }
-  }
-
-  static void setOnGameReturnedCallback(Function(int) callback) {
-    _onGameReturnedCallback = callback;
-  }
-
-  static void clearOnGameReturnedCallback() {
-    _onGameReturnedCallback = null;
-  }
-
-  static void setOnProcessExitCallback(Function() callback) {
-    _onProcessExitCallback = callback;
-  }
-
-  static void clearOnProcessExitCallback() {
-    _onProcessExitCallback = null;
-  }
+  static void clearOnProcessExitCallback() =>
+      GameSessionManager.clearOnProcessExitCallback();
 
   /// Retrieves games for a system with metadata formatting applied.
   /// Delegates to [GameListService].
@@ -248,61 +182,12 @@ class GameService {
   }
 
   /// Registers the initiation of a game session and initializes tracking state.
+  /// Delegates to [GameSessionManager].
   static void _registerGameLaunch(
     SystemModel system,
     GameModel game, [
     String? emulatorExeName,
-  ]) {
-    _isGameLaunched = true;
-    _launchPending = false;
-    _gameLaunchTime = DateTime.now();
-    _lastPlaytimeSave = _gameLaunchTime;
-    _launchedEmulatorExe = emulatorExeName;
-    _currentGameSystem = system;
-    _currentGame = game;
-
-    if (Platform.isAndroid) {
-      GameSessionPersistence.saveGameSession(
-        systemFolderName: system.folderName,
-        filename: game.romname,
-        startTimestamp: _gameLaunchTime!.millisecondsSinceEpoch,
-      );
-    }
-
-    _startPlaytimeTimer();
-  }
-
-  /// Starts the periodic timer for incremental playtime persistence.
-  static void _startPlaytimeTimer() {
-    _playtimeTimer?.cancel();
-
-    _playtimeTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (_isGameLaunched &&
-          _gameLaunchTime != null &&
-          _lastPlaytimeSave != null &&
-          _currentGameSystem != null &&
-          _currentGame != null) {
-        final now = DateTime.now();
-        final elapsedSinceLastSave = now
-            .difference(_lastPlaytimeSave!)
-            .inSeconds;
-
-        if (elapsedSinceLastSave > 0) {
-          _savePlayTime(
-            _currentGameSystem!,
-            _currentGame!,
-            elapsedSinceLastSave,
-          );
-          _lastPlaytimeSave = now;
-        }
-      }
-    });
-  }
-
-  static void _stopPlaytimeTimer() {
-    _playtimeTimer?.cancel();
-    _playtimeTimer = null;
-  }
+  ]) => GameSessionManager.registerGameLaunch(system, game, emulatorExeName);
 
   /// Checks if the default emulator (RetroArch) is currently running on the host system.
   static Future<bool> _isDefaultEmulatorRunning() async {
@@ -346,59 +231,26 @@ class GameService {
   }
 
   /// Gracefully terminates the active game session and finalizes playtime tracking.
-  static Future<void> endGameSession() async {
-    if (!_isGameLaunched) return;
-
-    if (_gameLaunchTime != null &&
-        _lastPlaytimeSave != null &&
-        _currentGameSystem != null &&
-        _currentGame != null) {
-      final now = DateTime.now();
-      final elapsedSinceLastSave = now.difference(_lastPlaytimeSave!).inSeconds;
-      if (elapsedSinceLastSave > 0) {
-        await _savePlayTime(
-          _currentGameSystem!,
-          _currentGame!,
-          elapsedSinceLastSave,
-        );
-      }
-    }
-
-    _stopPlaytimeTimer();
-
-    if (Platform.isAndroid) {
-      const platform = MethodChannel('com.neogamelab.neostation/game');
-      await platform.invokeMethod('setGamepadBlock', {'block': false});
-      GameSessionPersistence.clearGameSession();
-    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      if (_onProcessExitCallback != null) {
-        _onProcessExitCallback!();
-      }
-    }
-
-    _isGameLaunched = false;
-    _gameLaunchTime = null;
-    _lastPlaytimeSave = null;
-    _launchedEmulatorExe = null;
-    _currentGameSystem = null;
-    _currentGame = null;
-  }
+  /// Delegates to [GameSessionManager].
+  static Future<void> endGameSession() => GameSessionManager.endGameSession();
 
   /// Handles application re-entry (foregrounding) to detect session termination.
   static Future<void> handleAppResumed() async {
-    if (_isGameLaunched) {
+    if (GameSessionManager.isGameLaunched) {
       if (Platform.isLinux) return;
 
       final isDesktop =
           Platform.isWindows || Platform.isLinux || Platform.isMacOS;
       final gracePeriod = isDesktop ? 10 : 2;
-      final timeSinceLaunch = DateTime.now().difference(_gameLaunchTime!);
+      final timeSinceLaunch = DateTime.now().difference(
+        GameSessionManager.gameLaunchTime!,
+      );
 
       if (timeSinceLaunch.inSeconds > gracePeriod) {
         bool emulatorStillRunning = false;
 
-        if (_launchedEmulatorExe != null) {
-          emulatorStillRunning = await _isProcessRunning(_launchedEmulatorExe!);
+        if (launchedEmulatorExe != null) {
+          emulatorStillRunning = await _isProcessRunning(launchedEmulatorExe!);
         } else {
           emulatorStillRunning = await _isDefaultEmulatorRunning();
         }
@@ -421,7 +273,8 @@ class GameService {
     return await _isDefaultEmulatorRunning();
   }
 
-  static String? get launchedEmulatorExe => _launchedEmulatorExe;
+  static String? get launchedEmulatorExe =>
+      GameSessionManager.launchedEmulatorExe;
 
   /// Verifies if a process is running on desktop platforms.
   static Future<bool> isProcessRunning(String processName) async {
@@ -434,18 +287,6 @@ class GameService {
       return await _isProcessRunningUnix(unixName);
     }
     return false;
-  }
-
-  static Future<void> _savePlayTime(
-    SystemModel system,
-    GameModel game,
-    int elapsedSeconds,
-  ) async {
-    try {
-      await GameRepository.updatePlayTime(game.romPath!, elapsedSeconds);
-    } catch (e) {
-      _log.e('Error saving game time: $e');
-    }
   }
 
   /// Computes aggregate statistics for a list of games.
@@ -1014,8 +855,8 @@ class GameService {
             _log.i('Process exited with code: $exitCode');
             await Future.delayed(Duration(seconds: 2));
             bool stillRunning = false;
-            if (_launchedEmulatorExe != null) {
-              stillRunning = await _isProcessRunning(_launchedEmulatorExe!);
+            if (launchedEmulatorExe != null) {
+              stillRunning = await _isProcessRunning(launchedEmulatorExe!);
             }
 
             if (!stillRunning &&
@@ -1250,8 +1091,8 @@ class GameService {
             _log.i('Standalone emulator exited with code: $exitCode');
             await Future.delayed(Duration(seconds: 2));
             bool stillRunning = false;
-            if (_launchedEmulatorExe != null) {
-              stillRunning = await _isProcessRunning(_launchedEmulatorExe!);
+            if (launchedEmulatorExe != null) {
+              stillRunning = await _isProcessRunning(launchedEmulatorExe!);
             }
 
             if (!stillRunning &&
