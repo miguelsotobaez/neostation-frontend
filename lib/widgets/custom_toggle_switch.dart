@@ -21,16 +21,22 @@ class CustomToggleSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final effectiveActiveColor = activeColor ?? theme.colorScheme.primary;
+    final scheme = theme.colorScheme;
+    final effectiveActiveColor = activeColor ?? scheme.primary;
 
-    Color onActiveColor;
-    if (activeColor == theme.colorScheme.secondary) {
-      onActiveColor = theme.colorScheme.onSecondary;
-    } else if (activeColor == theme.colorScheme.primary) {
-      onActiveColor = theme.colorScheme.onPrimary;
-    } else {
-      onActiveColor = theme.colorScheme.onPrimary;
-    }
+    // The full-saturation daisyUI primaries read as a gaudy slab when they
+    // flood the whole pill. Keep the accent on the moving indicator (thumb)
+    // and give the ON track only a soft tonal tint of that colour, layered
+    // over the surface — closer to how daisyUI uses primary as an accent.
+    final activeTrackColor = Color.alphaBlend(
+      effectiveActiveColor.withValues(alpha: 0.20),
+      scheme.surface,
+    );
+
+    // Colour sitting on top of the active (primary) indicator.
+    final onActiveIndicator = effectiveActiveColor == scheme.secondary
+        ? scheme.onSecondary
+        : scheme.onPrimary;
 
     final toggle = AnimatedToggleSwitch<bool>.dual(
       indicatorSize: Size(24.r, 24.r),
@@ -52,38 +58,26 @@ class CustomToggleSwitch extends StatelessWidget {
               onChanged?.call(T);
             },
       styleBuilder: (b) => ToggleStyle(
-        backgroundColor: b
-            ? effectiveActiveColor.withValues(alpha: disabled ? 0.4 : 1.0)
-            : theme.colorScheme.surface.withValues(alpha: disabled ? 0.4 : 1.0),
+        backgroundColor: b ? activeTrackColor : scheme.surface,
+        indicatorColor: b ? effectiveActiveColor : scheme.onSurfaceVariant,
       ),
       iconBuilder: (value) => Icon(
         value ? Symbols.check_rounded : Symbols.close_rounded,
         size: 12.r,
-        color: onActiveColor.withValues(alpha: disabled ? 0.4 : 1.0),
+        // Icon rides the indicator: contrast against the primary thumb when
+        // ON, against the neutral thumb when OFF.
+        color: value ? onActiveIndicator : scheme.surface,
       ),
-      textBuilder: (value) => value
-          ? Center(
-              child: Text(
-                'ON',
-                style: TextStyle(
-                  color: onActiveColor.withValues(alpha: disabled ? 0.4 : 1.0),
-                  fontSize: 8.r,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            )
-          : Center(
-              child: Text(
-                'OFF',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(
-                    alpha: disabled ? 0.4 : 1.0,
-                  ),
-                  fontSize: 8.r,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+      textBuilder: (value) => Center(
+        child: Text(
+          value ? 'ON' : 'OFF',
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontSize: 8.r,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
 
     if (disabled) {

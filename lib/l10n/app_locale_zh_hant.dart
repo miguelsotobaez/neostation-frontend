@@ -775,4 +775,35 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.raNoRecentUnlocks: '最近 30 天內沒有解鎖紀錄',
   AppLocale.raRecentlyPlayedTitle: '最近遊玩',
   AppLocale.raNoRecentlyPlayed: '沒有最近遊玩的遊戲',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: '已比對系統',
+  AppLocale.esdeSummaryUnmatched: '未比對',
+  AppLocale.esdeSummarySkipped: '已略過（無法讀取）',
+  AppLocale.esdeSummaryGamesImported: '已匯入遊戲',
+  AppLocale.esdeSummaryNoRomMatch: '無相符 ROM',
+  AppLocale.esdeSummaryStatsUpdated: '我的最愛 / 統計已更新',
+  AppLocale.esdeSummaryGames: '遊戲',
+  AppLocale.esdeSummarySystems: '系統',
 };

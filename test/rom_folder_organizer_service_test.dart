@@ -181,6 +181,46 @@ void main() {
       expect(await File('${nesDir.path}/Example Disc 1.chd').exists(), isTrue);
       expect(await File('${nesDir.path}/Example Disc 2.chd').exists(), isTrue);
     });
+    test(
+      'only scans folders for multi-disc-capable systems when provided',
+      () async {
+        final root = await Directory.systemTemp.createTemp(
+          'neostation_organize_',
+        );
+        addTearDown(() async {
+          if (await root.exists()) await root.delete(recursive: true);
+        });
+
+        final psxDir = Directory('${root.path}/psx')..createSync();
+        final nesDir = Directory('${root.path}/nes')..createSync();
+        for (final directory in [psxDir, nesDir]) {
+          File('${directory.path}/Example Disc 1.chd').writeAsStringSync('1');
+          File('${directory.path}/Example Disc 2.chd').writeAsStringSync('2');
+        }
+
+        final progress = <String>[];
+        final result = await RomFolderOrganizerService.organizeRomFolders(
+          [root.path],
+          supportedSystemFolders: {'psx'},
+          onProgress: (completed, total) => progress.add('$completed/$total'),
+        );
+
+        expect(result.groupsOrganized, 1);
+        expect(progress, ['1/1']);
+        expect(
+          await File('${psxDir.path}/Example/Example.m3u').exists(),
+          isTrue,
+        );
+        expect(
+          await File('${nesDir.path}/Example Disc 1.chd').exists(),
+          isTrue,
+        );
+        expect(
+          await File('${nesDir.path}/Example Disc 2.chd').exists(),
+          isTrue,
+        );
+      },
+    );
 
     test('skips m3u folders and everything inside them', () async {
       final root = await Directory.systemTemp.createTemp(

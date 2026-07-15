@@ -12,7 +12,7 @@ const Color _onTertiaryFixedColor = Color(0xFFd8dee9);
 const Color _surfaceColor = Color(0xFFeceff4);
 const Color _onSurfaceColor = Color(0xFF2e3440);
 
-const Color _outlineColor = Color(0xFFF7FAFF);
+const Color _outlineColor = Color(0xFFd8dee9);
 const Color _shadowColor = Color(0xFF2e3440);
 
 const Color _backgroundColor = Color(0xFFd8dee9);
@@ -33,7 +33,7 @@ const Color _onInfoColor = Color(0xFF0c070b);
 
 final ThemeData nordTheme = ThemeData(
   useMaterial3: true,
-  colorScheme: ColorScheme.dark(
+  colorScheme: ColorScheme.light(
     primary: _primaryColor,
     secondary: _secondaryColor,
     tertiary: _tertiaryColor,

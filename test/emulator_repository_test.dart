@@ -71,6 +71,56 @@ void main() {
     });
 
     test(
+      'saveDetectedEmulatorPath persists RetroArch path under ra unique id',
+      () async {
+        await EmulatorRepository.saveDetectedEmulatorPath(
+          emulatorName: 'RetroArch',
+          emulatorPath: '/usr/bin/retroarch',
+        );
+
+        final detected = await EmulatorRepository.getUserDetectedEmulators();
+        expect(detected['RetroArch'], isNotNull);
+        expect(detected['RetroArch']!.path, '/usr/bin/retroarch');
+      },
+    );
+
+    test(
+      'saveDetectedEmulatorPath updates an existing RetroArch path',
+      () async {
+        await EmulatorRepository.saveDetectedEmulatorPath(
+          emulatorName: 'RetroArch',
+          emulatorPath: '/old/path/RetroArch.AppImage',
+        );
+        await EmulatorRepository.saveDetectedEmulatorPath(
+          emulatorName: 'RetroArch',
+          emulatorPath: '/usr/bin/retroarch',
+        );
+
+        final detected = await EmulatorRepository.getUserDetectedEmulators();
+        expect(detected['RetroArch']!.path, '/usr/bin/retroarch');
+      },
+    );
+
+    test(
+      'getUserDetectedEmulators prefers ra entry over standalone RetroArch entry',
+      () async {
+        await db.execute(
+          "INSERT INTO app_emulators (system_id, os_id, name, unique_identifier, is_standalone) VALUES ('snes', 3, 'RetroArch', 'retroarch.snes', 1)",
+        );
+        await db.execute(
+          "INSERT INTO user_emulator_config (emulator_unique_id, emulator_path) VALUES ('retroarch.snes', '/home/user/Applications/RetroArch-Linux-x86_64.AppImage')",
+        );
+        await EmulatorRepository.saveDetectedEmulatorPath(
+          emulatorName: 'RetroArch',
+          emulatorPath: '/usr/bin/retroarch',
+        );
+
+        final detected = await EmulatorRepository.getUserDetectedEmulators();
+        expect(detected['RetroArch']!.path, '/usr/bin/retroarch');
+      },
+    );
+
+    test(
       'getSystemsWithStandaloneEmulators throws when OS is missing',
       () async {
         // Clear OS table so current OS cannot be resolved

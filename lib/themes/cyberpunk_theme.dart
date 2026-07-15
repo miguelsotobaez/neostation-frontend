@@ -12,7 +12,7 @@ const Color _onTertiaryFixedColor = Color(0xFFfff248);
 const Color _surfaceColor = Color(0xFFfff248);
 const Color _onSurfaceColor = Color(0xFF000000);
 
-const Color _outlineColor = Color(0xFFFFF564);
+const Color _outlineColor = Color(0xFFe3d40e);
 const Color _shadowColor = Color(0xFF111a3b);
 
 const Color _backgroundColor = Color(0xFFe3d40e);
@@ -33,7 +33,7 @@ const Color _onInfoColor = Color(0xFF000000);
 
 final ThemeData cyberpunkTheme = ThemeData(
   useMaterial3: true,
-  colorScheme: ColorScheme.dark(
+  colorScheme: ColorScheme.light(
     primary: _primaryColor,
     secondary: _secondaryColor,
     tertiary: _tertiaryColor,

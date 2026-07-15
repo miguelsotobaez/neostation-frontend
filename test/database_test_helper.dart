@@ -42,6 +42,7 @@ class DatabaseTestHelper {
         type TEXT,
         color1 TEXT,
         color2 TEXT,
+        multidisc INTEGER NOT NULL DEFAULT 0,
         neosync_json TEXT
       )
     ''');
@@ -147,7 +148,9 @@ class DatabaseTestHelper {
       CREATE TABLE user_emulator_config (
         emulator_unique_id TEXT PRIMARY KEY,
         emulator_path TEXT,
-        is_user_default INTEGER
+        is_user_default INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -177,6 +180,7 @@ class DatabaseTestHelper {
         prefer_file_name INTEGER DEFAULT 0,
         custom_background_path TEXT,
         custom_logo_path TEXT,
+        esde_media_dir TEXT,
         updated_at TEXT
       )
     ''');
@@ -253,6 +257,8 @@ class DatabaseTestHelper {
         genre TEXT,
         players TEXT,
         is_fully_scraped INTEGER DEFAULT 0,
+        esde_media_subdir TEXT,
+        esde_imported INTEGER DEFAULT 0,
         updated_at TEXT,
         UNIQUE(app_system_id, filename)
       )

@@ -7,6 +7,8 @@ const Color _secondaryColor = Color(0xFF9ECE6A);
 const Color _onSecondaryColor = Color(0xFF1A1B26);
 const Color _tertiaryColor = Color(0xFF7DCFFF);
 const Color _onTertiaryColor = Color(0xFF1A1B26);
+const Color _tertiaryFixedColor = Color(0xFF414868);
+const Color _onTertiaryFixedColor = Color(0xFFC0CAF5);
 const Color _surfaceColor = Color(0xFF24283B);
 const Color _onSurfaceColor = Color(0xFFC0CAF5);
 const Color _errorColor = Color(0xFFF7768E);
@@ -34,11 +36,13 @@ final ThemeData tokyoNightTheme = ThemeData(
     primary: _primaryColor,
     secondary: _secondaryColor,
     tertiary: _tertiaryColor,
+    tertiaryFixed: _tertiaryFixedColor,
     surface: _surfaceColor,
 
     onPrimary: _onPrimaryColor,
     onSecondary: _onSecondaryColor,
     onTertiary: _onTertiaryColor,
+    onTertiaryFixed: _onTertiaryFixedColor,
     onSurface: _onSurfaceColor,
 
     error: _errorColor,

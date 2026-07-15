@@ -202,6 +202,7 @@ class SqliteConfigService {
                     ) ??
                     25)
                 .clamp(0, 100),
+        esdeFolderPath: userConfig?['esde_folder_path']?.toString() ?? '',
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -246,6 +247,7 @@ class SqliteConfigService {
         nowPlayingDimDelay: config.nowPlayingDimDelay,
         nowPlayingDimLevel: config.nowPlayingDimLevel,
         fanartDimLevel: config.fanartDimLevel,
+        esdeFolderPath: config.esdeFolderPath,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

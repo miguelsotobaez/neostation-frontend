@@ -38,7 +38,7 @@ class AccountContent extends StatelessWidget {
     }
   }
 
-  Color _getContributionColor(String? contribution) {
+  Color _getContributionColor(String? contribution, Color fallback) {
     switch (contribution) {
       case '1':
         return const Color(0xFFCD7F32);
@@ -47,7 +47,9 @@ class AccountContent extends StatelessWidget {
       case '3':
         return const Color(0xFFFFD700);
       default:
-        return Colors.blueGrey;
+        // Base "Member" tier: follow the theme accent (like the RA tab's
+        // user-type pill) instead of an off-palette blue-grey.
+        return fallback;
     }
   }
 
@@ -132,13 +134,16 @@ class AccountContent extends StatelessWidget {
                         context,
                         userInfo!['contribution'],
                       ),
-                      color: _getContributionColor(userInfo!['contribution']),
+                      color: _getContributionColor(
+                        userInfo!['contribution'],
+                        theme.colorScheme.primary,
+                      ),
                     ),
                     _buildPill(
                       icon: Symbols.lan_rounded,
                       label:
                           '${AppLocale.maxThreads.getString(context)}: ${userInfo!['maxthreads'] ?? '1'}',
-                      color: theme.colorScheme.secondary,
+                      color: theme.colorScheme.primary,
                     ),
                   ],
                 ),

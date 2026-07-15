@@ -886,4 +886,35 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.raNoRecentUnlocks: 'Nessuno sblocco recente negli ultimi 30 giorni',
   AppLocale.raRecentlyPlayedTitle: 'Giocati di Recente',
   AppLocale.raNoRecentlyPlayed: 'Nessun gioco giocato di recente',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Sistemi corrispondenti',
+  AppLocale.esdeSummaryUnmatched: 'senza corrispondenza',
+  AppLocale.esdeSummarySkipped: 'saltati (illeggibili)',
+  AppLocale.esdeSummaryGamesImported: 'Giochi importati',
+  AppLocale.esdeSummaryNoRomMatch: 'nessuna corrispondenza ROM',
+  AppLocale.esdeSummaryStatsUpdated: 'Preferiti / statistiche aggiornati',
+  AppLocale.esdeSummaryGames: 'giochi',
+  AppLocale.esdeSummarySystems: 'sistemi',
 };
