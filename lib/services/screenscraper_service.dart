@@ -9,6 +9,7 @@ import 'package:path/path.dart' as path;
 import 'package:http/io_client.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../repositories/scraper_repository.dart';
+import 'screenscraper/region_config.dart';
 import '../repositories/system_repository.dart';
 import 'config_service.dart';
 import '../utils/optimized_md5_utils.dart';
@@ -29,34 +30,6 @@ import '../widgets/scraping_summary_dialog.dart';
 class ScreenScraperService {
   static const String _baseUrl = 'https://api.screenscraper.fr/api2';
   static final _log = LoggerService.instance;
-
-  static const List<String> _defaultRegionOrder = [
-    'wor',
-    'us',
-    'eu',
-    'jp',
-    'sp',
-    'fr',
-    'de',
-    'it',
-    'kr',
-    'cn',
-  ];
-
-  static Map<String, int> _buildRegionPriorityMap(List<String> orderedRegions) {
-    return {
-      for (var i = 0; i < orderedRegions.length; i++)
-        orderedRegions[i]: (orderedRegions.length - i) * 10,
-    };
-  }
-
-  static Future<Map<String, int>> _getRegionPriority() async {
-    try {
-      final regions = await ScraperRepository.getRegionPriority();
-      if (regions.isNotEmpty) return _buildRegionPriorityMap(regions);
-    } catch (_) {}
-    return _buildRegionPriorityMap(_defaultRegionOrder);
-  }
 
   // Developer credentials — provided at build time via --dart-define
   // or at runtime via environment variables.
@@ -643,7 +616,7 @@ class ScreenScraperService {
     Map<String, dynamic> gameInfo, {
     String? preferredLanguage,
   }) async {
-    final regionPriority = await _getRegionPriority();
+    final regionPriority = await ScreenscraperRegionConfig.getRegionPriority();
     final metadata = <String, dynamic>{};
     metadata['filename'] = filename;
 
@@ -947,7 +920,7 @@ class ScreenScraperService {
     }
 
     final userDataDir = await _getMediaDirectory();
-    final regionPriority = await _getRegionPriority();
+    final regionPriority = await ScreenscraperRegionConfig.getRegionPriority();
     final mediaTypes =
         allowedMediaTypes ?? ['fanart', 'ss', 'video', 'wheel', 'box2D'];
 
