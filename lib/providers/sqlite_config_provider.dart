@@ -23,6 +23,8 @@ import '../widgets/tv_directory_picker.dart';
 import '../constants/system_folder_names.dart';
 import '../services/game_session_persistence.dart';
 
+part 'sqlite_config_provider/mutators.dart';
+
 /// Provider responsible for managing application configuration and system detection using SQLite as the backend.
 ///
 /// Coordinates filesystem scanning for ROMs, system metadata synchronization,
@@ -1012,16 +1014,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Updates the entire list of ROM folders and triggers a configuration save.
-  Future<void> updateRomFolders(List<String> romFolders) async {
-    _config = _config.copyWith(
-      romFolders: romFolders,
-      lastScan: DateTime.now(),
-    );
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
   /// Displays a platform-appropriate directory picker to select a ROM root folder.
   ///
   /// On Android, uses Scoped Storage (SAF) or a custom TV-optimized picker.
@@ -1061,67 +1053,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       _log.e('Error selecting rom folder: $e');
     }
-  }
-
-  /// Convenience method to update the primary ROM folder.
-  Future<void> updateRomFolder(String path) async {
-    if (_config.romFolders.isNotEmpty) {
-      final newList = List<String>.from(_config.romFolders);
-      newList[0] = path;
-      await updateRomFolders(newList);
-    } else {
-      await addRomFolder(path);
-    }
-  }
-
-  /// Updates the preferred UI layout mode for game lists.
-  Future<void> updateGameViewMode(String gameViewMode) async {
-    _config = _config.copyWith(gameViewMode: gameViewMode);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred UI layout mode for system carousels/grids.
-  Future<void> updateSystemViewMode(String systemViewMode) async {
-    _config = _config.copyWith(systemViewMode: systemViewMode);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred grid column density for the systems grid.
-  Future<void> updateSystemGridColumns(String systemGridColumns) async {
-    _config = _config.copyWith(systemGridColumns: systemGridColumns);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred grid column density for the games grid.
-  Future<void> updateGameGridColumns(String gameGridColumns) async {
-    _config = _config.copyWith(gameGridColumns: gameGridColumns);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred card style for the game carousel ('fanart' or 'box').
-  Future<void> updateGameCarouselCardStyle(String cardStyle) async {
-    _config = _config.copyWith(gameCarouselCardStyle: cardStyle);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Toggles the application's fullscreen state.
-  Future<void> updateIsFullscreen(bool value) async {
-    _config = _config.copyWith(isFullscreen: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Persists the user's ES-DE application folder path (used by ES-DE import
-  /// and read-time fallback artwork resolution).
-  Future<void> updateEsdeFolderPath(String path) async {
-    _config = _config.copyWith(esdeFolderPath: path);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
   }
 
   /// Manually triggers a re-scan for a specific system's ROMs.
@@ -1267,18 +1198,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> updateHideRecentCard(bool value) async {
-    _config = _config.copyWith(hideRecentCard: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  Future<void> updateActiveSyncProvider(String providerId) async {
-    _config = _config.copyWith(activeSyncProvider: providerId);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
   Future<void> _loadAvailableEmulators() async {
     _availableEmulators = await SqliteConfigService.loadAvailableEmulators();
   }
@@ -1324,153 +1243,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       _log.e('Error updating systems from DB: $e');
     }
-  }
-
-  /// Toggles the visibility of detailed game metadata in the UI.
-  Future<void> updateShowGameInfo(bool show) async {
-    _config = _config.copyWith(showGameInfo: show);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Configures whether the application should shut down the host OS upon exit (Arcade/Cabinet mode).
-  Future<void> updateBartopExitPoweroff(bool value) async {
-    _config = _config.copyWith(bartopExitPoweroff: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether startup scan is enabled
-  Future<void> updateScanOnStartup(bool value) async {
-    _config = _config.copyWith(scanOnStartup: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether hidden files/folders are ignored during ROM scans.
-  Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
-    _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether the header clock uses a 12-hour (AM/PM) format.
-  Future<void> updateUse12HourClock(bool value) async {
-    _config = _config.copyWith(use12HourClock: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether UI navigation SFX sounds are enabled
-  Future<void> updateSfxEnabled(bool value) async {
-    _config = _config.copyWith(sfxEnabled: value);
-    await SqliteConfigService.saveConfig(_config);
-    // Apply immediately to the running service — no restart needed.
-    SfxService().setEnabled(value);
-    notifyListeners();
-  }
-
-  /// Updates the app display language and applies it immediately
-  Future<void> updateAppLanguage(String langCode) async {
-    _config = _config.copyWith(appLanguage: langCode);
-    await SqliteConfigService.saveConfig(_config);
-    FlutterLocalization.instance.translate(langCode);
-    notifyListeners();
-  }
-
-  /// Updates the global audio mute state for game preview videos.
-  ///
-  /// Automatically synchronizes the mute state with the secondary display if connected.
-  Future<void> updateVideoSound(bool value) async {
-    if (_config.videoSound == value) return;
-    _config = _config.copyWith(videoSound: value);
-    // ignore: unawaited_futures
-    SqliteConfigService.saveConfig(_config); // No await to avoid lag
-
-    // Sincronizar con pantalla secundaria si está activa
-    if (_secondaryDisplayState != null) {
-      final current = _secondaryDisplayState!.value;
-      if (current != null) {
-        _secondaryDisplayState!.updateState(isVideoMuted: !value);
-      }
-    }
-
-    notifyListeners();
-  }
-
-  /// Toggles the current video audio mute state.
-  Future<void> toggleVideoSound() async {
-    await updateVideoSound(!_config.videoSound);
-  }
-
-  /// Sets the inactivity delay (seconds) before the secondary Now Playing panel
-  /// dims; `0` disables dimming. Persists and pushes the value to the secondary
-  /// display.
-  Future<void> updateNowPlayingDimDelay(int seconds) async {
-    _config = _config.copyWith(nowPlayingDimDelay: seconds);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(nowPlayingDimDelay: seconds);
-    notifyListeners();
-  }
-
-  /// Sets how dark the secondary Now Playing panel goes when dimmed (0–100%).
-  /// Persists and pushes the value to the secondary display.
-  Future<void> updateNowPlayingDimLevel(int percent) async {
-    final clamped = percent.clamp(0, 100);
-    _config = _config.copyWith(nowPlayingDimLevel: clamped);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(nowPlayingDimLevel: clamped);
-    notifyListeners();
-  }
-
-  /// Sets how much the game fanart/background art is dimmed behind the logo on
-  /// the secondary screen (percentage 0–100, 0 = off). Persists and pushes it.
-  Future<void> updateFanartDimLevel(int percent) async {
-    final clamped = percent.clamp(0, 100);
-    _config = _config.copyWith(fanartDimLevel: clamped);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(fanartDimLevel: clamped);
-    notifyListeners();
-  }
-
-  /// Persists the secondary app-dock slot assignments (one package name per
-  /// slot, empty string = free) and pushes them to the secondary display.
-  Future<void> updateDockApps(List<String> apps) async {
-    final normalized = ConfigModel.normalizeDock(apps);
-    _config = _config.copyWith(dockApps: normalized);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(dockApps: normalized);
-    notifyListeners();
-  }
-
-  /// Enables or disables the secondary Now Playing app dock. Persists and
-  /// pushes the value to the secondary display.
-  Future<void> updateDockEnabled(bool enabled) async {
-    _config = _config.copyWith(dockEnabled: enabled);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(dockEnabled: enabled);
-    notifyListeners();
-  }
-
-  /// Sets how many secondary dock slots are visible, clamped to
-  /// [ConfigModel.dockMinSlotCount]–[ConfigModel.dockMaxSlotCount]. Persists and
-  /// pushes the value to the secondary display.
-  Future<void> updateDockSlotCount(int count) async {
-    final clamped = count.clamp(
-      ConfigModel.dockMinSlotCount,
-      ConfigModel.dockMaxSlotCount,
-    );
-    _config = _config.copyWith(dockSlotCount: clamped);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(dockSlotCount: clamped);
-    notifyListeners();
-  }
-
-  /// Marks the initial application onboarding as completed.
-  Future<void> completeSetup() async {
-    _config = _config.copyWith(setupCompleted: true);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
   }
 
   /// Toggles the visibility of the secondary display on dual-screen hardware.
@@ -1565,6 +1337,13 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Bridge exposing [notifyListeners] to same-library extensions (parts).
+  ///
+  /// [notifyListeners] is `@protected`/`@visibleForTesting`, so an extension
+  /// (e.g. [SqliteConfigMutators]) can't call it directly. Mirrors the `notify()`
+  /// bridge in [neo_sync_provider]. Behaviourally identical to a direct call.
+  void _notify() => notifyListeners();
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
@@ -1652,36 +1431,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
       });
       _onSecondaryDisplayChanged(connected: false);
     }
-  }
-
-  Future<void> updateAutoUpdateApp(bool value) async {
-    _config = _config.copyWith(autoUpdateApp: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  Future<void> updateAutoUpdateSystems(bool value) async {
-    _config = _config.copyWith(autoUpdateSystems: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the sorting criteria for the system list.
-  Future<void> updateSystemSortBy(String sortBy) async {
-    if (_config.systemSortBy == sortBy) return;
-    _config = _config.copyWith(systemSortBy: sortBy);
-    _sortDetectedSystems();
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the sorting direction (ascending or descending) for the system list.
-  Future<void> updateSystemSortOrder(String order) async {
-    if (_config.systemSortOrder == order) return;
-    _config = _config.copyWith(systemSortOrder: order);
-    _sortDetectedSystems();
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
   }
 
   /// Re-orders the detected systems list based on current sorting preferences.
