@@ -95,7 +95,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.nowPlayingDimDarknessSubtitle: '面板变暗时的暗度',
   AppLocale.nowPlayingDimNever: '从不',
   AppLocale.nowPlayingDockEnabled: '应用坞',
-  AppLocale.nowPlayingDockEnabledSubtitle: '在副屏的 Now Playing 面板上显示应用坞',
+  AppLocale.nowPlayingDockEnabledSubtitle: '在副屏上显示应用坞',
   AppLocale.nowPlayingDockSlots: '应用坞槽位',
   AppLocale.nowPlayingDockSlotsSubtitle: '应用坞显示多少个应用槽位 (1-5)',
   AppLocale.nowPlayingFanartDim: '变暗同人图',

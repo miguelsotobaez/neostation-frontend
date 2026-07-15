@@ -112,7 +112,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.nowPlayingDimNever: 'Nunca',
   AppLocale.nowPlayingDockEnabled: 'Dock de apps',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Mostrar o dock de apps no painel Now Playing secundário',
+      'Mostrar o dock de apps na tela secundária',
   AppLocale.nowPlayingDockSlots: 'Slots do dock',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Quantos slots de apps o dock mostra (1-5)',

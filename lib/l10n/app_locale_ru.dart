@@ -111,7 +111,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.nowPlayingDimNever: 'Никогда',
   AppLocale.nowPlayingDockEnabled: 'Док приложений',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Показывать док приложений на панели Now Playing второго экрана',
+      'Показывать док приложений на втором экране',
   AppLocale.nowPlayingDockSlots: 'Слоты дока',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Сколько слотов приложений показывает док (1-5)',
