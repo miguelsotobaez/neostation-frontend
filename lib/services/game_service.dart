@@ -20,6 +20,7 @@ import 'android_service.dart';
 import 'music_player_service.dart';
 import 'launcher_service.dart';
 import 'game/game_list_service.dart';
+import 'game/favorites_service.dart';
 import 'gamepad/gamepad_navigation_manager.dart';
 export 'gamepad/gamepad_navigation_manager.dart'
     show GamepadNavigationManager, NavLayer;
@@ -222,16 +223,14 @@ class GameService {
       GameListService.getRecentlyPlayedGames(games);
 
   /// Toggles the favorite status of a game in the persistent database.
-  static Future<void> toggleFavorite(GameModel game) async {
-    if (game.romPath == null) return;
-    await GameRepository.toggleRomFavoriteByPath(game.romPath!);
-  }
+  /// Delegates to [FavoritesService].
+  static Future<void> toggleFavorite(GameModel game) =>
+      FavoritesService.toggleFavorite(game);
 
   /// Records a new play instance for a game in the persistent database.
-  static Future<void> recordGamePlayed(GameModel game) async {
-    if (game.romPath == null) return;
-    await GameRepository.recordRomPlayedByPath(game.romPath!);
-  }
+  /// Delegates to [FavoritesService].
+  static Future<void> recordGamePlayed(GameModel game) =>
+      FavoritesService.recordGamePlayed(game);
 
   /// Verifies if a valid screenshots folder exists for the specified system.
   static bool hasScreenshotsFolder(String systemFolderName) {
@@ -450,42 +449,9 @@ class GameService {
   }
 
   /// Computes aggregate statistics for a list of games.
-  static Map<String, dynamic> getGameStats(List<GameModel> games) {
-    if (games.isEmpty) {
-      return {
-        'total': 0,
-        'genres': 0,
-        'developers': 0,
-        'favorites': 0,
-        'played': 0,
-        'averageRating': 0.0,
-      };
-    }
-
-    final genres = games.map((g) => g.genre).where((g) => g.isNotEmpty).toSet();
-    final developers = games
-        .map((g) => g.developer)
-        .where((d) => d.isNotEmpty)
-        .toSet();
-    final favorites = games.where((g) => g.isFavorite == true).length;
-    final played = games.where((g) => g.lastPlayed != null).length;
-
-    final ratingsWithValue = games.map((g) => g.rating).where((r) => r > 0);
-    double averageRating = 0.0;
-    if (ratingsWithValue.isNotEmpty) {
-      averageRating =
-          ratingsWithValue.reduce((a, b) => a + b) / ratingsWithValue.length;
-    }
-
-    return {
-      'total': games.length,
-      'genres': genres.length,
-      'developers': developers.length,
-      'favorites': favorites,
-      'played': played,
-      'averageRating': averageRating,
-    };
-  }
+  /// Delegates to [FavoritesService].
+  static Map<String, dynamic> getGameStats(List<GameModel> games) =>
+      FavoritesService.getGameStats(games);
 
   /// Core logic for launching a game session across all supported platforms.
   ///
