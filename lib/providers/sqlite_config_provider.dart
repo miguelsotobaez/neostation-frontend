@@ -25,6 +25,7 @@ import '../services/game_session_persistence.dart';
 
 part 'sqlite_config_provider/mutators.dart';
 part 'sqlite_config_provider/scanning.dart';
+part 'sqlite_config_provider/secondary_display.dart';
 
 /// Provider responsible for managing application configuration and system detection using SQLite as the backend.
 ///
@@ -399,98 +400,6 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   // Private data loading methods
 
-  /// Toggles the visibility of the secondary display on dual-screen hardware.
-  Future<void> updateHideBottomScreen(
-    bool value, {
-    int? backgroundColor,
-  }) async {
-    _config = _config.copyWith(hideBottomScreen: value);
-    await SqliteConfigService.saveConfig(_config);
-
-    if (Platform.isAndroid && _secondaryDisplayState != null) {
-      final current = _secondaryDisplayState!.value;
-      if (current != null) {
-        _secondaryDisplayState!.updateState(
-          systemName: current.systemName,
-          gameFanart: current.gameFanart,
-          gameWheel: current.gameWheel,
-          gameVideo: current.gameVideo,
-          isGameSelected: current.isGameSelected,
-          isVideoMuted: current.isVideoMuted,
-          hideBottomScreen: value,
-          backgroundColor: backgroundColor ?? current.backgroundColor,
-          muteToggleTrigger: current.muteToggleTrigger,
-          // Hiding deactivates the secondary; un-hiding reactivates it. Mirror
-          // the toggle directly — preserving the prior value would leave it
-          // stuck inactive, since hiding has already forced it false.
-          isSecondaryActive: !value,
-        );
-        if (!value) {
-          // ignore: unawaited_futures
-          refreshSecondaryScreenshotAccess();
-        }
-      }
-    }
-
-    if (Platform.isAndroid) {
-      _secondaryDisplayChannel.invokeMethod('setSecondaryDisplayVisible', {
-        'visible': !value,
-      });
-    }
-
-    notifyListeners();
-  }
-
-  /// Handles native→Dart method calls for secondary display events.
-  Future<dynamic> _handleSecondaryDisplayCall(MethodCall call) async {
-    switch (call.method) {
-      case 'onSecondaryDisplayConnected':
-        if (_config.hideBottomScreen) {
-          _log.i('Secondary display connected but hidden by user preference');
-        } else {
-          _log.i('Secondary display connected, activating');
-        }
-        _onSecondaryDisplayChanged(
-          connected: call.method == 'onSecondaryDisplayConnected',
-        );
-        break;
-      case 'onSecondaryDisplayDisconnected':
-        _log.i('Secondary display disconnected');
-        _onSecondaryDisplayChanged(connected: false);
-        break;
-      case 'onAccessibilityConnected':
-        // The user just enabled the Screen Return service (e.g. via the in-game
-        // launcher nudge). Re-push access state so the secondary display clears
-        // the launcher warning badge and reveals the screenshot button — this
-        // fires even while a game keeps the main engine backgrounded.
-        // ignore: unawaited_futures
-        refreshSecondaryScreenshotAccess();
-        break;
-    }
-  }
-
-  /// Updates secondary display state when a physical display is connected or disconnected.
-  void _onSecondaryDisplayChanged({required bool connected}) {
-    if (_secondaryDisplayState == null) return;
-
-    if (connected && !_config.hideBottomScreen) {
-      _secondaryDisplayState!.updateState(
-        isSecondaryActive: true,
-        nowPlayingDimDelay: _config.nowPlayingDimDelay,
-        nowPlayingDimLevel: _config.nowPlayingDimLevel,
-        fanartDimLevel: _config.fanartDimLevel,
-        dockApps: _config.dockApps,
-        dockEnabled: _config.dockEnabled,
-        dockSlotCount: _config.dockSlotCount,
-      );
-      // ignore: unawaited_futures
-      refreshSecondaryScreenshotAccess();
-    } else {
-      _secondaryDisplayState!.updateState(isSecondaryActive: false);
-    }
-    notifyListeners();
-  }
-
   /// Bridge exposing [notifyListeners] to same-library extensions (parts).
   ///
   /// [notifyListeners] is `@protected`/`@visibleForTesting`, so an extension
@@ -514,76 +423,5 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   void clearError() {
     _error = null;
     notifyListeners();
-  }
-
-  void _onSecondaryStateChanged() {
-    final state = _secondaryDisplayState?.value;
-    if (state != null) {
-      if (state.muteToggleTrigger > _lastMuteToggleTrigger) {
-        _lastMuteToggleTrigger = state.muteToggleTrigger;
-        // ignore: unawaited_futures
-        toggleVideoSound();
-      }
-      if (state.screenshotTrigger > _lastScreenshotTrigger) {
-        _lastScreenshotTrigger = state.screenshotTrigger;
-        // ignore: unawaited_futures
-        _handleSecondaryScreenshotRequest();
-      }
-      if (state.dockEditTrigger > _lastDockEditTrigger) {
-        _lastDockEditTrigger = state.dockEditTrigger;
-        // The secondary already shows the new layout; persist it on the main
-        // engine (the source of truth for SQLite).
-        // ignore: unawaited_futures
-        updateDockApps(state.dockApps);
-      }
-    }
-  }
-
-  /// Responds to a screenshot request from the secondary display: fires a system
-  /// screenshot of the main screen, or opens accessibility settings if the user
-  /// hasn't granted screenshot access yet.
-  Future<void> _handleSecondaryScreenshotRequest() async {
-    final taken = await ScreenshotService.takeScreenshot();
-    if (!taken) {
-      await ScreenshotService.openAccessSettings();
-    }
-  }
-
-  /// Clears any stale in-game state on the secondary display. Used when the app
-  /// regains focus without an active game (e.g. after quitting mid-game and
-  /// relaunching), so the Now Playing panel doesn't linger.
-  void resetSecondaryInGameState() {
-    _secondaryDisplayState?.updateState(
-      nowPlayingActive: false,
-      showAchievementPanel: false,
-    );
-  }
-
-  /// Pushes a known screenshot-access state to the secondary display so it can
-  /// show or hide the in-game screenshot button.
-  void pushScreenshotAccess(bool enabled) {
-    _secondaryDisplayState?.updateState(screenshotAccessEnabled: enabled);
-  }
-
-  /// Checks current screenshot access and pushes it to the secondary display.
-  Future<void> refreshSecondaryScreenshotAccess() async {
-    if (_secondaryDisplayState == null) return;
-    final enabled = await ScreenshotService.isAccessEnabled();
-    _secondaryDisplayState!.updateState(screenshotAccessEnabled: enabled);
-  }
-
-  /// Re-applies the persisted secondary display visibility setting to the native
-  /// side. Used as a safety net when the app resumes after a display reconnection
-  /// event that may have auto-created the subscreen before our native gate could
-  /// intercept it.
-  void reapplySecondaryDisplay() {
-    if (!Platform.isAndroid) return;
-    if (_config.hideBottomScreen) {
-      // ignore: unawaited_futures
-      _secondaryDisplayChannel.invokeMethod('setSecondaryDisplayVisible', {
-        'visible': false,
-      });
-      _onSecondaryDisplayChanged(connected: false);
-    }
   }
 }
