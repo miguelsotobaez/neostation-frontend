@@ -300,6 +300,9 @@ class SqliteMigrations {
       case 98:
         await _migrateToVersion98(db);
         break;
+      case 99:
+        await _migrateToVersion99(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4771,6 +4774,24 @@ class SqliteMigrations {
       }
     } catch (e, stackTrace) {
       _log.e('Error in migration v98: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v99: Stores the display selected for NeoStation's main UI.
+  static Future<void> _migrateToVersion99(Database db) async {
+    _log.i('Migration v99: Adding primary_screen to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('primary_screen')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN primary_screen TEXT DEFAULT 'top'",
+        );
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v99: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

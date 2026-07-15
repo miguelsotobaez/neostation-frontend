@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 98;
+  static const int _databaseVersion = 99;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1620,6 +1620,7 @@ class SqliteService {
         ignore_hidden_files INTEGER DEFAULT 1,
         setup_completed INTEGER DEFAULT 0,
         hide_bottom_screen INTEGER DEFAULT 0,
+        primary_screen TEXT DEFAULT 'top',
         sfx_enabled INTEGER DEFAULT 1,
         system_sort_by TEXT DEFAULT 'alphabetical',
         system_sort_order TEXT DEFAULT 'asc',
@@ -2347,6 +2348,7 @@ class SqliteService {
     int? ignoreHiddenFiles,
     int? setupCompleted,
     int? hideBottomScreen,
+    String? primaryScreen,
     int? sfxEnabled,
     int? use12HourClock,
     String? systemSortBy,
@@ -2406,6 +2408,9 @@ class SqliteService {
     }
     if (hideBottomScreen != null) {
       newConfig['hide_bottom_screen'] = hideBottomScreen;
+    }
+    if (primaryScreen != null) {
+      newConfig['primary_screen'] = primaryScreen;
     }
     if (sfxEnabled != null) {
       newConfig['sfx_enabled'] = sfxEnabled;

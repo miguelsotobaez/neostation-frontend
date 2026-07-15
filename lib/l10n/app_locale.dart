@@ -138,6 +138,10 @@ mixin AppLocale {
   static const String secondarySectionNowPlaying =
       'secondary_section_now_playing';
   static const String secondarySectionDock = 'secondary_section_dock';
+  static const String primaryScreen = 'primary_screen';
+  static const String primaryScreenSubtitle = 'primary_screen_subtitle';
+  static const String primaryScreenTop = 'primary_screen_top';
+  static const String primaryScreenBottom = 'primary_screen_bottom';
   static const String screenshotAccess = 'screenshot_access';
   static const String screenshotAccessSubtitle = 'screenshot_access_subtitle';
   static const String ignoreHiddenFiles = 'ignore_hidden_files';

@@ -103,6 +103,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.nowPlayingDimOff: '關閉',
   AppLocale.secondarySectionNowPlaying: 'Now Playing 面板',
   AppLocale.secondarySectionDock: '應用程式塢',
+  AppLocale.primaryScreen: '主螢幕',
+  AppLocale.primaryScreenSubtitle: '下次開啟應用程式時執行 NeoStation 的螢幕',
+  AppLocale.primaryScreenTop: '上螢幕',
+  AppLocale.primaryScreenBottom: '下螢幕',
   AppLocale.screenshotAccess: 'Screen return & screenshots',
   AppLocale.screenshotAccessSubtitle:
       'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',

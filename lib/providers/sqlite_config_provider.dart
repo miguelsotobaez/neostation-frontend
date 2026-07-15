@@ -1409,6 +1409,27 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Chooses which physical display runs NeoStation's main interface the next
+  /// time the app starts. Only `top` and `bottom` are persisted.
+  Future<void> updatePrimaryScreen(String screen) async {
+    final normalized = screen == 'bottom' ? 'bottom' : 'top';
+    if (_config.primaryScreen == normalized) return;
+    _config = _config.copyWith(primaryScreen: normalized);
+    await SqliteConfigService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  /// Re-launches the Android activities through the display router so the
+  /// persisted primary-screen choice takes effect immediately.
+  Future<void> restartForPrimaryScreen() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _secondaryDisplayChannel.invokeMethod('restartForPrimaryScreen');
+    } on PlatformException catch (e) {
+      _log.e('Could not restart for primary-screen change: ${e.message}');
+    }
+  }
+
   /// Persists the secondary app-dock slot assignments (one package name per
   /// slot, empty string = free) and pushes them to the secondary display.
   Future<void> updateDockApps(List<String> apps) async {

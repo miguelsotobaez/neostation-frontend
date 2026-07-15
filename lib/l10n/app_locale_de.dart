@@ -121,6 +121,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.nowPlayingDimOff: 'Aus',
   AppLocale.secondarySectionNowPlaying: 'Now Playing-Bereich',
   AppLocale.secondarySectionDock: 'App-Dock',
+  AppLocale.primaryScreen: 'Hauptbildschirm',
+  AppLocale.primaryScreenSubtitle:
+      'Bildschirm, auf dem NeoStation beim nächsten Start ausgeführt wird',
+  AppLocale.primaryScreenTop: 'Oben',
+  AppLocale.primaryScreenBottom: 'Unten',
   AppLocale.screenshotAccess: 'Screen return & screenshots',
   AppLocale.screenshotAccessSubtitle:
       'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',

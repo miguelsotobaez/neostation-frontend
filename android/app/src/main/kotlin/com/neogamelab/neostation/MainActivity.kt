@@ -28,12 +28,14 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import java.io.ByteArrayOutputStream
 import android.view.Display
-import com.hcoderlee.subscreen.sub_screen.MultiDisplayFlutterActivity
+import android.app.Presentation
+import io.flutter.embedding.android.FlutterActivity
+import com.hcoderlee.subscreen.sub_screen.FlutterEngineHelper
 import com.hcoderlee.subscreen.sub_screen.FlutterPresentation
 import com.hcoderlee.subscreen.sub_screen.SharedStateManager
 import androidx.core.content.FileProvider
 
-class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
+open class MainActivity: FlutterActivity(), GamepadsCompatibleActivity {
     private val CHANNEL = "com.neogamelab.neostation/game"
     private val LAUNCHER_CHANNEL = "com.neogamelab.neostation/launcher"
     var keyListener: ((KeyEvent) -> Boolean)? = null
@@ -52,33 +54,44 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     // True while the Now Playing presentation is hidden to reveal a dock-launched
     // app on the secondary display; restored when NeoStation resumes.
     private var presentationHiddenForApp = false
+    protected var subScreenPresentation: Presentation? = null
+
+    /// The regular activity is the primary UI. On bottom-primary launches it
+    /// itself runs on the non-default display, so it must not also create a
+    /// presentation over that same display.
+    private val isRunningOnSecondaryDisplay: Boolean
+        get() = windowManager.defaultDisplay.displayId != Display.DEFAULT_DISPLAY
 
     // Usar directorio por defecto para cores; no verificar existencia por permisos
     private fun getDefaultLibretroDirectory(retroArchPackage: String): String {
         return "/data/user/0/$retroArchPackage/cores/"
     }
 
-    override fun getSubScreenEntryPoint(): String {
-        return "subDisplay"
-    }
+    private fun getSubScreenEntryPoint() = "subDisplay"
 
-    override fun createSubScreenPresentation(display: Display): FlutterPresentation? {
+    private fun createSubScreenPresentation(display: Display): FlutterPresentation {
         // Custom presentation that registers a secondary-engine-only MethodChannel
         // so the bottom-screen app dock can list/launch Android apps directly
         // (the secondary engine can't reach the main "/game" channel).
         return SecondaryAppsPresentation(this, display, getSubScreenEntryPoint())
     }
 
-    override fun onLaunchSubScreen(display: Display) {
-        if (isSecondaryDisplayHiddenInDb()) {
-            // The sub_screen package may have already auto-created and shown the
-            // presentation when a display reconnects. Actively close it here to
-            // enforce the user's persisted preference.
-            onCloseSubScreen()
-            return
+    private fun showSecondaryDisplay(display: Display) {
+        if (isRunningOnSecondaryDisplay || isSecondaryDisplayHiddenInDb() ||
+            subScreenPresentation != null) return
+        try {
+            subScreenPresentation = createSubScreenPresentation(display).apply { show() }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error showing subscreen: ${e.message}")
         }
-        super.onLaunchSubScreen(display)
     }
+
+    protected fun onCloseSubScreen() {
+        subScreenPresentation?.dismiss()
+        subScreenPresentation = null
+    }
+
+    override fun getCachedEngineGroupId(): String? = FlutterEngineHelper.ENGINE_GROUP_ID
 
     private fun getUserDataDir(): File {
         val prefs = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
@@ -115,8 +128,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         // group), so its retained shared state may still say a game is "now
         // playing" from before the quit. Clear it before super.onCreate launches
         // the sub screen, so the stale Now Playing panel never renders.
+        FlutterEngineHelper.init(this)
         clearStaleSecondaryNowPlaying()
         super.onCreate(savedInstanceState)
+
+        if (!isRunningOnSecondaryDisplay) {
+            val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+            dm.displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.let {
+                showSecondaryDisplay(it)
+            }
+        }
 
         // Disable focus highlight for the entire activity
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -204,6 +225,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     }
 
     override fun onDestroy() {
+        onCloseSubScreen()
         super.onDestroy()
         displayListener?.let {
             val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
@@ -450,6 +472,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     setSecondaryDisplayVisible(visible)
                     result.success(true)
                 }
+                "restartForPrimaryScreen" -> {
+                    restartForPrimaryScreen()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -488,6 +514,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
                 val display = dm.getDisplay(displayId)
                 if (display != null && displayId != Display.DEFAULT_DISPLAY && !isSecondaryDisplayHiddenInDb()) {
+                    showSecondaryDisplay(display)
                     Handler(Looper.getMainLooper()).post {
                         secondaryDisplayChannel?.invokeMethod("onSecondaryDisplayConnected", null)
                     }
@@ -496,6 +523,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
             override fun onDisplayRemoved(displayId: Int) {
                 if (displayId != Display.DEFAULT_DISPLAY) {
+                    onCloseSubScreen()
                     Handler(Looper.getMainLooper()).post {
                         secondaryDisplayChannel?.invokeMethod("onSecondaryDisplayDisconnected", null)
                     }
@@ -512,29 +540,23 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     private fun setSecondaryDisplayVisible(visible: Boolean) {
         if (visible) {
-            if (subScreenPresentation == null) {
-                val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
-                val displays = dm.displays
-                val secondaryDisplay = displays.firstOrNull { it.displayId != android.view.Display.DEFAULT_DISPLAY }
-                if (secondaryDisplay != null) {
-                    try {                        val presentation = createSubScreenPresentation(secondaryDisplay) ?: FlutterPresentation(
-                            this,
-                            secondaryDisplay,
-                            getSubScreenEntryPoint()
-                        )
-                        subScreenPresentation = presentation
-                        presentation.show()
-                        
-                        onLaunchSubScreen(secondaryDisplay)
-
-                    } catch (e: Exception) {
-                        android.util.Log.e("MainActivity", "Error showing subscreen: ${e.message}")
-                    }
-                }
+            val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+            dm.displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.let {
+                showSecondaryDisplay(it)
             }
         } else {
             onCloseSubScreen()
         }
+    }
+
+    /** Restarts both display activities through the launcher display router. */
+    private fun restartForPrimaryScreen() {
+        SecondaryScreenActivity.closeForDisplayRestart()
+        val intent = Intent(this, DisplayRouterActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        startActivity(intent)
+        finishAndRemoveTask()
     }
 
     /**
