@@ -197,6 +197,13 @@ class SecondaryDisplayStateData {
   /// engine; slots beyond it stay in [dockApps] but are hidden.
   final int dockSlotCount;
 
+  /// Whether the main NeoStation UI has rendered its first frame and is ready
+  /// for use. Pushed by the main engine once, on cold start. The secondary
+  /// display holds the app dock off-screen until this flips true, then slides
+  /// it up — so the dock arrives as the main UI settles rather than popping in
+  /// while the app is still loading.
+  final bool appReady;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -252,6 +259,7 @@ class SecondaryDisplayStateData {
     this.dockEditTrigger = 0,
     this.dockEnabled = true,
     this.dockSlotCount = 3,
+    this.appReady = false,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -328,6 +336,7 @@ class SecondaryDisplayStateData {
     int? dockEditTrigger,
     bool? dockEnabled,
     int? dockSlotCount,
+    bool? appReady,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -405,6 +414,7 @@ class SecondaryDisplayStateData {
       dockEditTrigger: dockEditTrigger ?? this.dockEditTrigger,
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      appReady: appReady ?? this.appReady,
     );
   }
 
@@ -484,6 +494,7 @@ class SecondaryDisplayStateData {
       dockEditTrigger: (json['dockEditTrigger'] as num?)?.toInt() ?? 0,
       dockEnabled: json['dockEnabled'] as bool? ?? true,
       dockSlotCount: (json['dockSlotCount'] as num?)?.toInt() ?? 3,
+      appReady: json['appReady'] as bool? ?? false,
     );
   }
 
@@ -546,6 +557,7 @@ class SecondaryDisplayStateData {
       'dockEditTrigger': dockEditTrigger,
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
+      'appReady': appReady,
     };
   }
 }
@@ -658,6 +670,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     int? dockEditTrigger,
     bool? dockEnabled,
     int? dockSlotCount,
+    bool? appReady,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -739,6 +752,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           dockEditTrigger: dockEditTrigger,
           dockEnabled: dockEnabled,
           dockSlotCount: dockSlotCount,
+          appReady: appReady,
         ),
       );
     } catch (e) {

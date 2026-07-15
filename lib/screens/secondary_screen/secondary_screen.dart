@@ -34,6 +34,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   SecondaryDisplayState? _secondaryDisplayState;
   VideoPlayerController? _videoController;
 
+  /// Latches true the first time the main engine reports `appReady`; drives the
+  /// app dock's one-shot slide-up. Local so the oscillating shared-state flag
+  /// can't un-reveal the dock. See [_buildDockOverlay].
+  bool _dockRevealed = false;
+
   /// A BuildContext captured from *under* this screen's MaterialApp (and its
   /// Localizations). The _buildXxx helpers below run as methods on this State,
   /// so a bare `context` resolves to `this.context` — which sits ABOVE the
@@ -974,6 +979,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// While browsing (no game active) neither applies, so the dock is fully lit
   /// and interactive.
   Widget _buildDockOverlay(SecondaryDisplayStateData value) {
+    // `appReady` is a one-way "main UI has painted" latch, but the shared state
+    // is written by BOTH engines: the secondary's own pushes (isSecondaryActive,
+    // mute/screenshot toggles) copyWith from a local snapshot that may still
+    // carry appReady=false, so the incoming flag oscillates. Latch it locally on
+    // first true and ignore later falses, so the dock slides up once and stays.
+    if (value.appReady) _dockRevealed = true;
     final raAvailable =
         value.showAchievementPanel && value.achievements != null;
     // Off the Now Playing page (achievements/comments) → hide the dock.
@@ -996,29 +1007,43 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 400),
           opacity: opacity,
-          child: Stack(
-            children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: AppDock(
-                  value: value,
-                  onLaunchApp: _launchDockApp,
-                  onPickSlot: _openAppPicker,
-                  onClearSlot: _clearSlot,
+          // Slide-up keyed to main-UI readiness: the dock starts parked fully
+          // below the bottom edge (t=1) and stays there until the main engine
+          // reports its first frame via `appReady`, then eases into place. This
+          // syncs the dock's arrival with the app becoming usable instead of
+          // firing on the secondary display's own (earlier) first paint.
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 1.0, end: _dockRevealed ? 0.0 : 1.0),
+            duration: const Duration(milliseconds: 550),
+            curve: Curves.easeOutCubic,
+            builder: (context, t, child) => Transform.translate(
+              offset: Offset(0, t * 140.r),
+              child: child,
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: AppDock(
+                    value: value,
+                    onLaunchApp: _launchDockApp,
+                    onPickSlot: _openAppPicker,
+                    onClearSlot: _clearSlot,
+                  ),
                 ),
-              ),
-              Positioned(
-                left: 16.r,
-                bottom: 16.r,
-                child: DockLauncherButton(
-                  value: value,
-                  onOpenLauncher: _openAppLauncher,
-                  onOpenAccessibilitySettings: _showAccessibilityDialog,
+                Positioned(
+                  left: 16.r,
+                  bottom: 16.r,
+                  child: DockLauncherButton(
+                    value: value,
+                    onOpenLauncher: _openAppLauncher,
+                    onOpenAccessibilitySettings: _showAccessibilityDialog,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
