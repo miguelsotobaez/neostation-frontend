@@ -118,6 +118,24 @@ class LauncherService {
         (p) => p['name'] == preferredPlayerId,
         orElse: () => null,
       );
+
+      if (player == null) {
+        // A specific emulator was requested but it no longer exists in the
+        // current systems config — typically a per-game override left stale by
+        // a systems update that renamed the emulator's unique_id. Do NOT fall
+        // through to players.first: the JSON is RetroArch-first for some
+        // systems (e.g. 3DS), so that silently launches a *different*,
+        // possibly-uninstalled emulator (RetroArch) and surfaces a misleading
+        // ACTIVITY_NOT_FOUND. Return empty so the caller falls back to the
+        // user-selected standalone default instead.
+        LoggerService.instance.log(
+          'Requested emulator "$preferredPlayerId" not found in '
+          '${system.folderName} config; falling back to system default '
+          '(stale per-game override?)',
+          level: LogLevel.warning,
+        );
+        return {};
+      }
     }
 
     player ??= players.first;
