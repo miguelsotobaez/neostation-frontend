@@ -10,7 +10,7 @@ import 'package:neostation/services/logger_service.dart';
 import '../repositories/scraper_repository.dart';
 import 'screenscraper/region_config.dart';
 import 'screenscraper/rom_hasher.dart';
-import 'config_service.dart';
+import 'screenscraper/media_resolver.dart';
 import '../utils/semaphore.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
@@ -89,7 +89,6 @@ class ScreenScraperService {
   static int _dailyRequestsCount = 0;
   static DateTime? _lastRequestDate;
 
-  static String? _cachedMediaDirectory;
   static Map<String, dynamic>? _cachedCredentials;
   static bool _isMetadataScrapingRunning = false;
 
@@ -199,22 +198,6 @@ class ScreenScraperService {
     }
 
     return true;
-  }
-
-  /// Retrieves the directory path for downloaded media assets.
-  static Future<String> _getMediaDirectory() async {
-    if (_cachedMediaDirectory != null) {
-      return _cachedMediaDirectory!;
-    }
-
-    final mediaPath = await ConfigService.getMediaPath();
-    final mediaDir = Directory(mediaPath);
-    if (!await mediaDir.exists()) {
-      await mediaDir.create(recursive: true);
-    }
-    _cachedMediaDirectory = mediaDir.path;
-
-    return _cachedMediaDirectory!;
   }
 
   /// Authenticates user credentials against the ScreenScraper API.
@@ -736,91 +719,6 @@ class ScreenScraperService {
     }
   }
 
-  /// Maps API media type names to NeoStation folder names.
-  static String _mapMediaTypeToFolder(String mediaType) {
-    switch (mediaType) {
-      case 'fanart':
-        return 'fanarts';
-      case 'ss':
-        return 'screenshots';
-      case 'video':
-        return 'videos';
-      case 'wheel':
-        return 'wheels';
-      case 'box2D':
-        return 'box2d';
-      default:
-        return mediaType;
-    }
-  }
-
-  /// Selects the best media asset from a list based on region and language priority.
-  ///
-  /// Priority: World > US > EU > Others > Asia.
-  static Map<String, dynamic>? _selectBestMedia(
-    List<dynamic> medias,
-    String mediaType, {
-    String? preferredLanguage,
-    Map<String, int> regionPriority = const {},
-  }) {
-    if (medias.isEmpty) return null;
-
-    final typesToSearch = mediaType == 'wheel'
-        ? ['wheel-hd', 'wheel']
-        : (mediaType == 'ss'
-              ? ['ss-hd', 'ss']
-              : (mediaType == 'box2D' ? ['box-2D'] : [mediaType]));
-
-    const defaultLanguageHierarchy = ['en', 'es', 'fr', 'de', 'it', 'pt', 'jp'];
-
-    Map<String, dynamic>? bestMedia;
-    int bestPriority = -1;
-
-    final candidates = medias
-        .where((m) => typesToSearch.contains(m['type']))
-        .toList();
-
-    for (final media in candidates) {
-      final region = media['region']?.toString() ?? '';
-      final regionValue = regionPriority[region] ?? 5;
-
-      int languageBonus = 0;
-      final mediaLang = media['langue']?.toString() ?? '';
-
-      if (preferredLanguage != null && preferredLanguage.isNotEmpty) {
-        if (mediaLang == preferredLanguage) languageBonus = 200;
-      } else {
-        final langIndex = defaultLanguageHierarchy.indexOf(mediaLang);
-        if (langIndex != -1) {
-          languageBonus = (defaultLanguageHierarchy.length - langIndex) * 10;
-        }
-      }
-
-      final bool isHD = (media['type']?.toString() ?? '').endsWith('-hd');
-      final int totalPriority = regionValue + languageBonus + (isHD ? 1 : 0);
-
-      if (totalPriority > bestPriority) {
-        bestPriority = totalPriority;
-        bestMedia = media as Map<String, dynamic>;
-      }
-    }
-
-    return bestMedia;
-  }
-
-  /// Verifies if a specific media asset exists in the local cache.
-  static Future<bool> _checkFileExists(
-    String relativePath,
-    String userDataDir,
-  ) async {
-    try {
-      final fullPath = path.join(userDataDir, relativePath);
-      return await File(fullPath).exists();
-    } catch (e) {
-      return false;
-    }
-  }
-
   /// Downloads and caches a media file.
   static Future<bool> _downloadMediaFileSmart(
     String url,
@@ -878,21 +776,23 @@ class ScreenScraperService {
       };
     }
 
-    final userDataDir = await _getMediaDirectory();
+    final userDataDir = await ScreenscraperMediaResolver.getMediaDirectory();
     final regionPriority = await ScreenscraperRegionConfig.getRegionPriority();
     final mediaTypes =
         allowedMediaTypes ?? ['fanart', 'ss', 'video', 'wheel', 'box2D'];
 
     final downloadTasks = <Map<String, dynamic>>[];
     for (final mediaType in mediaTypes) {
-      final bestMedia = _selectBestMedia(
+      final bestMedia = ScreenscraperMediaResolver.selectBestMedia(
         medias,
         mediaType,
         preferredLanguage: preferredLanguage,
         regionPriority: regionPriority,
       );
       if (bestMedia != null) {
-        final folderName = _mapMediaTypeToFolder(mediaType);
+        final folderName = ScreenscraperMediaResolver.mapMediaTypeToFolder(
+          mediaType,
+        );
         final romBaseName = await ScreenscraperRomHasher.getCleanRomName(
           romName,
           appSystemId,
@@ -950,7 +850,10 @@ class ScreenScraperService {
           'wasExisting':
               !forceOverwrite &&
               success &&
-              await _checkFileExists(task['relativePath'], userDataDir),
+              await ScreenscraperMediaResolver.checkFileExists(
+                task['relativePath'],
+                userDataDir,
+              ),
         };
       });
 
@@ -1412,7 +1315,7 @@ class ScreenScraperService {
       if (systemFolder == null) {
         return {'hasAllMedia': false, 'error': 'System not found'};
       }
-      final userDataDir = await _getMediaDirectory();
+      final userDataDir = await ScreenscraperMediaResolver.getMediaDirectory();
       const expectedTypes = [
         'fanarts',
         'screenshots',
