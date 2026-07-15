@@ -49,6 +49,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   Timer? _videoTimer;
   bool _showVideo = false;
   String? _currentVideoPath;
+
+  /// Bumped every time the preview is torn down. [_initializeVideo] captures it
+  /// on entry and re-checks after each await, so an in-flight init that started
+  /// just as a game launched (which calls [_stopVideo]) throws away the
+  /// controller it created instead of leaving it playing audio over the game.
+  int _videoGeneration = 0;
   int _lastMediaRevision = 0;
 
   /// Auto-clearing timer for the "newly earned this session" celebration.
@@ -422,10 +428,14 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   Future<void> _initializeVideo(String path) async {
     if (!mounted) return;
 
+    // Snapshot the generation: if _stopVideo runs (e.g. a game launches) while
+    // we're awaiting below, this goes stale and we abort before playing.
+    final gen = _videoGeneration;
+    VideoPlayerController? controller;
     try {
-      final controller = VideoPlayerController.file(File(path));
+      controller = VideoPlayerController.file(File(path));
       await controller.initialize();
-      if (!mounted) {
+      if (!mounted || gen != _videoGeneration) {
         await controller.dispose();
         return;
       }
@@ -437,7 +447,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       await controller.setLooping(true);
       await controller.play();
 
-      if (!mounted) {
+      if (!mounted || gen != _videoGeneration) {
         await controller.dispose();
         return;
       }
@@ -448,10 +458,19 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       });
     } catch (e) {
       debugPrint('SecondaryScreen: Error initializing video: $e');
+      // Don't leak the controller if we threw after creating it.
+      if (controller != null && _videoController != controller) {
+        try {
+          await controller.dispose();
+        } catch (_) {}
+      }
     }
   }
 
   void _stopVideo() {
+    // Invalidate any in-flight _initializeVideo so it discards its controller
+    // rather than playing audio over a game that just launched.
+    _videoGeneration++;
     _videoTimer?.cancel();
     _videoTimer = null;
     if (_videoController != null) {

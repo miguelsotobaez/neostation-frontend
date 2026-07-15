@@ -216,6 +216,25 @@ Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines on bug reports, 
 
 If you discover a security vulnerability, please follow the instructions in [`SECURITY.md`](SECURITY.md) to report it responsibly.
 
+## Project Team
+
+### Lead
+
+- **@misobadev**
+  - Ko-fi: https://ko-fi.com/neostation
+
+### Official Co-Maintainers
+
+- **@androosio**
+  - Ko-fi: https://ko-fi.com/androosio
+
+### Official Collaborators
+
+- **@ItsRetroPup**
+  - Ko-fi: https://ko-fi.com/retropup84752
+
+These co-maintainers and collaborators work very hard to make NeoStation what it is today.
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [`LICENSE.md`](LICENSE.md) for details.
