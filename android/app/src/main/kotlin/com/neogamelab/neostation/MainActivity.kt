@@ -295,6 +295,14 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 "openSafDirectoryPicker" -> {
                     openSafDirectoryPicker(result)
                 }
+                "hasPermission" -> {
+                    val uriString = call.argument<String>("uri")
+                    if (uriString != null) {
+                        hasSafPermission(uriString, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI is required", null)
+                    }
+                }
                 "openAllFilesAccessSettings" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         try {
@@ -320,6 +328,35 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                         listSafDirectory(uriString, result)
                     } else {
                         result.error("INVALID_ARGUMENTS", "URI is required", null)
+                    }
+                }
+                "createSafDirectory" -> {
+                    val uriString = call.argument<String>("uri")
+                    val name = call.argument<String>("name")
+                    if (uriString != null && name != null) {
+                        createSafDirectory(uriString, name, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI and name are required", null)
+                    }
+                }
+                "moveSafFile" -> {
+                    val sourceUri = call.argument<String>("sourceUri")
+                    val targetUri = call.argument<String>("targetUri")
+                    val name = call.argument<String>("name")
+                    if (sourceUri != null && targetUri != null && name != null) {
+                        moveSafFile(sourceUri, targetUri, name, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "Source, target, and name are required", null)
+                    }
+                }
+                "writeSafFile" -> {
+                    val uriString = call.argument<String>("uri")
+                    val name = call.argument<String>("name")
+                    val contents = call.argument<ByteArray>("contents")
+                    if (uriString != null && name != null && contents != null) {
+                        writeSafFile(uriString, name, contents, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI, name, and contents are required", null)
                     }
                 }
                 "readSafFileRange" -> {
@@ -1117,6 +1154,18 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         }.start()
     }
 
+    private fun hasSafPermission(uriString: String, result: MethodChannel.Result) {
+        try {
+            val uri = Uri.parse(uriString)
+            val hasPermission = contentResolver.persistedUriPermissions.any { permission ->
+                permission.uri == uri && permission.isReadPermission && permission.isWritePermission
+            }
+            result.success(hasPermission)
+        } catch (e: Exception) {
+            result.success(false)
+        }
+    }
+
     private fun deleteSafFile(uriString: String, result: MethodChannel.Result) {
         Thread {
             try {
@@ -1141,6 +1190,132 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             } catch (e: Exception) {
                 android.util.Log.e("MainActivity", "deleteSafFile error: ${e.message}")
                 runOnUiThread { result.error("DELETE_FAILED", e.message, null) }
+            }
+        }.start()
+    }
+
+    private fun safDocumentUri(uriString: String): Uri {
+        val uri = Uri.parse(uriString)
+        val documentId = if (android.provider.DocumentsContract.isDocumentUri(this, uri)) {
+            android.provider.DocumentsContract.getDocumentId(uri)
+        } else {
+            android.provider.DocumentsContract.getTreeDocumentId(uri)
+        }
+        return if (android.provider.DocumentsContract.isTreeUri(uri)) {
+            android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, documentId)
+        } else {
+            uri
+        }
+    }
+
+    private fun createSafDirectory(uriString: String, name: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val created = android.provider.DocumentsContract.createDocument(
+                    contentResolver,
+                    safDocumentUri(uriString),
+                    android.provider.DocumentsContract.Document.MIME_TYPE_DIR,
+                    name
+                )
+                runOnUiThread { result.success(created?.toString()) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("CREATE_DIRECTORY_FAILED", e.message, null) }
+            }
+        }.start()
+    }
+
+    private fun moveSafFile(
+        sourceUriString: String,
+        targetUriString: String,
+        name: String,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            try {
+                val sourceUri = Uri.parse(sourceUriString)
+                val targetUri = safDocumentUri(targetUriString)
+                val created = android.provider.DocumentsContract.createDocument(
+                    contentResolver,
+                    targetUri,
+                    "application/octet-stream",
+                    name
+                ) ?: throw java.io.IOException("Could not create target file")
+
+                contentResolver.openInputStream(sourceUri)?.use { input ->
+                    contentResolver.openOutputStream(created, "w")?.use { output ->
+                        input.copyTo(output)
+                    } ?: throw java.io.IOException("Could not open target file")
+                } ?: throw java.io.IOException("Could not open source file")
+
+                if (!android.provider.DocumentsContract.deleteDocument(contentResolver, sourceUri)) {
+                    throw java.io.IOException("Could not remove source file")
+                }
+                runOnUiThread { result.success(true) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("MOVE_FILE_FAILED", e.message, null) }
+            }
+        }.start()
+    }
+
+    private fun writeSafFile(
+        uriString: String,
+        name: String,
+        contents: ByteArray,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            try {
+                val parentUri = Uri.parse(uriString)
+                val parentDocumentUri = safDocumentUri(uriString)
+                val treeUri = if (android.provider.DocumentsContract.isTreeUri(parentUri)) {
+                    parentUri
+                } else {
+                    android.provider.DocumentsContract.buildTreeDocumentUri(
+                        parentUri.authority!!,
+                        android.provider.DocumentsContract.getDocumentId(parentUri)
+                    )
+                }
+                val parentId = android.provider.DocumentsContract.getDocumentId(parentDocumentUri)
+                val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+                    treeUri,
+                    parentId
+                )
+                var fileUri: Uri? = null
+                contentResolver.query(
+                    childrenUri,
+                    arrayOf(
+                        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    ),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(1) == name) {
+                            fileUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                                treeUri,
+                                cursor.getString(0)
+                            )
+                            break
+                        }
+                    }
+                }
+                if (fileUri == null) {
+                    fileUri = android.provider.DocumentsContract.createDocument(
+                        contentResolver,
+                        parentDocumentUri,
+                        "audio/x-mpegurl",
+                        name
+                    )
+                }
+                val outputUri = fileUri ?: throw java.io.IOException("Could not create playlist")
+                contentResolver.openOutputStream(outputUri, "w")?.use { output ->
+                    output.write(contents)
+                } ?: throw java.io.IOException("Could not open playlist")
+                runOnUiThread { result.success(true) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("WRITE_FILE_FAILED", e.message, null) }
             }
         }.start()
     }

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "tgcd",
+    "multidisc": true,
     "name": "TurboGrafx-CD",
     "short_name": "TG-CD",
     "details": {

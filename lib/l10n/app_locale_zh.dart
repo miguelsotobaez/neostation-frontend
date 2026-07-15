@@ -152,6 +152,17 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.confirmExit: '确认退出',
   AppLocale.rescanAllFolders: '重新扫描所有 ROM 文件夹',
   AppLocale.rescanAllFoldersSubtitle: '手动扫描新系统和 ROM',
+  AppLocale.organizeMultiDiscGames: '整理多碟游戏',
+  AppLocale.organizeMultiDiscGamesSubtitle: '自动为多碟游戏创建 .m3u 文件，并将其整理到文件夹中',
+  AppLocale.organizeMultiDiscScanning: '正在扫描 ROM 文件夹中的多碟游戏...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured: '未配置 ROM 文件夹。',
+  AppLocale.organizeMultiDiscSkippedSuffix: '（已跳过 {count} 个文件夹路径）',
+  AppLocale.organizeMultiDiscDone:
+      '完成：已整理 {groups} 组，移动 {files} 个文件，创建 {playlists} 个播放列表{skipped}。',
+  AppLocale.organizeMultiDiscNoSetsFound: '未找到可整理的多碟组合{skipped}。',
+  AppLocale.organizeMultiDiscFailed: '整理多碟游戏失败：{error}',
+  AppLocale.organizeMultiDiscWarning:
+      '这将把匹配的 ROM 文件移动到新的游戏文件夹，并在存储设备上创建 .m3u 播放列表。此操作无法自动撤销。',
   AppLocale.romsFolderSubtitle: '添加包含 ROM 文件的文件夹',
   AppLocale.pressToRemoveFolder: '按确认键删除此文件夹',
   AppLocale.maxRomFoldersReached: '最多允许 5 个 ROM 文件夹',
@@ -721,6 +732,8 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.userDataLocationUpdated: '数据位置已更新',
   AppLocale.resetToDefault: '恢复默认',
   AppLocale.romDirectories: 'ROM 目录',
+  AppLocale.tools: '工具',
+  AppLocale.toolsSubtitle: '帮助整理 ROM 的工具',
   AppLocale.addRomFolder: '添加 ROM 文件夹',
   AppLocale.removeRomFolder: '删除',
   AppLocale.resetPlayTimeConfirm: '重置游戏时间',
@@ -764,4 +777,35 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.raNoRecentUnlocks: '最近 30 天内没有解锁记录',
   AppLocale.raRecentlyPlayedTitle: '最近游玩',
   AppLocale.raNoRecentlyPlayed: '没有最近游玩的游戏',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: '已匹配系统',
+  AppLocale.esdeSummaryUnmatched: '未匹配',
+  AppLocale.esdeSummarySkipped: '已跳过（无法读取）',
+  AppLocale.esdeSummaryGamesImported: '已导入游戏',
+  AppLocale.esdeSummaryNoRomMatch: '无匹配 ROM',
+  AppLocale.esdeSummaryStatsUpdated: '收藏 / 统计已更新',
+  AppLocale.esdeSummaryGames: '游戏',
+  AppLocale.esdeSummarySystems: '系统',
 };

@@ -152,6 +152,17 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.confirmExit: '確認離開',
   AppLocale.rescanAllFolders: '重新掃描所有 ROM 資料夾',
   AppLocale.rescanAllFoldersSubtitle: '手動掃描新系統和 ROM',
+  AppLocale.organizeMultiDiscGames: '整理多片遊戲',
+  AppLocale.organizeMultiDiscGamesSubtitle: '自動為多片遊戲建立 .m3u 檔案，並將其整理到資料夾中',
+  AppLocale.organizeMultiDiscScanning: '正在掃描 ROM 資料夾中的多片遊戲...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured: '尚未設定 ROM 資料夾。',
+  AppLocale.organizeMultiDiscSkippedSuffix: '（已略過 {count} 個資料夾路徑）',
+  AppLocale.organizeMultiDiscDone:
+      '完成：已整理 {groups} 組、移動 {files} 個檔案、建立 {playlists} 個播放清單{skipped}。',
+  AppLocale.organizeMultiDiscNoSetsFound: '找不到可整理的多片組合{skipped}。',
+  AppLocale.organizeMultiDiscFailed: '整理多片遊戲失敗：{error}',
+  AppLocale.organizeMultiDiscWarning:
+      '這將把相符的 ROM 檔案移至新的遊戲資料夾，並在儲存空間中建立 .m3u 播放清單。此操作無法自動復原。',
   AppLocale.romsFolderSubtitle: '新增包含 ROM 檔案的資料夾',
   AppLocale.pressToRemoveFolder: '按確認鍵刪除此資料夾',
   AppLocale.maxRomFoldersReached: '最多允許 5 個 ROM 資料夾',
@@ -721,6 +732,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.userDataLocationUpdated: '資料位置已更新',
   AppLocale.resetToDefault: '恢復預設',
   AppLocale.romDirectories: 'ROM 目錄',
+  AppLocale.tools: '工具',
+  AppLocale.toolsSubtitle: '協助整理 ROM 的工具',
   AppLocale.addRomFolder: '新增 ROM 資料夾',
   AppLocale.removeRomFolder: '移除',
   AppLocale.resetPlayTimeConfirm: '重設遊玩時間',
@@ -764,4 +777,35 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.raNoRecentUnlocks: '最近 30 天內沒有解鎖紀錄',
   AppLocale.raRecentlyPlayedTitle: '最近遊玩',
   AppLocale.raNoRecentlyPlayed: '沒有最近遊玩的遊戲',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: '已比對系統',
+  AppLocale.esdeSummaryUnmatched: '未比對',
+  AppLocale.esdeSummarySkipped: '已略過（無法讀取）',
+  AppLocale.esdeSummaryGamesImported: '已匯入遊戲',
+  AppLocale.esdeSummaryNoRomMatch: '無相符 ROM',
+  AppLocale.esdeSummaryStatsUpdated: '我的最愛 / 統計已更新',
+  AppLocale.esdeSummaryGames: '遊戲',
+  AppLocale.esdeSummarySystems: '系統',
 };

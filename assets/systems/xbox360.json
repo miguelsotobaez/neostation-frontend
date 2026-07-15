@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "xbox360",
+    "multidisc": true,
     "name": "Microsoft - XBox 360",
     "short_name": "XB360",
     "details": {

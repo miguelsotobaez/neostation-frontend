@@ -13,6 +13,7 @@ class NotificationData {
   Uint8List? imageBytes;
   IconData? icon;
   NotificationType type;
+  double? progress;
 
   NotificationData({
     required this.message,
@@ -20,6 +21,7 @@ class NotificationData {
     this.imageBytes,
     this.icon,
     required this.type,
+    this.progress,
   });
 }
 
@@ -200,6 +202,18 @@ class _CustomNotificationState extends State<CustomNotification>
                             maxLines: data.title != null ? 1 : 4,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if (data.progress != null) ...[
+                            SizedBox(height: 6.r),
+                            LinearProgressIndicator(
+                              value: data.progress,
+                              minHeight: 3.r,
+                              color: textColor,
+                              backgroundColor: textColor.withValues(
+                                alpha: 0.25,
+                              ),
+                              borderRadius: BorderRadius.circular(2.r),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -230,6 +244,7 @@ class AppNotification {
     NotificationType type = NotificationType.info,
     Duration duration = const Duration(seconds: 4),
     String? notificationId,
+    double? progress,
   }) {
     // If there is a notification with the same ID, update it instead of creating a new one
     if (notificationId != null &&
@@ -241,6 +256,7 @@ class AppNotification {
         title: title,
         imageBytes: imageBytes,
         icon: icon,
+        progress: progress,
       );
       return;
     }
@@ -256,6 +272,7 @@ class AppNotification {
         imageBytes: imageBytes,
         icon: icon,
         type: type,
+        progress: progress,
       ),
     );
 
@@ -287,6 +304,7 @@ class AppNotification {
     String? title,
     Uint8List? imageBytes,
     IconData? icon,
+    double? progress,
   }) {
     if (_currentDataNotifier != null) {
       _currentDataNotifier!.value = NotificationData(
@@ -295,6 +313,7 @@ class AppNotification {
         imageBytes: imageBytes,
         icon: icon,
         type: type,
+        progress: progress,
       );
     }
   }

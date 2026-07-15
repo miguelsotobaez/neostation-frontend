@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wii",
+    "multidisc": true,
     "name": "Nintendo Wii",
     "short_name": "Wii",
     "details": {

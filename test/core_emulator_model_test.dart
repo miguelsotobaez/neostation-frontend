@@ -29,7 +29,10 @@ void main() {
     test('is false for standalone emulator packages', () {
       // The regression this guards: substituting one of these into a RetroArch
       // intent produced a package+activity mismatch (ACTIVITY_NOT_FOUND).
-      expect(emu(package: 'com.github.stenzek.duckstation').isRetroArch, isFalse);
+      expect(
+        emu(package: 'com.github.stenzek.duckstation').isRetroArch,
+        isFalse,
+      );
       expect(emu(package: 'org.azahar_emu.azahar').isRetroArch, isFalse);
       expect(emu(package: 'org.dolphinemu.dolphinemu').isRetroArch, isFalse);
     });
@@ -39,9 +42,12 @@ void main() {
       expect(emu(package: '').isRetroArch, isFalse);
     });
 
-    test('is false for a package that merely contains "retroarch" mid-string', () {
-      // Guards against a substring check regressing into startsWith.
-      expect(emu(package: 'org.example.com.retroarch').isRetroArch, isFalse);
-    });
+    test(
+      'is false for a package that merely contains "retroarch" mid-string',
+      () {
+        // Guards against a substring check regressing into startsWith.
+        expect(emu(package: 'org.example.com.retroarch').isRetroArch, isFalse);
+      },
+    );
   });
 }

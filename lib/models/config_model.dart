@@ -141,6 +141,11 @@ class ConfigModel {
   /// Preferred card style for the game carousel ('fanart' or 'box').
   final String gameCarouselCardStyle;
 
+  /// Absolute path to the user's ES-DE application folder (the one containing
+  /// `gamelists/` and `downloaded_media/`), or empty if not configured. Used
+  /// by the ES-DE import and read-time fallback artwork resolution.
+  final String esdeFolderPath;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -175,6 +180,7 @@ class ConfigModel {
     this.dockApps = const ['', '', '', '', ''],
     this.dockEnabled = true,
     this.dockSlotCount = 3,
+    this.esdeFolderPath = '',
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -318,6 +324,8 @@ class ConfigModel {
                   ) ??
                   3)
               .clamp(dockMinSlotCount, dockMaxSlotCount),
+      esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
+          .toString(),
     );
   }
 
@@ -362,6 +370,7 @@ class ConfigModel {
       'dockApps': dockApps,
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
+      'esdeFolderPath': esdeFolderPath,
     };
   }
 
@@ -400,6 +409,7 @@ class ConfigModel {
     List<String>? dockApps,
     bool? dockEnabled,
     int? dockSlotCount,
+    String? esdeFolderPath,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -436,6 +446,7 @@ class ConfigModel {
       dockApps: dockApps ?? this.dockApps,
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
     );
   }
 

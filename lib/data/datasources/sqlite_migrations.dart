@@ -297,6 +297,18 @@ class SqliteMigrations {
       case 97:
         await _migrateToVersion97(db);
         break;
+      case 98:
+        await _migrateToVersion98(db);
+        break;
+      case 99:
+        await _migrateToVersion99(db);
+        break;
+      case 100:
+        await _migrateToVersion100(db);
+        break;
+      case 101:
+        await _migrateToVersion101(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4750,6 +4762,118 @@ class SqliteMigrations {
       _log.i('Migration v97 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v97: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v98: ES-DE import support.
+  ///
+  /// Adds `esde_folder_path` to `user_config` (the ES-DE application folder the
+  /// user selected) and `esde_media_dir` to `user_system_settings` (the ES-DE
+  /// `downloaded_media` subfolder name captured for that system at import time,
+  /// used to resolve read-time fallback artwork). Idempotent.
+  static Future<void> _migrateToVersion98(Database db) async {
+    _log.i('Migration v98: Adding ES-DE import columns');
+    try {
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!configColumns.contains('esde_folder_path')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN esde_folder_path TEXT DEFAULT ''",
+        );
+        _log.i('Column esde_folder_path added to user_config via v98');
+      }
+
+      final settingsColumns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!settingsColumns.contains('esde_media_dir')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN esde_media_dir TEXT',
+        );
+        _log.i('Column esde_media_dir added to user_system_settings via v98');
+      }
+
+      _log.i('Migration v98 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v98: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion99(Database db) async {
+    _log.i('Migration v99: Adding ES-DE media subfolder column');
+    try {
+      final metaColumns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!metaColumns.contains('esde_media_subdir')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN esde_media_subdir TEXT',
+        );
+        _log.i(
+          'Column esde_media_subdir added to user_screenscraper_metadata via v99',
+        );
+      }
+
+      _log.i('Migration v99 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v99: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v100: Adds `esde_imported` to `user_screenscraper_metadata`, a
+  /// provenance flag marking rows the ES-DE import created from scratch. Lets
+  /// the ES-DE reset target only those rows instead of every `is_fully_scraped`
+  /// = 0 row (which also includes NeoStation's own partially-scraped rows).
+  /// Idempotent.
+  static Future<void> _migrateToVersion100(Database db) async {
+    _log.i('Migration v100: Adding esde_imported column');
+    try {
+      final metaColumns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!metaColumns.contains('esde_imported')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN esde_imported INTEGER DEFAULT 0',
+        );
+        _log.i(
+          'Column esde_imported added to user_screenscraper_metadata via v100',
+        );
+      }
+
+      _log.i('Migration v100 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v100: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v101: Store whether a platform supports multi-disc games.
+  static Future<void> _migrateToVersion101(Database db) async {
+    _log.i('Migration v101: Adding multidisc to app_systems');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_systems)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('multidisc')) {
+        db.execute(
+          'ALTER TABLE app_systems ADD COLUMN multidisc INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+
+      _log.i('Migration v101 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v101: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

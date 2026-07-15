@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "jagcd",
+    "multidisc": true,
     "name": "Atari Jaguar CD",
     "short_name": "JCD",
     "details": {

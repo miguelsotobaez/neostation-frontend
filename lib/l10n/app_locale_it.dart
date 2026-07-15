@@ -180,6 +180,23 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.confirmExit: 'Conferma Uscita',
   AppLocale.rescanAllFolders: 'Scansiona di nuovo tutte le cartelle ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Cerca manualmente nuovi sistemi e ROM',
+  AppLocale.organizeMultiDiscGames: 'Organizza giochi multi-disco',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Crea automaticamente file .m3u per i giochi multi-disco e li organizza in cartelle',
+  AppLocale.organizeMultiDiscScanning:
+      'Scansione delle cartelle ROM per giochi multi-disco...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Nessuna cartella ROM configurata.',
+  AppLocale.organizeMultiDiscSkippedSuffix:
+      ' ({count} percorso/i cartella saltato/i)',
+  AppLocale.organizeMultiDiscDone:
+      'Fatto: {groups} set organizzato/i, {files} file spostato/i, {playlists} playlist creata/e{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Nessun set multi-disco da organizzare{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Impossibile organizzare i giochi multi-disco: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Questa operazione sposterà i file ROM corrispondenti in nuove cartelle di gioco e creerà playlist .m3u sul dispositivo di archiviazione. Non può essere annullata automaticamente.',
   AppLocale.romsFolderSubtitle:
       'Aggiungi le cartelle che contengono i tuoi file ROM',
   AppLocale.pressToRemoveFolder: 'Premi Conferma per rimuovere questa cartella',
@@ -818,6 +835,8 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.userDataLocationUpdated: 'Posizione dati aggiornata',
   AppLocale.resetToDefault: 'Ripristina predefinito',
   AppLocale.romDirectories: 'Directory ROM',
+  AppLocale.tools: 'Strumenti',
+  AppLocale.toolsSubtitle: 'Strumenti per aiutarti a organizzare le tue ROM',
   AppLocale.addRomFolder: 'Aggiungi cartella ROM',
   AppLocale.removeRomFolder: 'Rimuovi',
   AppLocale.resetPlayTimeConfirm: 'Reimposta tempo di gioco',
@@ -868,4 +887,35 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.raNoRecentUnlocks: 'Nessuno sblocco recente negli ultimi 30 giorni',
   AppLocale.raRecentlyPlayedTitle: 'Giocati di Recente',
   AppLocale.raNoRecentlyPlayed: 'Nessun gioco giocato di recente',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Sistemi corrispondenti',
+  AppLocale.esdeSummaryUnmatched: 'senza corrispondenza',
+  AppLocale.esdeSummarySkipped: 'saltati (illeggibili)',
+  AppLocale.esdeSummaryGamesImported: 'Giochi importati',
+  AppLocale.esdeSummaryNoRomMatch: 'nessuna corrispondenza ROM',
+  AppLocale.esdeSummaryStatsUpdated: 'Preferiti / statistiche aggiornati',
+  AppLocale.esdeSummaryGames: 'giochi',
+  AppLocale.esdeSummarySystems: 'sistemi',
 };

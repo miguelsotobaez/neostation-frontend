@@ -185,6 +185,20 @@ mixin AppLocale {
   static const String logoImageSubtitle = 'logo_image_subtitle';
   static const String selectRetroArchExe = 'select_retroarch_exe';
   static const String selectExecutablePath = 'select_executable_path';
+  static const String organizeMultiDiscGames = 'organize_multi_disc_games';
+  static const String organizeMultiDiscGamesSubtitle =
+      'organize_multi_disc_games_subtitle';
+  static const String organizeMultiDiscScanning =
+      'organize_multi_disc_scanning';
+  static const String organizeMultiDiscNoRomFoldersConfigured =
+      'organize_multi_disc_no_rom_folders_configured';
+  static const String organizeMultiDiscSkippedSuffix =
+      'organize_multi_disc_skipped_suffix';
+  static const String organizeMultiDiscDone = 'organize_multi_disc_done';
+  static const String organizeMultiDiscNoSetsFound =
+      'organize_multi_disc_no_sets_found';
+  static const String organizeMultiDiscFailed = 'organize_multi_disc_failed';
+  static const String organizeMultiDiscWarning = 'organize_multi_disc_warning';
 
   // ---------------------------------------------------------------------------
   // Exit
@@ -194,6 +208,7 @@ mixin AppLocale {
   static const String confirmExit = 'confirm_exit';
   static const String rescanAllFolders = 'rescan_all_folders';
   static const String rescanAllFoldersSubtitle = 'rescan_all_folders_subtitle';
+
   static const String romsFolderSubtitle = 'roms_folder_subtitle';
   static const String pressToRemoveFolder = 'press_to_remove_folder';
   static const String maxRomFoldersReached = 'max_rom_folders_reached';
@@ -803,6 +818,34 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   static const String userDataLocation = 'user_data_location';
   static const String userDataLocationSubtitle = 'user_data_location_subtitle';
+
+  // ---------------------------------------------------------------------------
+  // ES-DE import
+  // ---------------------------------------------------------------------------
+  static const String esdeImport = 'esde_import';
+  static const String esdeImportSubtitle = 'esde_import_subtitle';
+  static const String esdeSelectFolder = 'esde_select_folder';
+  static const String esdeSelectFolderSubtitle = 'esde_select_folder_subtitle';
+  static const String esdeRunImport = 'esde_run_import';
+  static const String esdeRunImportSubtitle = 'esde_run_import_subtitle';
+  static const String esdeImporting = 'esde_importing';
+  static const String esdeImportComplete = 'esde_import_complete';
+  static const String esdeImportNoFolder = 'esde_import_no_folder';
+  static const String esdeReset = 'esde_reset';
+  static const String esdeResetSubtitle = 'esde_reset_subtitle';
+  static const String esdeResetComplete = 'esde_reset_complete';
+  static const String esdeResetConfirmBody = 'esde_reset_confirm_body';
+  static const String esdeImportNotEsdeFolder = 'esde_import_not_esde_folder';
+  static const String esdeImportNothingFound = 'esde_import_nothing_found';
+  static const String esdeSummarySystemsMatched =
+      'esde_summary_systems_matched';
+  static const String esdeSummaryUnmatched = 'esde_summary_unmatched';
+  static const String esdeSummarySkipped = 'esde_summary_skipped';
+  static const String esdeSummaryGamesImported = 'esde_summary_games_imported';
+  static const String esdeSummaryNoRomMatch = 'esde_summary_no_rom_match';
+  static const String esdeSummaryStatsUpdated = 'esde_summary_stats_updated';
+  static const String esdeSummaryGames = 'esde_summary_games';
+  static const String esdeSummarySystems = 'esde_summary_systems';
   static const String userDataLocationDefault = 'user_data_location_default';
   static const String selectUserDataFolder = 'select_user_data_folder';
   static const String folderNotEmptyTitle = 'folder_not_empty_title';
@@ -827,6 +870,8 @@ mixin AppLocale {
   static const String userDataLocationUpdated = 'user_data_location_updated';
   static const String resetToDefault = 'reset_to_default';
   static const String romDirectories = 'rom_directories';
+  static const String tools = 'tools';
+  static const String toolsSubtitle = 'tools_subtitle';
   static const String addRomFolder = 'add_rom_folder';
   static const String removeRomFolder = 'remove_rom_folder';
 

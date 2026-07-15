@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "xbox",
+    "multidisc": true,
     "name": "Xbox",
     "neosync": {
       "sync": false,

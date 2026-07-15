@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "dos",
+    "multidisc": true,
     "name": "MS-DOS",
     "short_name": "DOS",
     "details": {

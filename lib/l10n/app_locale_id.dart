@@ -177,6 +177,21 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.confirmExit: 'Konfirmasi Keluar',
   AppLocale.rescanAllFolders: 'Pindai ulang semua folder ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Cari sistem dan ROM baru secara manual',
+  AppLocale.organizeMultiDiscGames: 'Atur game multi-disk',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Secara otomatis membuat file .m3u untuk game multi-disk dan mengaturnya ke dalam folder',
+  AppLocale.organizeMultiDiscScanning:
+      'Memindai folder ROM untuk game multi-disk...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Belum ada folder ROM yang dikonfigurasi.',
+  AppLocale.organizeMultiDiscSkippedSuffix: ' ({count} jalur folder dilewati)',
+  AppLocale.organizeMultiDiscDone:
+      'Selesai: {groups} set diatur, {files} file dipindahkan, {playlists} playlist dibuat{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Tidak ada set multi-disk yang ditemukan untuk diatur{skipped}.',
+  AppLocale.organizeMultiDiscFailed: 'Gagal mengatur game multi-disk: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Ini akan memindahkan file ROM yang cocok ke folder game baru dan membuat playlist .m3u di penyimpanan Anda. Tindakan ini tidak dapat dibatalkan secara otomatis.',
   AppLocale.romsFolderSubtitle: 'Tambahkan folder yang berisi file ROM Anda',
   AppLocale.pressToRemoveFolder: 'Tekan Konfirmasi untuk menghapus folder ini',
   AppLocale.maxRomFoldersReached: 'Maksimal 5 folder ROM diizinkan',
@@ -801,6 +816,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.userDataLocationUpdated: 'Lokasi data diperbarui',
   AppLocale.resetToDefault: 'Setel Ulang ke Default',
   AppLocale.romDirectories: 'Direktori ROM',
+  AppLocale.tools: 'Alat',
+  AppLocale.toolsSubtitle: 'Alat untuk membantu mengatur ROM Anda',
   AppLocale.addRomFolder: 'Tambah Folder ROM',
   AppLocale.removeRomFolder: 'Hapus',
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',
@@ -851,4 +868,35 @@ const Map<String, dynamic> appLocaleId = {
       'Tidak ada pembukaan baru dalam 30 hari terakhir',
   AppLocale.raRecentlyPlayedTitle: 'Baru Dimainkan',
   AppLocale.raNoRecentlyPlayed: 'Tidak ada game yang baru dimainkan',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Sistem cocok',
+  AppLocale.esdeSummaryUnmatched: 'tidak cocok',
+  AppLocale.esdeSummarySkipped: 'dilewati (tidak terbaca)',
+  AppLocale.esdeSummaryGamesImported: 'Gim diimpor',
+  AppLocale.esdeSummaryNoRomMatch: 'tidak ada ROM cocok',
+  AppLocale.esdeSummaryStatsUpdated: 'Favorit / statistik diperbarui',
+  AppLocale.esdeSummaryGames: 'gim',
+  AppLocale.esdeSummarySystems: 'sistem',
 };

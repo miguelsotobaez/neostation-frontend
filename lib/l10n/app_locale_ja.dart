@@ -154,6 +154,18 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.confirmExit: '終了の確認',
   AppLocale.rescanAllFolders: 'すべての ROM フォルダを再スキャン',
   AppLocale.rescanAllFoldersSubtitle: '新しいシステムとROMを手動で検索',
+  AppLocale.organizeMultiDiscGames: 'マルチディスクゲームを整理',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      '.m3u ファイルを自動作成してマルチディスクゲームをフォルダに整理します',
+  AppLocale.organizeMultiDiscScanning: 'マルチディスクゲームを探すため ROM フォルダをスキャン中...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured: 'ROMフォルダが設定されていません。',
+  AppLocale.organizeMultiDiscSkippedSuffix: '（{count} 件のフォルダパスをスキップ）',
+  AppLocale.organizeMultiDiscDone:
+      '完了: {groups} セットを整理、{files} ファイルを移動、{playlists} プレイリストを作成{skipped}。',
+  AppLocale.organizeMultiDiscNoSetsFound: '整理するマルチディスクセットは見つかりませんでした{skipped}。',
+  AppLocale.organizeMultiDiscFailed: 'マルチディスクゲームの整理に失敗しました: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      '一致するROMファイルを新しいゲームフォルダへ移動し、ストレージに.m3uプレイリストを作成します。この操作を自動的に元に戻すことはできません。',
   AppLocale.romsFolderSubtitle: 'ROMファイルを含むフォルダを追加',
   AppLocale.pressToRemoveFolder: '決定を押してこのフォルダを削除',
   AppLocale.maxRomFoldersReached: '最大5つのROMフォルダが許可されています',
@@ -730,6 +742,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.userDataLocationUpdated: 'データの保存場所を更新しました',
   AppLocale.resetToDefault: 'デフォルトに戻す',
   AppLocale.romDirectories: 'ROMディレクトリ',
+  AppLocale.tools: 'ツール',
+  AppLocale.toolsSubtitle: 'ROMの整理に役立つツール',
   AppLocale.addRomFolder: 'ROMフォルダを追加',
   AppLocale.removeRomFolder: '削除',
   AppLocale.resetPlayTimeConfirm: 'プレイ時間をリセット',
@@ -776,4 +790,35 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.raNoRecentUnlocks: '過去30日間に解除した実績はありません',
   AppLocale.raRecentlyPlayedTitle: '最近プレイ',
   AppLocale.raNoRecentlyPlayed: '最近プレイしたゲームはありません',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: '一致したシステム',
+  AppLocale.esdeSummaryUnmatched: '一致なし',
+  AppLocale.esdeSummarySkipped: 'スキップ（読み取り不可）',
+  AppLocale.esdeSummaryGamesImported: 'インポートしたゲーム',
+  AppLocale.esdeSummaryNoRomMatch: 'ROMの一致なし',
+  AppLocale.esdeSummaryStatsUpdated: 'お気に入り／統計を更新',
+  AppLocale.esdeSummaryGames: 'ゲーム',
+  AppLocale.esdeSummarySystems: 'システム',
 };
