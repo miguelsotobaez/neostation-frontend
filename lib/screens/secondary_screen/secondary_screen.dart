@@ -89,6 +89,10 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// Whether the app picker overlay is currently visible in either mode.
   bool get _pickerVisible => _pickerSlot != null || _launcherOpen;
 
+  /// Whether the "enable Screen Return" explainer dialog is showing. Raised
+  /// when the launcher is tapped while the accessibility service is off.
+  bool _accessDialogVisible = false;
+
   /// Installed-app list backing the picker; null until first loaded.
   List<Map<String, dynamic>>? _pickerApps;
   bool _loadingPickerApps = false;
@@ -819,6 +823,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                             // all-apps launcher). Top-most so it covers the dock
                             // and any panel; available in every state.
                             if (_pickerVisible) _buildAppPickerOverlay(),
+
+                            // Accessibility explainer, top-most so it sits over
+                            // the dock and picker.
+                            if (_accessDialogVisible)
+                              _buildAccessibilityDialog(value),
                           ],
                         ),
                 );
@@ -1006,7 +1015,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                 child: DockLauncherButton(
                   value: value,
                   onOpenLauncher: _openAppLauncher,
-                  onOpenAccessibilitySettings: _openAccessibilitySettings,
+                  onOpenAccessibilitySettings: _showAccessibilityDialog,
                 ),
               ),
             ],
@@ -1172,6 +1181,161 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _wakeInGamePanel();
     SfxService().playNavSound();
     SecondaryAppsService.openAccessibilitySettings();
+  }
+
+  /// Shows the explainer dialog raised when the launcher is tapped while the
+  /// Screen Return accessibility service is off.
+  void _showAccessibilityDialog() {
+    _wakeInGamePanel();
+    SfxService().playNavSound();
+    setState(() => _accessDialogVisible = true);
+  }
+
+  void _dismissAccessibilityDialog() {
+    SfxService().playNavSound();
+    setState(() => _accessDialogVisible = false);
+  }
+
+  /// Accepts the explainer: closes it and jumps to accessibility settings.
+  void _confirmAccessibilityDialog() {
+    setState(() => _accessDialogVisible = false);
+    _openAccessibilitySettings();
+  }
+
+  /// Modal explainer shown before sending the user to accessibility settings.
+  /// Tells them why the Screen Return service is needed and what to do once the
+  /// settings screen opens. Tapping the backdrop or CANCEL dismisses; OPEN
+  /// SETTINGS jumps straight to the accessibility page.
+  Widget _buildAccessibilityDialog(SecondaryDisplayStateData value) {
+    final scheme = panelScheme(value);
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _dismissAccessibilityDialog,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.72),
+          child: Center(
+            child: GestureDetector(
+              // Swallow taps on the card so they don't dismiss via the backdrop.
+              onTap: () {},
+              child: Container(
+                width: 480.r,
+                padding: EdgeInsets.all(28.r),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(
+                    color: scheme.onSurface.withValues(alpha: 0.15),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      blurRadius: 24.r,
+                      offset: Offset(0, 8.r),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Symbols.accessibility_new_rounded,
+                          color: scheme.primary,
+                          size: 30.r,
+                        ),
+                        SizedBox(width: 12.r),
+                        Expanded(
+                          child: Text(
+                            'Enable Screen Return',
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 20.r,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 18.r),
+                    Text(
+                      'To launch apps from the dock, NeoStation needs the '
+                      'Screen Return accessibility service. It lets NeoStation '
+                      'bring you back here after you close the app you opened. '
+                      "Without it you could be left with no way back.\n\n"
+                      'On the next screen, find NeoStation in the list of '
+                      'services and switch it on.',
+                      style: TextStyle(
+                        color: scheme.onSurface.withValues(alpha: 0.8),
+                        fontSize: 14.r,
+                        height: 1.45,
+                      ),
+                    ),
+                    SizedBox(height: 26.r),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _buildDialogButton(
+                          label: 'CANCEL',
+                          onTap: _dismissAccessibilityDialog,
+                          scheme: scheme,
+                          filled: false,
+                        ),
+                        SizedBox(width: 12.r),
+                        _buildDialogButton(
+                          label: 'OPEN SETTINGS',
+                          onTap: _confirmAccessibilityDialog,
+                          scheme: scheme,
+                          filled: true,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A flat dialog action button — filled with the accent for the primary
+  /// action, outlined for the secondary. Custom (not a Material button) to match
+  /// the rest of the secondary screen, which has no Material ancestor.
+  Widget _buildDialogButton({
+    required String label,
+    required VoidCallback onTap,
+    required ColorScheme scheme,
+    required bool filled,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 12.r),
+        decoration: BoxDecoration(
+          color: filled ? scheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: filled
+                ? scheme.primary
+                : scheme.onSurface.withValues(alpha: 0.30),
+            width: 1.5.r,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: filled ? scheme.onPrimary : scheme.onSurface,
+            fontSize: 13.r,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.r,
+          ),
+        ),
+      ),
+    );
   }
 
   /// Full-panel overlay for choosing an app for the pending dock slot. Tapping
