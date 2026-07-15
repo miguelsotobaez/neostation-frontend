@@ -12,8 +12,14 @@ class SettingRow extends StatelessWidget {
   /// Primary label text.
   final String title;
 
-  /// Secondary description text shown beneath the title.
+  /// Secondary description text shown beneath the title. Ignored when
+  /// [subtitleWidget] is provided.
   final String subtitle;
+
+  /// Optional custom widget rendered beneath the title in place of the plain
+  /// [subtitle] text — for rows needing richer secondary content (e.g. a
+  /// coloured permission-status line).
+  final Widget? subtitleWidget;
 
   /// The control rendered at the trailing edge of the row.
   final Widget trailing;
@@ -30,6 +36,7 @@ class SettingRow extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
+    this.subtitleWidget,
     required this.trailing,
     required this.focused,
     this.expandTitle = true,
@@ -53,13 +60,16 @@ class SettingRow extends StatelessWidget {
           ),
         ),
         SizedBox(height: 4.r),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontSize: 9.r,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        if (subtitleWidget != null)
+          subtitleWidget!
+        else
+          Text(
+            subtitle,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontSize: 9.r,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
-        ),
       ],
     );
 
@@ -77,6 +87,7 @@ class SettingRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           expandTitle ? Expanded(child: titleColumn) : titleColumn,
+          SizedBox(width: 12.r),
           trailing,
         ],
       ),

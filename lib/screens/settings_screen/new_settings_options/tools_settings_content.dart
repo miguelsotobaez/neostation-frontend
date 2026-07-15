@@ -12,6 +12,8 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/rom_folder_organizer_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'settings_title.dart';
+import 'widgets/settings_card_row.dart';
+import 'widgets/settings_action_button.dart';
 
 class ToolsSettingsContent extends StatefulWidget {
   final bool isContentFocused;
@@ -185,7 +187,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isSelected =
         widget.isContentFocused && widget.selectedContentIndex == 0;
 
@@ -201,87 +202,18 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
           child: ListView(
             physics: const ClampingScrollPhysics(),
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: theme.cardColor.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(12.r),
-                  border: Border.all(
-                    color: isSelected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline.withValues(alpha: 0),
-                    width: isSelected ? 2.r : 1.r,
-                  ),
+              SettingsCardRow(
+                icon: Symbols.folder_managed_rounded,
+                title: AppLocale.organizeMultiDiscGames.getString(context),
+                subtitle: AppLocale.organizeMultiDiscGamesSubtitle.getString(
+                  context,
                 ),
-                child: InkWell(
-                  onTap: () => _organizeMultiDiscGames(),
-                  borderRadius: BorderRadius.circular(12.r),
-                  canRequestFocus: false,
-                  focusColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                  splashColor: Colors.transparent,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 12.r,
-                      vertical: 10.r,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Symbols.folder_managed_rounded,
-                          color: isSelected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurface,
-                          size: 20.r,
-                        ),
-                        SizedBox(width: 12.r),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppLocale.organizeMultiDiscGames.getString(
-                                  context,
-                                ),
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12.r,
-                                  color: isSelected
-                                      ? theme.colorScheme.primary
-                                      : theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              SizedBox(height: 2.r),
-                              Text(
-                                AppLocale.organizeMultiDiscGamesSubtitle
-                                    .getString(context),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.6,
-                                  ),
-                                  fontSize: 9.r,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: EdgeInsets.all(4.r),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: isSelected ? 1.0 : 0.8,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Symbols.folder_managed_rounded,
-                            color: theme.colorScheme.onPrimary,
-                            size: 16.r,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                subtitleMaxLines: 2,
+                selected: isSelected,
+                onTap: () => _organizeMultiDiscGames(),
+                trailing: SettingsActionButton(
+                  icon: Symbols.folder_managed_rounded,
+                  selected: isSelected,
                 ),
               ),
             ],
