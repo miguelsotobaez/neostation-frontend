@@ -805,8 +805,20 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                 ),
                               ),
 
+                            // Persistent app dock + all-apps launcher. Drawn at
+                            // the top level (not inside the in-game panel) so it
+                            // stays visible while browsing systems and on the
+                            // Now Playing page — hidden on the achievement pages
+                            // and dimmed together with the panel's idle scrim.
+                            if (value.dockEnabled) _buildDockOverlay(value),
+
                             // Scraping Overlay
                             _buildScrapingOverlay(value),
+
+                            // App picker overlay (dock-slot assignment or
+                            // all-apps launcher). Top-most so it covers the dock
+                            // and any panel; available in every state.
+                            if (_pickerVisible) _buildAppPickerOverlay(),
                           ],
                         ),
                 );
@@ -939,6 +951,71 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
+  /// The persistent app dock + all-apps launcher overlay, drawn above the
+  /// in-game panel so it stays reachable while browsing systems and on the Now
+  /// Playing page.
+  ///
+  /// Two behaviours mirror the Now Playing panel so the dock reads as part of
+  /// it while a game is active:
+  ///  * Hidden while flipped to an achievements/comments page (the dock belongs
+  ///    to the Now Playing page).
+  ///  * Faded toward black in step with the panel's idle-dim scrim (which sits
+  ///    below this overlay), so the whole display darkens uniformly.
+  ///
+  /// While browsing (no game active) neither applies, so the dock is fully lit
+  /// and interactive.
+  Widget _buildDockOverlay(SecondaryDisplayStateData value) {
+    final raAvailable =
+        value.showAchievementPanel && value.achievements != null;
+    // Off the Now Playing page (achievements/comments) → hide the dock.
+    final hidden =
+        value.nowPlayingActive && raAvailable && _inGamePanelPage >= 1;
+    final dimmed = value.nowPlayingActive && _inGameDimmed;
+    // Fade to black alongside the panel scrim behind us: the scrim darkens the
+    // display to `nowPlayingDimLevel`, so drop the dock's opacity to match and
+    // let that black show through.
+    final opacity = hidden
+        ? 0.0
+        : dimmed
+        ? (1.0 - value.nowPlayingDimLevel.clamp(0, 100) / 100.0)
+        : 1.0;
+    return Positioned.fill(
+      child: IgnorePointer(
+        // Non-interactive while hidden or dimmed — when dimmed, touches fall
+        // through to the panel's wake Listener below (first touch only wakes).
+        ignoring: hidden || dimmed,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 400),
+          opacity: opacity,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: AppDock(
+                  value: value,
+                  onLaunchApp: _launchDockApp,
+                  onPickSlot: _openAppPicker,
+                  onClearSlot: _clearSlot,
+                ),
+              ),
+              Positioned(
+                left: 16.r,
+                bottom: 16.r,
+                child: DockLauncherButton(
+                  value: value,
+                  onOpenLauncher: _openAppLauncher,
+                  onOpenAccessibilitySettings: _openAccessibilitySettings,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// The in-game container body: shows the Now Playing page or the
   /// achievements/comments pages, with edge chevrons to flip between them when the game
   /// has a RetroAchievements set. The page index is clamped so the RA page is
@@ -981,9 +1058,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
               ),
             ),
           ),
-          // App picker overlay sits above the dim scrim so opening it (which
-          // also wakes the panel) is always visible.
-          if (_pickerVisible) _buildAppPickerOverlay(),
         ],
       ),
     );
@@ -1039,11 +1113,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                       sessionRunning: _sessionWatch.isRunning,
                       sessionTime: _formatSessionTime(),
                       onRequestScreenshot: _requestScreenshot,
-                      onLaunchApp: _launchDockApp,
-                      onPickSlot: _openAppPicker,
-                      onClearSlot: _clearSlot,
-                      onOpenLauncher: _openAppLauncher,
-                      onOpenAccessibilitySettings: _openAccessibilitySettings,
                     ),
             ),
           ),
