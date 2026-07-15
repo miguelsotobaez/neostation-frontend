@@ -170,6 +170,22 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.confirmExit: 'Confirm Exit',
   AppLocale.rescanAllFolders: 'Rescan All ROM Folders',
   AppLocale.rescanAllFoldersSubtitle: 'Manually scan for new systems and ROMs',
+  AppLocale.organizeMultiDiscGames: 'Organize Multi-Disc Games',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Automatically creates .m3u files for multi disc games and organises them into folders',
+  AppLocale.organizeMultiDiscScanning:
+      'Scanning ROM folders for multi-disc games...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'No ROM folders configured.',
+  AppLocale.organizeMultiDiscSkippedSuffix: ' ({count} folder path(s) skipped)',
+  AppLocale.organizeMultiDiscDone:
+      'Done: {groups} set(s) organized, {files} file(s) moved, {playlists} playlist(s) created{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'No multi-disc sets found to organize{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Failed to organize multi-disc games: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'This moves matching ROM files into new game folders and creates .m3u playlists on your storage. This cannot be undone automatically.',
   AppLocale.romsFolderSubtitle: 'Add a folder containing your ROM files',
   AppLocale.pressToRemoveFolder: 'Press confirm to remove this folder',
   AppLocale.maxRomFoldersReached: 'Maximum 5 ROM folders allowed',
@@ -793,6 +809,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.userDataLocationUpdated: 'User data location updated',
   AppLocale.resetToDefault: 'Reset to Default',
   AppLocale.romDirectories: 'ROM Directories',
+  AppLocale.tools: 'Tools',
+  AppLocale.toolsSubtitle: 'Tools to help organise your ROMs',
   AppLocale.addRomFolder: 'Add ROM Folder',
   AppLocale.removeRomFolder: 'Remove',
   AppLocale.resetPlayTimeConfirm: 'Reset Play Time',

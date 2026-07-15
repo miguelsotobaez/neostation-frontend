@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "3do",
+    "multidisc": true,
     "name": "Panasonic 3DO",
     "short_name": "3DO",
     "details": {

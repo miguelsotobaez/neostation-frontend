@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gc",
+    "multidisc": true,
     "name": "Nintendo GameCube",
     "short_name": "GC",
     "details": {

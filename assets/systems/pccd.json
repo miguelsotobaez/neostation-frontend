@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pccd",
+    "multidisc": true,
     "name": "PC Engine-CD",
     "short_name": "PCCD",
     "details": {

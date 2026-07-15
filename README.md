@@ -6,7 +6,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Discord](https://img.shields.io/discord/1088818368129273946?label=Discord&logo=discord&color=5865f2)](https://discord.gg/xE2kgKsRVq) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/miguelsotobaez/neostation-frontend/total) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/miguelsotobaez/neostation-frontend/build-and-deploy.yml) [![Stars](https://img.shields.io/github/stars/misobadev/neostation-frontend?logo=github)](https://github.com/misobadev/neostation-frontend) [![Issues](https://img.shields.io/github/issues/misobadev/neostation-frontend)](https://github.com/misobadev/neostation-frontend/issues)  [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(x64%2Farm64)%20%7C%20macOS%20%7C%20Android-blue)](https://github.com/misobadev/neostation-frontend)
 
-![NeoStation Hero](https://repository-images.githubusercontent.com/1223168847/145cb04c-3479-4eb5-bbb6-23d14d047a7c)
+![NeoStation Hero](https://repository-images.githubusercontent.com/1223168847/4e7a727d-9855-4597-a999-c07167d8552f)
 
 </div>
 
@@ -22,6 +22,7 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 
 - **Modern & customizable UI**: Designed for both large screens and handheld devices, with themes and animations.
 - **Collection management**: Intuitively organize your ROMs and platforms.
+- **Multi-disc ROM organization**: Automatically create `.m3u` playlists for your multi-disc games and organize them into game folders.
 - **RetroArch & standalone emulator integration**: Easy configuration and auto-detection.
 - **Multi-platform support**: Windows, Linux, macOS, and Android.
 - **Lightweight & fast**: Built with web and native technologies for maximum performance.
@@ -31,6 +32,17 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 - **ScreenScraper integration**: Automatic metadata and media scraping.
 - **Gamepad & keyboard navigation**: Full controller support across all platforms.
 - **10 languages supported**: English, Spanish, Portuguese, Russian, Chinese, French, German, Italian, Indonesian, Japanese.
+
+## Multi-disc ROM Organization
+
+The built-in organizer helps prepare multi-disc games for emulators that use `.m3u` playlists:
+
+1. Open **Settings > Tools**.
+2. Select **Organize Multi-Disc Games**.
+3. NeoStation recursively scans all configured ROM folders and detects disc sets using `Disc`, `Disk`, or `CD` filename markers.
+4. Each detected set is placed in a game folder with an `.m3u` playlist. Existing playlists are reused rather than duplicated.
+
+Folders that already contain `.m3u` playlists are skipped during the scan.
 
 ## Supported Platforms
 

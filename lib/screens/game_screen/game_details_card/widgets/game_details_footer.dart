@@ -12,11 +12,10 @@ import '../../../../sync/i_sync_provider.dart';
 import '../../../../utils/game_utils.dart';
 import '../../../../widgets/marquee_text.dart';
 import '../../music/music_player.dart';
-import 'glass_button.dart';
 
 /// A sticky footer component for the game details card that provides actionable controls and status summaries.
 ///
-/// Manages high-level game interactions (Play, Favorite, Scrape), summarizes cloud synchronization
+/// Manages high-level game interactions (Play), summarizes cloud synchronization
 /// health, and provides quick access to trophy progress. Dynamically adjusts for specialized
 /// systems like the Music Player.
 class GameDetailsFooter extends StatelessWidget {
@@ -24,16 +23,11 @@ class GameDetailsFooter extends StatelessWidget {
   final GameModel game;
   final bool isMusicSystem;
   final bool hasScreenScraper;
-  final bool isScrapingGame;
-  final String? localizedDescription;
   final bool isSecondaryScreenActive;
-  final bool isFavorite;
   final bool cloudSyncEnabled;
   final ISyncProvider syncProvider;
   final AnimationController? syncIconController;
   final VoidCallback onPlayGame;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onScrapeGame;
   final VoidCallback onShowAchievements;
   final bool hasRetroAchievements;
   final bool isLoadingAchievements;
@@ -45,16 +39,11 @@ class GameDetailsFooter extends StatelessWidget {
     required this.game,
     required this.isMusicSystem,
     required this.hasScreenScraper,
-    required this.isScrapingGame,
-    this.localizedDescription,
     required this.isSecondaryScreenActive,
-    required this.isFavorite,
     required this.cloudSyncEnabled,
     required this.syncProvider,
     this.syncIconController,
     required this.onPlayGame,
-    required this.onToggleFavorite,
-    required this.onScrapeGame,
     required this.onShowAchievements,
     required this.hasRetroAchievements,
     required this.isLoadingAchievements,
@@ -171,24 +160,6 @@ class GameDetailsFooter extends StatelessWidget {
                           leftSide.add(Expanded(flex: 1, child: ach));
                         }
 
-                        // Metadata Scraping Control.
-                        final scrape = _buildScrapeButtonCompact(context);
-                        if (scrape is! SizedBox) {
-                          if (leftSide.isNotEmpty) {
-                            leftSide.add(SizedBox(width: 8.r));
-                          }
-                          leftSide.add(Expanded(flex: 1, child: scrape));
-                        }
-
-                        // Library Favorite Toggle.
-                        final fav = _buildFavoriteButtonCompact(context);
-                        if (fav is! SizedBox) {
-                          if (leftSide.isNotEmpty) {
-                            leftSide.add(SizedBox(width: 8.r));
-                          }
-                          leftSide.add(Expanded(flex: 1, child: fav));
-                        }
-
                         return leftSide;
                       })(),
 
@@ -197,7 +168,7 @@ class GameDetailsFooter extends StatelessWidget {
 
                       // Primary Launch Control.
                       Expanded(
-                        flex: 2,
+                        flex: 1,
                         child: _buildPlayButtonCompact(context),
                       ),
                     ],
@@ -208,28 +179,6 @@ class GameDetailsFooter extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  /// Specialized button for toggling the game's favorite status in the library.
-  Widget _buildFavoriteButtonCompact(BuildContext context) {
-    final isFav = game.isFavorite ?? false;
-    return GlassButton(
-      onTap: () {
-        SfxService().playNavSound();
-        onToggleFavorite();
-      },
-      iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
-      iconData: isFav
-          ? Symbols.favorite_rounded
-          : Symbols.favorite_border_rounded,
-      iconColor: isFav
-          ? Colors.redAccent
-          : Theme.of(context).colorScheme.onSurface,
-      label: isFav
-          ? AppLocale.favorite.getString(context)
-          : AppLocale.addFav.getString(context),
-      isActive: isFav,
     );
   }
 
@@ -317,36 +266,6 @@ class GameDetailsFooter extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  /// Metadata fetching control that contextually switches between 'Scrape' and 'Rescrape'.
-  Widget _buildScrapeButtonCompact(BuildContext context) {
-    if (!hasScreenScraper) return const SizedBox.shrink();
-    final description =
-        localizedDescription ??
-        (game.getDescriptionForLanguage('en').isEmpty
-            ? AppLocale.noDescription.getString(context)
-            : game.getDescriptionForLanguage('en'));
-
-    final bool isDescriptionMissing =
-        description.isEmpty ||
-        description == AppLocale.noDescription.getString(context) ||
-        description.trim().isEmpty;
-
-    return GlassButton(
-      onTap: () {
-        SfxService().playNavSound();
-        onScrapeGame();
-      },
-      iconPath: 'assets/images/gamepad/Xbox_View_button.png',
-      iconData: isDescriptionMissing
-          ? Symbols.search_rounded
-          : Symbols.refresh_rounded,
-      label: isDescriptionMissing
-          ? AppLocale.scrape.getString(context)
-          : AppLocale.rescrape.getString(context),
-      isLoading: isScrapingGame,
     );
   }
 
@@ -527,16 +446,24 @@ class GameDetailsFooter extends StatelessWidget {
         !isLoadingAchievements &&
         (currentGameInfo == null || currentGameInfo!.numAchievements == 0);
 
+    final int awarded = currentGameInfo?.numAwardedToUser ?? 0;
+    final int total = currentGameInfo?.numAchievements ?? 0;
+    final double progress = total > 0 ? awarded / total : 0.0;
+
     final String progressText = isLoadingAchievements
         ? AppLocale.loading.getString(context)
         : (noAchievements
               ? AppLocale.noAchievements.getString(context)
-              : '${currentGameInfo!.numAwardedToUser}/${currentGameInfo!.numAchievements}');
+              : '$awarded/$total');
 
     final theme = Theme.of(context);
     final Color statusColor = noAchievements
         ? theme.colorScheme.onSurface
         : Colors.orange;
+
+    final String? gameIconUrl = currentGameInfo?.imageIcon.isNotEmpty == true
+        ? 'https://media.retroachievements.org${currentGameInfo!.imageIcon}'
+        : null;
 
     return Material(
       color: Colors.transparent,
@@ -565,36 +492,66 @@ class GameDetailsFooter extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6.r),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 4.r),
+            child: Row(
               children: [
-                if (isLoadingAchievements)
-                  SizedBox(
-                    width: 16.r,
-                    height: 16.r,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  )
-                else
-                  Icon(
-                    Symbols.emoji_events_rounded,
-                    color: statusColor,
-                    size: 16.r,
+                // RetroAchievements game icon.
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6.r),
+                  child: Container(
+                    width: 28.r,
+                    height: 28.r,
+                    color: theme.colorScheme.surface,
+                    child: gameIconUrl != null
+                        ? Image.network(
+                            gameIconUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Icon(
+                              Symbols.emoji_events_rounded,
+                              color: statusColor,
+                              size: 16.r,
+                            ),
+                          )
+                        : Icon(
+                            Symbols.emoji_events_rounded,
+                            color: statusColor,
+                            size: 16.r,
+                          ),
                   ),
-                SizedBox(height: 2.r),
-                Text(
-                  progressText.toUpperCase(),
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface,
-                    fontSize: 8.r,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
+                ),
+                SizedBox(width: 8.r),
+                // Progress bar and achievement count.
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        progressText.toUpperCase(),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 8.r,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 4.r),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4.r),
+                        child: LinearProgressIndicator(
+                          value: isLoadingAchievements ? null : progress,
+                          minHeight: 5.r,
+                          backgroundColor: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.1),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

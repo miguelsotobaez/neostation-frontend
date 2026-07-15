@@ -58,11 +58,11 @@ void main() {
       });
 
       test('returns the ROM subfolder relative to the system folder', () {
-        expect(EsdeImportService.mediaSubdirForTest('./Hacks/Sonic.md'), 'Hacks');
         expect(
-          EsdeImportService.mediaSubdirForTest('./A/B/Sonic.md'),
-          'A/B',
+          EsdeImportService.mediaSubdirForTest('./Hacks/Sonic.md'),
+          'Hacks',
         );
+        expect(EsdeImportService.mediaSubdirForTest('./A/B/Sonic.md'), 'A/B');
       });
     });
 
@@ -76,7 +76,11 @@ void main() {
         ''');
         // esdeRoot doesn't exist, so _esdeMediaExists is false for both and the
         // first-seen entry is kept.
-        final chosen = EsdeImportService.selectGamesForTest(doc, '/no/such/root', 'megadrive');
+        final chosen = EsdeImportService.selectGamesForTest(
+          doc,
+          '/no/such/root',
+          'megadrive',
+        );
         expect(chosen.length, 1);
       });
 
@@ -87,7 +91,11 @@ void main() {
             <game><path>./Streets.md</path></game>
           </gameList>
         ''');
-        final chosen = EsdeImportService.selectGamesForTest(doc, '/no/such/root', 'megadrive');
+        final chosen = EsdeImportService.selectGamesForTest(
+          doc,
+          '/no/such/root',
+          'megadrive',
+        );
         expect(chosen.length, 2);
       });
     });

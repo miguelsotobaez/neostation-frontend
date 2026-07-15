@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ps2",
+    "multidisc": true,
     "name": "Sony PlayStation 2",
     "short_name": "PS2",
     "details": {

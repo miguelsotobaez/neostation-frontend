@@ -175,6 +175,22 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.confirmExit: 'Подтвердить выход',
   AppLocale.rescanAllFolders: 'Пересканировать все папки ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Вручную искать новые системы и ROM',
+  AppLocale.organizeMultiDiscGames: 'Организовать многодисковые игры',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Автоматически создаёт файлы .m3u для многодисковых игр и организует их по папкам',
+  AppLocale.organizeMultiDiscScanning:
+      'Сканирование папок ROM на наличие многодисковых игр...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured: 'Папки ROM не настроены.',
+  AppLocale.organizeMultiDiscSkippedSuffix:
+      ' ({count} путь(ей) к папкам пропущено)',
+  AppLocale.organizeMultiDiscDone:
+      'Готово: организовано наборов — {groups}, перемещено файлов — {files}, создано плейлистов — {playlists}{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Многодисковые наборы для организации не найдены{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Не удалось организовать многодисковые игры: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Подходящие ROM-файлы будут перемещены в новые папки игр, а на накопителе будут созданы плейлисты .m3u. Это нельзя отменить автоматически.',
   AppLocale.romsFolderSubtitle: 'Добавьте папку, содержащую ваши файлы ROM',
   AppLocale.pressToRemoveFolder:
       'Нажмите «Подтвердить», чтобы удалить эту папку',
@@ -791,6 +807,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.userDataLocationUpdated: 'Расположение данных обновлено',
   AppLocale.resetToDefault: 'Сбросить до стандартного',
   AppLocale.romDirectories: 'Директории ROM',
+  AppLocale.tools: 'Инструменты',
+  AppLocale.toolsSubtitle: 'Инструменты для организации ваших ROM',
   AppLocale.addRomFolder: 'Добавить папку ROM',
   AppLocale.removeRomFolder: 'Удалить',
   AppLocale.resetPlayTimeConfirm: 'Сбросить время игры',

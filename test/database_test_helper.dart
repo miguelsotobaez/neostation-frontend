@@ -42,6 +42,7 @@ class DatabaseTestHelper {
         type TEXT,
         color1 TEXT,
         color2 TEXT,
+        multidisc INTEGER NOT NULL DEFAULT 0,
         neosync_json TEXT
       )
     ''');
@@ -147,7 +148,9 @@ class DatabaseTestHelper {
       CREATE TABLE user_emulator_config (
         emulator_unique_id TEXT PRIMARY KEY,
         emulator_path TEXT,
-        is_user_default INTEGER
+        is_user_default INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 

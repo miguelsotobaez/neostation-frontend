@@ -12,7 +12,7 @@ const Color _onTertiaryFixedColor = Color(0xFFd4d0ce);
 const Color _surfaceColor = Color(0xFFece3ca);
 const Color _onSurfaceColor = Color(0xFF793205);
 
-const Color _outlineColor = Color(0xFFF8EFD4);
+const Color _outlineColor = Color(0xFFe4d8b4);
 const Color _shadowColor = Color(0xFF56524c);
 
 const Color _backgroundColor = Color(0xFFe4d8b4);

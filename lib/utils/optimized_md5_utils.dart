@@ -9,6 +9,7 @@ import '../repositories/system_repository.dart';
 import '../services/saf_directory_service.dart';
 import '../services/archive_service.dart';
 import 'dart:convert';
+import 'semaphore.dart';
 
 /// Utility service for high-performance MD5 hashing and file access.
 ///
@@ -601,7 +602,7 @@ class OptimizedMd5Utils {
   ) async {
     const int maxConcurrent = 4;
     final results = <String, String>{};
-    final semaphore = _Semaphore(maxConcurrent);
+    final semaphore = Semaphore(maxConcurrent);
 
     final futures = filePaths.map((filePath) async {
       await semaphore.acquire();
@@ -626,33 +627,6 @@ class OptimizedMd5Utils {
       return actualMd5 == expectedMd5;
     } catch (_) {
       return false;
-    }
-  }
-}
-
-/// Lightweight semaphore to limit asynchronous concurrency.
-class _Semaphore {
-  final int _maxCount;
-  int _currentCount = 0;
-  final List<Completer<void>> _waitQueue = [];
-
-  _Semaphore(this._maxCount);
-
-  Future<void> acquire() async {
-    if (_currentCount < _maxCount) {
-      _currentCount++;
-      return;
-    }
-    final completer = Completer<void>();
-    _waitQueue.add(completer);
-    await completer.future;
-  }
-
-  void release() {
-    if (_waitQueue.isNotEmpty) {
-      _waitQueue.removeAt(0).complete();
-    } else {
-      _currentCount--;
     }
   }
 }

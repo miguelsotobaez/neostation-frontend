@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "dc",
+    "multidisc": true,
     "name": "Sega Dreamcast",
     "short_name": "DC",
     "details": {

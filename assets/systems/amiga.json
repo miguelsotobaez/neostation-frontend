@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "amiga",
+    "multidisc": true,
     "name": "Commodore Amiga",
     "short_name": "Amiga",
     "details": {

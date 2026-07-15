@@ -69,11 +69,16 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
   void initState() {
     super.initState();
     NewScraperOptionsScreen._currentInstance = this;
-    _initializeMenuItems();
     _loadCredentials();
     _loadCurrentScrapeMode();
     _loadCurrentLanguage();
     _loadCurrentMediaConfig();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _initializeMenuItems();
   }
 
   @override

@@ -243,6 +243,17 @@ class GamepadEventTranslator {
     String gamepadId,
     KeyType eventType,
   ) {
+    // WINDOWS: The GameInput backend emits standardized, named keys
+    // (a/b/x/y, dpadUp, leftShoulder, leftThumbstickX, leftTrigger, ...) with a
+    // consistent layout across all XInput-class controllers, so we map them
+    // directly and skip the WinMM positional/POV heuristics entirely.
+    if (Platform.isWindows) {
+      final gameInput = _translateGameInputKey(key);
+      if (gameInput != null) {
+        return gameInput;
+      }
+    }
+
     // LINUX: Utilize native event type from the plugin.
     if (Platform.isLinux) {
       if (eventType == KeyType.button) {
@@ -272,6 +283,71 @@ class GamepadEventTranslator {
     }
 
     return GamepadInputType.unknown;
+  }
+
+  /// Maps a Windows GameInput named key to a [GamepadInputType].
+  ///
+  /// GameInput reports a standardized Xbox-style layout, so this mapping is the
+  /// same for every controller regardless of vendor/VID/PID. Keys arrive
+  /// lower-cased. Returns null for keys that aren't part of the GameInput
+  /// gamepad vocabulary. Note: GameInput's standard gamepad state has no guide
+  /// button, so there is no Home mapping on Windows.
+  GamepadInputType? _translateGameInputKey(String key) {
+    switch (key) {
+      // Face buttons.
+      case 'a':
+        return GamepadInputType.buttonA;
+      case 'b':
+        return GamepadInputType.buttonB;
+      case 'x':
+        return GamepadInputType.buttonX;
+      case 'y':
+        return GamepadInputType.buttonY;
+
+      // D-pad (reported as digital buttons: 1.0 pressed, 0.0 released).
+      case 'dpadup':
+        return GamepadInputType.dpadUp;
+      case 'dpaddown':
+        return GamepadInputType.dpadDown;
+      case 'dpadleft':
+        return GamepadInputType.dpadLeft;
+      case 'dpadright':
+        return GamepadInputType.dpadRight;
+
+      // Shoulders and triggers. Triggers arrive as analog [0, 1]; the press
+      // edge is detected against the 0.5 threshold downstream.
+      case 'leftshoulder':
+        return GamepadInputType.buttonLB;
+      case 'rightshoulder':
+        return GamepadInputType.buttonRB;
+      case 'lefttrigger':
+        return GamepadInputType.buttonLT;
+      case 'righttrigger':
+        return GamepadInputType.buttonRT;
+
+      // System buttons.
+      case 'menu':
+        return GamepadInputType.buttonStart;
+      case 'view':
+        return GamepadInputType.buttonSelect;
+
+      // Stick clicks.
+      case 'leftthumbstick':
+        return GamepadInputType.leftStickButton;
+      case 'rightthumbstick':
+        return GamepadInputType.rightStickButton;
+
+      // Analog sticks, [-1, 1] with 0 centered (+Y is up, +X is right).
+      case 'leftthumbstickx':
+        return GamepadInputType.leftStickX;
+      case 'leftthumbsticky':
+        return GamepadInputType.leftStickY;
+      case 'rightthumbstickx':
+        return GamepadInputType.rightStickX;
+      case 'rightthumbsticky':
+        return GamepadInputType.rightStickY;
+    }
+    return null;
   }
 
   /// Determines if a key identifier corresponds to a D-pad (directional) input.
@@ -685,29 +761,14 @@ class GamepadEventTranslator {
   /// Determines if a D-pad or analog input should be considered "pressed" based on platform-specific thresholds.
   bool _isDpadPressed(double value, {bool isAnalog = false}) {
     if (Platform.isWindows) {
-      // Windows POV: Specific values indicate pressed directions.
-      // 65535.0 can indicate POV Neutral (centered) OR a stick at its maximum range.
-      if (!isAnalog && (value == -1.0 || value == 65535.0 || value < 0)) {
-        return false;
+      // GameInput reports normalized values: analog sticks in [-1, 1] centered
+      // at 0, and digital D-pad buttons as 0.0 (released) / 1.0 (pressed).
+      if (isAnalog) {
+        // Deadzone for the press/release edge; the nav layer applies its own
+        // (larger) directional threshold for the actual action.
+        return value.abs() > 0.5;
       }
-
-      // POV: Values within [0, 36000] are active directions.
-      if (value >= 0.0 && value <= 36000.0) {
-        return true;
-      }
-
-      // Flexible center detection for analog sticks on Windows.
-      final distFrom32767 = (value - 32767).abs();
-      final distFromZero = value.abs();
-
-      // Deadzone for neutral position:
-      // 32767 is standard. 0 is only neutral if noise is minimal.
-      if (distFrom32767 < 8000 || distFromZero < 1000) {
-        return false;
-      }
-
-      // Active if far enough from both potential center points.
-      return distFrom32767 > 20000 || distFromZero > 20000;
+      return value > 0.5;
     }
 
     if (Platform.isAndroid) {

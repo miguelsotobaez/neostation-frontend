@@ -33,6 +33,18 @@ class CoreEmulatorModel {
   /// Runtime flag indicating if the emulator is currently installed on the device.
   final bool isInstalled;
 
+  /// Whether this emulator is a RetroArch variant (e.g. `com.retroarch`,
+  /// `com.retroarch.aarch64`). RetroArch variants all share the same launch
+  /// activity, so only their package differs — which is why substituting one
+  /// variant's package into a RetroArch intent is safe, while substituting a
+  /// standalone emulator's package is not.
+  bool get isRetroArch =>
+      androidPackageName != null &&
+      androidPackageName!.startsWith(CoreEmulatorModel.retroArchPackagePrefix);
+
+  /// Package prefix shared by every RetroArch variant.
+  static const String retroArchPackagePrefix = 'com.retroarch';
+
   const CoreEmulatorModel({
     required this.uniqueId,
     required this.osId,

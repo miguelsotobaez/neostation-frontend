@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "cdi",
+    "multidisc": true,
     "name": "Philips CD-i",
     "short_name": "CD-i",
     "details": {

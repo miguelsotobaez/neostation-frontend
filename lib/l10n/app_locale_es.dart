@@ -178,6 +178,23 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rescanAllFolders: 'Reescanear todas las carpetas de ROMs',
   AppLocale.rescanAllFoldersSubtitle:
       'Buscar nuevos sistemas y ROMs manualmente',
+  AppLocale.organizeMultiDiscGames: 'Organizar juegos multidisco',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Crea automáticamente archivos .m3u para juegos multidisco y los organiza en carpetas',
+  AppLocale.organizeMultiDiscScanning:
+      'Buscando juegos multidisco en las carpetas ROM...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'No hay carpetas ROM configuradas.',
+  AppLocale.organizeMultiDiscSkippedSuffix:
+      ' ({count} ruta(s) de carpeta omitida(s))',
+  AppLocale.organizeMultiDiscDone:
+      'Listo: {groups} conjunto(s) organizados, {files} archivo(s) movido(s), {playlists} lista(s) de reproducción creada(s){skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'No se encontraron conjuntos multidisco para organizar{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'No se pudieron organizar los juegos multidisco: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Esto moverá los archivos ROM coincidentes a nuevas carpetas de juegos y creará listas .m3u en tu almacenamiento. No se puede deshacer automáticamente.',
   AppLocale.romsFolderSubtitle: 'Añadir una carpeta que contenga tus ROMs',
   AppLocale.pressToRemoveFolder:
       'Presiona confirmar para eliminar esta carpeta',
@@ -817,6 +834,8 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.userDataLocationUpdated: 'Ubicación de datos actualizada',
   AppLocale.resetToDefault: 'Restablecer Predeterminado',
   AppLocale.romDirectories: 'Directorios de ROMs',
+  AppLocale.tools: 'Herramientas',
+  AppLocale.toolsSubtitle: 'Herramientas para ayudarte a organizar tus ROMs',
   AppLocale.addRomFolder: 'Añadir carpeta de ROMs',
   AppLocale.removeRomFolder: 'Eliminar',
   AppLocale.resetPlayTimeConfirm: 'Restablecer tiempo de juego',

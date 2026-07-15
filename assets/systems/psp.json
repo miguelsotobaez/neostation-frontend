@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "psp",
+    "multidisc": true,
     "name": "Sony PlayStation Portable",
     "short_name": "PSP",
     "details": {

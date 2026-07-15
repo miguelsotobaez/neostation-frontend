@@ -180,6 +180,23 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rescanAllFolders: 'Analyser à nouveau tous les dossiers ROM',
   AppLocale.rescanAllFoldersSubtitle:
       'Rechercher manuellement de nouveaux systèmes et ROMs',
+  AppLocale.organizeMultiDiscGames: 'Organiser les jeux multi-disques',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Crée automatiquement des fichiers .m3u pour les jeux multi-disques et les organise dans des dossiers',
+  AppLocale.organizeMultiDiscScanning:
+      'Analyse des dossiers ROM à la recherche de jeux multi-disques...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Aucun dossier ROM configuré.',
+  AppLocale.organizeMultiDiscSkippedSuffix:
+      ' ({count} chemin(s) de dossier ignoré(s))',
+  AppLocale.organizeMultiDiscDone:
+      'Terminé : {groups} lot(s) organisé(s), {files} fichier(s) déplacé(s), {playlists} playlist(s) créée(s){skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Aucun lot multi-disques à organiser{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Échec de l’organisation des jeux multi-disques : {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Cette opération déplacera les ROM correspondantes dans de nouveaux dossiers de jeux et créera des listes .m3u sur votre stockage. Elle ne peut pas être annulée automatiquement.',
   AppLocale.romsFolderSubtitle:
       'Ajoutez les dossiers contenant vos fichiers ROM',
   AppLocale.pressToRemoveFolder:
@@ -820,6 +837,8 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.userDataLocationUpdated: 'Emplacement des données mis à jour',
   AppLocale.resetToDefault: 'Rétablir par défaut',
   AppLocale.romDirectories: 'Répertoires ROM',
+  AppLocale.tools: 'Outils',
+  AppLocale.toolsSubtitle: 'Outils pour vous aider à organiser vos ROM',
   AppLocale.addRomFolder: 'Ajouter un dossier ROM',
   AppLocale.removeRomFolder: 'Supprimer',
   AppLocale.resetPlayTimeConfirm: 'Réinitialiser le temps de jeu',

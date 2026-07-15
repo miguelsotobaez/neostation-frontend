@@ -131,17 +131,47 @@ if [ ! -d "$APPDIR/usr/bin/data" ]; then
     exit 1
 fi
 
-LIB_DIR="/usr/lib/x86_64-linux-gnu"
+# Library search paths for x86_64 across Debian/Ubuntu and Fedora/RHEL Linux
+LIB_SEARCH_PATHS=(
+  "/usr/lib/x86_64-linux-gnu"
+  "/usr/lib64"
+  "/usr/lib"
+  "/lib/x86_64-linux-gnu"
+  "/lib64"
+)
+
+copy_lib_to_appdir() {
+  local lib_pattern="$1"
+  local found=0
+  for search_dir in "${LIB_SEARCH_PATHS[@]}"; do
+    if [ -d "$search_dir" ]; then
+      while IFS= read -r lib_path; do
+        if [ -n "$lib_path" ] && [ -f "$lib_path" ]; then
+          cp -L "$lib_path" "$APPDIR/usr/lib/" 2>/dev/null || true
+          found=1
+        fi
+      done < <(find "$search_dir" -maxdepth 1 -name "$lib_pattern" 2>/dev/null)
+    fi
+  done
+  return $found
+}
 
 # Copy FFmpeg libraries
 echo "Copying FFmpeg libraries..."
 for lib in libavcodec.so.* libavformat.so.* libavutil.so.* libswscale.so.* libswresample.so.* libavfilter.so.*; do
-  find "$LIB_DIR" -name "$lib" -exec cp -L {} "$APPDIR/usr/lib/" \; 2>/dev/null || true
+  copy_lib_to_appdir "$lib" || true
 done
 
 # Copy SQLite3
-if [ -f "$LIB_DIR/libsqlite3.so.0" ]; then
-  cp -L "$LIB_DIR"/libsqlite3.so.* "$APPDIR/usr/lib/" 2>/dev/null || true
+SQLITE3_FOUND=0
+for search_dir in "${LIB_SEARCH_PATHS[@]}"; do
+  if [ -f "$search_dir/libsqlite3.so.0" ]; then
+    cp -L "$search_dir"/libsqlite3.so.* "$APPDIR/usr/lib/" 2>/dev/null || true
+    SQLITE3_FOUND=1
+    break
+  fi
+done
+if [ "$SQLITE3_FOUND" = "1" ]; then
   cd "$APPDIR/usr/lib/"
   for f in libsqlite3.so.0.*; do
     [ -f "$f" ] && ln -sf "$f" libsqlite3.so.0
@@ -154,14 +184,23 @@ fi
 # Copy X11 libraries
 echo "Copying X11 libraries..."
 for xlib in libX11.so.* libXau.so.* libXdmcp.so.* libXext.so.* libXfixes.so.* libXrender.so.* libXrandr.so.* libXi.so.* libXcursor.so.* libXdamage.so.* libXcomposite.so.* libXpresent.so.* libxcb.so.* libxcb-shm.so.* libxcb-render.so.*; do
-  find "$LIB_DIR" -name "$xlib" -exec cp -L {} "$APPDIR/usr/lib/" \; 2>/dev/null || true
+  copy_lib_to_appdir "$xlib" || true
 done
 
 # Copy SoLoud audio dependencies (loaded at runtime via DynamicLibrary.open — not caught by ldd on main binary)
 echo "Copying SoLoud audio libraries..."
 for audiolib in libFLAC.so.* libFLAC++.so.* libogg.so.* libvorbis.so.* libvorbisenc.so.* libvorbisfile.so.* libopus.so.*; do
-  find "$LIB_DIR" /usr/lib -name "$audiolib" -exec cp -L {} "$APPDIR/usr/lib/" \; 2>/dev/null || true
+  copy_lib_to_appdir "$audiolib" || true
 done
+
+# Verify critical audio libraries were bundled. Fedora/RHEL places them under /usr/lib64,
+# while Debian/Ubuntu uses /usr/lib/x86_64-linux-gnu. If the build machine lacks the
+# -devel/-dev package, CMake may link against a versioned SONAME that we then fail to ship.
+if [ ! -f "$APPDIR/usr/lib/libFLAC.so.12" ] && [ ! -f "$APPDIR/usr/lib/libFLAC.so.14" ]; then
+  echo "ERROR: libFLAC was not bundled. Ensure libflac/libflac-dev is installed and found in one of:"
+  printf '  %s\n' "${LIB_SEARCH_PATHS[@]}"
+  exit 1
+fi
 
 # Analyze and copy additional binary dependencies
 # Run ldd on main binary AND all bundled .so plugins to catch transitive/runtime-loaded deps

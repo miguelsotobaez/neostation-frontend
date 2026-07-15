@@ -33,7 +33,7 @@ const Color _onInfoColor = Color(0xFF042e49);
 
 final ThemeData abyssTheme = ThemeData(
   useMaterial3: true,
-  colorScheme: ColorScheme.light(
+  colorScheme: ColorScheme.dark(
     primary: _primaryColor,
     secondary: _secondaryColor,
     tertiary: _tertiaryColor,

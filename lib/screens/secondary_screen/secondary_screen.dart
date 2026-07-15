@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../l10n/app_locale.dart';
-import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/secondary_apps_service.dart';
 import 'package:video_player/video_player.dart';
@@ -17,35 +15,19 @@ import '../../models/secondary_display_state.dart';
 import '../../models/retro_achievement_comment.dart';
 import '../../repositories/retro_achievements_repository.dart';
 import '../../services/retro_achievements_service.dart';
-import '../../widgets/shaders/shader_gif_widget.dart';
-import '../../utils/image_utils.dart' as image_utils;
+import '../../utils/no_glow_scroll_behavior.dart';
+import 'background_builders.dart';
+import 'now_playing_helpers.dart';
+import 'widgets/achievement_comments.dart';
+import 'widgets/achievement_panel.dart';
+import 'widgets/app_dock.dart';
+import 'widgets/now_playing_panel.dart';
 
 class SecondaryScreen extends StatefulWidget {
   const SecondaryScreen({super.key});
 
   @override
   State<SecondaryScreen> createState() => _SecondaryScreenState();
-}
-
-class _AchievementCommentsState {
-  final List<RetroAchievementComment> comments;
-  final int total;
-
-  /// Number of *raw* API results consumed so far (system comments included).
-  /// The API pages over the unfiltered set, so the next fetch offset must be
-  /// based on this, not on the filtered [comments] length — otherwise paging
-  /// re-requests already-seen rows and "load more" appears to do nothing.
-  final int loadedRaw;
-  final bool isLoading;
-  final String? error;
-
-  const _AchievementCommentsState({
-    required this.comments,
-    required this.total,
-    this.loadedRaw = 0,
-    this.isLoading = false,
-    this.error,
-  });
 }
 
 class _SecondaryScreenState extends State<SecondaryScreen> {
@@ -78,7 +60,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// resets to 0 on each new launch.
   int _inGamePanelPage = 0;
   SecondaryAchievementItem? _selectedAchievement;
-  final Map<int, _AchievementCommentsState> _commentsCache = {};
+  final Map<int, AchievementCommentsState> _commentsCache = {};
   int _commentsRequestGeneration = 0;
   bool _wasNowPlayingActive = false;
   String? _panelGameId;
@@ -164,6 +146,16 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
     if (state.isGameLaunching) {
       _stopVideo();
+      return;
+    }
+
+    // Device asleep (lid closed / screen off): tear down the preview so its
+    // audio output device stops and the CPU can deep-sleep. This engine never
+    // receives Android lifecycle callbacks, so deviceScreenOn (bridged from the
+    // native ACTION_SCREEN_ON/OFF receiver) is the only reliable signal.
+    if (!state.deviceScreenOn) {
+      _stopVideo();
+      _currentVideoPath = null; // force a fresh start when the screen wakes
       return;
     }
 
@@ -278,7 +270,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     final rateLimitedMessage = AppLocale.raRateLimited.getString(ctx);
     final couldNotLoadMessage = AppLocale.raCommentsCouldNotLoad.getString(ctx);
     setState(() {
-      _commentsCache[achievementId] = _AchievementCommentsState(
+      _commentsCache[achievementId] = AchievementCommentsState(
         comments: reset ? const [] : (current?.comments ?? const []),
         total: reset ? 0 : (current?.total ?? 0),
         loadedRaw: reset ? 0 : (current?.loadedRaw ?? 0),
@@ -315,7 +307,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       final loadedRaw = offset + consumedRaw;
       final reachedEnd = consumedRaw < pageSize;
       setState(() {
-        _commentsCache[achievementId] = _AchievementCommentsState(
+        _commentsCache[achievementId] = AchievementCommentsState(
           comments: byKey.values.toList(),
           total: reachedEnd ? loadedRaw : page.total,
           loadedRaw: loadedRaw,
@@ -331,7 +323,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           ? rateLimitedMessage
           : couldNotLoadMessage;
       setState(() {
-        _commentsCache[achievementId] = _AchievementCommentsState(
+        _commentsCache[achievementId] = AchievementCommentsState(
           comments: reset ? const [] : (current?.comments ?? const []),
           total: reset ? 0 : (current?.total ?? 0),
           loadedRaw: reset ? 0 : (current?.loadedRaw ?? 0),
@@ -600,7 +592,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       builder: (_, child) => ValueListenableBuilder<SecondaryDisplayStateData?>(
         valueListenable: _secondaryDisplayState ?? ValueNotifier(null),
         builder: (context, value, child) {
-          final theme = _resolveTheme(value?.themeName);
+          final theme = resolveTheme(value?.themeName);
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             localizationsDelegates:
@@ -609,7 +601,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             // Suppress Android's overscroll glow/stretch: on this display a
             // slight drag near the edge would flash white arcs at the screen
             // border, which looks like a rendering glitch on a static panel.
-            scrollBehavior: const _NoGlowScrollBehavior(),
+            scrollBehavior: const NoGlowScrollBehavior(),
             theme: theme.copyWith(
               scaffoldBackgroundColor: value?.backgroundColor != null
                   ? Color(value!.backgroundColor!)
@@ -642,8 +634,8 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                 child:
                                     (value.isGameSelected ||
                                         value.useFluidShader)
-                                    ? _buildUnifiedAppBackground(value)
-                                    : _buildSystemBackground(value),
+                                    ? buildUnifiedAppBackground(value)
+                                    : buildSystemBackground(value),
                               ),
                               transitionBuilder: (child, animation) =>
                                   FadeTransition(
@@ -674,38 +666,38 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                         if (!_showVideo) ...[
                                           if (value.isGameLaunching) ...[
                                             if (value.gameImageBytes != null)
-                                              _buildBackgroundBytes(
+                                              buildBackgroundBytes(
                                                 value.gameImageBytes!,
                                                 fit: BoxFit
                                                     .contain, // "se debe ver completo"
                                               )
                                             else if (value.gameScreenshot !=
                                                 null)
-                                              _buildBackground(
+                                              buildBackground(
                                                 value.gameScreenshot!,
                                                 fit: BoxFit
                                                     .contain, // "se debe ver completo"
                                               )
                                             else if (value.gameFanart != null ||
                                                 value.gameWheel != null)
-                                              _buildFanartWithLogo(value),
+                                              buildFanartWithLogo(value),
                                           ] else ...[
                                             if (value.gameImageBytes != null)
-                                              _buildBackgroundBytes(
+                                              buildBackgroundBytes(
                                                 value.gameImageBytes!,
                                                 fit: BoxFit
                                                     .contain, // "se debe ver completo"
                                               )
                                             else if (value.gameScreenshot !=
                                                 null)
-                                              _buildBackground(
+                                              buildBackground(
                                                 value.gameScreenshot!,
                                                 fit: BoxFit
                                                     .contain, // "se debe ver completo"
                                               )
                                             else if (value.gameFanart != null ||
                                                 value.gameWheel != null)
-                                              _buildFanartWithLogo(value),
+                                              buildFanartWithLogo(value),
                                           ],
                                         ],
                                       ],
@@ -826,165 +818,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
-  Widget _buildBackgroundBytes(Uint8List bytes, {BoxFit fit = BoxFit.contain}) {
-    return Image.memory(
-      bytes,
-      fit: fit,
-      errorBuilder: (context, error, stackTrace) => _buildDefaultBackground(),
-    );
-  }
-
-  Widget _buildBackground(String path, {BoxFit fit = BoxFit.contain}) {
-    final file = File(path);
-    if (file.existsSync()) {
-      if (image_utils.ImageUtils.isGif(path)) {
-        return ShaderGifWidget(
-          imagePath: path,
-          key: ValueKey('secondary_bg_$path'),
-          fit: fit,
-        );
-      }
-      return Image.file(file, fit: fit);
-    }
-    return _buildDefaultBackground();
-  }
-
-  Widget _buildDefaultBackground() {
-    return const SizedBox.shrink();
-  }
-
-  /// Mirrors the main screen's game art as a fallback when no screenshot or
-  /// video is available: fanart filling the screen (cover) with the game's
-  /// wheel/logo centered on top. Either asset is optional — a logo-only game
-  /// shows just the centered logo over the app background, and a fanart-only
-  /// game shows just the fanart.
-  Widget _buildFanartWithLogo(SecondaryDisplayStateData value) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (value.gameFanart != null)
-          _buildBackground(value.gameFanart!, fit: BoxFit.cover),
-        // Optional scrim over the fanart only (below the logo) so a busy
-        // background doesn't clash with the logo. The logo, drawn next, stays
-        // at full brightness.
-        if (value.gameFanart != null && value.fanartDimLevel > 0)
-          Positioned.fill(
-            child: ColoredBox(
-              color: Colors.black.withValues(
-                alpha: value.fanartDimLevel.clamp(0, 100) / 100.0,
-              ),
-            ),
-          ),
-        if (value.gameWheel != null)
-          Center(
-            child: Padding(
-              padding: EdgeInsets.all(48.r),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Drop shadow: black-tinted copy offset behind the logo,
-                  // mirroring the main screen's wheel shadow treatment.
-                  Transform.translate(
-                    offset: Offset(4.r, 4.r),
-                    child: Image.file(
-                      File(value.gameWheel!),
-                      fit: BoxFit.contain,
-                      width: 600.r,
-                      filterQuality: FilterQuality.low,
-                      cacheWidth: 32,
-                      color: Colors.black.withValues(alpha: 0.7),
-                      errorBuilder: (context, error, stackTrace) =>
-                          const SizedBox.shrink(),
-                    ),
-                  ),
-                  Image.file(
-                    File(value.gameWheel!),
-                    fit: BoxFit.contain,
-                    width: 600.r,
-                    cacheWidth: 640,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const SizedBox.shrink(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildUnifiedAppBackground(SecondaryDisplayStateData value) {
-    if (value.isOled) {
-      return Container(
-        color: value.backgroundColor != null
-            ? Color(value.backgroundColor!)
-            : Colors.black,
-      );
-    }
-
-    return Builder(
-      builder: (context) {
-        final bg = Theme.of(context).scaffoldBackgroundColor;
-        return Container(decoration: BoxDecoration(color: bg));
-      },
-    );
-  }
-
-  Widget _buildSystemBackground(SecondaryDisplayStateData value) {
-    // Note: OLED is intentionally NOT short-circuited here. For a highlighted
-    // system the console artwork IS the background, so blacking it out would
-    // leave only the console name on screen. The black/background-color
-    // fallback below (via _buildShaderFallback) still applies when no system
-    // image is available, preserving the OLED look in the empty case.
-    final bgPath = value.systemBackground;
-    final hasBg = bgPath != null && bgPath.isNotEmpty;
-
-    if (hasBg) {
-      final isGif = image_utils.ImageUtils.isGif(bgPath);
-
-      if (value.isBackgroundAsset) {
-        if (isGif) {
-          return ShaderGifWidget(
-            imagePath: bgPath,
-            key: ValueKey('secondary_system_bg_$bgPath'),
-          );
-        }
-        return Image.asset(
-          bgPath,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) =>
-              _buildShaderFallback(value),
-        );
-      } else {
-        final file = File(bgPath);
-        if (file.existsSync()) {
-          if (isGif) {
-            return ShaderGifWidget(
-              imagePath: bgPath,
-              key: ValueKey('secondary_system_bg_$bgPath'),
-            );
-          }
-          return Image.file(
-            file,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                _buildShaderFallback(value),
-          );
-        }
-      }
-    }
-
-    return _buildShaderFallback(value);
-  }
-
-  Widget _buildShaderFallback(SecondaryDisplayStateData value) {
-    return Container(
-      color: value.backgroundColor != null
-          ? Color(value.backgroundColor!)
-          : Colors.black,
-    );
-  }
-
   Widget _buildDefaultLogo() {
     return Image.asset(
       'assets/images/logo_transparent.png',
@@ -1026,7 +859,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        _buildDefaultBackground(),
+        buildDefaultBackground(),
         Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1181,10 +1014,37 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
             child: KeyedSubtree(
               key: ValueKey('in-game-page-$page'),
               child: page == 2
-                  ? _buildAchievementCommentsPage(_selectedAchievement!)
+                  ? AchievementCommentsPage(
+                      achievement: _selectedAchievement!,
+                      state: _commentsCache[_selectedAchievement!.id],
+                      l10nContext: _l10nContext,
+                      onLoadComments: _loadAchievementComments,
+                    )
                   : page == 1
-                  ? _buildAchievementPanel(value)
-                  : _buildNowPlayingPanel(value),
+                  ? AchievementPanel(
+                      value: value,
+                      listView: _achievementListView,
+                      celebrate: _celebrate,
+                      l10nContext: _l10nContext,
+                      onToggleListView: () {
+                        SfxService().playNavSound();
+                        setState(
+                          () => _achievementListView = !_achievementListView,
+                        );
+                      },
+                      onSelectAchievement: _selectAchievement,
+                    )
+                  : NowPlayingPanel(
+                      value: value,
+                      sessionRunning: _sessionWatch.isRunning,
+                      sessionTime: _formatSessionTime(),
+                      onRequestScreenshot: _requestScreenshot,
+                      onLaunchApp: _launchDockApp,
+                      onPickSlot: _openAppPicker,
+                      onClearSlot: _clearSlot,
+                      onOpenLauncher: _openAppLauncher,
+                      onOpenAccessibilitySettings: _openAccessibilitySettings,
+                    ),
             ),
           ),
         ),
@@ -1237,342 +1097,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
-  /// Renders the "Now Playing" page: boxart, title, system, total play time
-  /// and last-played. Shown for every launched game (page 0). View-only.
-  /// Resolves the full user-selected theme for the secondary display from the
-  /// theme name pushed by the main engine. The secondary display runs in the
-  /// same isolate as the main app, so [ThemeProvider.availableThemes] is the
-  /// source of truth. Falls back to the brightness-appropriate neostation
-  /// theme for 'system' mode or an unknown/absent name.
-  ThemeData _resolveTheme(String? themeName) {
-    final themes = ThemeProvider.availableThemes;
-    final direct = themeName != null ? themes[themeName] : null;
-    if (direct != null) return direct;
-    final brightness =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    return brightness == Brightness.dark ? themes['dark']! : themes['light']!;
-  }
-
-  /// WCAG contrast ratio between two opaque colors (1.0 = identical, 21.0 =
-  /// black-on-white).
-  double _contrastRatio(Color a, Color b) {
-    final la = a.computeLuminance();
-    final lb = b.computeLuminance();
-    final hi = la > lb ? la : lb;
-    final lo = la > lb ? lb : la;
-    return (hi + 0.05) / (lo + 0.05);
-  }
-
-  /// Builds the effective color scheme for the Now Playing panel. Text colors
-  /// are derived from the *actual* painted background luminance (not the
-  /// theme's own on-colors, which can mismatch the pushed background and
-  /// collapse contrast on light themes), while the theme's primary accent is
-  /// preserved as long as it stays legible on that background.
-  ColorScheme _panelScheme(SecondaryDisplayStateData value) {
-    final base = _resolveTheme(value.themeName).colorScheme;
-    final bg = value.backgroundColor != null
-        ? Color(value.backgroundColor!)
-        : base.surface;
-    final fg = bg.computeLuminance() > 0.5
-        ? const Color(0xFF14161A)
-        : Colors.white;
-    final accent = _contrastRatio(base.primary, bg) >= 3.0 ? base.primary : fg;
-    return base.copyWith(surface: bg, onSurface: fg, primary: accent);
-  }
-
-  Widget _buildNowPlayingPanel(SecondaryDisplayStateData value) {
-    final title = (value.gameTitle != null && value.gameTitle!.isNotEmpty)
-        ? value.gameTitle!
-        : value.systemName;
-    final scheme = _panelScheme(value);
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: scheme.surface,
-      child: Stack(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(44.r, 32.r, 44.r, 96.r),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _buildNowPlayingBoxart(value.gameBoxart),
-                SizedBox(width: 32.r),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'NOW PLAYING',
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontSize: 14.r,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 3.r,
-                        ),
-                      ),
-                      SizedBox(height: 12.r),
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 30.r,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8.r),
-                      Text(
-                        value.systemName.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.onSurface.withValues(alpha: 0.7),
-                          fontSize: 16.r,
-                          letterSpacing: 1.5.r,
-                        ),
-                      ),
-                      SizedBox(height: 26.r),
-                      _buildNowPlayingStat(
-                        scheme: scheme,
-                        icon: Symbols.schedule_rounded,
-                        label: 'PLAY TIME',
-                        text: _formatPlayTime(value.playTimeSeconds),
-                      ),
-                      if (_sessionWatch.isRunning) ...[
-                        SizedBox(height: 12.r),
-                        _buildNowPlayingStat(
-                          scheme: scheme,
-                          icon: Symbols.timer_rounded,
-                          label: 'SESSION',
-                          text: _formatSessionTime(),
-                        ),
-                      ],
-                      SizedBox(height: 12.r),
-                      _buildNowPlayingStat(
-                        scheme: scheme,
-                        icon: Symbols.history_rounded,
-                        label: 'LAST PLAYED',
-                        text: _formatLastPlayed(value.lastPlayedMillis),
-                      ),
-                      if (value.screenshotAccessEnabled) ...[
-                        SizedBox(height: 28.r),
-                        _buildScreenshotButton(scheme),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(left: 0, right: 0, bottom: 0, child: _buildAppDock(value)),
-          // All-apps launcher pinned to the bottom-left corner.
-          if (value.dockEnabled)
-            Positioned(
-              left: 16.r,
-              bottom: 16.r,
-              child: _buildLauncherButton(value),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Tappable pill that asks the main engine to capture a system screenshot of
-  /// the main screen.
-  Widget _buildScreenshotButton(ColorScheme scheme) {
-    return GestureDetector(
-      onTap: _requestScreenshot,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 12.r),
-        decoration: BoxDecoration(
-          color: scheme.onSurface.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: scheme.onSurface.withValues(alpha: 0.18)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Symbols.photo_camera_rounded,
-              color: scheme.onSurface,
-              size: 22.r,
-            ),
-            SizedBox(width: 12.r),
-            Text(
-              'SCREENSHOT',
-              style: TextStyle(
-                color: scheme.onSurface,
-                fontSize: 14.r,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 2.r,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The app dock pinned to the bottom of the Now Playing page: a centered row
-  /// of [SecondaryDisplayStateData.dockSlotCount] slots (user setting). Tap a
-  /// filled slot to launch it, tap an empty slot to pick an app, long-press a
-  /// filled slot to clear it. Hidden entirely when the dock is disabled.
-  Widget _buildAppDock(SecondaryDisplayStateData value) {
-    if (!value.dockEnabled) return const SizedBox.shrink();
-    final apps = ConfigModel.normalizeDock(value.dockApps);
-    final scheme = _panelScheme(value);
-    final visibleSlots = value.dockSlotCount.clamp(
-      ConfigModel.dockMinSlotCount,
-      ConfigModel.dockMaxSlotCount,
-    );
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 12.r),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            scheme.shadow.withValues(alpha: 0.55),
-            scheme.shadow.withValues(alpha: 0.0),
-          ],
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < visibleSlots; i++) ...[
-            if (i > 0) SizedBox(width: 14.r),
-            _buildDockSlot(i, apps[i], scheme),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// The all-apps launcher, pinned to the bottom-left of the Now Playing
-  /// screen. Normally opens the app picker in launch mode. When the Screen
-  /// Return accessibility service isn't enabled, it's highlighted with an
-  /// accent border + warning badge and instead opens accessibility settings —
-  /// launching an app without that service would strand the user with no way
-  /// back to Now Playing.
-  Widget _buildLauncherButton(SecondaryDisplayStateData value) {
-    final scheme = _panelScheme(value);
-    final accessOk = value.screenshotAccessEnabled;
-    return GestureDetector(
-      onTap: accessOk ? _openAppLauncher : _openAccessibilitySettings,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 56.r,
-            height: 56.r,
-            decoration: BoxDecoration(
-              color: accessOk
-                  ? scheme.onSurface.withValues(alpha: 0.05)
-                  : scheme.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14.r),
-              border: Border.all(
-                color: accessOk
-                    ? scheme.onSurface.withValues(alpha: 0.14)
-                    : scheme.primary,
-                width: accessOk ? 1.r : 2.r,
-              ),
-            ),
-            child: Icon(
-              Symbols.apps_rounded,
-              color: accessOk
-                  ? scheme.onSurface.withValues(alpha: 0.65)
-                  : scheme.primary,
-              size: 28.r,
-            ),
-          ),
-          if (!accessOk)
-            Positioned(
-              top: -4.r,
-              right: -4.r,
-              child: Container(
-                width: 20.r,
-                height: 20.r,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: scheme.surface, width: 2.r),
-                ),
-                child: Icon(
-                  Symbols.priority_high_rounded,
-                  size: 12.r,
-                  color: scheme.onPrimary,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   /// Opens Android accessibility settings from the secondary engine so the user
   /// can enable the Screen Return service.
   void _openAccessibilitySettings() {
     _wakeInGamePanel();
     SfxService().playNavSound();
     SecondaryAppsService.openAccessibilitySettings();
-  }
-
-  /// A single dock slot. [package] empty = free slot.
-  Widget _buildDockSlot(int index, String package, ColorScheme scheme) {
-    final filled = package.isNotEmpty;
-    return GestureDetector(
-      onTap: () => filled ? _launchDockApp(package) : _openAppPicker(index),
-      onLongPress: filled ? () => _clearSlot(index) : null,
-      child: Container(
-        width: 56.r,
-        height: 56.r,
-        decoration: BoxDecoration(
-          color: scheme.onSurface.withValues(alpha: filled ? 0.10 : 0.05),
-          borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(
-            color: scheme.onSurface.withValues(alpha: filled ? 0.22 : 0.14),
-          ),
-        ),
-        child: filled
-            ? Padding(
-                padding: EdgeInsets.all(8.r),
-                child: _buildDockIcon(package),
-              )
-            : Icon(
-                Symbols.add_rounded,
-                color: scheme.onSurface.withValues(alpha: 0.45),
-                size: 26.r,
-              ),
-      ),
-    );
-  }
-
-  /// Lazily loads and renders a docked app's launcher icon (cached in
-  /// [SecondaryAppsService]).
-  Widget _buildDockIcon(String package) {
-    return FutureBuilder<Uint8List?>(
-      future: SecondaryAppsService.getAppIcon(package),
-      builder: (context, snapshot) {
-        final bytes = snapshot.data;
-        if (bytes != null) {
-          return Image.memory(
-            bytes,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-          );
-        }
-        return Icon(
-          Symbols.android_rounded,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-          size: 24.r,
-        );
-      },
-    );
   }
 
   /// Full-panel overlay for choosing an app for the pending dock slot. Tapping
@@ -1685,7 +1215,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
               borderRadius: BorderRadius.circular(18.r),
             ),
             padding: EdgeInsets.all(12.r),
-            child: _buildDockIcon(package),
+            child: buildDockIcon(package),
           ),
           SizedBox(height: 8.r),
           Text(
@@ -1698,75 +1228,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         ],
       ),
     );
-  }
-
-  Widget _buildNowPlayingBoxart(String? path) {
-    Widget placeholder() => Container(
-      width: 184.r,
-      height: 264.r,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Icon(
-        Symbols.videogame_asset_rounded,
-        color: Colors.white24,
-        size: 64.r,
-      ),
-    );
-
-    if (path == null) return placeholder();
-    final file = File(path);
-    if (!file.existsSync()) return placeholder();
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12.r),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: 360.r, maxWidth: 200.r),
-        child: Image.file(
-          file,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => placeholder(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNowPlayingStat({
-    required ColorScheme scheme,
-    required IconData icon,
-    required String label,
-    required String text,
-  }) {
-    final muted = scheme.onSurface.withValues(alpha: 0.55);
-    return Row(
-      children: [
-        Icon(icon, color: muted, size: 20.r),
-        SizedBox(width: 10.r),
-        Text(
-          '$label  ',
-          style: TextStyle(color: muted, fontSize: 14.r, letterSpacing: 1.r),
-        ),
-        Text(
-          text,
-          style: TextStyle(
-            color: scheme.onSurface,
-            fontSize: 16.r,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatPlayTime(int? seconds) {
-    if (seconds == null || seconds <= 0) return '—';
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    if (h > 0) return '${h}h ${m}m';
-    if (m > 0) return '${m}m';
-    return '<1m';
   }
 
   /// The running session length, formatted down to the second so the per-second
@@ -1782,614 +1243,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           '${s.toString().padLeft(2, '0')}s';
     }
     return '${m}m ${s.toString().padLeft(2, '0')}s';
-  }
-
-  String _formatLastPlayed(int? millis) {
-    if (millis == null) return 'Never';
-    final then = DateTime.fromMillisecondsSinceEpoch(millis);
-    final diff = DateTime.now().difference(then);
-    if (diff.inDays >= 1) {
-      final d = diff.inDays;
-      return d == 1 ? 'Yesterday' : '$d days ago';
-    }
-    if (diff.inHours >= 1) return '${diff.inHours}h ago';
-    if (diff.inMinutes >= 1) return '${diff.inMinutes}m ago';
-    return 'Just now';
-  }
-
-  /// Renders the in-game RetroAchievements panel: a progress header plus an
-  /// unlocked-first grid of achievement badges. View-only (no gamepad input
-  /// reaches the secondary engine), so there is no selection/scroll affordance.
-  Widget _buildAchievementPanel(SecondaryDisplayStateData value) {
-    final achievements =
-        List<SecondaryAchievementItem>.from(value.achievements!)..sort((a, b) {
-          if (a.earned != b.earned) return a.earned ? -1 : 1;
-          return a.displayOrder.compareTo(b.displayOrder);
-        });
-
-    final newlyEarned = value.newlyEarnedIds?.toSet() ?? const <int>{};
-    final progress = value.raTotal > 0 ? value.raEarned / value.raTotal : 0.0;
-    final title = (value.raGameTitle != null && value.raGameTitle!.isNotEmpty)
-        ? value.raGameTitle!
-        : value.systemName;
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      // Opaque background so the underlying game screenshot doesn't bleed
-      // through; matches the secondary display's themed background color.
-      color: value.backgroundColor != null
-          ? Color(value.backgroundColor!)
-          : Colors.black,
-      padding: EdgeInsets.symmetric(horizontal: 24.r, vertical: 20.r),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header: title + earned/total + points.
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(
-                    Symbols.trophy_rounded,
-                    color: const Color(0xFFFFC107),
-                    size: 26.r,
-                  ),
-                  SizedBox(width: 10.r),
-                  Expanded(
-                    child: Text(
-                      title.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18.r,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5.r,
-                        fontFamily: 'Anta',
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12.r),
-                  Text(
-                    '${value.raEarned}/${value.raTotal}',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18.r,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Anta',
-                    ),
-                  ),
-                  SizedBox(width: 12.r),
-                  Text(
-                    '${value.raPoints}/${value.raPointsTotal}p',
-                    style: TextStyle(
-                      color: const Color(0xFFFFC107),
-                      fontSize: 16.r,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Anta',
-                    ),
-                  ),
-                  SizedBox(width: 14.r),
-                  // Touch toggle: grid <-> list. Shows the icon of the view
-                  // you'll switch to. The bottom screen is touch-only since
-                  // the gamepad is driving the game on the main screen.
-                  GestureDetector(
-                    onTap: () {
-                      SfxService().playNavSound();
-                      setState(
-                        () => _achievementListView = !_achievementListView,
-                      );
-                    },
-                    child: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10.r),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Icon(
-                        _achievementListView
-                            ? Symbols.grid_view_rounded
-                            : Symbols.view_list_rounded,
-                        color: Colors.white,
-                        size: 22.r,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12.r),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4.r),
-                child: LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  minHeight: 6.r,
-                  backgroundColor: Colors.white10,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFFFC107),
-                  ),
-                ),
-              ),
-              SizedBox(height: 16.r),
-              // Content: badge grid or list, both touch-scrollable. Unlocked
-              // achievements are sorted first.
-              Expanded(
-                child: _achievementListView
-                    ? _buildAchievementListView(achievements, newlyEarned)
-                    : SingleChildScrollView(
-                        child: Wrap(
-                          spacing: 8.r,
-                          runSpacing: 8.r,
-                          children: [
-                            for (final a in achievements)
-                              _buildAchievementBadge(
-                                a,
-                                isNew: newlyEarned.contains(a.id),
-                                onTap: () => _selectAchievement(a),
-                              ),
-                          ],
-                        ),
-                      ),
-              ),
-            ],
-          ),
-
-          // Celebration banner for freshly-earned achievements.
-          if (_celebrate && newlyEarned.isNotEmpty)
-            Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                margin: EdgeInsets.only(top: 2.r),
-                padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 10.r),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFC107),
-                  borderRadius: BorderRadius.circular(20.r),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFC107).withValues(alpha: 0.5),
-                      blurRadius: 24.r,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Symbols.celebration_rounded,
-                      color: Colors.black,
-                      size: 22.r,
-                    ),
-                    SizedBox(width: 8.r),
-                    Text(
-                      '+${newlyEarned.length} this session',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 16.r,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Anta',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Touch-scrollable list of achievements: badge + title + description, with
-  /// points and an earned/locked indicator. Shows detail the grid can't.
-  Widget _buildAchievementListView(
-    List<SecondaryAchievementItem> achievements,
-    Set<int> newlyEarned,
-  ) {
-    return ListView.separated(
-      padding: EdgeInsets.only(bottom: 8.r),
-      itemCount: achievements.length,
-      separatorBuilder: (_, _) => SizedBox(height: 8.r),
-      itemBuilder: (context, i) {
-        final a = achievements[i];
-        final isNew = newlyEarned.contains(a.id);
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _selectAchievement(a),
-          child: Container(
-            padding: EdgeInsets.all(8.r),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: a.earned ? 0.08 : 0.03),
-              borderRadius: BorderRadius.circular(10.r),
-              border: isNew
-                  ? Border.all(color: const Color(0xFFFFC107), width: 1.5.r)
-                  : null,
-            ),
-            child: Row(
-              children: [
-                _buildAchievementBadge(a, isNew: false),
-                SizedBox(width: 12.r),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              a.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15.r,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'Anta',
-                              ),
-                            ),
-                          ),
-                          if (a.isMissable) ...[
-                            SizedBox(width: 6.r),
-                            Center(child: _buildMissablePill()),
-                          ],
-                        ],
-                      ),
-                      if (a.description.isNotEmpty) ...[
-                        SizedBox(height: 2.r),
-                        Text(
-                          a.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12.r,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                SizedBox(width: 10.r),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${a.points}p',
-                      style: TextStyle(
-                        color: const Color(0xFFFFC107),
-                        fontSize: 13.r,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Anta',
-                      ),
-                    ),
-                    SizedBox(height: 4.r),
-                    Icon(
-                      a.earned
-                          ? Symbols.check_circle_rounded
-                          : Symbols.lock_rounded,
-                      color: a.earned
-                          ? const Color(0xFF66BB6A)
-                          : Colors.white24,
-                      size: 18.r,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// A single achievement badge: full-color when earned, dimmed locked icon
-  /// otherwise, with a gold glow when earned during the current session.
-  Widget _buildAchievementBadge(
-    SecondaryAchievementItem a, {
-    required bool isNew,
-    VoidCallback? onTap,
-  }) {
-    final double size = 46.r;
-    final url = a.earned
-        ? 'https://media.retroachievements.org/Badge/${a.badgeName}.png'
-        : 'https://media.retroachievements.org/Badge/${a.badgeName}_lock.png';
-
-    Widget badge = ClipRRect(
-      borderRadius: BorderRadius.circular(8.r),
-      child: Image.network(
-        url,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: size,
-          height: size,
-          color: Colors.white10,
-          child: Icon(
-            Symbols.trophy_rounded,
-            color: Colors.white24,
-            size: 24.r,
-          ),
-        ),
-      ),
-    );
-
-    if (!a.earned) {
-      badge = Opacity(opacity: 0.45, child: badge);
-    }
-
-    Widget result = Container(
-      decoration: isNew
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(10.r),
-              border: Border.all(color: const Color(0xFFFFC107), width: 2.r),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFFC107).withValues(alpha: 0.6),
-                  blurRadius: 12.r,
-                ),
-              ],
-            )
-          : null,
-      padding: EdgeInsets.all(isNew ? 2.r : 0),
-      child: badge,
-    );
-    if (a.isMissable) {
-      result = Stack(
-        clipBehavior: Clip.none,
-        children: [
-          result,
-          Positioned(
-            top: -4.r,
-            right: -4.r,
-            child: Container(
-              padding: EdgeInsets.all(2.r),
-              decoration: const BoxDecoration(
-                color: Color(0xFFE65100),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Symbols.warning_rounded,
-                color: Colors.white,
-                size: 13.r,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    return onTap == null
-        ? result
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Padding(padding: EdgeInsets.all(3.r), child: result),
-          );
-  }
-
-  Widget _buildMissablePill() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 2.r),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE65100),
-        borderRadius: BorderRadius.circular(8.r),
-      ),
-      child: Text(
-        AppLocale.raMissable.getString(_l10nContext ?? context),
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 9.r,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.6.r,
-          fontFamily: 'Anta',
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAchievementCommentsPage(SecondaryAchievementItem achievement) {
-    final state = _commentsCache[achievement.id];
-    final comments = (state?.comments ?? const <RetroAchievementComment>[])
-        .where((comment) => !comment.isSystemComment)
-        .toList();
-    final hasMore = state != null && state.loadedRaw < state.total;
-
-    return Container(
-      color: Colors.black,
-      padding: EdgeInsets.fromLTRB(58.r, 20.r, 24.r, 20.r),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildAchievementBadge(achievement, isNew: false),
-              SizedBox(width: 14.r),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            achievement.title,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18.r,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Anta',
-                            ),
-                          ),
-                        ),
-                        if (achievement.isMissable)
-                          Center(child: _buildMissablePill()),
-                        SizedBox(width: 10.r),
-                        Text(
-                          '${achievement.points}p',
-                          style: TextStyle(
-                            color: const Color(0xFFFFC107),
-                            fontSize: 15.r,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Anta',
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (achievement.description.isNotEmpty) ...[
-                      SizedBox(height: 4.r),
-                      Text(
-                        achievement.description,
-                        style: TextStyle(color: Colors.white60, fontSize: 12.r),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16.r),
-          Text(
-            AppLocale.raComments.getString(_l10nContext ?? context),
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12.r,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2.r,
-              fontFamily: 'Anta',
-            ),
-          ),
-          SizedBox(height: 8.r),
-          Expanded(
-            child: state == null || (state.isLoading && comments.isEmpty)
-                ? const Center(child: CircularProgressIndicator())
-                : state.error != null && comments.isEmpty
-                ? _buildCommentsMessage(
-                    AppLocale.raCommentsCouldNotLoad.getString(
-                      _l10nContext ?? context,
-                    ),
-                    actionLabel: AppLocale.retry
-                        .getString(_l10nContext ?? context)
-                        .toUpperCase(),
-                    onAction: () =>
-                        _loadAchievementComments(achievement.id, reset: true),
-                  )
-                : comments.isEmpty
-                ? _buildCommentsMessage(
-                    AppLocale.raNoCommentsYet.getString(
-                      _l10nContext ?? context,
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: comments.length + (hasMore ? 1 : 0),
-                    separatorBuilder: (_, _) => SizedBox(height: 8.r),
-                    itemBuilder: (context, index) {
-                      if (index == comments.length) {
-                        return _buildLoadMoreComments(achievement.id, state);
-                      }
-                      return _buildCommentCard(comments[index]);
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommentCard(RetroAchievementComment comment) {
-    return Container(
-      padding: EdgeInsets.all(10.r),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  comment.user.isEmpty
-                      ? AppLocale.unknownUser.getString(_l10nContext ?? context)
-                      : comment.user,
-                  style: TextStyle(
-                    color: const Color(0xFFFFC107),
-                    fontSize: 12.r,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (comment.submitted != null)
-                Text(
-                  _formatCommentDate(comment.submitted!),
-                  style: TextStyle(color: Colors.white38, fontSize: 10.r),
-                ),
-            ],
-          ),
-          SizedBox(height: 5.r),
-          Text(
-            comment.commentText,
-            style: TextStyle(color: Colors.white70, fontSize: 12.r),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadMoreComments(
-    int achievementId,
-    _AchievementCommentsState state,
-  ) {
-    if (state.isLoading) {
-      return Padding(
-        padding: EdgeInsets.all(12.r),
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return _buildCommentsMessage(
-      state.error ??
-          AppLocale.raOlderCommentsAvailable.getString(_l10nContext ?? context),
-      actionLabel: state.error == null
-          ? AppLocale.raLoadMore.getString(_l10nContext ?? context)
-          : AppLocale.retry.getString(_l10nContext ?? context).toUpperCase(),
-      onAction: () => _loadAchievementComments(achievementId, reset: false),
-    );
-  }
-
-  Widget _buildCommentsMessage(
-    String message, {
-    String? actionLabel,
-    VoidCallback? onAction,
-  }) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            message,
-            style: TextStyle(color: Colors.white54, fontSize: 13.r),
-          ),
-          if (actionLabel != null && onAction != null) ...[
-            SizedBox(height: 10.r),
-            TextButton(onPressed: onAction, child: Text(actionLabel)),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatCommentDate(DateTime date) {
-    final local = date.toLocal();
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
   }
 
   Widget _buildScrapingOverlay(SecondaryDisplayStateData value) {
@@ -2477,21 +1330,5 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         ],
       ),
     );
-  }
-}
-
-/// Scroll behavior that removes the Android overscroll glow/stretch indicator
-/// while leaving scrolling itself intact. Applied to the secondary display so a
-/// stray edge drag doesn't flash white arcs at the screen border.
-class _NoGlowScrollBehavior extends MaterialScrollBehavior {
-  const _NoGlowScrollBehavior();
-
-  @override
-  Widget buildOverscrollIndicator(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) {
-    return child;
   }
 }
