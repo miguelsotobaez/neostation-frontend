@@ -44,6 +44,7 @@ import '../../themes/corner_radii.dart';
 
 part 'my_games_list/gamepad_nav.dart';
 part 'my_games_list/favorites_reorder.dart';
+part 'my_games_list/data_loading.dart';
 
 /// A high-fidelity list component for browsing games within a specific system.
 ///
@@ -851,56 +852,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
     });
   }
 
-  /// Retrieves localized game descriptions directly from the SQLite database.
-  void _loadLocalizedDescription() async {
-    if (_selectedGame == null) return;
-
-    try {
-      String? systemId;
-
-      // In 'Global Library' mode, resolve the game's native hardware system ID.
-      if ((widget.system.folderName == 'all' ||
-              widget.system.folderName == SystemFolderNames.favorites) &&
-          _selectedGame!.systemFolderName != null) {
-        final originalSystem = await SystemRepository.getSystemByFolderName(
-          _selectedGame!.systemFolderName!,
-        );
-        systemId = originalSystem?.id;
-      } else {
-        systemId = widget.system.id;
-      }
-
-      if (systemId == null) {
-        if (mounted) {
-          setState(() {
-            _localizedDescription = null;
-          });
-        }
-        return;
-      }
-
-      final description = await GameRepository.getLocalizedDescription(
-        _selectedGame!.romname,
-        systemId,
-      );
-
-      if (mounted &&
-          _selectedGame != null &&
-          _selectedGame!.romname == _selectedGame!.romname) {
-        setState(() {
-          _localizedDescription = description;
-        });
-      }
-    } catch (e) {
-      _log.e('Localized description loading failed: $e');
-      if (mounted) {
-        setState(() {
-          _localizedDescription = null;
-        });
-      }
-    }
-  }
-
   bool _isNavigatingBack = false;
 
   /// Orchestrates a graceful exit from the game list, synchronizing state with previous screens.
@@ -1513,99 +1464,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
         GamepadNavigationManager.popLayer('random_dialog');
       }
     });
-  }
-
-  Future<void> _loadGames() async {
-    if (!mounted || _isLoadingGames) return;
-    _isLoadingGames = true;
-
-    final isInitialLoad = _games.isEmpty;
-    if (isInitialLoad) {
-      setState(() => _isLoading = true);
-    }
-
-    try {
-      final games = await GameService.loadGamesForSystem(widget.system);
-      if (!mounted) return;
-
-      _log.i(
-        'SystemGamesList: Loaded ${games.length} games for ${widget.system.folderName}',
-      );
-      if (widget.system.folderName == 'music' && games.isNotEmpty) {
-        _log.i(
-          'SystemGamesList: First 3 music tracks: ${games.take(3).map((g) => g.name).toList()}',
-        );
-      }
-      setState(() {
-        _games = games;
-        _gameIndexMap = {for (int i = 0; i < games.length; i++) games[i]: i};
-
-        // Music system specialization: Anchor initial focus to the currently active track.
-        if (widget.system.folderName == 'music') {
-          final musicService = MusicPlayerService();
-          if (musicService.isStarted && musicService.currentTrack != null) {
-            final playingTrackPath = musicService.currentTrack?.romPath;
-            final playingIndex = games.indexWhere(
-              (g) => g.romPath == playingTrackPath,
-            );
-
-            if (playingIndex != -1) {
-              _selectedGameIndex = playingIndex;
-              _selectedGame = games[playingIndex];
-              _log.i(
-                'SystemGamesList: Initial focus set to playing track at index $playingIndex',
-              );
-            }
-          }
-        }
-
-        if (widget.initialRomPath != null &&
-            widget.initialRomPath!.isNotEmpty) {
-          final initialIndex = games.indexWhere(
-            (game) => game.romPath == widget.initialRomPath,
-          );
-          if (initialIndex != -1) {
-            _selectedGameIndex = initialIndex;
-            _selectedGame = games[initialIndex];
-          } else {
-            _selectedGameIndex = 0;
-            _selectedGame = games.isNotEmpty ? games.first : null;
-          }
-        } else if (_selectedGame != null &&
-            widget.system.folderName != 'music') {
-          // Persistent Selection Logic: Retain current index if the game still exists post-reload.
-          final selectedIndex = games.indexWhere(
-            (game) => game.romname == _selectedGame!.romname,
-          );
-          if (selectedIndex != -1) {
-            _selectedGameIndex = selectedIndex;
-            _selectedGame = games[selectedIndex];
-          } else {
-            _selectedGameIndex = 0;
-            _selectedGame = games.isNotEmpty ? games.first : null;
-          }
-        } else if (_selectedGame == null) {
-          _selectedGameIndex = 0;
-          _selectedGame = games.isNotEmpty ? games.first : null;
-        }
-        _isLoading = false;
-      });
-
-      // Trigger deferred media and background tasks after initial UI render.
-      if (_selectedGame != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _startVideoTimer();
-          _performBackgroundOperationsForSelectedGame();
-        });
-      }
-    } catch (e) {
-      _log.e('Error loading games: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _isLoadingGames = false;
-      }
-    }
   }
 
   /// Selects a game via interaction (touch or click) and triggers resource resolution.
