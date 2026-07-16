@@ -1614,6 +1614,15 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     // triggers a download.
     return Consumer<NeoAssetsProvider>(
       builder: (context, neoAssets, child) {
+        // On the art-pack step, block the primary action while the theme
+        // manifest is still loading: otherwise the button reads "Finish" (no
+        // themes yet) and a press would silently complete setup with no art
+        // pack even though one is about to become available.
+        final artLoading =
+            _currentStep == _stepArtPack &&
+            !neoAssets.hasActiveTheme &&
+            neoAssets.themes.isEmpty &&
+            neoAssets.loading;
         return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1648,7 +1657,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
         // Main action button
         ElevatedButton(
-          onPressed: (_isSelectingFolder || _isImportingEsde || _isDownloadingArt)
+          onPressed:
+              (_isSelectingFolder ||
+                  _isImportingEsde ||
+                  _isDownloadingArt ||
+                  artLoading)
               ? null
               : () => _handleMainAction(),
           style: ElevatedButton.styleFrom(
@@ -1664,7 +1677,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
               alpha: 0.3,
             ),
           ),
-          child: _isSelectingFolder
+          child: (_isSelectingFolder || artLoading)
               ? SizedBox(
                   width: 20.r,
                   height: 20.r,
