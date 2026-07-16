@@ -75,6 +75,26 @@ void main() {
       expect(theme.themeData.colorScheme.brightness, Brightness.light);
     });
 
+    test('reads the designer\'s "colorScheme" key (light)', () {
+      // The theme designer exports the brightness under `colorScheme`, not
+      // `scheme`. A light theme must import as light rather than silently
+      // falling back to dark.
+      final json = Map<String, dynamic>.from(_daisyJson)
+        ..remove('scheme')
+        ..['colorScheme'] = 'light';
+      final theme = CustomTheme.fromDaisyJson(json);
+      expect(theme.brightness, Brightness.light);
+      expect(theme.themeData.colorScheme.brightness, Brightness.light);
+    });
+
+    test('reads the designer\'s "colorScheme" key (dark)', () {
+      final json = Map<String, dynamic>.from(_daisyJson)
+        ..remove('scheme')
+        ..['colorScheme'] = 'dark';
+      final theme = CustomTheme.fromDaisyJson(json);
+      expect(theme.brightness, Brightness.dark);
+    });
+
     test('missing on-* tokens fall back to base-content', () {
       final colors = Map<String, dynamic>.from(
         _daisyJson['colors'] as Map,

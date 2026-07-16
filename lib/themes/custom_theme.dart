@@ -110,7 +110,10 @@ class CustomTheme {
       return _parseColor(raw, token);
     }
 
-    final rawScheme = (json['scheme'] as String?)?.toLowerCase();
+    // Designer exports the key as `colorScheme`; older/manual files may use
+    // `scheme`. Accept either so light themes don't silently import as dark.
+    final rawScheme =
+        ((json['scheme'] ?? json['colorScheme']) as String?)?.toLowerCase();
     final isDark = rawScheme != 'light';
     final brightness = isDark ? Brightness.dark : Brightness.light;
 
