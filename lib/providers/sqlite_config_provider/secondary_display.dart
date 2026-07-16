@@ -128,7 +128,19 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
     if (!Platform.isAndroid) return;
     final state = SecondaryDisplayState.instance;
     unawaited(() async {
-      await state.initialSync;
+      // Only await initialSync when the sync is still pending. When the singleton
+      // was constructed *after* the shared-state cache was already populated (the
+      // secondary engine broadcasts its startup state before the main engine
+      // first touches the singleton), sub_screen takes its cached-construction
+      // path and leaves `initialSync` (a `late final`) UNASSIGNED — a bare
+      // `await state.initialSync` then throws LateInitializationError, which the
+      // unawaited wrapper swallows, so `appReady` never propagates and the dock
+      // never slides in. A non-null value means that cached path was taken (sync
+      // already done), so skip the await. Mirrors the same guard in
+      // SqliteConfigProvider's init (see `value == null` check there).
+      if (state.value == null) {
+        await state.initialSync;
+      }
       await state.updateState(appReady: true);
     }());
   }
