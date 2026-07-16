@@ -21,6 +21,7 @@ class AppDock extends StatelessWidget {
     required this.onLaunchApp,
     required this.onPickSlot,
     required this.onClearSlot,
+    required this.onOpenAccessibilitySettings,
   });
 
   final SecondaryDisplayStateData value;
@@ -34,11 +35,18 @@ class AppDock extends StatelessWidget {
   /// Clears the app assigned to slot [index].
   final void Function(int index) onClearSlot;
 
+  /// Opens the Screen Return accessibility explainer/settings. Filled slots
+  /// route here instead of launching when the service is off — launching an app
+  /// without it would strand the user with no way back to the home screen.
+  final VoidCallback onOpenAccessibilitySettings;
+
   @override
   Widget build(BuildContext context) {
     if (!value.dockEnabled) return const SizedBox.shrink();
     final apps = ConfigModel.normalizeDock(value.dockApps);
     final scheme = panelScheme(value);
+    // Screen Return off → guard filled slots (see [onOpenAccessibilitySettings]).
+    final accessOk = value.screenshotAccessEnabled;
     final visibleSlots = value.dockSlotCount.clamp(
       ConfigModel.dockMinSlotCount,
       ConfigModel.dockMaxSlotCount,
@@ -50,18 +58,36 @@ class AppDock extends StatelessWidget {
         children: [
           for (var i = 0; i < visibleSlots; i++) ...[
             if (i > 0) SizedBox(width: 14.r),
-            _buildDockSlot(i, apps[i], scheme),
+            _buildDockSlot(i, apps[i], scheme, accessOk),
           ],
         ],
       ),
     );
   }
 
-  /// A single dock slot. [package] empty = free slot.
-  Widget _buildDockSlot(int index, String package, ColorScheme scheme) {
+  /// A single dock slot. [package] empty = free slot. When [accessOk] is false,
+  /// a filled slot is guarded: tapping opens the Screen Return explainer instead
+  /// of launching, and the slot wears an accent border to nudge the user to
+  /// enable the service for the best experience. Empty slots are unaffected —
+  /// assigning an app doesn't launch anything, so there's nothing to strand.
+  Widget _buildDockSlot(
+    int index,
+    String package,
+    ColorScheme scheme,
+    bool accessOk,
+  ) {
     final filled = package.isNotEmpty;
+    final guarded = filled && !accessOk;
     return GestureDetector(
-      onTap: () => filled ? onLaunchApp(package) : onPickSlot(index),
+      onTap: () {
+        if (!filled) {
+          onPickSlot(index);
+        } else if (guarded) {
+          onOpenAccessibilitySettings();
+        } else {
+          onLaunchApp(package);
+        }
+      },
       onLongPress: filled ? () => onClearSlot(index) : null,
       child: Container(
         width: 56.r,
@@ -76,8 +102,10 @@ class AppDock extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(14.r),
           border: Border.all(
-            color: scheme.onSurface.withValues(alpha: filled ? 0.55 : 0.40),
-            width: 1.5.r,
+            color: guarded
+                ? scheme.primary
+                : scheme.onSurface.withValues(alpha: filled ? 0.55 : 0.40),
+            width: guarded ? 2.r : 1.5.r,
           ),
           boxShadow: [
             BoxShadow(

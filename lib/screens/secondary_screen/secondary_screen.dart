@@ -1050,6 +1050,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                     onLaunchApp: _launchDockApp,
                     onPickSlot: _openAppPicker,
                     onClearSlot: _clearSlot,
+                    onOpenAccessibilitySettings: _showAccessibilityDialog,
                   ),
                 ),
                 Positioned(
