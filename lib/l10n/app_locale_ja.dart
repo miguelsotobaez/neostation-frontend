@@ -97,7 +97,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.nowPlayingDimDarknessSubtitle: 'パネルが暗くなるときの明るさのレベル',
   AppLocale.nowPlayingDimNever: 'なし',
   AppLocale.nowPlayingDockEnabled: 'アプリドック',
-  AppLocale.nowPlayingDockEnabledSubtitle: 'セカンダリのNow Playingパネルにアプリドックを表示',
+  AppLocale.nowPlayingDockEnabledSubtitle: 'セカンダリ画面にアプリドックを表示',
   AppLocale.nowPlayingDockSlots: 'ドックスロット',
   AppLocale.nowPlayingDockSlotsSubtitle: 'ドックに表示するアプリスロット数 (1-5)',
   AppLocale.nowPlayingFanartDim: 'ファンアートを暗くする',

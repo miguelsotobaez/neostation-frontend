@@ -449,6 +449,12 @@ class _MyAppState extends State<MyApp> {
     FlutterLocalization.instance.onTranslatedLanguage = (Locale? locale) {
       if (mounted) setState(() => _locale = locale);
     };
+    // Once the main UI has painted its first frame, tell the secondary display
+    // the app is ready so it can slide the app dock into place (rather than
+    // showing it fully-formed while the app is still cold-starting).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.sqliteConfigProvider.markAppReady();
+    });
   }
 
   @override

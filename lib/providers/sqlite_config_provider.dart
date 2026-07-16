@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -55,6 +57,10 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   int _lastMuteToggleTrigger = 0;
   int _lastScreenshotTrigger = 0;
   int _lastDockEditTrigger = 0;
+  // Latched once the main UI paints its first frame; re-pushed to the secondary
+  // display so the app dock slides in as the app settles instead of popping in
+  // during cold-boot. See [markAppReady].
+  bool _appReady = false;
   bool _hasAllFilesAccess = false;
   Set<String> _hiddenSystems = {};
 

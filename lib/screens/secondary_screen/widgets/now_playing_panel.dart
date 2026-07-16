@@ -3,11 +3,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../../models/secondary_display_state.dart';
 import '../now_playing_helpers.dart';
-import 'app_dock.dart';
 
 /// The Now Playing page shown on the secondary display: boxart + game/system
-/// title + play-time / session / last-played stats, the app dock, and the
-/// all-apps launcher button.
+/// title + play-time / session / last-played stats.
+///
+/// The app dock and all-apps launcher are no longer part of this panel — they
+/// are drawn as a persistent overlay by [SecondaryScreen] so they stay visible
+/// in every state (browsing and in-game), not just while a game is active.
 ///
 /// Pure, input-driven subtree — the owning [SecondaryScreen] passes the current
 /// state snapshot, the live session readout ([sessionRunning] / [sessionTime]),
@@ -19,11 +21,6 @@ class NowPlayingPanel extends StatelessWidget {
     required this.sessionRunning,
     required this.sessionTime,
     required this.onRequestScreenshot,
-    required this.onLaunchApp,
-    required this.onPickSlot,
-    required this.onClearSlot,
-    required this.onOpenLauncher,
-    required this.onOpenAccessibilitySettings,
   });
 
   final SecondaryDisplayStateData value;
@@ -37,21 +34,6 @@ class NowPlayingPanel extends StatelessWidget {
 
   /// Asks the main engine to capture a screenshot of the main screen.
   final VoidCallback onRequestScreenshot;
-
-  /// Launches the docked app in `package` (prefers the bottom display).
-  final void Function(String package) onLaunchApp;
-
-  /// Opens the app picker to assign an app to the empty slot `index`.
-  final void Function(int index) onPickSlot;
-
-  /// Clears the app assigned to slot `index`.
-  final void Function(int index) onClearSlot;
-
-  /// Opens the app picker in launch mode (all-apps launcher).
-  final VoidCallback onOpenLauncher;
-
-  /// Opens Android accessibility settings to enable the Screen Return service.
-  final VoidCallback onOpenAccessibilitySettings;
 
   @override
   Widget build(BuildContext context) {
@@ -142,24 +124,6 @@ class NowPlayingPanel extends StatelessWidget {
               ],
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AppDock(
-              value: value,
-              onLaunchApp: onLaunchApp,
-              onPickSlot: onPickSlot,
-              onClearSlot: onClearSlot,
-            ),
-          ),
-          // All-apps launcher pinned to the bottom-left corner.
-          if (value.dockEnabled)
-            Positioned(
-              left: 16.r,
-              bottom: 16.r,
-              child: _buildLauncherButton(value),
-            ),
         ],
       ),
     );
@@ -197,67 +161,6 @@ class NowPlayingPanel extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// The all-apps launcher, pinned to the bottom-left of the Now Playing
-  /// screen. Normally opens the app picker in launch mode. When the Screen
-  /// Return accessibility service isn't enabled, it's highlighted with an
-  /// accent border + warning badge and instead opens accessibility settings —
-  /// launching an app without that service would strand the user with no way
-  /// back to Now Playing.
-  Widget _buildLauncherButton(SecondaryDisplayStateData value) {
-    final scheme = panelScheme(value);
-    final accessOk = value.screenshotAccessEnabled;
-    return GestureDetector(
-      onTap: accessOk ? onOpenLauncher : onOpenAccessibilitySettings,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 56.r,
-            height: 56.r,
-            decoration: BoxDecoration(
-              color: accessOk
-                  ? scheme.onSurface.withValues(alpha: 0.05)
-                  : scheme.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14.r),
-              border: Border.all(
-                color: accessOk
-                    ? scheme.onSurface.withValues(alpha: 0.14)
-                    : scheme.primary,
-                width: accessOk ? 1.r : 2.r,
-              ),
-            ),
-            child: Icon(
-              Symbols.apps_rounded,
-              color: accessOk
-                  ? scheme.onSurface.withValues(alpha: 0.65)
-                  : scheme.primary,
-              size: 28.r,
-            ),
-          ),
-          if (!accessOk)
-            Positioned(
-              top: -4.r,
-              right: -4.r,
-              child: Container(
-                width: 20.r,
-                height: 20.r,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: scheme.surface, width: 2.r),
-                ),
-                child: Icon(
-                  Symbols.priority_high_rounded,
-                  size: 12.r,
-                  color: scheme.onPrimary,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

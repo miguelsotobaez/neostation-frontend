@@ -110,7 +110,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.nowPlayingDimNever: 'Jangan Pernah',
   AppLocale.nowPlayingDockEnabled: 'Dock aplikasi',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Tampilkan dock aplikasi di panel Now Playing sekunder',
+      'Tampilkan dock aplikasi di layar sekunder',
   AppLocale.nowPlayingDockSlots: 'Slot dock',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Berapa banyak slot aplikasi yang ditampilkan dock (1-5)',
