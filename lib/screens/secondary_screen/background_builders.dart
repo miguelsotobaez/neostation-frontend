@@ -129,39 +129,66 @@ Widget buildSystemBackground(SecondaryDisplayStateData value) {
   if (hasBg) {
     final isGif = image_utils.ImageUtils.isGif(bgPath);
 
+    Widget? art;
     if (value.isBackgroundAsset) {
       if (isGif) {
-        return ShaderGifWidget(
+        art = ShaderGifWidget(
           imagePath: bgPath,
           key: ValueKey('secondary_system_bg_$bgPath'),
         );
-      }
-      return Image.asset(
-        bgPath,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            buildShaderFallback(value),
-      );
-    } else {
-      final file = File(bgPath);
-      if (file.existsSync()) {
-        if (isGif) {
-          return ShaderGifWidget(
-            imagePath: bgPath,
-            key: ValueKey('secondary_system_bg_$bgPath'),
-          );
-        }
-        return Image.file(
-          file,
+      } else {
+        art = Image.asset(
+          bgPath,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) =>
               buildShaderFallback(value),
         );
       }
+    } else {
+      final file = File(bgPath);
+      if (file.existsSync()) {
+        if (isGif) {
+          art = ShaderGifWidget(
+            imagePath: bgPath,
+            key: ValueKey('secondary_system_bg_$bgPath'),
+          );
+        } else {
+          art = Image.file(
+            file,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                buildShaderFallback(value),
+          );
+        }
+      }
+    }
+
+    if (art != null) {
+      return _withFanartDim(art, value);
     }
   }
 
   return buildShaderFallback(value);
+}
+
+/// Overlays the same dim scrim used behind game logos so system console
+/// artwork doesn't clash with the system name/logo drawn on top. Mirrors the
+/// scrim in [buildFanartWithLogo]; a no-op when the dim level is 0.
+Widget _withFanartDim(Widget art, SecondaryDisplayStateData value) {
+  if (value.fanartDimLevel <= 0) return art;
+  return Stack(
+    fit: StackFit.expand,
+    children: [
+      art,
+      Positioned.fill(
+        child: ColoredBox(
+          color: Colors.black.withValues(
+            alpha: value.fanartDimLevel.clamp(0, 100) / 100.0,
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 Widget buildShaderFallback(SecondaryDisplayStateData value) {

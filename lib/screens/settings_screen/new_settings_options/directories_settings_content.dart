@@ -370,6 +370,16 @@ class DirectoriesSettingsContentState
 
   Future<void> _resetEsdeImport() async {
     if (_isImporting) return;
+
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.esdeReset.getString(context),
+      body: AppLocale.esdeResetConfirmBody.getString(context),
+      confirmLabel: AppLocale.esdeReset.getString(context),
+      icon: Symbols.restart_alt_rounded,
+    );
+    if (!confirmed || !mounted) return;
+
     try {
       final cleared = await EsdeImportService.reset();
       // Fully disconnect ES-DE: also clear the selected folder so the section
