@@ -802,4 +802,18 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.esdeSummaryStatsUpdated: '收藏 / 统计已更新',
   AppLocale.esdeSummaryGames: '游戏',
   AppLocale.esdeSummarySystems: '系统',
+  AppLocale.wizardScanComplete: '扫描完成',
+  AppLocale.wizardTapNextToContinue: '点按“下一步”继续',
+  AppLocale.wizardEsdeStepTitle: '从 ES-DE 导入',
+  AppLocale.wizardEsdeStepDesc:
+      '已经在使用 ES-DE 了吗？导入你的游戏元数据和图片。选择包含 “gamelists” 和 '
+      '“downloaded_media” 文件夹的 ES-DE 主文件夹。可选；你可以稍后在“设置”中运行。',
+  AppLocale.wizardArtPackTitle: '获取 NeoStation 美术包',
+  AppLocale.wizardArtPackDesc:
+      '我们强烈建议下载 NeoStation 系统美术包，为你的整个游戏库带来精美的'
+      '主机背景。之后可在“设置”中更改。',
+  AppLocale.wizardDownloadArtPack: '下载美术包',
+  AppLocale.wizardArtPackInstalled: '美术包已安装！你之后可以在“设置”中探索更多主题。',
+  AppLocale.wizardArtPackUnavailable:
+      '目前无法访问美术包。联网后，你可以稍后在“设置”中安装它。',
 };

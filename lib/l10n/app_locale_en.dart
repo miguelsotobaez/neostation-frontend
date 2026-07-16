@@ -894,9 +894,9 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.wizardTapNextToContinue: 'Tap Next to continue',
   AppLocale.wizardEsdeStepTitle: 'Import from ES-DE',
   AppLocale.wizardEsdeStepDesc:
-      'Already using ES-DE? Import your existing game metadata and artwork. '
-      'Select the folder that contains your "gamelists" and "downloaded_media" '
-      'folders. This step is optional, so skip it if you don\'t use ES-DE.',
+      'Already using ES-DE? Import your game metadata and artwork. Select the '
+      'main ES-DE folder containing your "gamelists" and "downloaded_media" '
+      'folders. Optional; you can run it later from Settings.',
   AppLocale.wizardArtPackTitle: 'Get the NeoStation Art Pack',
   AppLocale.wizardArtPackDesc:
       'We strongly recommend downloading the NeoStation system art pack for '

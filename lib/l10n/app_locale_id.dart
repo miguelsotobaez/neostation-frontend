@@ -893,4 +893,23 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.esdeSummaryStatsUpdated: 'Favorit / statistik diperbarui',
   AppLocale.esdeSummaryGames: 'gim',
   AppLocale.esdeSummarySystems: 'sistem',
+  AppLocale.wizardScanComplete: 'Pemindaian selesai',
+  AppLocale.wizardTapNextToContinue: 'Ketuk Berikutnya untuk melanjutkan',
+  AppLocale.wizardEsdeStepTitle: 'Impor dari ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      'Sudah menggunakan ES-DE? Impor metadata dan gambar game Anda. Pilih '
+      'folder utama ES-DE yang berisi folder "gamelists" dan "downloaded_media" '
+      'Anda. Opsional; Anda dapat menjalankannya nanti dari Pengaturan.',
+  AppLocale.wizardArtPackTitle: 'Dapatkan Paket Gambar NeoStation',
+  AppLocale.wizardArtPackDesc:
+      'Kami sangat menyarankan untuk mengunduh paket gambar sistem NeoStation '
+      'agar latar belakang konsol tampil indah di seluruh koleksi Anda. Ini '
+      'dapat diubah nanti di Pengaturan.',
+  AppLocale.wizardDownloadArtPack: 'Unduh Paket Gambar',
+  AppLocale.wizardArtPackInstalled:
+      'Paket gambar terpasang! Anda dapat menjelajahi lebih banyak tema nanti '
+      'di Pengaturan.',
+  AppLocale.wizardArtPackUnavailable:
+      'Paket gambar tidak dapat dijangkau saat ini. Anda dapat memasangnya '
+      'nanti dari Pengaturan setelah online.',
 };

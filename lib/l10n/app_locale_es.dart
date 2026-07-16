@@ -917,4 +917,24 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoritos / estadísticas actualizados',
   AppLocale.esdeSummaryGames: 'juegos',
   AppLocale.esdeSummarySystems: 'sistemas',
+  AppLocale.wizardScanComplete: 'Análisis completado',
+  AppLocale.wizardTapNextToContinue: 'Toca Siguiente para continuar',
+  AppLocale.wizardEsdeStepTitle: 'Importar desde ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      '¿Ya usas ES-DE? Importa los metadatos y las imágenes de tus juegos. '
+      'Selecciona la carpeta principal de ES-DE que contiene tus carpetas '
+      '"gamelists" y "downloaded_media". Opcional; puedes ejecutarlo más tarde '
+      'desde Ajustes.',
+  AppLocale.wizardArtPackTitle: 'Consigue el paquete de arte de NeoStation',
+  AppLocale.wizardArtPackDesc:
+      'Recomendamos encarecidamente descargar el paquete de arte de sistemas de '
+      'NeoStation para tener bonitos fondos de consola en toda tu biblioteca. '
+      'Se puede cambiar más tarde en Ajustes.',
+  AppLocale.wizardDownloadArtPack: 'Descargar paquete de arte',
+  AppLocale.wizardArtPackInstalled:
+      '¡Paquete de arte instalado! Puedes explorar más temas más tarde en '
+      'Ajustes.',
+  AppLocale.wizardArtPackUnavailable:
+      'No se pudo acceder al paquete de arte en este momento. Puedes instalarlo '
+      'más tarde desde Ajustes cuando estés en línea.',
 };

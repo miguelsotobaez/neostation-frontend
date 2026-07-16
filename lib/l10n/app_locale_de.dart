@@ -919,4 +919,25 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoriten / Statistiken aktualisiert',
   AppLocale.esdeSummaryGames: 'Spiele',
   AppLocale.esdeSummarySystems: 'Systeme',
+  AppLocale.wizardScanComplete: 'Scan abgeschlossen',
+  AppLocale.wizardTapNextToContinue: 'Zum Fortfahren auf „Weiter" tippen',
+  AppLocale.wizardEsdeStepTitle: 'Aus ES-DE importieren',
+  AppLocale.wizardEsdeStepDesc:
+      'Nutzt du bereits ES-DE? Importiere deine Spiel-Metadaten und Artworks. '
+      'Wähle den ES-DE-Hauptordner, der deine Ordner "gamelists" und '
+      '"downloaded_media" enthält. Optional; du kannst es später in den '
+      'Einstellungen ausführen.',
+  AppLocale.wizardArtPackTitle: 'Hol dir das NeoStation-Artwork-Paket',
+  AppLocale.wizardArtPackDesc:
+      'Wir empfehlen dringend, das NeoStation-System-Artwork-Paket '
+      'herunterzuladen, um in deiner gesamten Bibliothek schöne '
+      'Konsolen-Hintergründe zu erhalten. Es kann später in den Einstellungen '
+      'geändert werden.',
+  AppLocale.wizardDownloadArtPack: 'Artwork-Paket herunterladen',
+  AppLocale.wizardArtPackInstalled:
+      'Artwork-Paket installiert! Weitere Designs findest du später in den '
+      'Einstellungen.',
+  AppLocale.wizardArtPackUnavailable:
+      'Das Artwork-Paket ist derzeit nicht erreichbar. Du kannst es später in '
+      'den Einstellungen installieren, sobald du online bist.',
 };

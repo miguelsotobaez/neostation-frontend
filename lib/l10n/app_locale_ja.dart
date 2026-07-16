@@ -815,4 +815,23 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.esdeSummaryStatsUpdated: 'お気に入り／統計を更新',
   AppLocale.esdeSummaryGames: 'ゲーム',
   AppLocale.esdeSummarySystems: 'システム',
+  AppLocale.wizardScanComplete: 'スキャン完了',
+  AppLocale.wizardTapNextToContinue: '「次へ」をタップして続行',
+  AppLocale.wizardEsdeStepTitle: 'ES-DE からインポート',
+  AppLocale.wizardEsdeStepDesc:
+      'すでに ES-DE をお使いですか？ゲームのメタデータとアートワークを'
+      'インポートできます。「gamelists」と「downloaded_media」フォルダーが含まれる '
+      'ES-DE のメインフォルダーを選択してください。任意です。後で設定から'
+      '実行できます。',
+  AppLocale.wizardArtPackTitle: 'NeoStation アートパックを入手',
+  AppLocale.wizardArtPackDesc:
+      'ライブラリ全体で美しいコンソール背景を表示するために、NeoStation '
+      'システムアートパックのダウンロードを強くおすすめします。後で設定から'
+      '変更できます。',
+  AppLocale.wizardDownloadArtPack: 'アートパックをダウンロード',
+  AppLocale.wizardArtPackInstalled:
+      'アートパックをインストールしました！他のテーマは後で設定から確認できます。',
+  AppLocale.wizardArtPackUnavailable:
+      '現在アートパックにアクセスできませんでした。オンラインになったら、後で'
+      '設定からインストールできます。',
 };

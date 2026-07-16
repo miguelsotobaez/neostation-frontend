@@ -912,4 +912,24 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.esdeSummaryStatsUpdated: 'Preferiti / statistiche aggiornati',
   AppLocale.esdeSummaryGames: 'giochi',
   AppLocale.esdeSummarySystems: 'sistemi',
+  AppLocale.wizardScanComplete: 'Scansione completata',
+  AppLocale.wizardTapNextToContinue: 'Tocca Avanti per continuare',
+  AppLocale.wizardEsdeStepTitle: 'Importa da ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      'Usi già ES-DE? Importa i metadati e le immagini dei tuoi giochi. '
+      'Seleziona la cartella principale di ES-DE che contiene le cartelle '
+      '"gamelists" e "downloaded_media". Facoltativo; puoi eseguirlo più tardi '
+      'dalle Impostazioni.',
+  AppLocale.wizardArtPackTitle: 'Ottieni il pacchetto grafico NeoStation',
+  AppLocale.wizardArtPackDesc:
+      'Consigliamo vivamente di scaricare il pacchetto grafico dei sistemi '
+      'NeoStation per splendidi sfondi delle console in tutta la tua libreria. '
+      'Può essere modificato in seguito nelle Impostazioni.',
+  AppLocale.wizardDownloadArtPack: 'Scarica pacchetto grafico',
+  AppLocale.wizardArtPackInstalled:
+      'Pacchetto grafico installato! Puoi esplorare altri temi in seguito nelle '
+      'Impostazioni.',
+  AppLocale.wizardArtPackUnavailable:
+      'Al momento non è stato possibile raggiungere il pacchetto grafico. Puoi '
+      'installarlo in seguito dalle Impostazioni una volta online.',
 };
