@@ -152,6 +152,15 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
         // engine (the source of truth for SQLite).
         // ignore: unawaited_futures
         updateDockApps(state.dockApps);
+      } else if (_initialized &&
+          !listEquals(state.dockApps, _config.dockApps)) {
+        // No edit trigger, yet the shared dockApps disagrees with the persisted
+        // layout — this is a stale echo from the secondary, whose snapshot
+        // synced before our boot seed and shipped the old (usually empty)
+        // dockApps back, clobbering it. The main engine owns dockApps outside
+        // of user edits, so re-assert the persisted layout. (Guarded on
+        // _initialized so we don't fight before the config has loaded.)
+        _secondaryDisplayState?.updateState(dockApps: _config.dockApps);
       }
     }
   }
