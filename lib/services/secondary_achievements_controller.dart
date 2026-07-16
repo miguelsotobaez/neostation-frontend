@@ -78,6 +78,27 @@ class SecondaryAchievementsController {
       await state.initialSync;
     }
 
+    // Refresh the in-game screenshot button's visibility on every launch. The
+    // screenshotAccessEnabled flag is otherwise seeded only once at cold start,
+    // which on a fresh install happens BEFORE the user grants access in
+    // first-run setup — so the button would stay hidden until a later cold
+    // restart or display reconnect re-seeded it.
+    //
+    // Resolved UP FRONT (with a short timeout) so it rides in the SAME atomic
+    // launch snapshot below instead of a separate push. A separate push,
+    // serialized before the async RA fetch (so carrying achievements=null), can
+    // be delivered out-of-order AFTER the achievements push and wipe the panel
+    // — the RA panel would flash in then vanish. The old comment here only
+    // reasoned about nowPlayingActive; achievements are just as vulnerable.
+    bool screenshotAccess = false;
+    try {
+      screenshotAccess = await ScreenshotService.isAccessEnabled().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
+    } catch (_) {}
+    if (!_active || _state != state) return;
+
     // Show the "Now Playing" page immediately for every launched game — this
     // is independent of RetroAchievements, needs no network, and is the first
     // page the secondary display shows. The RA fetch below may then add the
@@ -85,15 +106,16 @@ class SecondaryAchievementsController {
     // ignore: unawaited_futures
     state.updateState(
       // isGameLaunching is set here — in the SAME atomic snapshot as
-      // nowPlayingActive — rather than via a separate _updateSecondaryDisplay
-      // push. The cross-engine transport delivers full snapshots without
-      // ordering guarantees, so a separate launch snapshot carrying
-      // nowPlayingActive=false could land after this one and clobber it (the
-      // intermittent "no Now Playing on PSX/GameCube" race). One snapshot = no
+      // nowPlayingActive (and screenshotAccessEnabled) — rather than via a
+      // separate push. The cross-engine transport delivers full snapshots
+      // without ordering guarantees, so a separate launch snapshot could land
+      // after this one and clobber it (the intermittent "no Now Playing on
+      // PSX/GameCube" race, and the RA-panel-flash race). One snapshot = no
       // race. It also stops the secondary preview video (the receiver keys the
       // video teardown off isGameLaunching).
       isGameLaunching: true,
       nowPlayingActive: true,
+      screenshotAccessEnabled: screenshotAccess,
       gameTitle: game.name,
       gameBoxart: boxartPath,
       clearGameBoxart: boxartPath == null,
@@ -102,19 +124,6 @@ class SecondaryAchievementsController {
       lastPlayedMillis: game.lastPlayed?.millisecondsSinceEpoch,
       clearLastPlayed: game.lastPlayed == null,
     );
-
-    // Refresh the in-game screenshot button's visibility on every launch. The
-    // screenshotAccessEnabled flag is otherwise seeded only once at cold start,
-    // which on a fresh install happens BEFORE the user grants access in
-    // first-run setup — so the button would stay hidden until a later cold
-    // restart or display reconnect re-seeded it. Pushed as its own snapshot: it
-    // doesn't touch nowPlayingActive, so there's no clobber race with the
-    // launch snapshot above.
-    final launchState = state;
-    // ignore: unawaited_futures
-    ScreenshotService.isAccessEnabled().then((enabled) {
-      launchState.updateState(screenshotAccessEnabled: enabled);
-    });
 
     if (!_active) return;
 

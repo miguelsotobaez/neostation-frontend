@@ -122,7 +122,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.nowPlayingDimNever: 'Jamais',
   AppLocale.nowPlayingDockEnabled: 'Dock d\'applications',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Afficher le dock d\'applications sur le panneau Now Playing secondaire',
+      'Afficher le dock d\'applications sur l\'écran secondaire',
   AppLocale.nowPlayingDockSlots: 'Emplacements du dock',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Combien d\'emplacements le dock affiche (1-5)',
@@ -929,4 +929,24 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoris / statistiques mis à jour',
   AppLocale.esdeSummaryGames: 'jeux',
   AppLocale.esdeSummarySystems: 'systèmes',
+  AppLocale.wizardScanComplete: 'Analyse terminée',
+  AppLocale.wizardTapNextToContinue: 'Appuyez sur Suivant pour continuer',
+  AppLocale.wizardEsdeStepTitle: 'Importer depuis ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      'Vous utilisez déjà ES-DE ? Importez les métadonnées et les visuels de vos '
+      'jeux. Sélectionnez le dossier principal ES-DE contenant vos dossiers '
+      '"gamelists" et "downloaded_media". Facultatif ; vous pourrez le faire '
+      'plus tard depuis les Paramètres.',
+  AppLocale.wizardArtPackTitle: 'Obtenez le pack visuel NeoStation',
+  AppLocale.wizardArtPackDesc:
+      'Nous vous recommandons vivement de télécharger le pack visuel des systèmes '
+      'NeoStation pour de superbes arrière-plans de console dans toute votre '
+      'bibliothèque. Il peut être modifié plus tard dans les Paramètres.',
+  AppLocale.wizardDownloadArtPack: 'Télécharger le pack visuel',
+  AppLocale.wizardArtPackInstalled:
+      'Pack visuel installé ! Vous pourrez explorer d\'autres thèmes plus tard '
+      'dans les Paramètres.',
+  AppLocale.wizardArtPackUnavailable:
+      'Le pack visuel est actuellement inaccessible. Vous pourrez l\'installer '
+      'plus tard depuis les Paramètres une fois en ligne.',
 };

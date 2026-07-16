@@ -101,7 +101,7 @@ class NeoAssetsProvider extends ChangeNotifier {
         if (plan.forceRedownload) {
           await NeoAssetsService.downloadAllThemeAssets(
             themeFolder,
-            systemFolderNames,
+            plan.systemsToDownload,
             forceRedownload: true,
             onProgress: (done, t) {
               _downloadProgress = t == 0 ? 1.0 : done / t;
@@ -111,7 +111,7 @@ class NeoAssetsProvider extends ChangeNotifier {
         } else {
           await NeoAssetsService.downloadMissingThemeAssets(
             themeFolder,
-            systemFolderNames,
+            plan.systemsToDownload,
             missingTotal: plan.totalAssetsToDownload,
             onProgress: (done, t) {
               _downloadProgress = t == 0 ? 1.0 : done / t;

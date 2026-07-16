@@ -34,6 +34,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   SecondaryDisplayState? _secondaryDisplayState;
   VideoPlayerController? _videoController;
 
+  /// Latches true the first time the main engine reports `appReady`; drives the
+  /// app dock's one-shot slide-up. Local so the oscillating shared-state flag
+  /// can't un-reveal the dock. See [_buildDockOverlay].
+  bool _dockRevealed = false;
+
   /// A BuildContext captured from *under* this screen's MaterialApp (and its
   /// Localizations). The _buildXxx helpers below run as methods on this State,
   /// so a bare `context` resolves to `this.context` — which sits ABOVE the
@@ -44,6 +49,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   Timer? _videoTimer;
   bool _showVideo = false;
   String? _currentVideoPath;
+
+  /// Bumped every time the preview is torn down. [_initializeVideo] captures it
+  /// on entry and re-checks after each await, so an in-flight init that started
+  /// just as a game launched (which calls [_stopVideo]) throws away the
+  /// controller it created instead of leaving it playing audio over the game.
+  int _videoGeneration = 0;
   int _lastMediaRevision = 0;
 
   /// Auto-clearing timer for the "newly earned this session" celebration.
@@ -88,6 +99,10 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
   /// Whether the app picker overlay is currently visible in either mode.
   bool get _pickerVisible => _pickerSlot != null || _launcherOpen;
+
+  /// Whether the "enable Screen Return" explainer dialog is showing. Raised
+  /// when the launcher is tapped while the accessibility service is off.
+  bool _accessDialogVisible = false;
 
   /// Installed-app list backing the picker; null until first loaded.
   List<Map<String, dynamic>>? _pickerApps;
@@ -413,10 +428,14 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   Future<void> _initializeVideo(String path) async {
     if (!mounted) return;
 
+    // Snapshot the generation: if _stopVideo runs (e.g. a game launches) while
+    // we're awaiting below, this goes stale and we abort before playing.
+    final gen = _videoGeneration;
+    VideoPlayerController? controller;
     try {
-      final controller = VideoPlayerController.file(File(path));
+      controller = VideoPlayerController.file(File(path));
       await controller.initialize();
-      if (!mounted) {
+      if (!mounted || gen != _videoGeneration) {
         await controller.dispose();
         return;
       }
@@ -428,7 +447,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       await controller.setLooping(true);
       await controller.play();
 
-      if (!mounted) {
+      if (!mounted || gen != _videoGeneration) {
         await controller.dispose();
         return;
       }
@@ -439,10 +458,19 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       });
     } catch (e) {
       debugPrint('SecondaryScreen: Error initializing video: $e');
+      // Don't leak the controller if we threw after creating it.
+      if (controller != null && _videoController != controller) {
+        try {
+          await controller.dispose();
+        } catch (_) {}
+      }
     }
   }
 
   void _stopVideo() {
+    // Invalidate any in-flight _initializeVideo so it discards its controller
+    // rather than playing audio over a game that just launched.
+    _videoGeneration++;
     _videoTimer?.cancel();
     _videoTimer = null;
     if (_videoController != null) {
@@ -805,8 +833,25 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                 ),
                               ),
 
+                            // Persistent app dock + all-apps launcher. Drawn at
+                            // the top level (not inside the in-game panel) so it
+                            // stays visible while browsing systems and on the
+                            // Now Playing page — hidden on the achievement pages
+                            // and dimmed together with the panel's idle scrim.
+                            if (value.dockEnabled) _buildDockOverlay(value),
+
                             // Scraping Overlay
                             _buildScrapingOverlay(value),
+
+                            // App picker overlay (dock-slot assignment or
+                            // all-apps launcher). Top-most so it covers the dock
+                            // and any panel; available in every state.
+                            if (_pickerVisible) _buildAppPickerOverlay(),
+
+                            // Accessibility explainer, top-most so it sits over
+                            // the dock and picker.
+                            if (_accessDialogVisible)
+                              _buildAccessibilityDialog(value),
                           ],
                         ),
                 );
@@ -939,6 +984,92 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     );
   }
 
+  /// The persistent app dock + all-apps launcher overlay, drawn above the
+  /// in-game panel so it stays reachable while browsing systems and on the Now
+  /// Playing page.
+  ///
+  /// Two behaviours mirror the Now Playing panel so the dock reads as part of
+  /// it while a game is active:
+  ///  * Hidden while flipped to an achievements/comments page (the dock belongs
+  ///    to the Now Playing page).
+  ///  * Faded toward black in step with the panel's idle-dim scrim (which sits
+  ///    below this overlay), so the whole display darkens uniformly.
+  ///
+  /// While browsing (no game active) neither applies, so the dock is fully lit
+  /// and interactive.
+  Widget _buildDockOverlay(SecondaryDisplayStateData value) {
+    // `appReady` is a one-way "main UI has painted" latch, but the shared state
+    // is written by BOTH engines: the secondary's own pushes (isSecondaryActive,
+    // mute/screenshot toggles) copyWith from a local snapshot that may still
+    // carry appReady=false, so the incoming flag oscillates. Latch it locally on
+    // first true and ignore later falses, so the dock slides up once and stays.
+    if (value.appReady) _dockRevealed = true;
+    final raAvailable =
+        value.showAchievementPanel && value.achievements != null;
+    // Off the Now Playing page (achievements/comments) → hide the dock.
+    final hidden =
+        value.nowPlayingActive && raAvailable && _inGamePanelPage >= 1;
+    final dimmed = value.nowPlayingActive && _inGameDimmed;
+    // Fade to black alongside the panel scrim behind us: the scrim darkens the
+    // display to `nowPlayingDimLevel`, so drop the dock's opacity to match and
+    // let that black show through.
+    final opacity = hidden
+        ? 0.0
+        : dimmed
+        ? (1.0 - value.nowPlayingDimLevel.clamp(0, 100) / 100.0)
+        : 1.0;
+    return Positioned.fill(
+      child: IgnorePointer(
+        // Non-interactive while hidden or dimmed — when dimmed, touches fall
+        // through to the panel's wake Listener below (first touch only wakes).
+        ignoring: hidden || dimmed,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 400),
+          opacity: opacity,
+          // Slide-up keyed to main-UI readiness: the dock starts parked fully
+          // below the bottom edge (t=1) and stays there until the main engine
+          // reports its first frame via `appReady`, then eases into place. This
+          // syncs the dock's arrival with the app becoming usable instead of
+          // firing on the secondary display's own (earlier) first paint.
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 1.0, end: _dockRevealed ? 0.0 : 1.0),
+            duration: const Duration(milliseconds: 550),
+            curve: Curves.easeOutCubic,
+            builder: (context, t, child) => Transform.translate(
+              offset: Offset(0, t * 140.r),
+              child: child,
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: AppDock(
+                    value: value,
+                    onLaunchApp: _launchDockApp,
+                    onPickSlot: _openAppPicker,
+                    onClearSlot: _clearSlot,
+                    onOpenAccessibilitySettings: _showAccessibilityDialog,
+                  ),
+                ),
+                Positioned(
+                  left: 16.r,
+                  bottom: 16.r,
+                  child: DockLauncherButton(
+                    value: value,
+                    onOpenLauncher: _openAppLauncher,
+                    onOpenAccessibilitySettings: _showAccessibilityDialog,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// The in-game container body: shows the Now Playing page or the
   /// achievements/comments pages, with edge chevrons to flip between them when the game
   /// has a RetroAchievements set. The page index is clamped so the RA page is
@@ -981,9 +1112,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
               ),
             ),
           ),
-          // App picker overlay sits above the dim scrim so opening it (which
-          // also wakes the panel) is always visible.
-          if (_pickerVisible) _buildAppPickerOverlay(),
         ],
       ),
     );
@@ -1039,11 +1167,6 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                       sessionRunning: _sessionWatch.isRunning,
                       sessionTime: _formatSessionTime(),
                       onRequestScreenshot: _requestScreenshot,
-                      onLaunchApp: _launchDockApp,
-                      onPickSlot: _openAppPicker,
-                      onClearSlot: _clearSlot,
-                      onOpenLauncher: _openAppLauncher,
-                      onOpenAccessibilitySettings: _openAccessibilitySettings,
                     ),
             ),
           ),
@@ -1103,6 +1226,161 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _wakeInGamePanel();
     SfxService().playNavSound();
     SecondaryAppsService.openAccessibilitySettings();
+  }
+
+  /// Shows the explainer dialog raised when the launcher is tapped while the
+  /// Screen Return accessibility service is off.
+  void _showAccessibilityDialog() {
+    _wakeInGamePanel();
+    SfxService().playNavSound();
+    setState(() => _accessDialogVisible = true);
+  }
+
+  void _dismissAccessibilityDialog() {
+    SfxService().playNavSound();
+    setState(() => _accessDialogVisible = false);
+  }
+
+  /// Accepts the explainer: closes it and jumps to accessibility settings.
+  void _confirmAccessibilityDialog() {
+    setState(() => _accessDialogVisible = false);
+    _openAccessibilitySettings();
+  }
+
+  /// Modal explainer shown before sending the user to accessibility settings.
+  /// Tells them why the Screen Return service is needed and what to do once the
+  /// settings screen opens. Tapping the backdrop or CANCEL dismisses; OPEN
+  /// SETTINGS jumps straight to the accessibility page.
+  Widget _buildAccessibilityDialog(SecondaryDisplayStateData value) {
+    final scheme = panelScheme(value);
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _dismissAccessibilityDialog,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.72),
+          child: Center(
+            child: GestureDetector(
+              // Swallow taps on the card so they don't dismiss via the backdrop.
+              onTap: () {},
+              child: Container(
+                width: 480.r,
+                padding: EdgeInsets.all(28.r),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(
+                    color: scheme.onSurface.withValues(alpha: 0.15),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      blurRadius: 24.r,
+                      offset: Offset(0, 8.r),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Symbols.accessibility_new_rounded,
+                          color: scheme.primary,
+                          size: 30.r,
+                        ),
+                        SizedBox(width: 12.r),
+                        Expanded(
+                          child: Text(
+                            'Enable Screen Return',
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 20.r,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 18.r),
+                    Text(
+                      'To launch apps from the dock, NeoStation needs the '
+                      'Screen Return accessibility service. It lets NeoStation '
+                      'bring you back here after you close the app you opened. '
+                      "Without it you could be left with no way back.\n\n"
+                      'On the next screen, find NeoStation in the list of '
+                      'services and switch it on.',
+                      style: TextStyle(
+                        color: scheme.onSurface.withValues(alpha: 0.8),
+                        fontSize: 14.r,
+                        height: 1.45,
+                      ),
+                    ),
+                    SizedBox(height: 26.r),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _buildDialogButton(
+                          label: 'CANCEL',
+                          onTap: _dismissAccessibilityDialog,
+                          scheme: scheme,
+                          filled: false,
+                        ),
+                        SizedBox(width: 12.r),
+                        _buildDialogButton(
+                          label: 'OPEN SETTINGS',
+                          onTap: _confirmAccessibilityDialog,
+                          scheme: scheme,
+                          filled: true,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A flat dialog action button — filled with the accent for the primary
+  /// action, outlined for the secondary. Custom (not a Material button) to match
+  /// the rest of the secondary screen, which has no Material ancestor.
+  Widget _buildDialogButton({
+    required String label,
+    required VoidCallback onTap,
+    required ColorScheme scheme,
+    required bool filled,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 12.r),
+        decoration: BoxDecoration(
+          color: filled ? scheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(
+            color: filled
+                ? scheme.primary
+                : scheme.onSurface.withValues(alpha: 0.30),
+            width: 1.5.r,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: filled ? scheme.onPrimary : scheme.onSurface,
+            fontSize: 13.r,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.r,
+          ),
+        ),
+      ),
+    );
   }
 
   /// Full-panel overlay for choosing an app for the pending dock slot. Tapping

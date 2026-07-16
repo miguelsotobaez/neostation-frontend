@@ -23,7 +23,10 @@ import 'package:neostation/widgets/restart_required_dialog.dart';
 import 'package:neostation/widgets/tv_directory_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'settings_title.dart';
+import 'widgets/settings_section_header.dart';
+import 'widgets/settings_action_button.dart';
 
 class DirectoriesSettingsContent extends StatefulWidget {
   final bool isContentFocused;
@@ -43,6 +46,19 @@ class DirectoriesSettingsContent extends StatefulWidget {
 class DirectoriesSettingsContentState
     extends State<DirectoriesSettingsContent> {
   final ScrollController _scrollController = ScrollController();
+  final AdaptiveScroller _scroller = AdaptiveScroller();
+
+  /// GlobalKeys for the navigable rows, used to keep the focused row visible
+  /// during gamepad navigation.
+  final List<GlobalKey> _itemKeys = [];
+
+  /// Grows [_itemKeys] to cover the current navigable-item count.
+  void _ensureKeys(int count) {
+    while (_itemKeys.length < count) {
+      _itemKeys.add(GlobalKey());
+    }
+  }
+
   List<String> _currentRomFolders = [];
   String? _currentUserDataPath;
   bool _isLoading = true;
@@ -77,18 +93,15 @@ class DirectoriesSettingsContentState
   }
 
   void scrollToIndex(int index) {
-    if (!_scrollController.hasClients) return;
-    // The visual list interleaves section-header rows among the nav items
-    // ("ROM Directories" before nav 2, "ES-DE Import" before _esdeSectionStart),
-    // so a nav item's on-screen row is offset by the headers that precede it.
-    var headersBefore = 0;
-    if (index >= 2) headersBefore++;
-    if (_esdeSectionStart >= 0 && index >= _esdeSectionStart) headersBefore++;
-    _scrollController.animateTo(
-      (index + headersBefore) * 60.h,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-    );
+    // Use the focused row's own key so scrolling tracks its real height —
+    // section headers and path-chip cards aren't a uniform height, so a
+    // fixed per-row estimate drifts and overshoots as the list scrolls.
+    if (index >= 0 && index < _itemKeys.length) {
+      final ctx = _itemKeys[index].currentContext;
+      if (ctx != null) {
+        _scroller.ensureVisible(ctx);
+      }
+    }
   }
 
   void _buildDirectoryItems() {
@@ -785,60 +798,6 @@ class DirectoriesSettingsContentState
     );
   }
 
-  Widget _buildSectionHeader(ThemeData theme, String label) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8.r, top: 4.r, left: 2.r),
-      child: Row(
-        children: [
-          Container(
-            width: 3.r,
-            height: 14.r,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(2.r),
-            ),
-          ),
-          SizedBox(width: 8.r),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.r,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(
-    ThemeData theme,
-    bool isSelected,
-    IconData icon, {
-    bool isDestructive = false,
-  }) {
-    final color = isDestructive
-        ? theme.colorScheme.error
-        : theme.colorScheme.primary;
-    return Container(
-      padding: EdgeInsets.all(4.r),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isSelected ? 1.0 : 0.8),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.3),
-            blurRadius: 4.r,
-            offset: Offset(0, 2.r),
-          ),
-        ],
-      ),
-      child: Icon(icon, color: theme.colorScheme.onPrimary, size: 16.r),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -893,6 +852,7 @@ class DirectoriesSettingsContentState
                     }
                     visualRows.add({'nav': i});
                   }
+                  _ensureKeys(_directoryItems.length);
 
                   return ListView.builder(
                     controller: _scrollController,
@@ -901,9 +861,8 @@ class DirectoriesSettingsContentState
                     itemBuilder: (context, visualIndex) {
                       final row = visualRows[visualIndex];
                       if (row.containsKey('header')) {
-                        return _buildSectionHeader(
-                          theme,
-                          row['header'] as String,
+                        return SettingsSectionHeader(
+                          label: row['header'] as String,
                         );
                       }
 
@@ -925,6 +884,7 @@ class DirectoriesSettingsContentState
                           : theme.colorScheme.outline.withValues(alpha: 0);
 
                       return Opacity(
+                        key: _itemKeys[navIndex],
                         opacity: isEsdeDisabled ? 0.4 : 1.0,
                         child: Container(
                           decoration: BoxDecoration(
@@ -1035,49 +995,42 @@ class DirectoriesSettingsContentState
                                         ),
                                       ),
                                       if (isRemoveItem)
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.delete_outline_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.delete_outline_rounded,
+                                          selected: isSelected,
                                           isDestructive: true,
                                         )
                                       else if (item['action'] == 'add_rom')
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.add_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.add_rounded,
+                                          selected: isSelected,
                                         )
                                       else if (item['action'] == 'rescan')
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.refresh_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.refresh_rounded,
+                                          selected: isSelected,
                                         )
                                       else if (isUserData)
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.edit_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.edit_rounded,
+                                          selected: isSelected,
                                         )
                                       else if (item['action'] ==
                                           'esde_select_folder')
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.folder_special_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.folder_special_rounded,
+                                          selected: isSelected,
                                         )
                                       else if (item['action'] ==
                                           'esde_run_import')
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.download_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.download_rounded,
+                                          selected: isSelected,
                                         )
                                       else if (item['action'] == 'esde_reset')
-                                        _buildActionButton(
-                                          theme,
-                                          isSelected,
-                                          Symbols.restart_alt_rounded,
+                                        SettingsActionButton(
+                                          icon: Symbols.restart_alt_rounded,
+                                          selected: isSelected,
                                           isDestructive: true,
                                         ),
                                     ],

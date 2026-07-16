@@ -118,7 +118,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.nowPlayingDimNever: 'Nunca',
   AppLocale.nowPlayingDockEnabled: 'Dock de apps',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Mostrar o dock de apps no painel Now Playing secundário',
+      'Mostrar o dock de apps na tela secundária',
   AppLocale.nowPlayingDockSlots: 'Slots do dock',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Quantos slots de apps o dock mostra (1-5)',
@@ -907,4 +907,24 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoritos / estatísticas atualizados',
   AppLocale.esdeSummaryGames: 'jogos',
   AppLocale.esdeSummarySystems: 'sistemas',
+  AppLocale.wizardScanComplete: 'Análise concluída',
+  AppLocale.wizardTapNextToContinue: 'Toque em Avançar para continuar',
+  AppLocale.wizardEsdeStepTitle: 'Importar do ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      'Já usa o ES-DE? Importe os metadados e as artes dos seus jogos. '
+      'Selecione a pasta principal do ES-DE que contém suas pastas "gamelists" '
+      'e "downloaded_media". Opcional; você pode fazer isso mais tarde nas '
+      'Configurações.',
+  AppLocale.wizardArtPackTitle: 'Obtenha o pacote de arte da NeoStation',
+  AppLocale.wizardArtPackDesc:
+      'Recomendamos fortemente baixar o pacote de arte de sistemas da NeoStation '
+      'para ter belos planos de fundo de console em toda a sua biblioteca. Pode '
+      'ser alterado mais tarde nas Configurações.',
+  AppLocale.wizardDownloadArtPack: 'Baixar pacote de arte',
+  AppLocale.wizardArtPackInstalled:
+      'Pacote de arte instalado! Você pode explorar mais temas mais tarde nas '
+      'Configurações.',
+  AppLocale.wizardArtPackUnavailable:
+      'Não foi possível acessar o pacote de arte agora. Você pode instalá-lo '
+      'mais tarde nas Configurações quando estiver online.',
 };

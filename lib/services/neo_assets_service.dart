@@ -28,12 +28,19 @@ class ThemeDownloadPlan {
   /// Full metadata retrieved from the remote theme configuration.
   final Map<String, dynamic>? remoteMetadata;
 
+  /// The system folders whose backgrounds this theme actually provides,
+  /// intersected with the user's systems. When the theme declares a `systems`
+  /// list in `theme.json` this excludes uncovered systems entirely (no 404
+  /// probes); otherwise it falls back to all of the user's systems.
+  final List<String> systemsToDownload;
+
   const ThemeDownloadPlan({
     required this.forceRedownload,
     required this.totalAssetsToDownload,
     required this.localVersion,
     required this.remoteVersion,
     required this.remoteMetadata,
+    required this.systemsToDownload,
   });
 }
 
@@ -147,6 +154,40 @@ class NeoAssetsTheme {
       '.webp',
     );
     return uri.replace(path: newPath).toString();
+  }
+
+  /// Public preview-URL normalizer shared by the UIs (system-art settings grid
+  /// and the setup wizard) so they render the exact same image. Handles legacy
+  /// embedded-GitHub URLs, GitHub blob→raw translation, and WebP conversion.
+  static String normalizePreviewUrl(String value) {
+    var url = value.trim();
+    if (url.isEmpty) return '';
+
+    // Legacy malformed URLs like:
+    // https://raw.../https://github.com/owner/repo/blob/main/file.webp
+    final embeddedGithub = RegExp(
+      r'https?://github\.com/[^\s]+',
+    ).firstMatch(url);
+    if (embeddedGithub != null) {
+      url = embeddedGithub.group(0)!;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return url;
+
+    if (uri.host == 'github.com' &&
+        uri.pathSegments.length >= 5 &&
+        uri.pathSegments[2] == 'blob') {
+      final owner = uri.pathSegments[0];
+      final repo = uri.pathSegments[1];
+      final branch = uri.pathSegments[3];
+      final filePath = uri.pathSegments.sublist(4).join('/');
+      return _forceWebpPreviewUrl(
+        'https://raw.githubusercontent.com/$owner/$repo/$branch/$filePath',
+      );
+    }
+
+    return _forceWebpPreviewUrl(url);
   }
 }
 
@@ -390,13 +431,84 @@ class NeoAssetsService {
   ) async {
     int missing = 0;
     for (final system in systemFolderNames) {
-      final bgWebp = await backgroundCachePath(themeFolder, system);
-      final bgGif = await backgroundCachePath(themeFolder, system, ext: 'gif');
-      if (!await File(bgWebp).exists() && !await File(bgGif).exists()) {
+      if (!await _backgroundResolvedOrKnownMissing(themeFolder, system)) {
         missing++;
       }
     }
     return missing;
+  }
+
+  /// Local path of the negative-cache marker for a system whose background is
+  /// not provided by the theme. Lives inside the theme's `backgrounds/` dir so
+  /// it is wiped by [clearThemeCache] on a version bump, re-enabling probing.
+  static Future<String> _backgroundMissingMarkerPath(
+    String themeFolder,
+    String systemFolderName,
+  ) async {
+    final dir = await _cacheDir();
+    return path.join(
+      dir,
+      themeFolder,
+      'backgrounds',
+      '$systemFolderName.missing',
+    );
+  }
+
+  /// True when a system's background is cached (.webp/.gif) OR is known to be
+  /// absent from the theme (a `.missing` marker exists). Prevents re-probing
+  /// systems the pack simply does not cover on every re-selection.
+  static Future<bool> _backgroundResolvedOrKnownMissing(
+    String themeFolder,
+    String systemFolderName,
+  ) async {
+    final bgWebp = await backgroundCachePath(themeFolder, systemFolderName);
+    final bgGif = await backgroundCachePath(
+      themeFolder,
+      systemFolderName,
+      ext: 'gif',
+    );
+    final marker = await _backgroundMissingMarkerPath(
+      themeFolder,
+      systemFolderName,
+    );
+    return await File(bgWebp).exists() ||
+        await File(bgGif).exists() ||
+        await File(marker).exists();
+  }
+
+  /// Records that a system's background is absent from the theme so it is not
+  /// re-downloaded on subsequent selections (cleared on version bump).
+  static Future<void> _writeMissingMarker(
+    String themeFolder,
+    String systemFolderName,
+  ) async {
+    try {
+      final marker = File(
+        await _backgroundMissingMarkerPath(themeFolder, systemFolderName),
+      );
+      await marker.parent.create(recursive: true);
+      await marker.writeAsString('');
+    } catch (e) {
+      _log.w(
+        'Error writing missing marker for "$themeFolder/$systemFolderName": $e',
+      );
+    }
+  }
+
+  /// Resolves which of the user's systems this theme actually covers.
+  ///
+  /// When `theme.json` declares a `systems` list, returns the intersection with
+  /// the user's systems so uncovered systems are never probed (no 404s). When
+  /// the list is absent (older themes / offline metadata), returns all of the
+  /// user's systems and relies on the `.missing` negative-cache fallback.
+  static List<String> _resolveCoveredSystems(
+    Map<String, dynamic>? remoteMetadata,
+    List<String> systemFolderNames,
+  ) {
+    final declared = remoteMetadata?['systems'];
+    if (declared is! List) return systemFolderNames;
+    final covered = declared.map((e) => e.toString()).toSet();
+    return systemFolderNames.where(covered.contains).toList();
   }
 
   /// Compares local and remote versions to build a prioritized download plan.
@@ -408,6 +520,11 @@ class NeoAssetsService {
     final localVersion = await readLocalThemeVersion(themeFolder);
     final remoteVersion = remoteMetadata?['version']?.toString();
 
+    final coveredSystems = _resolveCoveredSystems(
+      remoteMetadata,
+      systemFolderNames,
+    );
+
     final forceRedownload =
         localVersion != null &&
         remoteVersion != null &&
@@ -416,8 +533,16 @@ class NeoAssetsService {
         localVersion != remoteVersion;
 
     final totalAssetsToDownload = forceRedownload
-        ? systemFolderNames.length
-        : await countMissingThemeAssets(themeFolder, systemFolderNames);
+        ? coveredSystems.length
+        : await countMissingThemeAssets(themeFolder, coveredSystems);
+
+    _log.i(
+      'buildThemeDownloadPlan[$themeFolder]: '
+      'localVersion=$localVersion remoteVersion=$remoteVersion '
+      'forceRedownload=$forceRedownload '
+      'covered=${coveredSystems.length}/${systemFolderNames.length} '
+      'missing=$totalAssetsToDownload',
+    );
 
     return ThemeDownloadPlan(
       forceRedownload: forceRedownload,
@@ -425,6 +550,7 @@ class NeoAssetsService {
       localVersion: localVersion,
       remoteVersion: remoteVersion,
       remoteMetadata: remoteMetadata,
+      systemsToDownload: coveredSystems,
     );
   }
 
@@ -448,6 +574,9 @@ class NeoAssetsService {
     result = await downloadAndCacheAsset(gifUrl, gifPath);
     if (result != null) return result;
 
+    // Neither format exists remotely: record a negative-cache marker so this
+    // system is not re-probed on every re-selection of the theme.
+    await _writeMissingMarker(themeFolder, systemFolderName);
     return null;
   }
 
@@ -459,6 +588,41 @@ class NeoAssetsService {
     final localPath = await logoCachePath(themeFolder, systemFolderName);
     final url = getLogoUrl(themeFolder, systemFolderName);
     return downloadAndCacheAsset(url, localPath);
+  }
+
+  /// Max background downloads in flight at once. Theme assets are small,
+  /// independent HTTP GETs, so a bounded pool cuts wall-clock time roughly
+  /// linearly without overwhelming the network or the host.
+  static const int _downloadConcurrency = 8;
+
+  /// Runs [task] over [items] with at most [concurrency] tasks in flight,
+  /// invoking [onEach] after each completion (for progress). A single failing
+  /// task never aborts the batch. Safe on Dart's single-threaded event loop:
+  /// the `next++` cursor and progress counter are only touched synchronously.
+  static Future<void> _runBounded<T>(
+    List<T> items,
+    int concurrency,
+    Future<void> Function(T item) task, {
+    void Function()? onEach,
+  }) async {
+    if (items.isEmpty) return;
+    int next = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final i = next++;
+        if (i >= items.length) return;
+        try {
+          await task(items[i]);
+        } catch (e) {
+          _log.w('Bounded task failed for item ${items[i]}: $e');
+        }
+        onEach?.call();
+      }
+    }
+
+    final workerCount = concurrency < items.length ? concurrency : items.length;
+    await Future.wait(List.generate(workerCount, (_) => worker()));
   }
 
   /// Downloads all background and logo assets for a theme, optionally
@@ -475,11 +639,12 @@ class NeoAssetsService {
 
     final total = systemFolderNames.length;
     int done = 0;
-    for (final system in systemFolderNames) {
-      await getCachedBackground(themeFolder, system);
-      done++;
-      onProgress?.call(done, total);
-    }
+    await _runBounded<String>(
+      systemFolderNames,
+      _downloadConcurrency,
+      (system) => getCachedBackground(themeFolder, system),
+      onEach: () => onProgress?.call(++done, total),
+    );
   }
 
   /// Downloads only the missing background and logo assets for a theme.
@@ -491,21 +656,23 @@ class NeoAssetsService {
   }) async {
     if (missingTotal <= 0) return;
 
-    int done = 0;
+    // Skip systems already cached or known to be absent from the theme.
+    final pending = <String>[];
     for (final system in systemFolderNames) {
-      final bgWebp = await backgroundCachePath(themeFolder, system);
-      final bgGif = await backgroundCachePath(themeFolder, system, ext: 'gif');
-      if (!await File(bgWebp).exists() && !await File(bgGif).exists()) {
-        final bgUrl = getBackgroundUrl(themeFolder, system);
-        var result = await downloadAndCacheAsset(bgUrl, bgWebp);
-        if (result == null) {
-          final gifUrl = getBackgroundUrl(themeFolder, system, ext: 'gif');
-          await downloadAndCacheAsset(gifUrl, bgGif);
-        }
-        done++;
-        onProgress?.call(done, missingTotal);
+      if (!await _backgroundResolvedOrKnownMissing(themeFolder, system)) {
+        pending.add(system);
       }
     }
+
+    int done = 0;
+    // getCachedBackground tries .webp then .gif and records a negative-cache
+    // marker when neither exists remotely.
+    await _runBounded<String>(
+      pending,
+      _downloadConcurrency,
+      (system) => getCachedBackground(themeFolder, system),
+      onEach: () => onProgress?.call(++done, missingTotal),
+    );
   }
 
   /// Deletes all cached assets for a specific theme folder.

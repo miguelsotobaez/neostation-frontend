@@ -98,6 +98,11 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
         dockApps: _config.dockApps,
         dockEnabled: _config.dockEnabled,
         dockSlotCount: _config.dockSlotCount,
+        // If the main UI is already up (e.g. a display hot-connected after
+        // launch), carry the ready latch so the dock slides in on connect;
+        // during cold boot this is still false and the dock stays parked until
+        // [markAppReady] fires at first frame.
+        appReady: _appReady,
       );
       // ignore: unawaited_futures
       refreshSecondaryScreenshotAccess();
@@ -105,6 +110,39 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
       _secondaryDisplayState!.updateState(isSecondaryActive: false);
     }
     _notify();
+  }
+
+  /// Latches the main UI as ready and pushes it to the secondary display so the
+  /// app dock slides up into place. Called once, from the main screen's first
+  /// post-frame callback. Idempotent — safe to call more than once.
+  ///
+  /// Fires at first frame, which is *before* the provider's async init assigns
+  /// [_secondaryDisplayState] and seeds the shared state, so it can't rely on
+  /// that field. It pushes through [SecondaryDisplayState.instance] directly,
+  /// after [initialSync] so it doesn't race retained-state restoration; the
+  /// copyWith-based [updateState] merges, flipping only `appReady`. Every later
+  /// push copyWith's from this local state, so the latch persists.
+  void markAppReady() {
+    if (_appReady) return;
+    _appReady = true;
+    if (!Platform.isAndroid) return;
+    final state = SecondaryDisplayState.instance;
+    unawaited(() async {
+      // Only await initialSync when the sync is still pending. When the singleton
+      // was constructed *after* the shared-state cache was already populated (the
+      // secondary engine broadcasts its startup state before the main engine
+      // first touches the singleton), sub_screen takes its cached-construction
+      // path and leaves `initialSync` (a `late final`) UNASSIGNED — a bare
+      // `await state.initialSync` then throws LateInitializationError, which the
+      // unawaited wrapper swallows, so `appReady` never propagates and the dock
+      // never slides in. A non-null value means that cached path was taken (sync
+      // already done), so skip the await. Mirrors the same guard in
+      // SqliteConfigProvider's init (see `value == null` check there).
+      if (state.value == null) {
+        await state.initialSync;
+      }
+      await state.updateState(appReady: true);
+    }());
   }
 
   void _onSecondaryStateChanged() {
@@ -126,6 +164,15 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
         // engine (the source of truth for SQLite).
         // ignore: unawaited_futures
         updateDockApps(state.dockApps);
+      } else if (_initialized &&
+          !listEquals(state.dockApps, _config.dockApps)) {
+        // No edit trigger, yet the shared dockApps disagrees with the persisted
+        // layout — this is a stale echo from the secondary, whose snapshot
+        // synced before our boot seed and shipped the old (usually empty)
+        // dockApps back, clobbering it. The main engine owns dockApps outside
+        // of user edits, so re-assert the persisted layout. (Guarded on
+        // _initialized so we don't fight before the config has loaded.)
+        _secondaryDisplayState?.updateState(dockApps: _config.dockApps);
       }
     }
   }

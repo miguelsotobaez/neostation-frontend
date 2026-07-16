@@ -101,7 +101,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.nowPlayingDimDarknessSubtitle: '面板變暗時的暗度',
   AppLocale.nowPlayingDimNever: '從不',
   AppLocale.nowPlayingDockEnabled: '應用程式塢',
-  AppLocale.nowPlayingDockEnabledSubtitle: '在副螢幕的 Now Playing 面板上顯示應用程式塢',
+  AppLocale.nowPlayingDockEnabledSubtitle: '在副螢幕上顯示應用程式塢',
   AppLocale.nowPlayingDockSlots: '應用程式塢槽位',
   AppLocale.nowPlayingDockSlotsSubtitle: '應用程式塢顯示多少個應用程式槽位 (1-5)',
   AppLocale.nowPlayingFanartDim: '變暗同人圖',
@@ -808,4 +808,18 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.esdeSummaryStatsUpdated: '我的最愛 / 統計已更新',
   AppLocale.esdeSummaryGames: '遊戲',
   AppLocale.esdeSummarySystems: '系統',
+  AppLocale.wizardScanComplete: '掃描完成',
+  AppLocale.wizardTapNextToContinue: '點按「下一步」繼續',
+  AppLocale.wizardEsdeStepTitle: '從 ES-DE 匯入',
+  AppLocale.wizardEsdeStepDesc:
+      '已經在使用 ES-DE 了嗎？匯入你的遊戲中繼資料和圖片。選擇包含「gamelists」和'
+      '「downloaded_media」資料夾的 ES-DE 主資料夾。選用；你可以稍後在「設定」中執行。',
+  AppLocale.wizardArtPackTitle: '取得 NeoStation 美術包',
+  AppLocale.wizardArtPackDesc:
+      '我們強烈建議下載 NeoStation 系統美術包，為你的整個遊戲庫帶來精美的'
+      '主機背景。之後可在「設定」中變更。',
+  AppLocale.wizardDownloadArtPack: '下載美術包',
+  AppLocale.wizardArtPackInstalled: '美術包已安裝！你之後可以在「設定」中探索更多主題。',
+  AppLocale.wizardArtPackUnavailable:
+      '目前無法存取美術包。連上網路後，你可以稍後在「設定」中安裝它。',
 };

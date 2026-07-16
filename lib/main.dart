@@ -449,6 +449,12 @@ class _MyAppState extends State<MyApp> {
     FlutterLocalization.instance.onTranslatedLanguage = (Locale? locale) {
       if (mounted) setState(() => _locale = locale);
     };
+    // Once the main UI has painted its first frame, tell the secondary display
+    // the app is ready so it can slide the app dock into place (rather than
+    // showing it fully-formed while the app is still cold-starting).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.sqliteConfigProvider.markAppReady();
+    });
   }
 
   @override
@@ -477,6 +483,14 @@ class _MyAppState extends State<MyApp> {
         ),
         ChangeNotifierProvider(create: (context) => SystemBackgroundProvider()),
         ChangeNotifierProvider(
+          // Eager: the theme manifest is a network fetch, and during first-run
+          // setup the wizard's art-pack step is the ONLY consumer of this
+          // provider. A lazy create would not start loadThemes() until that
+          // final step renders, leaving `themes` empty if the user advances
+          // before the fetch resolves — the art pack then silently fails to
+          // apply. Starting at launch gives the fetch the whole wizard to
+          // complete.
+          lazy: false,
           create: (context) => NeoAssetsProvider()..init(),
         ),
       ],

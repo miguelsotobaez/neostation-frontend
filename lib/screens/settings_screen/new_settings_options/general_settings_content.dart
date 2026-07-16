@@ -15,6 +15,7 @@ import '../../../providers/sqlite_config_provider.dart';
 import '../../../widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
 import 'widgets/setting_row.dart';
+import 'widgets/setting_value_chip.dart';
 import 'widgets/language_picker_overlay.dart';
 import '../../../services/permission_service.dart';
 
@@ -314,17 +315,21 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     final config = provider.config;
     int currentItemIdx = 0;
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      physics: const ClampingScrollPhysics(),
-      padding: EdgeInsets.only(bottom: 24.r),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SettingsTitle(title: AppLocale.generalSettings.getString(context)),
-          SizedBox(height: 12.r),
-
-          // Setting: Scan on Startup.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Pinned header — stays put while the settings list scrolls beneath it.
+        SettingsTitle(title: AppLocale.generalSettings.getString(context)),
+        SizedBox(height: 12.r),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.only(bottom: 24.r),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Setting: Scan on Startup.
           () {
             final index = currentItemIdx++;
             return SettingRow(
@@ -472,39 +477,11 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
               subtitle: AppLocale.languageSub.getString(context),
               trailing: GestureDetector(
                 onTap: () => _showLanguagePicker(context, _itemKeys[index]),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 10.r,
-                    vertical: 6.r,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6.r),
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.4),
-                      width: 0.5.r,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        AppLocale.supportedLanguages[config.appLanguage] ??
-                            config.appLanguage,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontSize: 9.r,
-                          fontWeight: FontWeight.w400,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                      SizedBox(width: 2.r),
-                      Icon(
-                        Symbols.arrow_drop_down_rounded,
-                        size: 14.r,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ],
-                  ),
+                child: SettingValueChip(
+                  text:
+                      AppLocale.supportedLanguages[config.appLanguage] ??
+                      config.appLanguage,
+                  trailingIcon: Symbols.arrow_drop_down_rounded,
                 ),
               ),
             );
@@ -538,79 +515,44 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
             SizedBox(height: 12.r),
             () {
               final index = currentItemIdx++;
-              return Container(
+              return SettingRow(
                 key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                focused:
+                    widget.isContentFocused &&
+                    widget.selectedContentIndex == index,
+                title: AppLocale.allFilesAccess.getString(context),
+                subtitle: '',
+                subtitleWidget: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.allFilesAccess.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            provider.hasAllFilesAccess
-                                ? AppLocale.permissionGranted.getString(context)
-                                : AppLocale.permissionDisabled.getString(
-                                    context,
-                                  ),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              fontWeight: FontWeight.bold,
-                              color: provider.hasAllFilesAccess
-                                  ? Colors.green
-                                  : Colors.red,
-                            ),
-                          ),
-                          SizedBox(height: 2.r),
-                          Text(
-                            AppLocale.allFilesAccessSubtitle.getString(context),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 8.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      provider.hasAllFilesAccess
+                          ? AppLocale.permissionGranted.getString(context)
+                          : AppLocale.permissionDisabled.getString(context),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontSize: 9.r,
+                        fontWeight: FontWeight.bold,
+                        color: provider.hasAllFilesAccess
+                            ? Colors.green
+                            : Colors.red,
                       ),
                     ),
-                    CustomToggleSwitch(
-                      value: provider.hasAllFilesAccess,
-                      onChanged: (value) => _handlePermissionToggle(provider),
-                      activeColor: theme.colorScheme.primary,
+                    SizedBox(height: 2.r),
+                    Text(
+                      AppLocale.allFilesAccessSubtitle.getString(context),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontSize: 8.r,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
                     ),
                   ],
+                ),
+                trailing: CustomToggleSwitch(
+                  value: provider.hasAllFilesAccess,
+                  onChanged: (value) => _handlePermissionToggle(provider),
+                  activeColor: theme.colorScheme.primary,
                 ),
               );
             }(),
@@ -689,7 +631,10 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
             }(),
           ],
         ],
+          ),
+        ),
       ),
+      ],
     );
   }
 
