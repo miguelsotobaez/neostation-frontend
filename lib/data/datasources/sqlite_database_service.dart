@@ -457,13 +457,17 @@ class SqliteDatabaseService {
     if (isSwitch) await SwitchTitleExtractor.loadKeys();
 
     await db.transaction((txn) async {
+      // app_emulator_unique_id/os_id are left NULL = "inherit the system
+      // default", resolved live at launch. Do NOT freeze the default here:
+      // stamping it made per-game settings stale/"whack-a-mole" and bypassed
+      // the installed-aware default resolution at launch.
       const sql = '''
         INSERT INTO user_roms
         (app_system_id, app_emulator_unique_id, app_emulator_os_id, filename, rom_path, title_id, title_name, created_at)
         VALUES (
           ?,
-          (SELECT e.unique_identifier FROM app_emulators e WHERE e.system_id = ? AND e.os_id = 1 AND e.is_default = 1 LIMIT 1),
-          (SELECT e.os_id FROM app_emulators e WHERE e.system_id = ? AND e.os_id = 1 AND e.is_default = 1 LIMIT 1),
+          NULL,
+          NULL,
           ?, ?, ?, ?, datetime('now')
         )
         ON CONFLICT(rom_path) DO UPDATE SET
@@ -551,8 +555,6 @@ class SqliteDatabaseService {
         }
 
         batch.rawInsert(sql, [
-          systemId,
-          systemId,
           systemId,
           entry.filename,
           entry.path,

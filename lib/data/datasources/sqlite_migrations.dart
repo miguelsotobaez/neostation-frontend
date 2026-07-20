@@ -309,6 +309,9 @@ class SqliteMigrations {
       case 101:
         await _migrateToVersion101(db);
         break;
+      case 102:
+        await _migrateToVersion102(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4874,6 +4877,53 @@ class SqliteMigrations {
       _log.i('Migration v101 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v101: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v102: Reclaim inherited emulator stamps on [user_roms].
+  ///
+  /// The live ROM-scan path froze the *system default* emulator into
+  /// `user_roms.app_emulator_unique_id` at insert time, making an inherited
+  /// default indistinguishable from a deliberate per-game override. The per-game
+  /// column now means "explicit override, or NULL = inherit the system default"
+  /// (resolved live at launch). This backfill NULLs the rows that merely carry
+  /// the auto-stamped default so they re-inherit, leaving genuine per-game
+  /// overrides (a *different* emulator) untouched.
+  ///
+  /// We reclaim ONLY rows whose emulator equals the system's app-provided
+  /// default core (`app_emulators.is_default = 1`). That is the exact — and
+  /// only — value the batch scan-insert ever auto-stamped (it selected the
+  /// `is_default` core at `os_id = 1`). We deliberately do NOT reclaim rows
+  /// matching the user's `is_user_default` standalone: nothing auto-stamps a
+  /// standalone into user_roms, so such a row can only be a deliberate pin —
+  /// nulling it would destroy a genuine choice.
+  ///
+  /// Residual (irreducible) edge: a user who deliberately pinned a game to the
+  /// emulator that *is* the system default core is indistinguishable from an
+  /// inherited stamp and will be reclaimed to "inherit". This is benign and
+  /// recoverable (it re-inherits the same emulator, and can be re-pinned in the
+  /// per-game emulator tab in two taps).
+  static Future<void> _migrateToVersion102(Database db) async {
+    _log.i('Migration v102: Reclaiming inherited emulator stamps on user_roms');
+    try {
+      db.execute('''
+        UPDATE user_roms
+        SET app_emulator_unique_id = NULL, app_emulator_os_id = NULL
+        WHERE app_emulator_unique_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM app_emulators e
+            WHERE e.system_id = user_roms.app_system_id
+              AND e.unique_identifier = user_roms.app_emulator_unique_id
+              AND e.os_id = user_roms.app_emulator_os_id
+              AND e.is_default = 1
+          )
+      ''');
+
+      _log.i('Migration v102 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v102: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

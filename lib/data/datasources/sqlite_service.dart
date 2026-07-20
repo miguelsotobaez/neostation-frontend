@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 101;
+  static const int _databaseVersion = 102;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -3626,13 +3626,16 @@ class SqliteService {
   }
 
   /// Retrieves the effective default emulator for a system, respecting user overrides.
-  static Future<CoreEmulatorModel?> getDefaultEmulatorForSystem(
+  /// Returns the emulator the *user* explicitly set as default for [systemId]
+  /// (`is_user_default = 1`), or null if the user hasn't chosen one. Callers use
+  /// this to honor an explicit user choice before applying any auto-selection
+  /// heuristics.
+  static Future<CoreEmulatorModel?> getUserDefaultEmulatorForSystem(
     String systemId,
   ) async {
     final db = await instance.database;
     final currentOs = getCurrentOs();
 
-    // 1. Check for user-selected standalone default.
     final userStandalone = await db.rawQuery(
       '''
       SELECT e.*, os.name as os_name, uc.emulator_path, uc.is_user_default
@@ -3647,6 +3650,20 @@ class SqliteService {
 
     if (userStandalone.isNotEmpty) {
       return CoreEmulatorModel.fromMap(userStandalone.first);
+    }
+    return null;
+  }
+
+  static Future<CoreEmulatorModel?> getDefaultEmulatorForSystem(
+    String systemId,
+  ) async {
+    final db = await instance.database;
+    final currentOs = getCurrentOs();
+
+    // 1. Check for user-selected standalone default.
+    final userDefault = await getUserDefaultEmulatorForSystem(systemId);
+    if (userDefault != null) {
+      return userDefault;
     }
 
     // 2. Fallback to system-provided default (usually a core).
@@ -4033,12 +4050,32 @@ class SqliteService {
   }) async {
     final db = await instance.database;
     final system = await getSystemByFolderName(systemFolderName);
-    final defaultEmu = await getDefaultEmulatorForSystem(system.id!);
+
+    // Per-game emulator is an OVERRIDE, not an inherited default: leave it NULL
+    // (= "inherit the system default", resolved live at launch) unless the
+    // caller passes an explicit choice. Freezing the default here is what made
+    // per-game settings "whack-a-mole" (stale/uninstalled emulators). We only
+    // store a concrete id when we can also resolve its os_id, so the composite
+    // FK (app_emulator_os_id, app_emulator_unique_id) stays valid.
+    String? emulatorUniqueId;
+    int? emulatorOsId;
+    if (emulatorName != null && emulatorName.isNotEmpty) {
+      final osRow = await db.rawQuery(
+        'SELECT os_id FROM app_emulators '
+        'WHERE system_id = ? AND unique_identifier = ? '
+        'AND os_id = (SELECT id FROM app_os WHERE name = ?) LIMIT 1',
+        [system.id, emulatorName, getCurrentOs()],
+      );
+      if (osRow.isNotEmpty) {
+        emulatorUniqueId = emulatorName;
+        emulatorOsId = osRow.first['os_id'] as int?;
+      }
+    }
 
     await db.insert('user_roms', {
       'app_system_id': system.id,
-      'app_emulator_unique_id': defaultEmu?.uniqueId,
-      'app_emulator_os_id': defaultEmu?.osId,
+      'app_emulator_unique_id': emulatorUniqueId,
+      'app_emulator_os_id': emulatorOsId,
       'filename': filename,
       'rom_path': romPath,
       'ra_hash': raHash,

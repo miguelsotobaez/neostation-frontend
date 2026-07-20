@@ -27,11 +27,32 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
         if (e.androidPackageName != null && e.androidPackageName!.isNotEmpty) {
           try {
             const ch = MethodChannel('com.neogamelab.neostation/game');
-            final installed = await ch.invokeMethod<bool>(
-              'isPackageInstalled',
-              {'packageName': e.androidPackageName},
-            );
-            updated.add(e.copyWith(isInstalled: installed ?? false));
+            var installed =
+                await ch.invokeMethod<bool>('isPackageInstalled', {
+                  'packageName': e.androidPackageName,
+                }) ??
+                false;
+
+            // A RetroArch entry reports its *app* as installed even when the
+            // specific libretro core (.so) isn't present, which made uninstalled
+            // cores show "Ready" and get auto-selected → "Launch error" (#192).
+            // Verify the core file. Tri-state: null means we couldn't determine
+            // (RetroArch's cores dir is private and no root) → fail OPEN and leave
+            // the package-based result untouched.
+            if (installed &&
+                e.isRetroArch &&
+                e.coreFilename != null &&
+                e.coreFilename!.isNotEmpty) {
+              final coreInstalled = await ch.invokeMethod<bool>(
+                'isCoreInstalled',
+                {
+                  'packageName': e.androidPackageName,
+                  'coreFilename': e.coreFilename,
+                },
+              );
+              if (coreInstalled != null) installed = coreInstalled;
+            }
+            updated.add(e.copyWith(isInstalled: installed));
           } catch (_) {
             updated.add(e);
           }
@@ -41,11 +62,18 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
       }
       emulators = updated;
     } else {
-      // Desktop: RetroArch cores are considered installed when the global
-      // RetroArch executable has been detected/configured by the user.
+      // Desktop: a RetroArch core is only usable when its libretro core file
+      // actually exists — having the RetroArch executable configured is not
+      // enough (#192). Probe the cores dir next to the executable. If we can't
+      // locate a readable cores dir (layout varies by platform/install), fail
+      // OPEN and keep the executable-based assumption rather than hide a
+      // genuinely-installed core.
       final retroArchPath =
           await EmulatorRepository.getRetroArchExecutablePath();
       if (retroArchPath != null && retroArchPath.isNotEmpty) {
+        final coresDir = '${File(retroArchPath).parent.path}'
+            '${Platform.pathSeparator}cores';
+        final coresDirReadable = await Directory(coresDir).exists();
         final updated = <CoreEmulatorModel>[];
         for (final e in emulators) {
           final uid = e.uniqueId;
@@ -54,7 +82,13 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
               uid.contains('.ra32.') ||
               uid.contains('.ra64.');
           if (isRaCore && !e.isInstalled) {
-            updated.add(e.copyWith(isInstalled: true));
+            var installed = true; // fail-open default
+            if (coresDirReadable &&
+                e.coreFilename != null &&
+                e.coreFilename!.isNotEmpty) {
+              installed = await _desktopCoreExists(coresDir, e.coreFilename!);
+            }
+            updated.add(e.copyWith(isInstalled: installed));
           } else {
             updated.add(e);
           }
@@ -67,4 +101,33 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
     log.e('Emulator enumeration failed: $e');
     return [];
   }
+}
+
+/// Returns whether a libretro core exists in [coresDir] on a desktop host.
+///
+/// The DB [coreFilename] may carry the Android-style name (e.g.
+/// `ppsspp_libretro_android.so`), whereas desktop cores are named
+/// `<base>_libretro.{dll,so,dylib}`. We therefore strip the known libretro
+/// suffixes down to the base and probe each desktop extension, so a correct
+/// core install isn't missed due to a platform naming mismatch.
+Future<bool> _desktopCoreExists(String coresDir, String coreFilename) async {
+  const suffixes = [
+    '_libretro_android.so',
+    '_libretro.so',
+    '_libretro.dll',
+    '_libretro.dylib',
+  ];
+  var base = coreFilename;
+  for (final s in suffixes) {
+    if (base.endsWith(s)) {
+      base = base.substring(0, base.length - s.length);
+      break;
+    }
+  }
+  for (final ext in const ['_libretro.dll', '_libretro.so', '_libretro.dylib']) {
+    if (await File('$coresDir${Platform.pathSeparator}$base$ext').exists()) {
+      return true;
+    }
+  }
+  return false;
 }

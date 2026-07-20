@@ -265,6 +265,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     }
                 }
 
+                "isCoreInstalled" -> {
+                    val packageName = call.argument<String>("packageName")
+                    val coreFilename = call.argument<String>("coreFilename")
+                    if (packageName != null && coreFilename != null) {
+                        isCoreInstalled(packageName, coreFilename, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "packageName and coreFilename are required", null)
+                    }
+                }
+
                 "getInstalledApps" -> {
                     val includeSystemApps = call.argument<Boolean>("includeSystemApps") ?: false
                     getInstalledApps(includeSystemApps, result)
@@ -638,6 +648,61 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             result.success(false)
         } catch (e: Exception) {
             result.success(false)
+        }
+    }
+
+    /**
+     * Determines whether a specific RetroArch libretro core (.so) is actually present,
+     * as opposed to merely having the RetroArch app installed. RetroArch stores its
+     * cores in its own private data dir ({dataDir}/cores/), which this app's sandbox
+     * usually cannot read — so a plain File.exists() from here returns false even when
+     * the core IS installed. We therefore return a TRI-STATE:
+     *   true  = core file positively confirmed present
+     *   false = core file positively confirmed absent (cores dir was readable, or root)
+     *   null  = could not determine (dir unreadable and no root) → caller must fail OPEN
+     * This lets the Ready badge stay accurate where we can tell, without hiding genuinely
+     * installed cores on non-rooted devices. See issue #192.
+     */
+    private fun isCoreInstalled(retroArchPackage: String, coreFilename: String, result: MethodChannel.Result) {
+        try {
+            val coresDir = try {
+                val appInfo = packageManager.getApplicationInfo(retroArchPackage, 0)
+                "${appInfo.dataDir}/cores/"
+            } catch (e: Exception) {
+                "/data/user/0/$retroArchPackage/cores/"
+            }
+            // The DB stores core_filename as the bare base (e.g. "ppsspp"); the actual
+            // Android core is "<base>_libretro_android.so". Probe both the reconstructed
+            // name and the raw value in case a full filename was ever stored.
+            val base = coreFilename
+                .removeSuffix("_libretro_android.so")
+                .removeSuffix("_libretro.so")
+            val candidates = linkedSetOf(
+                "${base}_libretro_android.so",
+                coreFilename,
+            )
+
+            // 1. Direct filesystem check. Trustworthy only if we can actually read the
+            //    cores directory (usually we can't — it's RetroArch's private 0700 dir).
+            if (candidates.any { java.io.File(coresDir, it).exists() }) {
+                result.success(true)
+                return
+            }
+            val dir = java.io.File(coresDir)
+            if (dir.exists() && dir.canRead()) {
+                // Directory readable and none of the candidates were in it → absent.
+                result.success(false)
+                return
+            }
+
+            // 2. Directory unreadable from our sandbox (RetroArch's private 0700 dir).
+            //    We deliberately do NOT escalate to `su` here — requesting root would
+            //    pop a Superuser prompt on rooted devices at game-launch time. Report
+            //    unknown (null) → the caller fails open (treats the core as installed),
+            //    which matches non-rooted/production behavior.
+            result.success(null)
+        } catch (e: Exception) {
+            result.success(null)
         }
     }
 

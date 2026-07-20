@@ -80,6 +80,10 @@ class EmulatorRepository {
     String systemId,
   ) => SqliteService.getDefaultEmulatorForSystem(systemId);
 
+  static Future<CoreEmulatorModel?> getUserDefaultEmulatorForSystem(
+    String systemId,
+  ) => SqliteService.getUserDefaultEmulatorForSystem(systemId);
+
   static Future<List<String>> getAndroidRetroArchPackages() =>
       SqliteService.getAndroidRetroArchPackages();
 
