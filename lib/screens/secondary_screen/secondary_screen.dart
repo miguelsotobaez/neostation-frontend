@@ -39,6 +39,14 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// can't un-reveal the dock. See [_buildDockOverlay].
   bool _dockRevealed = false;
 
+  /// Failsafe that reveals the dock even if the `appReady` flag never arrives.
+  /// `appReady` is written by both engines and the secondary's own pushes can
+  /// clobber the main engine's `true` back to `false` before this engine ever
+  /// observes it (a slow fresh-install cold boot loses this race reliably),
+  /// leaving the dock parked off-screen forever. This timer guarantees the dock
+  /// still slides in shortly after the screen appears. See [_buildDockOverlay].
+  Timer? _dockRevealFallback;
+
   /// A BuildContext captured from *under* this screen's MaterialApp (and its
   /// Localizations). The _buildXxx helpers below run as methods on this State,
   /// so a bare `context` resolves to `this.context` — which sits ABOVE the
@@ -125,6 +133,15 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       // updateState fall back to the WELCOME default and clobber the real
       // retained display state, which then shows until the next push.
       _signalSecondaryActiveWhenSynced();
+      // Failsafe reveal: if `appReady` never lands (the cross-engine clobber
+      // described on [_dockRevealFallback]), slide the dock in anyway so it's
+      // never permanently stuck off-screen. The `appReady` path in
+      // [_buildDockOverlay] still wins the moment it arrives.
+      _dockRevealFallback = Timer(const Duration(seconds: 4), () {
+        if (mounted && !_dockRevealed) {
+          setState(() => _dockRevealed = true);
+        }
+      });
     }
   }
 
@@ -537,6 +554,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _celebrationTimer?.cancel();
     _playTimeTicker?.cancel();
     _dimTimer?.cancel();
+    _dockRevealFallback?.cancel();
     _stopVideo();
     super.dispose();
   }
@@ -1045,7 +1063,10 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     // mute/screenshot toggles) copyWith from a local snapshot that may still
     // carry appReady=false, so the incoming flag oscillates. Latch it locally on
     // first true and ignore later falses, so the dock slides up once and stays.
-    if (value.appReady) _dockRevealed = true;
+    if (value.appReady && !_dockRevealed) {
+      _dockRevealed = true;
+      _dockRevealFallback?.cancel();
+    }
     final raAvailable =
         value.showAchievementPanel && value.achievements != null;
     // Off the Now Playing page (achievements/comments) → hide the dock.
