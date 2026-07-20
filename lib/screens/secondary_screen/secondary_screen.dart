@@ -1434,9 +1434,14 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// the backdrop cancels; tapping an app assigns it.
   Widget _buildAppPickerOverlay() {
     return Positioned.fill(
+      // Opaque hit barrier (no onTap) so taps land on the grid/✕ only and never
+      // fall through to the dock beneath. Deliberately NOT tap-to-dismiss: this
+      // picker is fullscreen and fully opaque, so there's no "outside" to
+      // reveal, and the ~20px frame around the grid used to sit right under the
+      // bottom/edge icons — a near-miss reaching for an icon dismissed the whole
+      // drawer. Closing is explicit via the ✕ button.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _closeAppPicker,
         child: ColoredBox(
           // Fully opaque so the Now Playing screen behind is not visible while
           // choosing an app for a dock slot.
@@ -1459,11 +1464,19 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                       ),
                       const Spacer(),
                       GestureDetector(
+                        // Opaque + generous padding so the whole ~50px corner
+                        // region closes the picker, not just the 26px glyph.
+                        // (Now that the backdrop no longer dismisses, a near-miss
+                        // on the bare icon would otherwise do nothing.)
+                        behavior: HitTestBehavior.opaque,
                         onTap: _closeAppPicker,
-                        child: Icon(
-                          Symbols.close_rounded,
-                          color: Colors.white,
-                          size: 26.r,
+                        child: Padding(
+                          padding: EdgeInsets.all(12.r),
+                          child: Icon(
+                            Symbols.close_rounded,
+                            color: Colors.white,
+                            size: 26.r,
+                          ),
                         ),
                       ),
                     ],
