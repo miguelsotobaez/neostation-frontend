@@ -197,24 +197,56 @@ class NeoAssetsService {
   static List<NeoAssetsTheme>? _cachedThemes;
   static String? _cachedThemeDir;
 
-  /// Fetches the global manifest of available themes from the remote repository.
+  /// Fetches the global manifest of available themes.
+  ///
+  /// Tries the remote manifest first (caching it to disk on success), then
+  /// falls back to the last cached manifest when the network is unavailable.
+  /// The result is always floored with locally-downloaded theme folders so an
+  /// already-applied pack stays visible and selectable in the settings list
+  /// even offline — e.g. when NeoStation is the home launcher and cold-starts
+  /// at boot before wifi connects (the manifest fetch fails then, and without
+  /// this fallback the list collapses to just "None" while the theme is in
+  /// fact still applied and rendering from cache).
   static Future<List<NeoAssetsTheme>> fetchThemes() async {
     if (_cachedThemes != null) return _cachedThemes!;
 
+    final remote = await _fetchRemoteThemes();
+    if (remote != null) {
+      final merged = await _mergeWithLocalThemes(remote);
+      _cachedThemes = merged;
+      return merged;
+    }
+
+    // Offline: last cached manifest, floored by locally downloaded themes.
+    final fallback = await _mergeWithLocalThemes(await _readCachedManifest());
+    if (fallback.isNotEmpty) {
+      _log.i('Themes: offline fallback served ${fallback.length} theme(s)');
+      _cachedThemes = fallback;
+      return fallback;
+    }
+    return [];
+  }
+
+  /// Fetches and enriches the remote theme manifest, persisting it to disk for
+  /// offline reuse. Returns null on any network failure so callers can fall
+  /// back to the on-disk copy.
+  static Future<List<NeoAssetsTheme>?> _fetchRemoteThemes() async {
     try {
       final response = await http.get(Uri.parse(_manifestUrl));
       if (response.statusCode != 200) {
         _log.w(
           'Failed to fetch neostation-assets manifest: ${response.statusCode}',
         );
-        return [];
+        return null;
       }
       final json = jsonDecode(response.body) as Map<String, dynamic>;
+      // Persist the raw manifest so the theme list survives offline boots.
+      await _writeCachedManifest(response.body);
       final baseList = (json['themes'] as List? ?? [])
           .cast<Map<String, dynamic>>()
           .map(NeoAssetsTheme.fromJson)
           .toList();
-      final list = await Future.wait(
+      return Future.wait(
         baseList.map((theme) async {
           final metadata = await _fetchThemeMetadata(theme.folder);
           if (metadata == null) return theme;
@@ -223,12 +255,96 @@ class NeoAssetsService {
           return theme.copyWith(isAi: metadataAi);
         }),
       );
-      _cachedThemes = list;
-      return list;
     } catch (e) {
       _log.e('Error fetching themes: $e');
+      return null;
+    }
+  }
+
+  /// On-disk path of the cached global manifest.
+  static Future<String> _manifestCachePath() async {
+    return path.join(await _cacheDir(), 'manifest.json');
+  }
+
+  /// Persists the raw manifest JSON body to the theme cache directory.
+  static Future<void> _writeCachedManifest(String body) async {
+    try {
+      final file = File(await _manifestCachePath());
+      await file.parent.create(recursive: true);
+      await file.writeAsString(body);
+    } catch (e) {
+      _log.w('Error caching manifest: $e');
+    }
+  }
+
+  /// Reads the last successfully-fetched manifest from disk. Empty if none.
+  static Future<List<NeoAssetsTheme>> _readCachedManifest() async {
+    try {
+      final file = File(await _manifestCachePath());
+      if (!await file.exists()) return [];
+      final json = jsonDecode(await file.readAsString());
+      if (json is! Map<String, dynamic>) return [];
+      return (json['themes'] as List? ?? [])
+          .cast<Map<String, dynamic>>()
+          .map(NeoAssetsTheme.fromJson)
+          .toList();
+    } catch (e) {
+      _log.w('Error reading cached manifest: $e');
       return [];
     }
+  }
+
+  /// Builds theme entries from locally-downloaded theme folders (each carries a
+  /// `theme.json`). Guarantees an applied pack appears even if it is absent
+  /// from the cached manifest. Preview URLs are empty (previews are not cached),
+  /// so tiles render with a placeholder — the point is selectability.
+  static Future<List<NeoAssetsTheme>> _localThemes() async {
+    try {
+      final dir = Directory(await _cacheDir());
+      if (!await dir.exists()) return [];
+      final result = <NeoAssetsTheme>[];
+      await for (final entry in dir.list()) {
+        if (entry is! Directory) continue;
+        final folder = path.basename(entry.path);
+        final metaFile = File(path.join(entry.path, 'theme.json'));
+        if (!await metaFile.exists()) continue;
+        try {
+          final json = jsonDecode(await metaFile.readAsString());
+          if (json is! Map<String, dynamic>) continue;
+          final name = json['name']?.toString();
+          result.add(
+            NeoAssetsTheme(
+              name: (name == null || name.isEmpty) ? folder : name,
+              folder: folder,
+              previewUrl: '',
+              previewSource: '',
+              isAi: NeoAssetsTheme._parseAi(json['ai']),
+            ),
+          );
+        } catch (_) {
+          // Skip an unreadable theme.json rather than dropping the whole list.
+        }
+      }
+      return result;
+    } catch (e) {
+      _log.w('Error enumerating local themes: $e');
+      return [];
+    }
+  }
+
+  /// Appends any locally-downloaded theme not already present in [base]
+  /// (matched by folder), preserving [base]'s order and preview metadata.
+  static Future<List<NeoAssetsTheme>> _mergeWithLocalThemes(
+    List<NeoAssetsTheme> base,
+  ) async {
+    final local = await _localThemes();
+    if (local.isEmpty) return base;
+    final seen = base.map((t) => t.folder).toSet();
+    final merged = [...base];
+    for (final t in local) {
+      if (seen.add(t.folder)) merged.add(t);
+    }
+    return merged;
   }
 
   /// Clears the in-memory theme list cache.
