@@ -45,6 +45,12 @@ class SelectionGrid extends StatefulWidget {
 
   final SelectionGridItemBuilder itemBuilder;
 
+  /// Monotonic counter the parent bumps whenever card *content* (not
+  /// selection) changes — e.g. scrape progress, favorite toggles, or a games
+  /// list swap. Cached card widgets are rebuilt when this changes; leaving it
+  /// at its default means a selection move alone never rebuilds cards.
+  final int revision;
+
   /// Optional custom visuals for the selection highlight. Defaults to the
   /// standard primary-gradient frame used across the app.
   final WidgetBuilder? highlightBuilder;
@@ -55,6 +61,7 @@ class SelectionGrid extends StatefulWidget {
     required this.padding,
     required this.selectedIndex,
     required this.itemBuilder,
+    this.revision = 0,
     this.isNavigatingFast = false,
     this.highlightKey,
     this.highlightBuilder,
@@ -71,7 +78,37 @@ class SelectionGridState extends State<SelectionGrid> {
   int _firstRow = 0;
   int _lastRow = -1;
 
-  static const int _rowBuffer = 2;
+  static const int _rowBuffer = 4;
+
+  // ---- Card cell cache (per index) ----
+  // Cards are cached individually by item index and the *same widget instance*
+  // is reused across rebuilds. Two payoffs:
+  //   1. A selection move (range unchanged) rebuilds no cards — only the
+  //      highlight repositions, like the pre-#188 scroll-driven overlay.
+  //   2. When the scroll animation shifts the visible window by a row, only
+  //      the newly-entered indices are built; the rest are reused. This is the
+  //      key win — the old list cache rebuilt the *entire* window on every
+  //      shift (~70 cards → measured 20–28ms build frames), whereas building
+  //      one new row is a handful of cards.
+  // Passing identical instances lets Flutter skip diffing those subtrees.
+  final Map<int, Widget> _cellCache = {};
+  SelectionGridGeometry? _cacheGeometry;
+  int _cacheEpoch = -1;
+  int _cacheRevision = -1;
+
+  /// Extra indices kept warm on each side of the visible window so scrolling
+  /// back a little reuses cells instead of rebuilding them.
+  static const int _cacheMargin = 60;
+
+  /// Bumped when an inherited dependency (theme, media query, …) changes, so
+  /// cached card widgets — which capture theme-derived values — are rebuilt.
+  int _depEpoch = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _depEpoch++;
+  }
 
   @override
   void initState() {
@@ -118,20 +155,11 @@ class SelectionGridState extends State<SelectionGrid> {
     final startY = _scrollController.offset;
     final endY = startY + _scrollController.position.viewportDimension;
 
-    int first = 0;
-    for (int r = 0; r < rows.length; r++) {
-      if (rows[r].bottom >= startY) {
-        first = r;
-        break;
-      }
-    }
-    int last = rows.length - 1;
-    for (int r = first; r < rows.length; r++) {
-      if (rows[r].top > endY) {
-        last = r - 1;
-        break;
-      }
-    }
+    // Rows are sorted by vertical position, so binary-search the visible
+    // window instead of scanning every row on each scroll frame (a large
+    // library can have thousands of rows).
+    int first = _firstRowAtOrBelow(rows, startY);
+    int last = _lastRowAbove(rows, endY, first);
 
     first = (first - _rowBuffer).clamp(0, rows.length - 1);
     last = (last + _rowBuffer).clamp(first, rows.length - 1);
@@ -142,6 +170,36 @@ class SelectionGridState extends State<SelectionGrid> {
         _lastRow = last;
       });
     }
+  }
+
+  /// First row whose bottom edge is at or below [y] (i.e. still visible).
+  static int _firstRowAtOrBelow(List<GridRowInfo> rows, double y) {
+    int lo = 0, hi = rows.length - 1, result = rows.length - 1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      if (rows[mid].bottom >= y) {
+        result = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return result;
+  }
+
+  /// Last row whose top edge is at or above [y], searching from [from].
+  static int _lastRowAbove(List<GridRowInfo> rows, double y, int from) {
+    int lo = from, hi = rows.length - 1, result = rows.length - 1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      if (rows[mid].top > y) {
+        result = mid - 1;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return result.clamp(from, rows.length - 1);
   }
 
   /// Animates the viewport so the selected card sits centered.
@@ -182,26 +240,50 @@ class SelectionGridState extends State<SelectionGrid> {
       if (selectedRow < first) first = selectedRow;
       if (selectedRow > last) last = selectedRow;
 
-      for (int r = first; r <= last; r++) {
-        final row = rows[r];
-        for (int j = 0; j < row.count; j++) {
-          final index = row.startIndex + j;
+      // Drop the whole cache when something that affects *card content* (not
+      // selection or scroll position) changed: a new geometry (rects moved),
+      // a revision bump (scrape/favorite/games swap), or an inherited
+      // dependency (theme). Otherwise cells survive across rebuilds.
+      if (!identical(_cacheGeometry, geometry) ||
+          _cacheEpoch != _depEpoch ||
+          _cacheRevision != widget.revision) {
+        _cellCache.clear();
+        _cacheGeometry = geometry;
+        _cacheEpoch = _depEpoch;
+        _cacheRevision = widget.revision;
+      }
+
+      // Build only indices not already cached; reuse the rest by identity so a
+      // one-row window shift builds one row of cards, not the whole window.
+      final firstIndex = rows[first].startIndex;
+      final lastRow = rows[last];
+      final lastIndex = lastRow.startIndex + lastRow.count - 1;
+
+      for (int index = firstIndex; index <= lastIndex; index++) {
+        final cell = _cellCache[index] ??= () {
           final rect = geometry.cardRects[index];
-          children.add(
-            Positioned(
-              key: ValueKey('selection_grid_cell_$index'),
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-              child: widget.itemBuilder(
-                context,
-                index,
-                Size(rect.width, rect.height),
-              ),
+          return Positioned(
+            key: ValueKey('selection_grid_cell_$index'),
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            child: widget.itemBuilder(
+              context,
+              index,
+              Size(rect.width, rect.height),
             ),
           );
-        }
+        }();
+        children.add(cell);
+      }
+
+      // Evict cells well outside the visible window to bound memory during a
+      // long scroll (kept generous so small back-scrolls still hit the cache).
+      if (_cellCache.length > (lastIndex - firstIndex + 1) + 4 * _cacheMargin) {
+        final keepFrom = firstIndex - _cacheMargin;
+        final keepTo = lastIndex + _cacheMargin;
+        _cellCache.removeWhere((i, _) => i < keepFrom || i > keepTo);
       }
     }
 

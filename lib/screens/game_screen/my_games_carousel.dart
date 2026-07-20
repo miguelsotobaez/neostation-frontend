@@ -74,6 +74,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
   static final Map<String, bool> _fileExistsCache = {};
   int _lastBgIndex = -1;
 
+  /// Memoized `File.existsSync()` — synchronous disk stats on the UI thread
+  /// while cards build are a known jank source. Entries are evicted by
+  /// [GamesCarousel.evictArtworkCaches] when a scrape replaces artwork.
+  static bool _fileExists(String path) =>
+      _fileExistsCache.putIfAbsent(path, () => File(path).existsSync());
+
   GameInfoAndUserProgress? _currentGameInfo;
   bool _isLoadingAchievements = false;
   String? _achievementsTargetRomname;
@@ -497,7 +503,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       imageType,
       widget.fileProvider,
     );
-    if (File(path).existsSync()) return path;
+    if (_fileExists(path)) return path;
     return '';
   }
 
@@ -505,13 +511,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final theme = Theme.of(context);
     final folder = _folderForGame(game);
     final screenshotPath = game.getScreenshotPath(folder, widget.fileProvider);
-    final hasScreenshot = File(screenshotPath).existsSync();
+    final hasScreenshot = _fileExists(screenshotPath);
     final fanartPath = game.getImagePath(
       folder,
       'fanarts',
       widget.fileProvider,
     );
-    final hasFanart = File(fanartPath).existsSync();
+    final hasFanart = _fileExists(fanartPath);
     final bgPath = hasFanart
         ? fanartPath
         : (hasScreenshot ? screenshotPath : '');

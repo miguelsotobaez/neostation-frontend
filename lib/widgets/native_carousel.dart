@@ -172,9 +172,23 @@ class NativeCarouselState extends State<NativeCarousel> {
               allowImplicitScrolling: true,
               itemCount: widget.itemCount,
               itemBuilder: (context, index) {
+                // Build the card exactly once and pass it as the
+                // ValueListenableBuilder's `child`. Only the cheap
+                // Opacity/Transform.scale envelope reacts to per-frame page
+                // scroll updates — the card subtree (which does disk reads and
+                // Image.file decoding) is NOT rebuilt on every scroll frame.
+                // RepaintBoundary lets the card's raster be cached and reused
+                // as the scale/opacity animate.
+                final card = RepaintBoundary(
+                  child: AspectRatio(
+                    aspectRatio: pageAspectRatio,
+                    child: widget.itemBuilder(context, index),
+                  ),
+                );
                 return ValueListenableBuilder<double>(
                   valueListenable: _pageNotifier,
-                  builder: (context, page, _) {
+                  child: card,
+                  builder: (context, page, child) {
                     final distance = (index - page).abs() - 0.6;
                     final scale = (1.0 - distance * 0.4).clamp(0.25, 1.0);
                     final opacity = (0.6 - distance * 1).clamp(0.1, 1.0);
@@ -184,10 +198,7 @@ class NativeCarouselState extends State<NativeCarousel> {
                       child: Transform.scale(
                         scale: scale,
                         alignment: Alignment.center,
-                        child: AspectRatio(
-                          aspectRatio: pageAspectRatio,
-                          child: widget.itemBuilder(context, index),
-                        ),
+                        child: child,
                       ),
                     );
                   },

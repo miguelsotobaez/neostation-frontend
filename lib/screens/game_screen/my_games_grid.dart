@@ -74,11 +74,48 @@ class _GamesGridState extends State<GamesGrid> {
   late GamepadNavigation _gamepadNav;
   int _selectedIndex = 0;
   int _crossAxisCount = 5;
+
+  // Bumped whenever card *content* (as opposed to selection) changes, so the
+  // SelectionGrid rebuilds its cached card widgets. A pure selection move
+  // deliberately leaves this untouched — the cards are then reused and only
+  // the highlight repositions.
+  int _gridRevision = 0;
   bool _isNavigatingFast = false;
 
   GameInfoAndUserProgress? _currentGameInfo;
   bool _isLoadingAchievements = false;
   String? _achievementsTargetRomname;
+
+  // RetroAchievements info is loaded per selected game, but firing it (plus its
+  // setState churn) on every gamepad move floods the UI thread during fast
+  // navigation. Debounce so it loads once the selection settles.
+  Timer? _achievementsDebounce;
+  static const Duration _achievementsSettleDelay = Duration(milliseconds: 280);
+
+  /// Debounced entry point for the navigation hot path — coalesces rapid moves
+  /// into a single load once the user stops on a game.
+  void _scheduleAchievementsLoad() {
+    // Reflect the new selection in the footer's RA indicator immediately, so
+    // fast navigation never shows the *previous* game's achievement counts/icon
+    // while the (debounced) load is pending. Fields are mutated directly — every
+    // caller already has a rebuild in flight (setState on the move, or a
+    // didUpdateWidget). The actual load below fills in the real data on settle.
+    final selectedRomname = widget.games.isEmpty
+        ? null
+        : widget
+              .games[_selectedIndex.clamp(0, widget.games.length - 1)]
+              .romname;
+    if (selectedRomname != _achievementsTargetRomname) {
+      _achievementsTargetRomname = selectedRomname;
+      _currentGameInfo = null;
+      _isLoadingAchievements = true;
+    }
+    _achievementsDebounce?.cancel();
+    _achievementsDebounce = Timer(_achievementsSettleDelay, () {
+      if (mounted) _loadAchievementsForSelectedGame();
+    });
+  }
+
   DateTime? _lastNavTime;
   static const Duration _fastNavThreshold = Duration(milliseconds: 150);
 
@@ -449,6 +486,19 @@ class _GamesGridState extends State<GamesGrid> {
   void didUpdateWidget(GamesGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
     _updateCrossAxisCount();
+    // Card *content* changed (not just selection) — bump the revision so the
+    // SelectionGrid rebuilds cached card widgets instead of reusing stale ones.
+    //   - games: gets a fresh list instance on favorite toggle / reorder /
+    //     update, and length changes on delete (which also re-keys geometry),
+    //     so an identity check catches those.
+    //   - scrape sets/maps are `final` and mutated in place (stable identity),
+    //     so bump while a scrape is active — or was on the previous frame — to
+    //     keep progress bars animating and to clear them when the scrape ends.
+    if (!identical(widget.games, oldWidget.games) ||
+        widget.scrapingGameRomnames.isNotEmpty ||
+        oldWidget.scrapingGameRomnames.isNotEmpty) {
+      _gridRevision++;
+    }
     // Artwork replaced by a finished scrape must be re-checked on disk.
     final finishedScrapes = oldWidget.scrapingGameRomnames.difference(
       widget.scrapingGameRomnames,
@@ -464,7 +514,7 @@ class _GamesGridState extends State<GamesGrid> {
         0,
         (widget.games.length - 1).clamp(0, 999999),
       );
-      _loadAchievementsForSelectedGame();
+      _scheduleAchievementsLoad();
     }
   }
 
@@ -504,6 +554,7 @@ class _GamesGridState extends State<GamesGrid> {
   @override
   void dispose() {
     _cardSizeLabelTimer?.cancel();
+    _achievementsDebounce?.cancel();
     _cardSizeLabel.dispose();
     GamepadNavigationManager.popLayer('games_grid');
     _gamepadNav.dispose();
@@ -565,7 +616,7 @@ class _GamesGridState extends State<GamesGrid> {
   void _onSelectionChanged() {
     if (_selectedIndex < widget.games.length) {
       widget.onGameSelected(widget.games[_selectedIndex]);
-      _loadAchievementsForSelectedGame();
+      _scheduleAchievementsLoad();
     }
   }
 
@@ -732,6 +783,7 @@ class _GamesGridState extends State<GamesGrid> {
                             bottom: padB,
                           ),
                           selectedIndex: _selectedIndex,
+                          revision: _gridRevision,
                           isNavigatingFast: _isNavigatingFast,
                           // On a discontinuous layout change (density or card
                           // style) the highlight re-creates and jumps to the
@@ -852,7 +904,7 @@ class _GamesGridState extends State<GamesGrid> {
         setState(() => _selectedIndex = index);
         widget.onGameSelected(game);
         SfxService().playNavSound();
-        _loadAchievementsForSelectedGame();
+        _scheduleAchievementsLoad();
       },
       child: RepaintBoundary(
         child: Padding(
@@ -995,7 +1047,7 @@ class _GamesGridState extends State<GamesGrid> {
         setState(() => _selectedIndex = index);
         widget.onGameSelected(game);
         SfxService().playNavSound();
-        _loadAchievementsForSelectedGame();
+        _scheduleAchievementsLoad();
       },
       child: RepaintBoundary(
         child: Padding(
