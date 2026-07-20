@@ -1019,6 +1019,13 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         ? (1.0 - value.nowPlayingDimLevel.clamp(0, 100) / 100.0)
         : 1.0;
     return Positioned.fill(
+      // Stable key so this subtree's element (and its slide-in
+      // TweenAnimationBuilder state) is preserved across rebuilds of the parent
+      // Stack. Without it, the unkeyed conditional siblings above (game layer,
+      // mute button) inserting/removing on game-select and video-toggle shift
+      // element positions, tearing down and recreating the dock — which restarts
+      // the reveal tween and makes the static dock re-slide up every time.
+      key: const ValueKey('dock-overlay'),
       child: IgnorePointer(
         // Non-interactive while hidden or dimmed — when dimmed, touches fall
         // through to the panel's wake Listener below (first touch only wakes).
