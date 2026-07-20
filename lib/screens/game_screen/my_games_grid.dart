@@ -257,6 +257,15 @@ class _GamesGridState extends State<GamesGrid> {
     return game.getScreenshotPath(_folderForGame(game), widget.fileProvider);
   }
 
+  String _wheelsPath(int index) {
+    final game = widget.games[index];
+    return game.getImagePath(
+      _folderForGame(game),
+      'wheels',
+      widget.fileProvider,
+    );
+  }
+
   bool get _isFanart =>
       context.read<SqliteConfigProvider>().config.gameCarouselCardStyle ==
       'fanart';
@@ -1035,8 +1044,10 @@ class _GamesGridState extends State<GamesGrid> {
   Widget _buildFanartGridCard(int index, GameModel game, ThemeData theme) {
     final fanartPath = _fanartPath(index);
     final screenshotPath = _screenshotPath(index);
+    final wheelsPath = _wheelsPath(index);
     final hasFanart = _fileExists(fanartPath);
     final hasScreenshot = !hasFanart && _fileExists(screenshotPath);
+    final hasWheel = _fileExists(wheelsPath);
     final bgPath = hasFanart
         ? fanartPath
         : (hasScreenshot ? screenshotPath : '');
@@ -1100,6 +1111,48 @@ class _GamesGridState extends State<GamesGrid> {
                                 )
                               else
                                 _buildFallbackCard(game, theme),
+                              // Darkening gradient so the overlaid logo stays
+                              // legible against bright fanart.
+                              if (bgPath.isNotEmpty && hasWheel)
+                                const Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black54,
+                                          Colors.black87,
+                                        ],
+                                        stops: [0.5, 0.75, 1.0],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              // Wheel/logo overlaid at the bottom (restores the
+                              // pre-#188 fanart look).
+                              if (hasWheel)
+                                Positioned(
+                                  left: 10.r,
+                                  right: 10.r,
+                                  bottom: 5.r,
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 6.r,
+                                      vertical: 4.r,
+                                    ),
+                                    child: Image.file(
+                                      File(wheelsPath),
+                                      key: ValueKey('wheel_${game.romname}'),
+                                      fit: BoxFit.contain,
+                                      cacheWidth: 384,
+                                      gaplessPlayback: true,
+                                      errorBuilder: (ctx, e, s) =>
+                                          const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                ),
                               if (game.isFavorite == true)
                                 Positioned(
                                   top: 4.r,
