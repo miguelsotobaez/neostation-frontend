@@ -108,6 +108,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   List<Map<String, dynamic>>? _pickerApps;
   bool _loadingPickerApps = false;
 
+  /// Guards the one-shot background warm of the installed-app list + dock icons.
+  /// Deliberately deferred until *after* the dock has revealed (`appReady`), so
+  /// the heavy `getInstalledApps` scan can never contend with the cross-engine
+  /// dock-reveal timing race during cold boot.
+  bool _dockPrefetchStarted = false;
+
   @override
   void initState() {
     super.initState();
@@ -138,9 +144,44 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     state.updateState(isSecondaryActive: true);
   }
 
+  /// Pre-populates the picker's installed-app list and warms the in-process
+  /// icon cache so both the dock and the app picker render instantly on first
+  /// open instead of decoding icons on demand.
+  ///
+  /// Docked apps are warmed first (they're visible the moment the dock reveals),
+  /// then every installed app the picker can show. Icons are fetched one at a
+  /// time — each `getAppIcon` spins up native work, so a sequential trickle
+  /// avoids a CPU spike on low-power hardware. `getAppIcon` caches per package,
+  /// so this only ever pays the cost once.
+  Future<void> _prefetchDockData() async {
+    await _ensurePickerApps();
+    if (!mounted) return;
+
+    // Dock apps first, then the rest of the picker list, de-duplicated so a
+    // docked app isn't fetched twice.
+    final warmed = <String>{};
+    final order = <String>[
+      ..._dockApps,
+      ...?_pickerApps?.map((app) => (app['package'] ?? '').toString()),
+    ];
+    for (final package in order) {
+      if (package.isEmpty || !warmed.add(package)) continue;
+      if (!mounted) return; // stop if the screen went away mid-warm
+      await SecondaryAppsService.getAppIcon(package);
+    }
+  }
+
   void _onStateChanged() {
     final state = _secondaryDisplayState?.value;
     if (state == null) return;
+
+    // Warm the app list + dock icons exactly once, only after the dock has
+    // revealed. Gating on `appReady` keeps this heavy work off the cold-boot
+    // reveal path so it can't perturb the cross-engine dock-reveal race.
+    if (state.appReady && !_dockPrefetchStarted) {
+      _dockPrefetchStarted = true;
+      unawaited(_prefetchDockData());
+    }
 
     // A re-scrape rewrites the art at the same path, so this engine's image
     // cache still holds the old bitmap. When the producer bumps mediaRevision,
@@ -565,6 +606,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// Lazily loads the installed-app list backing the picker/launcher, once.
   Future<void> _ensurePickerApps() async {
     if (_pickerApps != null || _loadingPickerApps) return;
+    if (!mounted) return;
     setState(() => _loadingPickerApps = true);
     final apps = await SecondaryAppsService.getInstalledApps();
     if (!mounted) return;

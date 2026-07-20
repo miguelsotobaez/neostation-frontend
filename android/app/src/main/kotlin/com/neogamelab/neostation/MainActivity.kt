@@ -35,6 +35,9 @@ import androidx.core.content.FileProvider
 
 class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     private val CHANNEL = "com.neogamelab.neostation/game"
+    // Max size the dock/picker renders an app icon at; icons are rasterized to
+    // this (in px) before encoding so we don't ship/decode full-res drawables.
+    private val ICON_TARGET_DP = 56f
     private val LAUNCHER_CHANNEL = "com.neogamelab.neostation/launcher"
     var keyListener: ((KeyEvent) -> Boolean)? = null
     var motionListener: ((MotionEvent) -> Boolean)? = null
@@ -863,23 +866,18 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     val isGame = false
 
                     val label = resolveInfo.loadLabel(pm).toString()
-                    
-                    var firstInstallTime: Long = 0
-                    var versionName = ""
-                    try {
-                        val pInfo = pm.getPackageInfo(packageName, 0)
-                        firstInstallTime = pInfo.firstInstallTime
-                        versionName = pInfo.versionName ?: ""
-                    } catch (e: Exception) { }
 
+                    // Only name+package are consumed by the dock/picker on the
+                    // Dart side, so we deliberately skip the extra per-app
+                    // pm.getPackageInfo() round-trip that used to fetch
+                    // firstInstallTime/versionName here — on a device with many
+                    // installed apps that second PackageManager hit per app was
+                    // the bulk of the "app drawer takes seconds to wake up" lag.
                     apps.add(mapOf(
                         "name" to label,
                         "package" to packageName,
                         "isSystemApp" to isSystemApp,
-                        "isGame" to isGame,
-                        "firstInstallTime" to firstInstallTime,
-                        "version" to versionName,
-                        "description" to "Android Application ($versionName)"
+                        "isGame" to isGame
                     ))
                 }
                 
@@ -1001,19 +999,21 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         Thread {
             try {
                 val iconDrawable = packageManager.getApplicationIcon(packageName)
-                val bitmap = if (iconDrawable is BitmapDrawable) {
-                    iconDrawable.bitmap
-                } else {
-                    val bitmap = android.graphics.Bitmap.createBitmap(
-                        iconDrawable.intrinsicWidth,
-                        iconDrawable.intrinsicHeight,
-                        android.graphics.Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = android.graphics.Canvas(bitmap)
-                    iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
-                    iconDrawable.draw(canvas)
-                    bitmap
-                }
+                // The dock/picker never renders an icon larger than ~56dp, so
+                // rasterize straight into a small target bitmap instead of
+                // encoding the source drawable at its native resolution
+                // (adaptive icons are often 192-432px). This shrinks both the
+                // PNG encode here and the Image.memory decode on the Dart side,
+                // which was making the dock feel sluggish while icons loaded.
+                val targetPx = (ICON_TARGET_DP * resources.displayMetrics.density).toInt()
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    targetPx,
+                    targetPx,
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(bitmap)
+                iconDrawable.setBounds(0, 0, targetPx, targetPx)
+                iconDrawable.draw(canvas)
 
                 val stream = ByteArrayOutputStream()
                 bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)

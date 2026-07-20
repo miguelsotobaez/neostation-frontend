@@ -236,7 +236,14 @@ Widget buildDockIcon(String package) {
     builder: (context, snapshot) {
       final bytes = snapshot.data;
       if (bytes != null) {
-        return Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true);
+        return Image.memory(
+          bytes,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          // Native side already rasterizes to ~56dp; cap the decode so the
+          // engine keeps a small texture in memory rather than a full-res one.
+          cacheWidth: 112,
+        );
       }
       return Icon(
         Symbols.android_rounded,
