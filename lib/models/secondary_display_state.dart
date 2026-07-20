@@ -254,7 +254,14 @@ class SecondaryDisplayStateData {
     this.lastPlayedMillis,
     this.nowPlayingDimDelay = 5,
     this.nowPlayingDimLevel = 100,
-    this.fanartDimLevel = 0,
+    // Mirror the config default (fanart_dim_level DEFAULT 25). On first launch
+    // the native shared-state store is empty, so the initial WELCOME seed
+    // constructs a *fresh* data object and broadcasts it to the secondary
+    // engine before the real _config value is pushed. If this defaulted to 0,
+    // that first snapshot would render the system art undimmed until the later
+    // seed landed. Keeping it in sync with the config default (like
+    // nowPlayingDimLevel = 100 above) makes the 25% dim apply from frame one.
+    this.fanartDimLevel = 25,
     this.dockApps = const ['', '', '', '', ''],
     this.dockEditTrigger = 0,
     this.dockEnabled = true,
@@ -485,7 +492,7 @@ class SecondaryDisplayStateData {
       lastPlayedMillis: (json['lastPlayedMillis'] as num?)?.toInt(),
       nowPlayingDimDelay: (json['nowPlayingDimDelay'] as num?)?.toInt() ?? 5,
       nowPlayingDimLevel: (json['nowPlayingDimLevel'] as num?)?.toInt() ?? 100,
-      fanartDimLevel: (json['fanartDimLevel'] as num?)?.toInt() ?? 0,
+      fanartDimLevel: (json['fanartDimLevel'] as num?)?.toInt() ?? 25,
       dockApps: json['dockApps'] is List
           ? (json['dockApps'] as List<dynamic>)
                 .map((e) => e?.toString() ?? '')

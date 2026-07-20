@@ -129,7 +129,9 @@ void main() {
       expect(restored.deviceScreenOn, isTrue);
       expect(restored.nowPlayingDimDelay, 5);
       expect(restored.nowPlayingDimLevel, 100);
-      expect(restored.fanartDimLevel, 0);
+      // Mirrors the config default (fanart_dim_level DEFAULT 25) so the 25% dim
+      // applies from the first-launch WELCOME seed, not just after a relaunch.
+      expect(restored.fanartDimLevel, 25);
       expect(restored.dockEnabled, isTrue);
       expect(restored.dockSlotCount, 3);
       expect(restored.dockApps, const ['', '', '', '', '']);
