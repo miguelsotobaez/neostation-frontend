@@ -387,10 +387,16 @@ class _GamesCarouselState extends State<GamesCarousel> {
       return;
     }
 
-    if (mounted) {
-      setState(() => _isLoadingAchievements = true);
-    }
+    // Clear the previous game's info immediately (not just after the async load
+    // returns) so fast scrolling never shows the prior game's achievement
+    // counts/icon while this load is pending.
     _achievementsTargetRomname = game.romname;
+    if (mounted) {
+      setState(() {
+        _currentGameInfo = null;
+        _isLoadingAchievements = true;
+      });
+    }
 
     try {
       final provider = context.read<RetroAchievementsProvider>();
