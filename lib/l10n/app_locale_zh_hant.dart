@@ -403,6 +403,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.hintRefresh: '重新整理',
   AppLocale.hintViewMode: '檢視模式',
   AppLocale.hintScrape: '刮削',
+  AppLocale.hintMoreActions: '更多',
 
   AppLocale.error: '錯誤',
   AppLocale.loading: '正在載入...',

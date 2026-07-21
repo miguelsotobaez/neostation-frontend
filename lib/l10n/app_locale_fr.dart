@@ -476,6 +476,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.hintRefresh: 'Actualiser',
   AppLocale.hintViewMode: 'Vue',
   AppLocale.hintScrape: 'Scraper',
+  AppLocale.hintMoreActions: 'Plus',
 
   AppLocale.error: 'Erreur',
   AppLocale.loading: 'Chargement...',

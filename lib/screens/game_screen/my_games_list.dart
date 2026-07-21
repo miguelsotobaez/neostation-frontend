@@ -1187,6 +1187,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   onViewMode: () =>
                       GameViewModeDropdown.globalKey.currentState?.showDropdown(),
                   onSettings: _openGameSettingsDialog,
+                  onRandom: _showRandomGameDialog,
+                  onScrape: () => _scrapeAction?.call(),
                 );
               },
             ),

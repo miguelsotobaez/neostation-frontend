@@ -880,6 +880,7 @@ class _GamesGridState extends State<GamesGrid> {
             onViewMode: () =>
                 GameViewModeDropdown.globalKey.currentState?.showDropdown(),
             onSettings: widget.onSettings ?? () {},
+            onRandom: widget.onRandom,
           ),
         ),
       ],

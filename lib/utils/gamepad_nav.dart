@@ -122,6 +122,17 @@ class GamepadNavigation {
   /// while the button is held, which is why [_lastSelectDownTime] backs it up.
   bool _selectHeld = false;
 
+  /// Broadcasts whether Select is currently held, so UI (e.g. the gamepad
+  /// legend) can reveal the Select+face-button chord shortcuts while it is down.
+  /// Only the active navigation layer drives this.
+  static final ValueNotifier<bool> selectHeldNotifier = ValueNotifier(false);
+
+  /// Updates both the local hold flag and the shared notifier in one place.
+  void _setSelectHeld(bool held) {
+    _selectHeld = held;
+    if (selectHeldNotifier.value != held) selectHeldNotifier.value = held;
+  }
+
   /// When Select was last pressed. A face button counts as a combo if it lands
   /// while Select is still held OR within [_selectChordWindowMs] of this time,
   /// so the pulse-emitting controllers above still register chords.
@@ -309,7 +320,7 @@ class GamepadNavigation {
   /// Clears Select chord-modifier state so it can't leak across layer changes
   /// (e.g. opening a dialog while Select is down).
   void _resetSelectModifier() {
-    _selectHeld = false;
+    _setSelectHeld(false);
     _lastSelectDownTime = null;
     _comboConsumed.clear();
   }
@@ -481,10 +492,10 @@ class GamepadNavigation {
       // 1.0 = up → released. Select is a pure modifier, so it never dispatches.
       if (isAndroid && event.key.toLowerCase() == 'keycode_button_select') {
         if (event.value < 0.5) {
-          _selectHeld = true;
+          _setSelectHeld(true);
           _lastSelectDownTime = now;
         } else {
-          _selectHeld = false;
+          _setSelectHeld(false);
         }
         return;
       }
@@ -570,9 +581,9 @@ class GamepadNavigation {
     // of this button, so the timestamp is stamped on BOTH press and release.
     if (event.inputType == GamepadInputType.buttonSelect) {
       if (event.isPressed) {
-        _selectHeld = true;
+        _setSelectHeld(true);
       } else if (event.isReleased) {
-        _selectHeld = false;
+        _setSelectHeld(false);
       }
       _lastSelectDownTime = DateTime.now();
       return; // Select alone never triggers an action.

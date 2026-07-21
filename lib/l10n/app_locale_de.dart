@@ -470,6 +470,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.hintRefresh: 'Aktualisieren',
   AppLocale.hintViewMode: 'Ansicht',
   AppLocale.hintScrape: 'Scrapen',
+  AppLocale.hintMoreActions: 'Mehr',
 
   AppLocale.error: 'Fehler',
   AppLocale.loading: 'Wird geladen...',

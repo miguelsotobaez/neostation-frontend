@@ -683,6 +683,7 @@ mixin AppLocale {
   static const String hintRefresh = 'hint_refresh';
   static const String hintViewMode = 'hint_view_mode';
   static const String hintScrape = 'hint_scrape';
+  static const String hintMoreActions = 'hint_more_actions';
 
   // ---------------------------------------------------------------------------
   // Misc

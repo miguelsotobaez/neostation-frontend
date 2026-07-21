@@ -467,6 +467,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.hintRefresh: 'Actualizar',
   AppLocale.hintViewMode: 'Modo Vista',
   AppLocale.hintScrape: 'Escanear',
+  AppLocale.hintMoreActions: 'Más',
 
   AppLocale.error: 'Error',
   AppLocale.loading: 'Cargando...',

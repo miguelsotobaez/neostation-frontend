@@ -452,6 +452,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.hintRefresh: 'Segarkan',
   AppLocale.hintViewMode: 'Tampilan',
   AppLocale.hintScrape: 'Ambil',
+  AppLocale.hintMoreActions: 'Lainnya',
 
   AppLocale.error: 'Kesalahan',
   AppLocale.loading: 'Memuat...',

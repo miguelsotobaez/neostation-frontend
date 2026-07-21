@@ -461,6 +461,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.hintRefresh: 'Обновить',
   AppLocale.hintViewMode: 'Режим',
   AppLocale.hintScrape: 'Скрейп',
+  AppLocale.hintMoreActions: 'Ещё',
 
   AppLocale.error: 'Ошибка',
   AppLocale.loading: 'Загрузка...',

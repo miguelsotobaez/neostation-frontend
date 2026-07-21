@@ -406,6 +406,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.hintRefresh: '更新',
   AppLocale.hintViewMode: '表示切替',
   AppLocale.hintScrape: 'スクレイプ',
+  AppLocale.hintMoreActions: 'その他',
 
   AppLocale.error: 'エラー',
   AppLocale.loading: '読み込み中...',

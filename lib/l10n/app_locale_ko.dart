@@ -413,6 +413,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.hintRefresh: '새로고침',
   AppLocale.hintViewMode: '보기 모드',
   AppLocale.hintScrape: '정보 가져오기',
+  AppLocale.hintMoreActions: '더보기',
 
   AppLocale.error: '오류',
   AppLocale.loading: '불러오는 중...',

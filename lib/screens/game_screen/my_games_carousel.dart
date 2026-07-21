@@ -958,6 +958,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
             onViewMode: () =>
                 GameViewModeDropdown.globalKey.currentState?.showDropdown(),
             onSettings: widget.onSettings ?? () {},
+            onRandom: widget.onRandom,
           ),
         ),
       ],

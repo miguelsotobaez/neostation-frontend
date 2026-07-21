@@ -452,6 +452,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.hintRefresh: 'Refresh',
   AppLocale.hintViewMode: 'View Mode',
   AppLocale.hintScrape: 'Scrape',
+  AppLocale.hintMoreActions: 'More',
 
   AppLocale.error: 'Error',
   AppLocale.loading: 'Loading...',
