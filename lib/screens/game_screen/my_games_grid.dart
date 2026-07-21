@@ -100,6 +100,23 @@ class _GamesGridState extends State<GamesGrid> {
   Widget? _chromeFooter;
   Widget? _chromeLegend;
 
+  // Memoized grid rows. buildRow→_buildCard is a pure function of layout
+  // (`_layoutGen`), `targetWidth`, `theme`, and per-card favorite/scrape state —
+  // it never reads `_selectedIndex` (selection is drawn by the Positioned cursor
+  // overlay). So on a steady scroll the rows are identical across a settle /
+  // RA-load / legend-animating setState, yet an un-memoized SliverList.builder
+  // rebuilds all ~50 visible cards each time (profile-build VM timeline measured
+  // ~5 full-viewport rebuilds per scroll = 22–31 ms UI-thread BUILD spikes; the
+  // raster pipeline stays <5 ms). Cache built rows by index and gate on a cheap
+  // signature so those setStates return identical Row instances and Flutter
+  // skips the whole subtree. `_layoutGen` bumps whenever _positionCards actually
+  // re-runs (width/reflow/dim-reload), so the legend reflow still rebuilds while
+  // steady scroll does not. The cache is also cleared in didUpdateWidget when the
+  // game set or scrape state changes (favorite stars / scrape progress overlays).
+  int _layoutGen = 0;
+  final Map<int, Widget> _rowCache = {};
+  String? _rowCacheSig;
+
   /// True while the Select+B reflow is in flight. During it the selection cursor
   /// uses a plain Positioned that tracks the (per-frame changing) card rect
   /// exactly, so it stays fitted to the card instead of lagging a frame behind.
@@ -113,8 +130,16 @@ class _GamesGridState extends State<GamesGrid> {
   double _spY = 0;
   double? _lastLayoutWidth;
   int? _lastLayoutCols;
-  int? _lastLayoutGameCount;
   bool? _lastIsFanart;
+
+  // Per-card height/width ratio (aspect), which is INDEPENDENT of the card
+  // width. Measuring it is the expensive part of layout (file-header reads +
+  // string parsing per game), so it is cached here and only recomputed when the
+  // game set / column count / fanart mode / loaded dimensions change — never on
+  // a mere width change. That lets the Select+B reflow animate the width with
+  // cheap per-frame arithmetic instead of re-measuring every card each frame.
+  List<double> _cardHOverW = [];
+  bool _needsMeasure = true;
 
   // Image dimension cache
   static final Map<String, Size?> _imageSizeCache = {};
@@ -254,8 +279,12 @@ class _GamesGridState extends State<GamesGrid> {
     });
   }
 
-  double _cardHeightFor(int index) {
-    if (_isFanart) return _cardWidth;
+  /// Height/width ratio for a card, INDEPENDENT of the current card width.
+  /// This is the expensive lookup (DB string parse or image-header read) that
+  /// [_measureCards] caches into [_cardHOverW]. Note `_cardHeightFor(i)` equals
+  /// `_cardWidth * _heightRatioFor(i)`.
+  double _heightRatioFor(int index) {
+    if (_isFanart) return 1.0;
 
     final game = widget.games[index];
     // 1. From DB
@@ -265,7 +294,7 @@ class _GamesGridState extends State<GamesGrid> {
         final w = double.tryParse(parts[0]);
         final h = double.tryParse(parts[1]);
         if (w != null && h != null && w > 0 && h > 0) {
-          return _cardWidth / (w / h);
+          return h / w;
         }
       }
     }
@@ -276,27 +305,59 @@ class _GamesGridState extends State<GamesGrid> {
       // Save to DB for next time
       final ratio = '${size.width.toInt()}/${size.height.toInt()}';
       _scheduleAspectRatioSave(game, ratio);
-      return _cardWidth / (size.width / size.height);
+      return size.height / size.width;
     }
-    return _cardWidth; // 1:1 fallback
+    return 1.0; // 1:1 fallback
   }
 
-  // ---- Layout (computed once, cached) ----
-  bool _needsLayout(double w) =>
-      _lastLayoutWidth != w ||
-      _lastLayoutCols != _cols ||
-      _lastLayoutGameCount != widget.games.length ||
-      _lastIsFanart != _isFanart ||
-      _needsDimReload;
+  /// Measures every card's aspect ratio into [_cardHOverW]. This is the only
+  /// O(n) width-INDEPENDENT pass and is deliberately kept out of the per-frame
+  /// path so a width animation (Select+B reflow) never re-reads image headers.
+  void _measureCards() {
+    final n = widget.games.length;
+    _cardHOverW = List<double>.filled(n, 1.0);
+    _loadedDims.clear();
+    if (!_isFanart) {
+      for (int i = 0; i < n; i++) {
+        _cardHOverW[i] = _heightRatioFor(i);
+        if (_imageSizeCache.containsKey(_box2dPath(i))) _loadedDims.add(i);
+      }
+    }
+    _needsMeasure = false;
+  }
+
+  // ---- Layout ----
+  // Aspect ratios (the costly part) are measured/cached separately; positioning
+  // for a given width is cheap arithmetic so it can run every animation frame.
 
   void _computeLayout(double availableWidth) {
-    if (!_needsLayout(availableWidth)) return;
+    final measureChanged =
+        _needsMeasure ||
+        _cardHOverW.length != widget.games.length ||
+        _lastIsFanart != _isFanart ||
+        _needsDimReload;
+
+    if (!measureChanged &&
+        _lastLayoutWidth == availableWidth &&
+        _lastLayoutCols == _cols) {
+      return;
+    }
+
+    if (measureChanged) {
+      _measureCards();
+      _needsDimReload = false;
+    }
+
     _lastLayoutWidth = availableWidth;
     _lastLayoutCols = _cols;
-    _lastLayoutGameCount = widget.games.length;
     _lastIsFanart = _isFanart;
-    _needsDimReload = false;
 
+    _positionCards(availableWidth);
+  }
+
+  /// Cheap positioning pass: turns cached aspect ratios + a target width into
+  /// card rects and row bounds. No image reads, one allocation per card.
+  void _positionCards(double availableWidth) {
     final spX = 6.0.r;
     final spY = 6.0.r;
     _spX = spX;
@@ -305,64 +366,58 @@ class _GamesGridState extends State<GamesGrid> {
     final totalWidth = availableWidth - 32;
     _cardWidth = (totalWidth - (_cols - 1) * spX) / _cols;
     final n = widget.games.length;
-    _cardRects = List.generate(
-      n,
-      (_) => _CardRect(left: 0, top: 0, width: _cardWidth, height: _cardWidth),
-    ); // placeholder
-    _loadedDims.clear();
+    final rowCount = _cols > 0 ? (n + _cols - 1) ~/ _cols : 0;
 
-    if (_isFanart) {
-      double y = 0;
-      final rows = <_RowInfo>[];
-      for (int i = 0; i < n; i += _cols) {
-        final end = (i + _cols).clamp(0, n);
-        final count = end - i;
-        rows.add(
-          _RowInfo(topY: y, height: _cardWidth, startIndex: i, count: count),
-        );
-        for (int idx = i; idx < end; idx++) {
-          final col = idx % _cols;
-          _cardRects[idx] = _CardRect(
-            left: col * (_cardWidth + spX),
-            top: y + spY / 2,
-            width: _cardWidth,
-            height: _cardWidth,
-          );
-        }
-        y += _cardWidth + spY;
-      }
-      _rows = rows;
-      return; // fanart path done
+    // Reuse the existing buffers when the counts are unchanged (the common case
+    // while the reflow animates), mutating rects in place so a width change
+    // allocates nothing.
+    if (_cardRects.length != n) {
+      _cardRects = List.generate(
+        n,
+        (_) => _CardRect(left: 0, top: 0, width: 0, height: 0),
+      );
+    }
+    if (_rows.length != rowCount) {
+      _rows = List.generate(
+        rowCount,
+        (_) => _RowInfo(topY: 0, height: 0, startIndex: 0, count: 0),
+      );
     }
 
-    // First pass: use the static cache to get known dimensions fast
     double y = 0;
     int i = 0;
-    final rows = <_RowInfo>[];
+    int r = 0;
     while (i < n) {
-      double maxH = 0;
       final end = (i + _cols).clamp(0, n);
-      final count = end - i;
+      double maxH = 0;
       for (int idx = i; idx < end; idx++) {
-        final h = _cardHeightFor(idx);
+        final h = _cardHOverW[idx] * _cardWidth;
         if (h > maxH) maxH = h;
       }
-      rows.add(_RowInfo(topY: y, height: maxH, startIndex: i, count: count));
+      final row = _rows[r];
+      row.topY = y;
+      row.height = maxH;
+      row.startIndex = i;
+      row.count = end - i;
       for (int idx = i; idx < end; idx++) {
         final col = idx % _cols;
-        final h = _cardHeightFor(idx);
-        _cardRects[idx] = _CardRect(
-          left: col * (_cardWidth + spX),
-          top: y + (maxH + spY - h) / 2,
-          width: _cardWidth,
-          height: h,
-        );
-        if (_imageSizeCache.containsKey(_box2dPath(idx))) _loadedDims.add(idx);
+        final h = _cardHOverW[idx] * _cardWidth;
+        final rect = _cardRects[idx];
+        rect.left = col * (_cardWidth + spX);
+        rect.top = y + (maxH + spY - h) / 2;
+        rect.width = _cardWidth;
+        rect.height = h;
       }
       y += maxH + spY;
       i = end;
+      r++;
     }
-    _rows = rows;
+
+    // Card rects/rows just changed → any memoized row widgets are stale.
+    // Bumping the generation invalidates the row cache on the next build (see
+    // _rowCache). This runs on every reflow frame (intended) but NOT during a
+    // steady scroll, where _computeLayout early-returns without calling us.
+    _layoutGen++;
   }
 
   // Lazy dimension loading for newly visible cards
@@ -520,6 +575,18 @@ class _GamesGridState extends State<GamesGrid> {
     _updateCrossAxisCount();
     if (widget.games != oldWidget.games || _crossAxisCount != prevCols) {
       _lastLayoutWidth = null;
+      // Aspect-ratio cache is keyed by index; a changed game set (even at the
+      // same length) must be re-measured.
+      if (widget.games != oldWidget.games) _needsMeasure = true;
+    }
+    // Row memoization depends on per-card favorite/scrape state, which arrives
+    // via these props. Any change means the cached rows may be stale, so drop
+    // them (a changed game set / cols also invalidates via _layoutGen, but the
+    // scrape props do not touch layout — clear explicitly).
+    if (widget.games != oldWidget.games ||
+        widget.scrapingGameRomnames != oldWidget.scrapingGameRomnames ||
+        widget.scrapeProgress != oldWidget.scrapeProgress) {
+      _rowCache.clear();
     }
     if (widget.selectedIndex != oldWidget.selectedIndex) {
       _selectedIndex = widget.selectedIndex.clamp(
@@ -836,9 +903,11 @@ class _GamesGridState extends State<GamesGrid> {
             Expanded(
               // Indent the grid to clear the vertical legend on the left; the
               // reduced width makes the cards slightly smaller. Select + B hides
-              // the legend and animates this indent to 0 so the cards reflow to
-              // fill the reclaimed 60.r. The cursor tracks the card rect while
-              // _legendAnimating so it stays fitted during the reflow.
+              // the legend and animates this indent to 0 so the cards genuinely
+              // reflow to fill the reclaimed 60.r. This drives _computeLayout
+              // every frame, but only its cheap _positionCards pass runs (aspect
+              // ratios are cached in _cardHOverW), and the cursor tracks rigidly
+              // while _legendAnimating so it never chases a moving target.
               child: AnimatedPadding(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
@@ -854,7 +923,17 @@ class _GamesGridState extends State<GamesGrid> {
 
                   final theme = Theme.of(context);
                   final fp = widget.fileProvider;
-                  final targetWidth = (_cardWidth * 1.5).toInt();
+                  // Quantize the decode resolution into buckets so the tiny
+                  // per-frame card-width changes during the legend reflow don't
+                  // thrash _GameCardImage into re-decoding every card each frame
+                  // (it reloads whenever targetWidth changes). Also a general win
+                  // for any width change (window resize, card-size cycling).
+                  const decodeBucket = 64;
+                  final bucketed =
+                      ((_cardWidth * 1.5) / decodeBucket).ceil() * decodeBucket;
+                  final targetWidth = bucketed < decodeBucket
+                      ? decodeBucket
+                      : bucketed;
 
                   final selRect = _selectedIndex < _cardRects.length
                       ? _cardRects[_selectedIndex]
@@ -863,7 +942,23 @@ class _GamesGridState extends State<GamesGrid> {
                     milliseconds: _isNavigatingFast ? 120 : 300,
                   );
 
+                  // Row-cache gate: when the layout/decode/theme signature is
+                  // unchanged, buildRow returns the exact same Row instances it
+                  // built last time, so a selection/settle/RA/legend setState
+                  // that re-runs build() does NOT rebuild the ~50 visible cards
+                  // (Flutter short-circuits identical child widgets). Any real
+                  // change (reflow bumps _layoutGen, width change moves
+                  // targetWidth, theme flips) rotates the signature and rebuilds.
+                  final rowSig =
+                      '$_layoutGen|$targetWidth|${theme.brightness.index}';
+                  if (rowSig != _rowCacheSig) {
+                    _rowCacheSig = rowSig;
+                    _rowCache.clear();
+                  }
+
                   Widget buildRow(BuildContext ctx, int rowIndex) {
+                    final cached = _rowCache[rowIndex];
+                    if (cached != null) return cached;
                     final row = _rows[rowIndex];
                     final cards = <Widget>[];
                     for (int j = 0; j < row.count; j++) {
@@ -885,13 +980,15 @@ class _GamesGridState extends State<GamesGrid> {
                         ),
                       );
                     }
-                    return SizedBox(
+                    final built = SizedBox(
                       height: row.height + _spY,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: _interleaveSpacing(cards, _spX),
                       ),
                     );
+                    _rowCache[rowIndex] = built;
+                    return built;
                   }
 
                   final cursorOverlay = ListenableBuilder(
@@ -1376,6 +1473,13 @@ class _GameCardImage extends StatefulWidget {
 }
 
 class _GameCardImageState extends State<_GameCardImage> {
+  // Process-wide cache of box2d-path existence. Fast dpad scroll recreates a
+  // card's `_GameCardImage` every time it re-enters the viewport (keyed by
+  // romname), and each creation used to fire a synchronous `existsSync()`
+  // syscall on the UI thread. Caching the boolean keeps re-scroll off the
+  // filesystem entirely.
+  static final Map<String, bool> _existsCache = {};
+
   ImageProvider? _imageProvider;
   bool _exists = false;
   bool _checked = false;
@@ -1383,7 +1487,8 @@ class _GameCardImageState extends State<_GameCardImage> {
   @override
   void initState() {
     super.initState();
-    _resolve();
+    // Pre-first-build: resolve synchronously without a redundant setState.
+    _computeResolve();
   }
 
   @override
@@ -1398,21 +1503,28 @@ class _GameCardImageState extends State<_GameCardImage> {
     }
   }
 
+  /// Populate `_exists`/`_imageProvider` for the current box2d path. Returns
+  /// true if any field changed. Callers decide whether a setState is needed
+  /// (initState resolves before the first build, so it skips setState).
+  bool _computeResolve() {
+    if (_checked) return false;
+    final path = widget.box2dPath;
+    final exists = _existsCache[path] ??= File(path).existsSync();
+    _checked = true;
+    _exists = exists;
+    if (exists) {
+      _imageProvider = ResizeImage(
+        FileImage(File(path)),
+        width: widget.targetWidth,
+        allowUpscaling: false,
+      );
+    }
+    return true;
+  }
+
   void _resolve() {
-    if (_checked) return;
-    final exists = File(widget.box2dPath).existsSync();
-    if (!mounted) return;
-    setState(() {
-      _checked = true;
-      _exists = exists;
-      if (exists) {
-        _imageProvider = ResizeImage(
-          FileImage(File(widget.box2dPath)),
-          width: widget.targetWidth,
-          allowUpscaling: false,
-        );
-      }
-    });
+    if (!_computeResolve() || !mounted) return;
+    setState(() {});
   }
 
   @override
@@ -1484,12 +1596,14 @@ class _Placeholder extends StatelessWidget {
   }
 }
 
+// Mutable so [_positionCards] can update a reused buffer in place — a width
+// change (the Select+B reflow) then allocates nothing per frame.
 class _RowInfo {
-  final double topY;
-  final double height;
-  final int startIndex;
-  final int count;
-  const _RowInfo({
+  double topY;
+  double height;
+  int startIndex;
+  int count;
+  _RowInfo({
     required this.topY,
     required this.height,
     required this.startIndex,
@@ -1498,8 +1612,8 @@ class _RowInfo {
 }
 
 class _CardRect {
-  final double left, top, width, height;
-  const _CardRect({
+  double left, top, width, height;
+  _CardRect({
     required this.left,
     required this.top,
     required this.width,
