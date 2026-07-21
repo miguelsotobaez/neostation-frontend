@@ -1052,6 +1052,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onFavorite: _toggleFavorite,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
+      onScrape: () => _scrapeAction?.call(),
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
     );
@@ -1076,6 +1077,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onFavorite: _toggleFavorite,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
+      onScrape: () => _scrapeAction?.call(),
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
     );

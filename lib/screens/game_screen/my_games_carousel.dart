@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -5,23 +6,24 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/models/game_model.dart';
-import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
-import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/services/game_service.dart';
-import 'package:neostation/services/retro_achievements_helper.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:neostation/screens/game_screen/game_details_card/dialogs/game_achievements_dialog.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
-import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/screens/app_screen.dart';
+import 'package:neostation/widgets/game_view_mode_dropdown.dart';
+import 'package:neostation/widgets/game_action_buttons.dart';
+import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
-import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/constants/system_folder_names.dart';
+import 'package:neostation/models/retro_achievements_game_info.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:neostation/services/retro_achievements_helper.dart';
+import 'package:neostation/screens/game_screen/game_details_card/dialogs/game_achievements_dialog.dart';
 
 class GamesCarousel extends StatefulWidget {
   final SystemModel system;
@@ -34,8 +36,14 @@ class GamesCarousel extends StatefulWidget {
   final VoidCallback? onFavorite;
   final VoidCallback? onRandom;
   final VoidCallback? onSettings;
+  final VoidCallback? onScrape;
   final Set<String> scrapingGameRomnames;
   final Map<String, double> scrapeProgress;
+
+  /// No-op stub retained for API compatibility with the current scraping tab.
+  /// This pre-#188 carousel keeps no static artwork caches; the Flutter image
+  /// cache is evicted separately by the caller.
+  static void evictArtworkCaches(Iterable<String> paths) {}
 
   const GamesCarousel({
     super.key,
@@ -49,20 +57,13 @@ class GamesCarousel extends StatefulWidget {
     this.onFavorite,
     this.onRandom,
     this.onSettings,
+    this.onScrape,
     this.scrapingGameRomnames = const {},
     this.scrapeProgress = const {},
   });
 
   @override
   State<GamesCarousel> createState() => _GamesCarouselState();
-
-  /// Evicts memoized file-existence entries for [paths]. Call after replacing a
-  /// game's image files on disk so the carousel re-checks the fresh artwork.
-  static void evictArtworkCaches(Iterable<String> paths) {
-    for (final path in paths) {
-      _GamesCarouselState._fileExistsCache.remove(path);
-    }
-  }
 }
 
 class _GamesCarouselState extends State<GamesCarousel> {
@@ -71,19 +72,17 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   int _currentIndex = 0;
   late GamepadNavigation _gamepadNav;
-  final Map<String, double> _letterWidthCache = {};
-  static final Map<String, bool> _fileExistsCache = {};
-  int _lastBgIndex = -1;
 
-  /// Memoized `File.existsSync()` — synchronous disk stats on the UI thread
-  /// while cards build are a known jank source. Entries are evicted by
-  /// [GamesCarousel.evictArtworkCaches] when a scrape replaces artwork.
-  static bool _fileExists(String path) =>
-      _fileExistsCache.putIfAbsent(path, () => File(path).existsSync());
-
+  // RetroAchievements info for the selected game (shown in the footer pill).
   GameInfoAndUserProgress? _currentGameInfo;
   bool _isLoadingAchievements = false;
   String? _achievementsTargetRomname;
+  // Debounce so RA loads once selection settles rather than on every move.
+  Timer? _achievementsDebounce;
+  static const Duration _achievementsSettleDelay = Duration(milliseconds: 280);
+  final Map<String, double> _letterWidthCache = {};
+  final Map<String, bool> _fileExistsCache = {};
+  int _lastBgIndex = -1;
 
   static final Map<String, Size?> _imgSizeCache = {};
 
@@ -235,6 +234,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
         _scrollToCurrentLetter();
         _updateBackground();
       });
+      _scheduleAchievementsLoad();
     }
     if (widget.games != oldWidget.games) {
       _letterWidthCache.clear();
@@ -246,6 +246,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   @override
   void dispose() {
+    _achievementsDebounce?.cancel();
     _cleanupGamepad();
     _letterBarController.dispose();
     super.dispose();
@@ -268,9 +269,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
       },
       onBack: widget.onBack,
       onFavorite: widget.onFavorite,
-      onXButton: () =>
-          GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-      onSelectModifierY: widget.onRandom, // Select + Y - Random.
+      onXButton: () {
+        try {
+          GameViewModeDropdown.globalKey.currentState?.showDropdown();
+        } catch (_) {}
+      },
+      onLeftStickClick: widget.onRandom,
+      onSelectButton: widget.onScrape,
       onSettings: widget.onSettings,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
@@ -303,9 +308,108 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (index < widget.games.length) {
       widget.onGameSelected(widget.games[index]);
     }
+    _scheduleAchievementsLoad();
     _scrollToCurrentLetter();
     _updateBackground();
-    _loadAchievementsForSelectedGame();
+  }
+
+  bool get _isAllMode =>
+      widget.system.folderName == SystemFolderNames.all ||
+      widget.system.folderName == SystemFolderNames.favorites;
+
+  SystemModel _effectiveSystemFor(GameModel game) {
+    final systemFolderName = game.systemFolderName;
+    if (systemFolderName == null || !_isAllMode) return widget.system;
+    try {
+      final detectedSystems = context
+          .read<SqliteConfigProvider>()
+          .detectedSystems;
+      return detectedSystems.firstWhere(
+        (s) => s.folderName == systemFolderName,
+        orElse: () => widget.system,
+      );
+    } catch (e) {
+      return widget.system;
+    }
+  }
+
+  bool _hasRetroAchievementsFor(GameModel game) {
+    final system = _effectiveSystemFor(game);
+    return system.raId != null && system.raId != '0' && system.raId!.isNotEmpty;
+  }
+
+  /// Debounced entry point — coalesces rapid moves into a single load once the
+  /// user stops on a game.
+  void _scheduleAchievementsLoad() {
+    final selectedRomname = widget.games.isEmpty
+        ? null
+        : widget.games[_currentIndex.clamp(0, widget.games.length - 1)].romname;
+    if (selectedRomname != _achievementsTargetRomname) {
+      _achievementsTargetRomname = selectedRomname;
+      _currentGameInfo = null;
+      _isLoadingAchievements = true;
+    }
+    _achievementsDebounce?.cancel();
+    _achievementsDebounce = Timer(_achievementsSettleDelay, () {
+      if (mounted) _loadAchievementsForSelectedGame();
+    });
+  }
+
+  Future<void> _loadAchievementsForSelectedGame() async {
+    if (widget.games.isEmpty) return;
+    final game = widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
+
+    if (!_hasRetroAchievementsFor(game)) {
+      if (mounted) {
+        setState(() {
+          _currentGameInfo = null;
+          _isLoadingAchievements = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _isLoadingAchievements = true);
+    _achievementsTargetRomname = game.romname;
+
+    try {
+      final provider = context.read<RetroAchievementsProvider>();
+      final info = await RetroAchievementsHelper.loadGameInfo(
+        game: game,
+        provider: provider,
+        effectiveSystem: _effectiveSystemFor(game),
+        isAllMode: _isAllMode,
+      );
+      if (mounted && _achievementsTargetRomname == game.romname) {
+        setState(() {
+          _currentGameInfo = info;
+          _isLoadingAchievements = false;
+        });
+      }
+    } catch (e) {
+      if (mounted && _achievementsTargetRomname == game.romname) {
+        setState(() {
+          _currentGameInfo = null;
+          _isLoadingAchievements = false;
+        });
+      }
+    }
+  }
+
+  void _showAchievementsDialog() {
+    if (widget.games.isEmpty) return;
+    final game = widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
+    if (!_hasRetroAchievementsFor(game)) return;
+
+    SfxService().playNavSound();
+    showDialog(
+      context: context,
+      builder: (_) => GameAchievementsDialog(
+        game: game,
+        system: _effectiveSystemFor(game),
+        retroAchievementsProvider: context.read<RetroAchievementsProvider>(),
+      ),
+    );
   }
 
   void _updateBackground() {
@@ -348,97 +452,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
     context.read<SystemBackgroundProvider>().updateImage(
       imageProvider,
       imagePath: imagePath,
-    );
-  }
-
-  bool get _isAllMode =>
-      widget.system.folderName == SystemFolderNames.all ||
-      widget.system.folderName == SystemFolderNames.favorites;
-
-  SystemModel _effectiveSystemFor(GameModel game) {
-    final systemFolderName = game.systemFolderName;
-    if (systemFolderName == null || !_isAllMode) return widget.system;
-    try {
-      final detectedSystems = context
-          .read<SqliteConfigProvider>()
-          .detectedSystems;
-      return detectedSystems.firstWhere(
-        (s) => s.folderName == systemFolderName,
-        orElse: () => widget.system,
-      );
-    } catch (e) {
-      return widget.system;
-    }
-  }
-
-  bool _hasRetroAchievementsFor(GameModel game) {
-    final system = _effectiveSystemFor(game);
-    return system.raId != null && system.raId != '0' && system.raId!.isNotEmpty;
-  }
-
-  Future<void> _loadAchievementsForSelectedGame() async {
-    if (widget.games.isEmpty) return;
-    final game = widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
-
-    if (!_hasRetroAchievementsFor(game)) {
-      if (mounted) {
-        setState(() {
-          _currentGameInfo = null;
-          _isLoadingAchievements = false;
-        });
-      }
-      return;
-    }
-
-    // Clear the previous game's info immediately (not just after the async load
-    // returns) so fast scrolling never shows the prior game's achievement
-    // counts/icon while this load is pending.
-    _achievementsTargetRomname = game.romname;
-    if (mounted) {
-      setState(() {
-        _currentGameInfo = null;
-        _isLoadingAchievements = true;
-      });
-    }
-
-    try {
-      final provider = context.read<RetroAchievementsProvider>();
-      final info = await RetroAchievementsHelper.loadGameInfo(
-        game: game,
-        provider: provider,
-        effectiveSystem: _effectiveSystemFor(game),
-        isAllMode: _isAllMode,
-      );
-
-      if (mounted && _achievementsTargetRomname == game.romname) {
-        setState(() {
-          _currentGameInfo = info;
-          _isLoadingAchievements = false;
-        });
-      }
-    } catch (e) {
-      if (mounted && _achievementsTargetRomname == game.romname) {
-        setState(() {
-          _currentGameInfo = null;
-          _isLoadingAchievements = false;
-        });
-      }
-    }
-  }
-
-  void _showAchievementsDialog() {
-    if (widget.games.isEmpty) return;
-    final game = widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
-    if (!_hasRetroAchievementsFor(game)) return;
-
-    SfxService().playNavSound();
-    showDialog(
-      context: context,
-      builder: (_) => GameAchievementsDialog(
-        game: game,
-        system: _effectiveSystemFor(game),
-        retroAchievementsProvider: context.read<RetroAchievementsProvider>(),
-      ),
     );
   }
 
@@ -512,7 +525,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       imageType,
       widget.fileProvider,
     );
-    if (_fileExists(path)) return path;
+    if (File(path).existsSync()) return path;
     return '';
   }
 
@@ -520,13 +533,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final theme = Theme.of(context);
     final folder = _folderForGame(game);
     final screenshotPath = game.getScreenshotPath(folder, widget.fileProvider);
-    final hasScreenshot = _fileExists(screenshotPath);
+    final hasScreenshot = File(screenshotPath).existsSync();
     final fanartPath = game.getImagePath(
       folder,
       'fanarts',
       widget.fileProvider,
     );
-    final hasFanart = _fileExists(fanartPath);
+    final hasFanart = File(fanartPath).existsSync();
     final bgPath = hasFanart
         ? fanartPath
         : (hasScreenshot ? screenshotPath : '');
@@ -849,9 +862,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
       children: [
         Column(
           children: [
+            // #188 layout: drop the top spacer so the carousel gets the full
+            // height (bigger cards sit closer together). Pad symmetrically so
+            // the centered card stays centered on-screen while still clearing
+            // the vertical legend on the left.
             Expanded(
               child: Padding(
-                padding: EdgeInsets.only(left: 60.r),
+                padding: EdgeInsets.symmetric(horizontal: 60.r),
                 child: NativeCarousel(
                   key: _carouselKey,
                   itemCount: widget.games.length,
@@ -939,7 +956,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
             GameViewFooter(
               game: currentGame,
               onPlay: widget.onPlay,
-              hasRetroAchievements: _hasRetroAchievementsFor(currentGame),
+              hasRetroAchievements:
+                  widget.games.isNotEmpty &&
+                  _hasRetroAchievementsFor(currentGame),
               isLoadingAchievements: _isLoadingAchievements,
               currentGameInfo: _currentGameInfo,
               onShowAchievements: _showAchievementsDialog,
@@ -947,18 +966,23 @@ class _GamesCarouselState extends State<GamesCarousel> {
             SizedBox(height: 8.r),
           ],
         ),
+        // Vertical action-button legend (shared with the game list view).
         Positioned(
           top: 12.r,
           left: 12.r,
-          child: GameActionButtons(
-            system: widget.system,
-            selectedGame: currentGame,
-            onBack: widget.onBack,
-            onFavorite: widget.onFavorite ?? () {},
-            onViewMode: () =>
-                GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-            onSettings: widget.onSettings ?? () {},
-            onRandom: widget.onRandom,
+          child: Consumer<SyncManager>(
+            builder: (context, syncManager, child) => GameActionButtons(
+              system: widget.system,
+              selectedGame: currentGame,
+              syncProvider: syncManager.active,
+              onBack: widget.onBack,
+              onFavorite: widget.onFavorite ?? () {},
+              onViewMode: () =>
+                  GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+              onSettings: widget.onSettings ?? () {},
+              onRandom: widget.onRandom,
+              onScrape: widget.onScrape,
+            ),
           ),
         ),
       ],
