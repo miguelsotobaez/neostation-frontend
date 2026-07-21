@@ -80,6 +80,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
   // Debounce so RA loads once selection settles rather than on every move.
   Timer? _achievementsDebounce;
   static const Duration _achievementsSettleDelay = Duration(milliseconds: 280);
+
+  // Debounced "settled" selection driving the footer pill + action-button
+  // legend, so that expensive chrome isn't rebuilt on every fast-swipe page
+  // change. Memoized by signature (see _buildSettledChrome) so build() returns
+  // identical instances during a burst and Flutter skips those subtrees.
+  int _settledIndex = 0;
+  Timer? _settleTimer;
+  DateTime? _lastNavTime;
+  bool _isNavigatingFast = false;
+  static const Duration _fastNavThreshold = Duration(milliseconds: 150);
+  static const Duration _chromeSettleDelay = Duration(milliseconds: 160);
+  String? _chromeSig;
+  Widget? _chromeFooter;
+  Widget? _chromeLegend;
   final Map<String, double> _letterWidthCache = {};
   final Map<String, bool> _fileExistsCache = {};
   int _lastBgIndex = -1;
@@ -213,6 +227,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   void initState() {
     super.initState();
     _currentIndex = widget.selectedIndex.clamp(0, _gamesLength - 1);
+    _settledIndex = _currentIndex;
     _initializeGamepad();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentLetter();
@@ -228,7 +243,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
         widget.selectedIndex != _currentIndex) {
       setState(() {
         _currentIndex = widget.selectedIndex.clamp(0, _gamesLength - 1);
+        _settledIndex = _currentIndex; // external jump: settle immediately
       });
+      _settleTimer?.cancel();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _carouselKey.currentState?.jumpToPage(_currentIndex);
         _scrollToCurrentLetter();
@@ -247,9 +264,17 @@ class _GamesCarouselState extends State<GamesCarousel> {
   @override
   void dispose() {
     _achievementsDebounce?.cancel();
+    _settleTimer?.cancel();
     _cleanupGamepad();
     _letterBarController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Theme / MediaQuery / ScreenUtil may have changed; drop memoized chrome.
+    _chromeSig = null;
   }
 
   void _initializeGamepad() {
@@ -302,6 +327,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (reason == CarouselPageChangeReason.manual) {
       SfxService().playNavSound();
     }
+    final now = DateTime.now();
+    _isNavigatingFast =
+        _lastNavTime != null &&
+        now.difference(_lastNavTime!) < _fastNavThreshold;
+    _lastNavTime = now;
     setState(() {
       _currentIndex = index;
     });
@@ -309,8 +339,68 @@ class _GamesCarouselState extends State<GamesCarousel> {
       widget.onGameSelected(widget.games[index]);
     }
     _scheduleAchievementsLoad();
+    _scheduleChromeSettle();
     _scrollToCurrentLetter();
     _updateBackground();
+  }
+
+  /// Advances the footer/legend's settled selection. A single (slow) page
+  /// change updates it immediately; during a fast-swipe burst it is deferred
+  /// until navigation settles, so the chrome isn't rebuilt every frame.
+  void _scheduleChromeSettle() {
+    _settleTimer?.cancel();
+    if (!_isNavigatingFast) {
+      if (_settledIndex != _currentIndex) {
+        setState(() => _settledIndex = _currentIndex);
+      }
+      return;
+    }
+    _settleTimer = Timer(_chromeSettleDelay, () {
+      if (mounted && _settledIndex != _currentIndex) {
+        setState(() => _settledIndex = _currentIndex);
+      }
+    });
+  }
+
+  /// (Re)builds the footer pill + action-button legend only when the settled
+  /// selection or its achievement/favorite state changes, so a fast-swipe
+  /// burst reuses cached widget instances instead of rebuilding this chrome.
+  void _buildSettledChrome() {
+    final settledGame = widget.games[_settledIndex.clamp(0, _gamesLength - 1)];
+    final hasRa = _hasRetroAchievementsFor(settledGame);
+    final sig =
+        '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
+        '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
+    if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
+      return;
+    }
+    _chromeSig = sig;
+    _chromeFooter = GameViewFooter(
+      game: settledGame,
+      onPlay: widget.onPlay,
+      hasRetroAchievements: hasRa,
+      isLoadingAchievements: _isLoadingAchievements,
+      currentGameInfo: _currentGameInfo,
+      onShowAchievements: _showAchievementsDialog,
+    );
+    _chromeLegend = Positioned(
+      top: 12.r,
+      left: 12.r,
+      child: Consumer<SyncManager>(
+        builder: (context, syncManager, child) => GameActionButtons(
+          system: widget.system,
+          selectedGame: settledGame,
+          syncProvider: syncManager.active,
+          onBack: widget.onBack,
+          onFavorite: widget.onFavorite ?? () {},
+          onViewMode: () =>
+              GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+          onSettings: widget.onSettings ?? () {},
+          onRandom: widget.onRandom,
+          onScrape: widget.onScrape,
+        ),
+      ),
+    );
   }
 
   bool get _isAllMode =>
@@ -858,6 +948,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
       fontWeight: FontWeight.w800,
     );
 
+    _buildSettledChrome();
+
     return Stack(
       children: [
         Column(
@@ -953,38 +1045,16 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 ),
               ),
             ),
-            GameViewFooter(
-              game: currentGame,
-              onPlay: widget.onPlay,
-              hasRetroAchievements:
-                  widget.games.isNotEmpty &&
-                  _hasRetroAchievementsFor(currentGame),
-              isLoadingAchievements: _isLoadingAchievements,
-              currentGameInfo: _currentGameInfo,
-              onShowAchievements: _showAchievementsDialog,
-            ),
+            // Footer pill driven by the debounced settled selection and
+            // memoized (see _buildSettledChrome) so it is not rebuilt on every
+            // fast-swipe frame.
+            _chromeFooter!,
             SizedBox(height: 8.r),
           ],
         ),
-        // Vertical action-button legend (shared with the game list view).
-        Positioned(
-          top: 12.r,
-          left: 12.r,
-          child: Consumer<SyncManager>(
-            builder: (context, syncManager, child) => GameActionButtons(
-              system: widget.system,
-              selectedGame: currentGame,
-              syncProvider: syncManager.active,
-              onBack: widget.onBack,
-              onFavorite: widget.onFavorite ?? () {},
-              onViewMode: () =>
-                  GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-              onSettings: widget.onSettings ?? () {},
-              onRandom: widget.onRandom,
-              onScrape: widget.onScrape,
-            ),
-          ),
-        ),
+        // Vertical action-button legend (shared with the game list view);
+        // also memoized on the settled selection.
+        _chromeLegend!,
       ],
     );
   }
