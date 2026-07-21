@@ -64,6 +64,15 @@ class GamepadNavigation {
   final VoidCallback? onLeftBumper;
   final VoidCallback? onRightBumper;
 
+  /// Select (View) chord combos. The Select button is a pure modifier — on its
+  /// own it does nothing. While it is held (or within a short window of a pulse),
+  /// a face-button press fires the matching modifier callback instead of its
+  /// normal action, and suppresses that normal action.
+  final VoidCallback? onSelectModifierA;
+  final VoidCallback? onSelectModifierB;
+  final VoidCallback? onSelectModifierX;
+  final VoidCallback? onSelectModifierY;
+
   /// Optional override that reports whether a text field is currently focused
   /// in the active UI layer. When provided, it takes precedence over the global
   /// focus search, preventing off-stage text fields from blocking navigation.
@@ -108,6 +117,23 @@ class GamepadNavigation {
   static const int _throttleDelayMs = 128;
   bool _isActive = false;
 
+  /// True while the Select (View) button is reported as physically held down.
+  /// Not all controllers sustain this — many emit a brief down+up pulse even
+  /// while the button is held, which is why [_lastSelectDownTime] backs it up.
+  bool _selectHeld = false;
+
+  /// When Select was last pressed. A face button counts as a combo if it lands
+  /// while Select is still held OR within [_selectChordWindowMs] of this time,
+  /// so the pulse-emitting controllers above still register chords.
+  DateTime? _lastSelectDownTime;
+
+  /// Face buttons whose PRESS fired a combo and whose matching RELEASE must be
+  /// swallowed so the normal action never fires (Desktop dispatches on release).
+  final Set<GamepadInputType> _comboConsumed = {};
+
+  /// How long after a Select press a face button still counts as a chord.
+  static const int _selectChordWindowMs = 400;
+
   DateTime? _activationTime;
 
   /// Grace period after activation during which inputs are ignored (prevents accidental inputs from previous screens).
@@ -143,6 +169,10 @@ class GamepadNavigation {
     this.onSelectButton,
     this.onLeftBumper,
     this.onRightBumper,
+    this.onSelectModifierA,
+    this.onSelectModifierB,
+    this.onSelectModifierX,
+    this.onSelectModifierY,
     this.isTextFieldFocused,
   });
 
@@ -272,7 +302,41 @@ class GamepadNavigation {
   void deactivate() {
     _isActive = false;
     _activationTime = null;
+    _resetSelectModifier();
     cancelAllRepeatTimers();
+  }
+
+  /// Clears Select chord-modifier state so it can't leak across layer changes
+  /// (e.g. opening a dialog while Select is down).
+  void _resetSelectModifier() {
+    _selectHeld = false;
+    _lastSelectDownTime = null;
+    _comboConsumed.clear();
+  }
+
+  /// Whether a Select+face-button chord should register right now: Select is
+  /// still reported down, or it pulsed within the chord window.
+  bool _isSelectChordActive() {
+    if (_selectHeld) return true;
+    final t = _lastSelectDownTime;
+    if (t == null) return false;
+    return DateTime.now().difference(t).inMilliseconds < _selectChordWindowMs;
+  }
+
+  /// Maps a face button to its Select-modifier combo callback, if any.
+  VoidCallback? _selectModifierFor(GamepadInputType inputType) {
+    switch (inputType) {
+      case GamepadInputType.buttonA:
+        return onSelectModifierA;
+      case GamepadInputType.buttonB:
+        return onSelectModifierB;
+      case GamepadInputType.buttonX:
+        return onSelectModifierX;
+      case GamepadInputType.buttonY:
+        return onSelectModifierY;
+      default:
+        return null;
+    }
   }
 
   /// Cancels all active auto-repeat timers.
@@ -356,6 +420,7 @@ class GamepadNavigation {
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
+    _resetSelectModifier();
     cancelAllRepeatTimers();
 
     if (_keyboardInitialized && isDesktop) {
@@ -408,6 +473,22 @@ class GamepadNavigation {
       }
 
       final now = DateTime.now();
+
+      // Select (View) chord modifier on Android: read the RAW key directly.
+      // This controller auto-repeats ACTION_DOWN (value 0.0) while the button is
+      // held and doesn't reliably emit a matching ACTION_UP, so edge-detection
+      // gets stuck. The raw value can't: 0.0 = down (incl. key-repeat) → held;
+      // 1.0 = up → released. Select is a pure modifier, so it never dispatches.
+      if (isAndroid && event.key.toLowerCase() == 'keycode_button_select') {
+        if (event.value < 0.5) {
+          _selectHeld = true;
+          _lastSelectDownTime = now;
+        } else {
+          _selectHeld = false;
+        }
+        return;
+      }
+
       final translatedEvent = _translator.translateEvent(event);
 
       if (translatedEvent == null) return;
@@ -443,12 +524,20 @@ class GamepadNavigation {
           }
           _lastShoulderEventTime = now;
         } else {
-          if (_lastActionEventTime != null &&
-              now.difference(_lastActionEventTime!).inMilliseconds <
-                  _actionDebounceMs) {
-            return;
+          // Select and any face button that lands during a Select chord bypass
+          // the action debounce so a quick chord isn't swallowed.
+          final isChordRelated =
+              translatedEvent.inputType == GamepadInputType.buttonSelect ||
+              (_isSelectChordActive() &&
+                  _selectModifierFor(translatedEvent.inputType) != null);
+          if (!isChordRelated) {
+            if (_lastActionEventTime != null &&
+                now.difference(_lastActionEventTime!).inMilliseconds <
+                    _actionDebounceMs) {
+              return;
+            }
+            _lastActionEventTime = now;
           }
-          _lastActionEventTime = now;
         }
 
         _lastEventTime = now;
@@ -474,6 +563,35 @@ class GamepadNavigation {
       };
       if (!allowedWhileTyping.contains(event.inputType)) return;
     }
+
+    // Select (View) is a PURE chord modifier: on its own it does nothing. Track
+    // its state — before the press/release gate below — so a face button pressed
+    // alongside it fires a combo. Some controllers only reliably report one edge
+    // of this button, so the timestamp is stamped on BOTH press and release.
+    if (event.inputType == GamepadInputType.buttonSelect) {
+      if (event.isPressed) {
+        _selectHeld = true;
+      } else if (event.isReleased) {
+        _selectHeld = false;
+      }
+      _lastSelectDownTime = DateTime.now();
+      return; // Select alone never triggers an action.
+    }
+
+    // A face-button PRESS fires its modifier combo when Select is still held or
+    // was seen within the chord window.
+    if (event.isPressed && _isSelectChordActive()) {
+      final modifier = _selectModifierFor(event.inputType);
+      if (modifier != null) {
+        _comboConsumed.add(event.inputType);
+        SfxService().playNavSound();
+        modifier();
+        return;
+      }
+    }
+    // Swallow the matching release so the normal action never fires for a button
+    // already consumed by a combo (order-independent of when Select is released).
+    if (event.isReleased && _comboConsumed.remove(event.inputType)) return;
 
     bool shouldProcess;
 
@@ -614,9 +732,8 @@ class GamepadNavigation {
         onSettings?.call();
         break;
 
-      case GamepadInputType.buttonSelect:
-        onSelectButton?.call();
-        break;
+      // buttonSelect is handled earlier as a held modifier (see _handleTranslatedEvent
+      // top): a plain tap fires onSelectButton on release, combos fire on press.
 
       case GamepadInputType.buttonLB:
         SfxService().playNavSound();

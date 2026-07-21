@@ -11,16 +11,16 @@ import 'neo_sync_status_icon.dart';
 
 /// Vertical action button column shared by the game list, grid, and carousel.
 ///
-/// Renders back, favorite, random, an optional NeoSync status icon, and the
-/// game-settings shortcut as the last entry. Scraping and view-mode actions
-/// live inside the game settings dialog.
+/// Renders back, favorite, view-mode, an optional NeoSync status icon, and the
+/// game-settings shortcut as the last entry. Random is a Select + Y combo and
+/// scraping is a Select + A combo, so neither has a dedicated legend entry.
 class GameActionButtons extends StatelessWidget {
   final SystemModel system;
   final GameModel? selectedGame;
   final ISyncProvider? syncProvider;
   final VoidCallback onBack;
   final VoidCallback onFavorite;
-  final VoidCallback onRandom;
+  final VoidCallback onViewMode;
   final VoidCallback onSettings;
 
   const GameActionButtons({
@@ -30,7 +30,7 @@ class GameActionButtons extends StatelessWidget {
     this.syncProvider,
     required this.onBack,
     required this.onFavorite,
-    required this.onRandom,
+    required this.onViewMode,
     required this.onSettings,
   });
 
@@ -72,10 +72,10 @@ class GameActionButtons extends StatelessWidget {
           SizedBox(height: 6.r),
           GameActionButton(
             iconPath: 'assets/images/gamepad/Xbox_X_button.png',
-            symbol: Symbols.casino_rounded,
+            symbol: Symbols.grid_view_rounded,
             color: Theme.of(context).colorScheme.primary,
             foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            onTap: onRandom,
+            onTap: onViewMode,
           ),
           SizedBox(height: 6.r),
           // Game settings — second-to-last option.

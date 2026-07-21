@@ -14,6 +14,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/retro_achievements_helper.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/screens/game_screen/game_details_card/dialogs/game_achievements_dialog.dart';
 import 'package:neostation/services/game_service.dart';
@@ -555,7 +556,9 @@ class _GamesGridState extends State<GamesGrid> {
       onSelectItem: widget.onPlay,
       onBack: widget.onBack,
       onFavorite: widget.onFavorite,
-      onXButton: widget.onRandom,
+      onXButton: () =>
+          GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+      onSelectModifierY: widget.onRandom, // Select + Y - Random.
       onSettings: widget.onSettings,
     );
   }
@@ -874,7 +877,8 @@ class _GamesGridState extends State<GamesGrid> {
                 : null,
             onBack: widget.onBack,
             onFavorite: widget.onFavorite,
-            onRandom: widget.onRandom,
+            onViewMode: () =>
+                GameViewModeDropdown.globalKey.currentState?.showDropdown(),
             onSettings: widget.onSettings ?? () {},
           ),
         ),

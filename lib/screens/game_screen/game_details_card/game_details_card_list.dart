@@ -99,6 +99,9 @@ class GameDetailsCardList extends StatefulWidget {
   /// Callback to register the Select button action.
   final Function(VoidCallback)? onRegisterSelectButton;
 
+  /// Callback to register the scrape action (Select + A combo).
+  final Function(VoidCallback)? onRegisterScrapeAction;
+
   final bool isSecondaryScreenActive;
   final bool isNavigatingFast;
   final VoidCallback? onBack;
@@ -135,6 +138,7 @@ class GameDetailsCardList extends StatefulWidget {
     this.onRegisterIsPlayingGameBlocked,
     this.onRegisterTabNavigation,
     this.onRegisterSelectButton,
+    this.onRegisterScrapeAction,
     this.isSecondaryScreenActive = false,
     this.isNavigatingFast = false,
     this.onBack,
@@ -319,6 +323,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     });
     widget.onRegisterTabNavigation?.call(_handleTabNavigation);
     widget.onRegisterSelectButton?.call(_handleSelectAction);
+    widget.onRegisterScrapeAction?.call(_onScrapeGameCompact);
     widget.onRegisterNavigation?.call(
       moveUp: () {
         if (_currentTab == DetailTab.achievements) {
@@ -824,6 +829,14 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     });
 
     if (!mounted) return;
+
+    // Surface immediate feedback — a scrape takes several seconds and can be
+    // triggered "blind" via the Select + A chord from the games list.
+    AppNotification.showNotification(
+      context,
+      AppLocale.scrapingGameData.getString(context),
+      type: NotificationType.info,
+    );
 
     final secondaryState = context.read<SecondaryDisplayState?>();
     if (secondaryState != null && widget.isSecondaryScreenActive) {

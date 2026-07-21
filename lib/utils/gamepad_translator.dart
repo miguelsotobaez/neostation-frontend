@@ -158,9 +158,14 @@ class GamepadEventTranslator {
         eventType,
       );
 
-      // Android keycode_dpad: ACTION_DOWN=0.0 (pressed), ACTION_UP=1.0 (released).
-      // Standardize to 1.0 = pressed / 0.0 = released to match axis_hat behavior.
-      if (Platform.isAndroid && key.startsWith('keycode_dpad_')) {
+      // Android keycode buttons: ACTION_DOWN=0.0 (pressed), ACTION_UP=1.0
+      // (released). Standardize to 1.0 = pressed / 0.0 = released so these fire
+      // on press rather than release. Applied to the dpad and the shoulder
+      // buttons (L1/R1) — the latter otherwise triggered tab switches on release.
+      if (Platform.isAndroid &&
+          (key.startsWith('keycode_dpad_') ||
+              key == 'keycode_button_l1' ||
+              key == 'keycode_button_r1')) {
         value = (value == 0.0) ? 1.0 : 0.0;
       }
 

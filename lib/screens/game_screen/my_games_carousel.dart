@@ -16,6 +16,7 @@ import 'package:neostation/services/retro_achievements_helper.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/screens/game_screen/game_details_card/dialogs/game_achievements_dialog.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
@@ -267,7 +268,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
       },
       onBack: widget.onBack,
       onFavorite: widget.onFavorite,
-      onXButton: widget.onRandom,
+      onXButton: () =>
+          GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+      onSelectModifierY: widget.onRandom, // Select + Y - Random.
       onSettings: widget.onSettings,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
@@ -952,7 +955,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
             selectedGame: currentGame,
             onBack: widget.onBack,
             onFavorite: widget.onFavorite ?? () {},
-            onRandom: widget.onRandom ?? () {},
+            onViewMode: () =>
+                GameViewModeDropdown.globalKey.currentState?.showDropdown(),
             onSettings: widget.onSettings ?? () {},
           ),
         ),

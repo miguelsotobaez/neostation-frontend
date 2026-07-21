@@ -40,16 +40,17 @@ class GamesFooter extends CoreFooter {
         textColor: Colors.white,
       ),
       SizedBox(width: 8.r),
+      // Select (View) held as a modifier: + A scrapes, + Y picks a random game.
       GamepadControl(
         iconPath: 'assets/images/gamepad/Xbox_View_button.png',
-        label: AppLocale.hintScrape.getString(context),
+        label: '+A ${AppLocale.hintScrape.getString(context)}',
         backgroundColor: theme.colorScheme.tertiaryContainer,
         textColor: theme.colorScheme.onTertiaryContainer,
       ),
       SizedBox(width: 8.r),
       GamepadControl(
-        iconPath: 'assets/images/gamepad/Left Stick Click.png',
-        label: AppLocale.hintRandom.getString(context),
+        iconPath: 'assets/images/gamepad/Xbox_View_button.png',
+        label: '+Y ${AppLocale.hintRandom.getString(context)}',
         backgroundColor: theme.colorScheme.errorContainer.withValues(
           alpha: 0.6,
         ),

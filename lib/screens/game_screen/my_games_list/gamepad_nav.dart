@@ -29,6 +29,24 @@ extension _GamepadNav on _SystemGamesListState {
     _selectButtonAction?.call();
   }
 
+  /// Handles the X button: opens the game view-mode picker (list/grid/carousel
+  /// + card size/style). For the music library, X keeps its shuffle toggle.
+  void _handleXButton() {
+    if (widget.system.folderName == 'music') {
+      final service = MusicPlayerService();
+      service.toggleShuffle();
+      AppNotification.showNotification(
+        context,
+        service.isShuffle
+            ? AppLocale.shuffleEnabled.getString(context)
+            : AppLocale.shuffleDisabled.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
+    GameViewModeDropdown.globalKey.currentState?.showDropdown();
+  }
+
   /// Registers gamepad and keyboard input mappings for the screen.
   void _initializeGamepad() {
     _gamepadNav = GamepadNavigation(
@@ -39,23 +57,11 @@ extension _GamepadNav on _SystemGamesListState {
       onSelectItem: _selectCurrentGame,
       onBack: _goBack,
       onFavorite: _toggleFavorite, // Button Y.
-      onXButton: () {
-        if (widget.system.folderName == 'music') {
-          final service = MusicPlayerService();
-          service.toggleShuffle();
-          AppNotification.showNotification(
-            context,
-            service.isShuffle
-                ? AppLocale.shuffleEnabled.getString(context)
-                : AppLocale.shuffleDisabled.getString(context),
-            type: NotificationType.info,
-          );
-        } else {
-          _showRandomGameDialog();
-        }
-      }, // Button X - Random.
+      onXButton: _handleXButton, // Button X - View mode picker (music: shuffle).
       onSettings: _openGameSettingsDialog, // Button Start.
-      onSelectButton: _handleSelectButton, // Button Select (View).
+      onSelectButton: _handleSelectButton, // Button Select (View) - tap.
+      onSelectModifierA: () => _scrapeAction?.call(), // Select + A - Scrape.
+      onSelectModifierY: _showRandomGameDialog, // Select + Y - Random.
       onRightStickClick: null,
       onLeftBumper: _handleLeftBumper,
       onRightBumper: _handleRightBumper,

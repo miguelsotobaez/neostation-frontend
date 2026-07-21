@@ -98,6 +98,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   VoidCallback? _triggerOverlayAction;
   VoidCallback? _secondaryOverlayAction; // Maps to RB (Scrape/Refresh).
   VoidCallback? _selectButtonAction; // Maps to Select (View) for mute/refresh.
+  VoidCallback? _scrapeAction; // Maps to Select + A (scrape highlighted game).
   bool Function(bool isRight)?
   _tabNavigationAction; // Facilitates tab switching via bumpers.
   bool Function()? _isPlayingGameBlocked; // Validation for launch readiness.
@@ -1183,7 +1184,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   syncProvider: syncManager.active,
                   onBack: _goBack,
                   onFavorite: _toggleFavorite,
-                  onRandom: _showRandomGameDialog,
+                  onViewMode: () =>
+                      GameViewModeDropdown.globalKey.currentState?.showDropdown(),
                   onSettings: _openGameSettingsDialog,
                 );
               },
@@ -1417,6 +1419,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
         },
         onRegisterSelectButton: (action) {
           _selectButtonAction = action;
+        },
+        onRegisterScrapeAction: (action) {
+          _scrapeAction = action;
         },
         onRegisterIsPlayingGameBlocked: (isBlocked) {
           _isPlayingGameBlocked = isBlocked;
