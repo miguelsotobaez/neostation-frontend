@@ -16,6 +16,7 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
@@ -229,6 +230,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     _currentIndex = widget.selectedIndex.clamp(0, _gamesLength - 1);
     _settledIndex = _currentIndex;
     _initializeGamepad();
+    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentLetter();
       _updateBackground();
@@ -265,6 +267,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   void dispose() {
     _achievementsDebounce?.cancel();
     _settleTimer?.cancel();
+    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     _cleanupGamepad();
     _letterBarController.dispose();
     super.dispose();
@@ -301,6 +304,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       },
       onLeftStickClick: widget.onRandom,
       onSelectButton: widget.onScrape,
+      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSettings: widget.onSettings,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
@@ -383,24 +387,32 @@ class _GamesCarouselState extends State<GamesCarousel> {
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
     );
-    _chromeLegend = Positioned(
-      top: 12.r,
-      left: 12.r,
-      child: Consumer<SyncManager>(
-        builder: (context, syncManager, child) => GameActionButtons(
-          system: widget.system,
-          selectedGame: settledGame,
-          syncProvider: syncManager.active,
-          onBack: widget.onBack,
-          onFavorite: widget.onFavorite ?? () {},
-          onViewMode: () =>
-              GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-          onSettings: widget.onSettings ?? () {},
-          onRandom: widget.onRandom,
-          onScrape: widget.onScrape,
-        ),
+    // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
+    // so Select + B can slide it without invalidating this memoized subtree.
+    _chromeLegend = Consumer<SyncManager>(
+      builder: (context, syncManager, child) => GameActionButtons(
+        system: widget.system,
+        selectedGame: settledGame,
+        syncProvider: syncManager.active,
+        onBack: widget.onBack,
+        onFavorite: widget.onFavorite ?? () {},
+        onViewMode: () =>
+            GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+        onSettings: widget.onSettings ?? () {},
+        onRandom: widget.onRandom,
+        onScrape: widget.onScrape,
       ),
     );
+  }
+
+  /// Select + B — toggles the (session-global) vertical action-button legend.
+  void _toggleLegend() {
+    SfxService().playNavSound();
+    GameLegendVisibility.toggle();
+  }
+
+  void _onLegendVisibilityChanged() {
+    if (mounted) setState(() {});
   }
 
   bool get _isAllMode =>
@@ -1053,8 +1065,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
           ],
         ),
         // Vertical action-button legend (shared with the game list view);
-        // also memoized on the settled selection.
-        _chromeLegend!,
+        // also memoized on the settled selection. Select + B slides it off the
+        // left edge. The centered carousel itself is left in place (there is no
+        // left-gutter to reflow into for a centered PageView).
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          top: 12.r,
+          left: GameLegendVisibility.hidden.value ? -60.r : 12.r,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 250),
+            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
+            child: _chromeLegend!,
+          ),
+        ),
       ],
     );
   }

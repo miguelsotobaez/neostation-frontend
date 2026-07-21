@@ -14,6 +14,7 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
@@ -98,6 +99,11 @@ class _GamesGridState extends State<GamesGrid> {
   String? _chromeSig;
   Widget? _chromeFooter;
   Widget? _chromeLegend;
+
+  /// True while the Select+B reflow is in flight. During it the selection cursor
+  /// uses a plain Positioned that tracks the (per-frame changing) card rect
+  /// exactly, so it stays fitted to the card instead of lagging a frame behind.
+  bool _legendAnimating = false;
 
   // Layout
   List<_CardRect> _cardRects = [];
@@ -230,6 +236,24 @@ class _GamesGridState extends State<GamesGrid> {
       context.read<SqliteConfigProvider>().config.gameCarouselCardStyle ==
       'fanart';
 
+  final Set<String> _pendingSaves = {};
+  void _scheduleAspectRatioSave(GameModel game, String ratio) {
+    final key = '${game.systemId}_${game.romname}';
+    if (_pendingSaves.contains(key)) return;
+    _pendingSaves.add(key);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _pendingSaves.remove(key);
+      if (game.systemId != null) {
+        GameRepository.updateBox2dAspectRatio(
+          game.systemId!,
+          game.romname,
+          ratio,
+        );
+      }
+    });
+  }
+
   double _cardHeightFor(int index) {
     if (_isFanart) return _cardWidth;
 
@@ -255,24 +279,6 @@ class _GamesGridState extends State<GamesGrid> {
       return _cardWidth / (size.width / size.height);
     }
     return _cardWidth; // 1:1 fallback
-  }
-
-  final Set<String> _pendingSaves = {};
-  void _scheduleAspectRatioSave(GameModel game, String ratio) {
-    final key = '${game.systemId}_${game.romname}';
-    if (_pendingSaves.contains(key)) return;
-    _pendingSaves.add(key);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _pendingSaves.remove(key);
-      if (game.systemId != null) {
-        GameRepository.updateBox2dAspectRatio(
-          game.systemId!,
-          game.romname,
-          ratio,
-        );
-      }
-    });
   }
 
   // ---- Layout (computed once, cached) ----
@@ -389,6 +395,7 @@ class _GamesGridState extends State<GamesGrid> {
     _settledIndex = _selectedIndex;
     _updateCrossAxisCount();
     _initializeGamepad();
+    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -541,8 +548,24 @@ class _GamesGridState extends State<GamesGrid> {
       },
       onLeftStickClick: widget.onRandom,
       onSelectButton: widget.onScrape,
+      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSettings: widget.onSettings,
     );
+  }
+
+  /// Select + B — toggles the (session-global) vertical action-button legend.
+  /// When hidden the legend slides off the left edge and the grid reflows into
+  /// the 60.r gutter.
+  void _toggleLegend() {
+    SfxService().playNavSound();
+    GameLegendVisibility.toggle();
+  }
+
+  /// Reacts to any change of the shared legend flag (this view's chord or a
+  /// future external/DB update). Starts the reflow animation; the flag is
+  /// cleared in AnimatedPadding.onEnd.
+  void _onLegendVisibilityChanged() {
+    if (mounted) setState(() => _legendAnimating = true);
   }
 
   @override
@@ -551,6 +574,7 @@ class _GamesGridState extends State<GamesGrid> {
     _achievementsDebounce?.cancel();
     _settleTimer?.cancel();
     _cardSizeLabel.dispose();
+    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     GamepadNavigationManager.popLayer('games_grid');
     _gamepadNav.dispose();
     _scrollController.dispose();
@@ -811,9 +835,19 @@ class _GamesGridState extends State<GamesGrid> {
           children: [
             Expanded(
               // Indent the grid to clear the vertical legend on the left; the
-              // reduced width makes the cards slightly smaller.
-              child: Padding(
-                padding: EdgeInsets.only(left: 60.r),
+              // reduced width makes the cards slightly smaller. Select + B hides
+              // the legend and animates this indent to 0 so the cards reflow to
+              // fill the reclaimed 60.r. The cursor tracks the card rect while
+              // _legendAnimating so it stays fitted during the reflow.
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                onEnd: () {
+                  if (_legendAnimating && mounted) {
+                    setState(() => _legendAnimating = false);
+                  }
+                },
+                padding: EdgeInsets.only(left: GameLegendVisibility.hidden.value ? 0 : 60.r),
                 child: LayoutBuilder(
                 builder: (context, constraints) {
                   _computeLayout(constraints.maxWidth);
@@ -860,6 +894,29 @@ class _GamesGridState extends State<GamesGrid> {
                     );
                   }
 
+                  final cursorOverlay = ListenableBuilder(
+                    listenable: _scrollController,
+                    builder: (_, child) {
+                      final offset = _scrollController.hasClients
+                          ? _scrollController.offset
+                          : 0.0;
+                      return Transform.translate(
+                        offset: Offset(0, -offset),
+                        child: IgnorePointer(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: theme.colorScheme.secondary,
+                                width: 4.r,
+                              ),
+                              borderRadius: BorderRadius.circular(12.r),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+
                   return Listener(
                     onPointerDown: _handlePointerDown,
                     onPointerMove: _handlePointerMove,
@@ -885,37 +942,31 @@ class _GamesGridState extends State<GamesGrid> {
                             ),
                           ],
                         ),
-                        AnimatedPositioned(
-                          key: const ValueKey('game_selector'),
-                          duration: hlDuration,
-                          curve: Curves.easeOutQuart,
-                          left: selRect.left + 16,
-                          top: selRect.top + 12,
-                          width: selRect.width,
-                          height: selRect.height,
-                          child: ListenableBuilder(
-                            listenable: _scrollController,
-                            builder: (_, child) {
-                              final offset = _scrollController.hasClients
-                                  ? _scrollController.offset
-                                  : 0.0;
-                              return Transform.translate(
-                                offset: Offset(0, -offset),
-                                child: IgnorePointer(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: theme.colorScheme.secondary,
-                                        width: 4.r,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.r),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                        // Selection cursor. During the reflow the card rect
+                        // changes every frame; a plain Positioned matches it
+                        // exactly, whereas AnimatedPositioned — even at zero
+                        // duration — evaluates through its controller and renders
+                        // a frame behind, looking mis-sized. Normal navigation
+                        // keeps the eased AnimatedPositioned.
+                        _legendAnimating
+                            ? Positioned(
+                                key: const ValueKey('game_selector'),
+                                left: selRect.left + 16,
+                                top: selRect.top + 12,
+                                width: selRect.width,
+                                height: selRect.height,
+                                child: cursorOverlay,
+                              )
+                            : AnimatedPositioned(
+                                key: const ValueKey('game_selector'),
+                                duration: hlDuration,
+                                curve: Curves.easeOutQuart,
+                                left: selRect.left + 16,
+                                top: selRect.top + 12,
+                                width: selRect.width,
+                                height: selRect.height,
+                                child: cursorOverlay,
+                              ),
                         ValueListenableBuilder<String?>(
                           valueListenable: _cardSizeLabel,
                           builder: (context, label, child) => AnimatedOpacity(
@@ -965,8 +1016,19 @@ class _GamesGridState extends State<GamesGrid> {
           ],
         ),
         // Vertical action-button legend (shared with the game list view);
-        // also memoized on the settled selection.
-        _chromeLegend!,
+        // also memoized on the settled selection. Select + B slides it off the
+        // left edge (in sync with the grid's Transform slide).
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          top: 12.r,
+          left: GameLegendVisibility.hidden.value ? -60.r : 12.r,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 250),
+            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
+            child: _chromeLegend!,
+          ),
+        ),
       ],
     );
   }
@@ -994,10 +1056,9 @@ class _GamesGridState extends State<GamesGrid> {
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
     );
-    _chromeLegend = Positioned(
-      top: 12.r,
-      left: 12.r,
-      child: Consumer<SyncManager>(
+    // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
+    // so Select + B can animate it without invalidating this memoized subtree.
+    _chromeLegend = Consumer<SyncManager>(
         builder: (context, syncManager, child) => GameActionButtons(
           system: widget.system,
           selectedGame: settledGame,
@@ -1010,7 +1071,6 @@ class _GamesGridState extends State<GamesGrid> {
           onRandom: widget.onRandom,
           onScrape: widget.onScrape,
         ),
-      ),
     );
   }
 

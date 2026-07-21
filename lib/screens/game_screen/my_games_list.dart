@@ -22,6 +22,7 @@ import '../../repositories/system_repository.dart';
 import '../../repositories/game_repository.dart';
 import '../../services/screenscraper_service.dart';
 import '../../services/secondary_achievements_controller.dart';
+import '../../services/game_legend_visibility.dart';
 import '../../utils/gamepad_nav.dart';
 import '../../providers/file_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
@@ -180,6 +181,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _configProvider = context.read<SqliteConfigProvider>();
     _configProvider.addListener(_onConfigChanged);
 
+    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
+
     _lastShowInfo = _configProvider.config.showGameInfo;
 
     MusicPlayerService().addListener(_onMusicPlayerStateChanged);
@@ -208,6 +211,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _configProvider.removeListener(_onConfigChanged);
     _databaseProvider.removeListener(_onDatabaseUpdated);
     MusicPlayerService().removeListener(_onMusicPlayerStateChanged);
+    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
 
     // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryDisplayChanged);
@@ -328,6 +332,18 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// rebuild — [State.setState] is `@protected` and cannot be invoked from an
   /// extension. Behaviourally identical to calling `setState` directly.
   void rebuild(VoidCallback fn) => setState(fn);
+
+  /// Select + B — toggles the (session-global) vertical action-button legend.
+  /// When hidden the legend slides off the left edge and the list sidebar +
+  /// details reflow into the reclaimed 60.r gutter.
+  void _toggleLegend() {
+    SfxService().playNavSound();
+    GameLegendVisibility.toggle();
+  }
+
+  void _onLegendVisibilityChanged() {
+    if (mounted) setState(() {});
+  }
 
   /// Core logic for updating selection and managing rapid-scrolling UI state.
   void _updateSelectedGame(int newIndex) {
@@ -1123,10 +1139,16 @@ class _SystemGamesListState extends State<SystemGamesList> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Sidebar: Interactive list of games or music tracks.
-            Container(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
               width: 200.r,
               height: availableHeight,
-              margin: EdgeInsets.only(left: 60.r, top: 12.r, bottom: 12.r),
+              margin: EdgeInsets.only(
+                left: GameLegendVisibility.hidden.value ? 0 : 60.r,
+                top: 12.r,
+                bottom: 12.r,
+              ),
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
@@ -1173,12 +1195,18 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ],
         ),
 
-        // Floating action buttons on the left side of the game list.
+        // Floating action buttons on the left side of the game list. Select + B
+        // slides this legend off the left edge (in sync with the sidebar margin).
         if (!isMusic)
-          Positioned(
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
             top: 12.r,
-            left: 12.r,
-            child: Consumer<SyncManager>(
+            left: GameLegendVisibility.hidden.value ? -60.r : 12.r,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
+              child: Consumer<SyncManager>(
               builder: (context, syncManager, child) {
                 return GameActionButtons(
                   system: widget.system,
@@ -1193,6 +1221,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   onScrape: () => _scrapeAction?.call(),
                 );
               },
+              ),
             ),
           ),
       ],
