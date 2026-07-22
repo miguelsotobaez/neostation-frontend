@@ -68,8 +68,7 @@ class GamesGrid extends StatefulWidget {
   State<GamesGrid> createState() => _GamesGridState();
 }
 
-class _GamesGridState extends State<GamesGrid>
-    with SingleTickerProviderStateMixin {
+class _GamesGridState extends State<GamesGrid> {
   late GamepadNavigation _gamepadNav;
   final ScrollController _scrollController = ScrollController();
   int _selectedIndex = 0;
@@ -118,25 +117,13 @@ class _GamesGridState extends State<GamesGrid>
   final Map<int, Widget> _rowCache = {};
   String? _rowCacheSig;
 
-  // Selection cursor. The border follows the *selected card's real rendered box*
-  // via a per-card LayerLink + CompositedTransformFollower, so it tracks the card
-  // through scrolling AND the Select+B reflow with zero manual coordinate math.
-  // This is what makes it correct at any scroll depth: a global-model overlay
-  // (selRect.top - scrollOffset) drifts because the culled SliverList doesn't
-  // re-lay off-screen rows when the cards grow, so its scroll accounting diverges
-  // from the model by an amount that accumulates per off-screen row. The follower
-  // sidesteps that entirely — it reads the leader layer's actual position. Links
-  // are created lazily per card index (only cards that get built get one).
-  final Map<int, LayerLink> _cardLinks = {};
-  // Cross-card glide: on a selection change the follower snaps to the new card,
-  // and this controller eases the border from the old card's rect to the new one
-  // (Transform + size) so the cursor still slides between cards. At rest (value 1)
-  // the border sits exactly on the followed card.
-  late final AnimationController _cursorGlide;
-  double _glideFromLeft = 0;
-  double _glideFromTop = 0;
-  double _glideFromWidth = 0;
-  double _glideFromHeight = 0;
+  // Selection cursor. The border is a scroll-compensated overlay positioned from
+  // the layout model (_cardRects[selectedIndex]) minus the live scroll offset,
+  // rebuilt every scroll tick. An earlier CompositedTransformFollower/LayerLink
+  // approach rendered a few rows north of the real card during scrolling because
+  // the leader (inside a RepaintBoundary-wrapped SliverList row) reports a stale
+  // composited transform. The cursor is now drawn inside the selected card's
+  // cell (see buildRow), which tracks the scroll content natively.
 
   // Layout
   List<_CardRect> _cardRects = [];
@@ -147,6 +134,16 @@ class _GamesGridState extends State<GamesGrid>
   double? _lastLayoutWidth;
   int? _lastLayoutCols;
   bool? _lastIsFanart;
+  // Exact laid-out height of all rows (set by _positionCards). See its use in
+  // _centerTargetFor for why we don't trust the SliverList's own estimate.
+  double _contentHeight = 0;
+
+  // Set just before any non-scroll layout change (legend toggle, card-size
+  // cycle, fanart↔box2d). The selected card is the source of truth: after the
+  // new layout is painted we scroll the view to centre that card, so the cursor
+  // is always brought back into view. Steady scroll and dpad nav never set it
+  // (nav scrolls via _ensureSelectedVisible).
+  bool _recenterAfterLayout = false;
 
   // Per-card height/width ratio (aspect), which is INDEPENDENT of the card
   // width. Measuring it is the expensive part of layout (file-header reads +
@@ -359,6 +356,13 @@ class _GamesGridState extends State<GamesGrid>
       return;
     }
 
+    // A fanart↔box2d switch is only observable here (card style is read from
+    // the config provider, not passed as a prop) — recentre on the selected card
+    // once relaid. Never on the first layout (_lastIsFanart == null).
+    if (_lastIsFanart != null && _lastIsFanart != _isFanart) {
+      _recenterAfterLayout = true;
+    }
+
     if (measureChanged) {
       _measureCards();
       _needsDimReload = false;
@@ -428,6 +432,11 @@ class _GamesGridState extends State<GamesGrid>
       i = end;
       r++;
     }
+    // Exact total height of all rows (each rendered as SizedBox(maxH + spY)).
+    // Used to clamp centre-scroll targets against the REAL content height rather
+    // than the SliverList's row-count estimate, which under-reports right after
+    // a relayout and would otherwise clamp a far jump short (selection off-screen).
+    _contentHeight = y;
 
     // Card rects/rows just changed → any memoized row widgets are stale.
     // Bumping the generation invalidates the row cache on the next build (see
@@ -464,11 +473,6 @@ class _GamesGridState extends State<GamesGrid>
       (widget.games.length - 1).clamp(0, 999999),
     );
     _settledIndex = _selectedIndex;
-    _cursorGlide = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-      value: 1, // start settled on the initial card (no glide)
-    );
     _updateCrossAxisCount();
     _initializeGamepad();
     GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
@@ -529,14 +533,14 @@ class _GamesGridState extends State<GamesGrid>
       final newIndex = (currentIndex + delta).clamp(0, sizes.length - 1);
       if (newIndex != currentIndex) {
         final newSize = sizes[newIndex];
+        // Recentre after relayout (pinch changes cols locally, so didUpdateWidget
+        // won't see a cols delta — set the flag here instead).
+        _recenterAfterLayout = true;
         provider.updateGameGridColumns(newSize);
         _updateCrossAxisCount();
         _lastLayoutWidth = null;
         _showCardSizeLabel(newSize);
         setState(() {});
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _ensureSelectedVisible();
-        });
       }
     } catch (_) {}
   }
@@ -594,6 +598,11 @@ class _GamesGridState extends State<GamesGrid>
     super.didUpdateWidget(oldWidget);
     final prevCols = _crossAxisCount;
     _updateCrossAxisCount();
+    if (_crossAxisCount != prevCols) {
+      // Card-size cycled via the dropdown (cols changed) — recentre on the
+      // selected card after the relayout so the view follows the cursor.
+      _recenterAfterLayout = true;
+    }
     if (widget.games != oldWidget.games || _crossAxisCount != prevCols) {
       _lastLayoutWidth = null;
       // Aspect-ratio cache is keyed by index; a changed game set (even at the
@@ -614,9 +623,8 @@ class _GamesGridState extends State<GamesGrid>
         0,
         (widget.games.length - 1).clamp(0, 999999),
       );
-      // External selection change (not a local nav): snap the cursor to the new
-      // card rather than gliding from a possibly-unrelated previous position.
-      _cursorGlide.value = 1;
+      // External selection change: the cursor overlay glides to the new card's
+      // rect on rebuild; just bring it into view.
       if (mounted && _scrollController.hasClients) {
         _ensureSelectedVisible();
       }
@@ -653,14 +661,42 @@ class _GamesGridState extends State<GamesGrid>
   }
 
   /// Reacts to any change of the shared legend flag (this view's chord or a
-  /// future external/DB update). Starts the reflow animation; the flag is
-  /// cleared in AnimatedPadding.onEnd.
+  /// future external/DB update). Rebuilds so the grid reflows in one frame, then
+  /// the view recentres on the selected card (see build) so the cursor stays in
+  /// view.
   void _onLegendVisibilityChanged() {
-    // Rebuild so AnimatedPadding picks up the new indent target and animates the
-    // reflow. The selection cursor needs no special handling here — it follows
-    // the selected card's real box via the LayerLink follower, so it stays fitted
-    // as the card grows/shrinks with no per-frame coordinate correction.
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _recenterAfterLayout = true;
+    setState(() {});
+  }
+
+  /// Scroll offset that centres the selected card in the viewport, clamped to
+  /// the EXACT content height (12 top pad + rows + 80 bottom pad). Using our own
+  /// height instead of the SliverList's estimate is what makes a far jump land:
+  /// right after a size/mode relayout the sliver hasn't built the distant rows,
+  /// so its maxScrollExtent under-reports and would clamp the target short —
+  /// leaving the selection off-screen. jumpTo force-sets the offset here, and the
+  /// sliver then builds around it and its extent catches up.
+  double _centerTargetFor(_CardRect rect, double viewportH) {
+    final maxScroll = (12 + _contentHeight + 80 - viewportH).clamp(
+      0.0,
+      double.infinity,
+    );
+    return (12 + rect.top + rect.height / 2 - viewportH / 2).clamp(
+      0.0,
+      maxScroll,
+    );
+  }
+
+  /// Jumps the scroll so the selected card sits at the vertical centre of the
+  /// viewport. The card (and its in-cell cursor) is the source of truth; this is
+  /// how the view follows it after any layout change. A card already centred
+  /// jumps to its own offset (a no-op), so there's no gratuitous movement.
+  void _centerOnSelected() {
+    if (!_scrollController.hasClients || _cardRects.isEmpty) return;
+    final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
+    final viewportH = _scrollController.position.viewportDimension;
+    _scrollController.jumpTo(_centerTargetFor(rect, viewportH));
   }
 
   @override
@@ -673,7 +709,6 @@ class _GamesGridState extends State<GamesGrid>
     GamepadNavigationManager.popLayer('games_grid');
     _gamepadNav.dispose();
     _scrollController.dispose();
-    _cursorGlide.dispose();
     super.dispose();
   }
 
@@ -698,7 +733,6 @@ class _GamesGridState extends State<GamesGrid>
   void _navDelta(int delta) {
     if (widget.games.isEmpty) return;
     final c = _cols;
-    final from = _selectedIndex;
     setState(() {
       int ni = _selectedIndex + delta;
       if (delta < 0 && ni < 0) {
@@ -714,7 +748,6 @@ class _GamesGridState extends State<GamesGrid>
       _selectedIndex = ni.clamp(0, widget.games.length - 1);
       _updateFastNav();
     });
-    _beginCursorGlide(from);
     _ensureSelectedVisible();
     _onSelectionChanged();
     SfxService().playNavSound();
@@ -722,7 +755,6 @@ class _GamesGridState extends State<GamesGrid>
 
   void _navHoriz(int dir) {
     if (widget.games.isEmpty) return;
-    final from = _selectedIndex;
     setState(() {
       int ni;
       if (dir < 0) {
@@ -741,32 +773,9 @@ class _GamesGridState extends State<GamesGrid>
       _selectedIndex = ni.clamp(0, widget.games.length - 1);
       _updateFastNav();
     });
-    _beginCursorGlide(from);
     _ensureSelectedVisible();
     _onSelectionChanged();
     SfxService().playNavSound();
-  }
-
-  /// Kicks the selection cursor's cross-card glide: snapshot the card we moved
-  /// *from* (its rect, before layout changes) and run the controller. The
-  /// follower is already re-anchored to the new card on the next build, so the
-  /// glide interpolates the border from the old card's box to the new one; at
-  /// rest the border sits exactly on the followed card.
-  void _beginCursorGlide(int fromIndex) {
-    if (fromIndex == _selectedIndex) return;
-    if (fromIndex >= 0 && fromIndex < _cardRects.length) {
-      final r = _cardRects[fromIndex];
-      _glideFromLeft = r.left;
-      _glideFromTop = r.top;
-      _glideFromWidth = r.width;
-      _glideFromHeight = r.height;
-      _cursorGlide.duration = Duration(
-        milliseconds: _isNavigatingFast ? 120 : 300,
-      );
-      _cursorGlide.forward(from: 0);
-    } else {
-      _cursorGlide.value = 1;
-    }
   }
 
   void _onSelectionChanged() {
@@ -911,13 +920,20 @@ class _GamesGridState extends State<GamesGrid>
     if (!_scrollController.hasClients || _cardRects.isEmpty) return;
     final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
     final viewportH = _scrollController.position.viewportDimension;
-    final target = (rect.top - viewportH / 2 + rect.height / 2).clamp(
-      0.0,
-      _scrollController.position.maxScrollExtent,
-    );
+    final target = _centerTargetFor(rect, viewportH);
+    // During a fast-nav burst, jump instantly rather than firing a fresh
+    // animateTo per keypress. Repeated overlapping animations let the viewport
+    // fall far behind _selectedIndex, so the selected card trails the logical
+    // selection by many rows until the scroll finally catches up. A synchronous
+    // jump keeps the selected card centered every frame. The trailing (settled)
+    // move still animates smoothly.
+    if (_isNavigatingFast) {
+      _scrollController.jumpTo(target);
+      return;
+    }
     _scrollController.animateTo(
       target,
-      duration: Duration(milliseconds: _isNavigatingFast ? 220 : 500),
+      duration: const Duration(milliseconds: 500),
       curve: Curves.easeOutQuart,
     );
   }
@@ -958,24 +974,30 @@ class _GamesGridState extends State<GamesGrid>
         Column(
           children: [
             Expanded(
-              // Indent the grid to clear the vertical legend on the left; the
-              // reduced width makes the cards slightly smaller. Select + B hides
-              // the legend and animates this indent to 0 so the cards genuinely
-              // reflow to fill the reclaimed 60.r. This drives _computeLayout
-              // every frame, but only its cheap _positionCards pass runs (aspect
-              // ratios are cached in _cardHOverW). The selection cursor needs no
-              // special handling during the reflow — it follows the selected
-              // card's real box via the LayerLink follower, so it stays fitted as
-              // the card grows with zero coordinate math.
-              child: AnimatedPadding(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutCubic,
+              // Indent the grid to clear the vertical legend on the left. Select
+              // + B toggles the legend; the indent flips 60.r↔0 in a single frame
+              // (no animation) so there's no moving target to chase — the grid
+              // reflows once and the selected card is pinned in place by the
+              // scroll restore below. The reduced width makes the cards slightly
+              // smaller when the legend is shown.
+              child: Padding(
                 padding: EdgeInsets.only(
                   left: GameLegendVisibility.hidden.value ? 0 : 60.r,
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     _computeLayout(constraints.maxWidth);
+
+                    // The layout just changed for a non-scroll reason (legend
+                    // toggle, size cycle, fanart↔box2d). Once this new layout is
+                    // painted, scroll so the selected card is centred — the view
+                    // follows the cursor.
+                    if (_recenterAfterLayout) {
+                      _recenterAfterLayout = false;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _centerOnSelected();
+                      });
+                    }
 
                     final theme = Theme.of(context);
                     final fp = widget.fileProvider;
@@ -992,9 +1014,7 @@ class _GamesGridState extends State<GamesGrid>
                         ? decodeBucket
                         : bucketed;
 
-                    final selRect = _selectedIndex < _cardRects.length
-                        ? _cardRects[_selectedIndex]
-                        : _cardRects.first;
+                    final borderColor = theme.colorScheme.secondary;
 
                     // Row-cache gate: when the layout/decode/theme signature is
                     // unchanged, buildRow returns the exact same Row instances it
@@ -1011,36 +1031,60 @@ class _GamesGridState extends State<GamesGrid>
                     }
 
                     Widget buildRow(BuildContext ctx, int rowIndex) {
-                      final cached = _rowCache[rowIndex];
-                      if (cached != null) return cached;
                       final row = _rows[rowIndex];
+                      // The selection cursor is a border drawn INSIDE the selected
+                      // card's cell, so it's part of the card's own coordinate
+                      // space — always pixel-exact on the card through scroll,
+                      // resize, mode switch and legend toggle, with no offset math
+                      // and no animation to lag. The one row holding the selection
+                      // therefore can't be memoized (its border must appear/vanish
+                      // with the selection), so we skip the cache for just that
+                      // row; every other row stays cached and the fast-scroll perf
+                      // is preserved.
+                      final hasSelection =
+                          _selectedIndex >= row.startIndex &&
+                          _selectedIndex < row.startIndex + row.count;
+                      if (!hasSelection) {
+                        final cached = _rowCache[rowIndex];
+                        if (cached != null) return cached;
+                      }
                       final cards = <Widget>[];
                       for (int j = 0; j < row.count; j++) {
                         final idx = row.startIndex + j;
                         final rect = _cardRects[idx];
                         _ensureDims(idx);
-                        final card = _buildCard(
+                        Widget cell = _buildCard(
                           idx,
                           rect,
                           fp,
                           targetWidth,
                           theme,
                         );
+                        if (idx == _selectedIndex) {
+                          cell = Stack(
+                            children: [
+                              cell,
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: borderColor,
+                                        width: 4.r,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12.r),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
                         cards.add(
                           SizedBox(
                             width: rect.width,
                             height: rect.height,
-                            // Anchor a per-card LayerLink so the selection cursor
-                            // can follow this card's real rendered box. Links are
-                            // cached per index (stable identity across row-cache
-                            // rebuilds); only built cards get one.
-                            child: CompositedTransformTarget(
-                              link: _cardLinks.putIfAbsent(
-                                idx,
-                                () => LayerLink(),
-                              ),
-                              child: card,
-                            ),
+                            child: cell,
                           ),
                         );
                       }
@@ -1051,12 +1095,9 @@ class _GamesGridState extends State<GamesGrid>
                           children: _interleaveSpacing(cards, _spX),
                         ),
                       );
-                      _rowCache[rowIndex] = built;
+                      if (!hasSelection) _rowCache[rowIndex] = built;
                       return built;
                     }
-
-                    final borderColor = theme.colorScheme.secondary;
-                    final selLink = _cardLinks[_selectedIndex];
 
                     return Listener(
                       onPointerDown: _handlePointerDown,
@@ -1083,84 +1124,7 @@ class _GamesGridState extends State<GamesGrid>
                               ),
                             ],
                           ),
-                          // Selection cursor. It follows the selected card's real
-                          // rendered box via a LayerLink, so it tracks the card
-                          // through scrolling AND the Select+B reflow (the card
-                          // grows, the leader layer moves, the border moves with it)
-                          // with no scroll-offset math — which is what kept the old
-                          // overlay drifting a row too low a few rows down. The
-                          // cross-card glide is driven by _cursorGlide: on selection
-                          // change the follower snaps to the new card and the border
-                          // eases from the old card's rect (Transform + size) to a
-                          // snug fit on the new one (translate 0, size == selRect).
-                          // Clip the cursor to the grid viewport. The follower's
-                          // render box is border-sized and sits at the Stack's
-                          // top-left; it only moves to the leader at composite time
-                          // via a layer transform, so the Stack's overflow-based
-                          // clip never fires and the border would otherwise paint
-                          // over the footer when a card scrolls past the bottom edge
-                          // during fast scrolling. An explicit ClipRect always
-                          // clips, regardless of the follower's reported size. The
-                          // Align fills the ClipRect (so it clips at the grid
-                          // bounds) while passing LOOSE constraints to the
-                          // follower — otherwise Positioned.fill's tight grid-sized
-                          // constraints would stretch the border Container to fill
-                          // the whole grid.
-                          if (selLink != null)
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: ClipRect(
-                                  child: Align(
-                                    alignment: Alignment.topLeft,
-                                    child: CompositedTransformFollower(
-                                      link: selLink,
-                                      showWhenUnlinked: false,
-                                      targetAnchor: Alignment.topLeft,
-                                      followerAnchor: Alignment.topLeft,
-                                      child: AnimatedBuilder(
-                                        animation: _cursorGlide,
-                                        builder: (_, _) {
-                                          final t = Curves.easeOutQuart
-                                              .transform(_cursorGlide.value);
-                                          final inv = 1 - t;
-                                          final dx =
-                                              (_glideFromLeft - selRect.left) *
-                                              inv;
-                                          final dy =
-                                              (_glideFromTop - selRect.top) *
-                                              inv;
-                                          final w =
-                                              _glideFromWidth +
-                                              (selRect.width -
-                                                      _glideFromWidth) *
-                                                  t;
-                                          final h =
-                                              _glideFromHeight +
-                                              (selRect.height -
-                                                      _glideFromHeight) *
-                                                  t;
-                                          return Transform.translate(
-                                            offset: Offset(dx, dy),
-                                            child: Container(
-                                              width: w,
-                                              height: h,
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                  color: borderColor,
-                                                  width: 4.r,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.r),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                          // Selection cursor is drawn in-cell (see buildRow).
                           ValueListenableBuilder<String?>(
                             valueListenable: _cardSizeLabel,
                             builder: (context, label, child) => AnimatedOpacity(
@@ -1297,12 +1261,10 @@ class _GamesGridState extends State<GamesGrid>
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
-        final from = _selectedIndex;
         setState(() {
           _selectedIndex = index;
           _settledIndex = index; // discrete tap: update chrome immediately
         });
-        _beginCursorGlide(from);
         _settleTimer?.cancel();
         widget.onGameSelected(game);
         _scheduleAchievementsLoad();
@@ -1416,12 +1378,10 @@ class _GamesGridState extends State<GamesGrid>
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
-        final from = _selectedIndex;
         setState(() {
           _selectedIndex = index;
           _settledIndex = index; // discrete tap: update chrome immediately
         });
-        _beginCursorGlide(from);
         _settleTimer?.cancel();
         widget.onGameSelected(game);
         _scheduleAchievementsLoad();
