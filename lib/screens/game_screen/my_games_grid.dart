@@ -68,7 +68,8 @@ class GamesGrid extends StatefulWidget {
   State<GamesGrid> createState() => _GamesGridState();
 }
 
-class _GamesGridState extends State<GamesGrid> {
+class _GamesGridState extends State<GamesGrid>
+    with SingleTickerProviderStateMixin {
   late GamepadNavigation _gamepadNav;
   final ScrollController _scrollController = ScrollController();
   int _selectedIndex = 0;
@@ -117,10 +118,25 @@ class _GamesGridState extends State<GamesGrid> {
   final Map<int, Widget> _rowCache = {};
   String? _rowCacheSig;
 
-  /// True while the Select+B reflow is in flight. During it the selection cursor
-  /// uses a plain Positioned that tracks the (per-frame changing) card rect
-  /// exactly, so it stays fitted to the card instead of lagging a frame behind.
-  bool _legendAnimating = false;
+  // Selection cursor. The border follows the *selected card's real rendered box*
+  // via a per-card LayerLink + CompositedTransformFollower, so it tracks the card
+  // through scrolling AND the Select+B reflow with zero manual coordinate math.
+  // This is what makes it correct at any scroll depth: a global-model overlay
+  // (selRect.top - scrollOffset) drifts because the culled SliverList doesn't
+  // re-lay off-screen rows when the cards grow, so its scroll accounting diverges
+  // from the model by an amount that accumulates per off-screen row. The follower
+  // sidesteps that entirely — it reads the leader layer's actual position. Links
+  // are created lazily per card index (only cards that get built get one).
+  final Map<int, LayerLink> _cardLinks = {};
+  // Cross-card glide: on a selection change the follower snaps to the new card,
+  // and this controller eases the border from the old card's rect to the new one
+  // (Transform + size) so the cursor still slides between cards. At rest (value 1)
+  // the border sits exactly on the followed card.
+  late final AnimationController _cursorGlide;
+  double _glideFromLeft = 0;
+  double _glideFromTop = 0;
+  double _glideFromWidth = 0;
+  double _glideFromHeight = 0;
 
   // Layout
   List<_CardRect> _cardRects = [];
@@ -448,6 +464,11 @@ class _GamesGridState extends State<GamesGrid> {
       (widget.games.length - 1).clamp(0, 999999),
     );
     _settledIndex = _selectedIndex;
+    _cursorGlide = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      value: 1, // start settled on the initial card (no glide)
+    );
     _updateCrossAxisCount();
     _initializeGamepad();
     GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
@@ -593,6 +614,9 @@ class _GamesGridState extends State<GamesGrid> {
         0,
         (widget.games.length - 1).clamp(0, 999999),
       );
+      // External selection change (not a local nav): snap the cursor to the new
+      // card rather than gliding from a possibly-unrelated previous position.
+      _cursorGlide.value = 1;
       if (mounted && _scrollController.hasClients) {
         _ensureSelectedVisible();
       }
@@ -632,7 +656,11 @@ class _GamesGridState extends State<GamesGrid> {
   /// future external/DB update). Starts the reflow animation; the flag is
   /// cleared in AnimatedPadding.onEnd.
   void _onLegendVisibilityChanged() {
-    if (mounted) setState(() => _legendAnimating = true);
+    // Rebuild so AnimatedPadding picks up the new indent target and animates the
+    // reflow. The selection cursor needs no special handling here — it follows
+    // the selected card's real box via the LayerLink follower, so it stays fitted
+    // as the card grows/shrinks with no per-frame coordinate correction.
+    if (mounted) setState(() {});
   }
 
   @override
@@ -645,6 +673,7 @@ class _GamesGridState extends State<GamesGrid> {
     GamepadNavigationManager.popLayer('games_grid');
     _gamepadNav.dispose();
     _scrollController.dispose();
+    _cursorGlide.dispose();
     super.dispose();
   }
 
@@ -669,6 +698,7 @@ class _GamesGridState extends State<GamesGrid> {
   void _navDelta(int delta) {
     if (widget.games.isEmpty) return;
     final c = _cols;
+    final from = _selectedIndex;
     setState(() {
       int ni = _selectedIndex + delta;
       if (delta < 0 && ni < 0) {
@@ -684,6 +714,7 @@ class _GamesGridState extends State<GamesGrid> {
       _selectedIndex = ni.clamp(0, widget.games.length - 1);
       _updateFastNav();
     });
+    _beginCursorGlide(from);
     _ensureSelectedVisible();
     _onSelectionChanged();
     SfxService().playNavSound();
@@ -691,6 +722,7 @@ class _GamesGridState extends State<GamesGrid> {
 
   void _navHoriz(int dir) {
     if (widget.games.isEmpty) return;
+    final from = _selectedIndex;
     setState(() {
       int ni;
       if (dir < 0) {
@@ -709,9 +741,32 @@ class _GamesGridState extends State<GamesGrid> {
       _selectedIndex = ni.clamp(0, widget.games.length - 1);
       _updateFastNav();
     });
+    _beginCursorGlide(from);
     _ensureSelectedVisible();
     _onSelectionChanged();
     SfxService().playNavSound();
+  }
+
+  /// Kicks the selection cursor's cross-card glide: snapshot the card we moved
+  /// *from* (its rect, before layout changes) and run the controller. The
+  /// follower is already re-anchored to the new card on the next build, so the
+  /// glide interpolates the border from the old card's box to the new one; at
+  /// rest the border sits exactly on the followed card.
+  void _beginCursorGlide(int fromIndex) {
+    if (fromIndex == _selectedIndex) return;
+    if (fromIndex >= 0 && fromIndex < _cardRects.length) {
+      final r = _cardRects[fromIndex];
+      _glideFromLeft = r.left;
+      _glideFromTop = r.top;
+      _glideFromWidth = r.width;
+      _glideFromHeight = r.height;
+      _cursorGlide.duration = Duration(
+        milliseconds: _isNavigatingFast ? 120 : 300,
+      );
+      _cursorGlide.forward(from: 0);
+    } else {
+      _cursorGlide.value = 1;
+    }
   }
 
   void _onSelectionChanged() {
@@ -773,7 +828,9 @@ class _GamesGridState extends State<GamesGrid> {
     // (debounced) load is pending.
     final selectedRomname = widget.games.isEmpty
         ? null
-        : widget.games[_selectedIndex.clamp(0, widget.games.length - 1)].romname;
+        : widget
+              .games[_selectedIndex.clamp(0, widget.games.length - 1)]
+              .romname;
     if (selectedRomname != _achievementsTargetRomname) {
       _achievementsTargetRomname = selectedRomname;
       _currentGameInfo = null;
@@ -906,203 +963,244 @@ class _GamesGridState extends State<GamesGrid> {
               // the legend and animates this indent to 0 so the cards genuinely
               // reflow to fill the reclaimed 60.r. This drives _computeLayout
               // every frame, but only its cheap _positionCards pass runs (aspect
-              // ratios are cached in _cardHOverW), and the cursor tracks rigidly
-              // while _legendAnimating so it never chases a moving target.
+              // ratios are cached in _cardHOverW). The selection cursor needs no
+              // special handling during the reflow — it follows the selected
+              // card's real box via the LayerLink follower, so it stays fitted as
+              // the card grows with zero coordinate math.
               child: AnimatedPadding(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
-                onEnd: () {
-                  if (_legendAnimating && mounted) {
-                    setState(() => _legendAnimating = false);
-                  }
-                },
-                padding: EdgeInsets.only(left: GameLegendVisibility.hidden.value ? 0 : 60.r),
+                padding: EdgeInsets.only(
+                  left: GameLegendVisibility.hidden.value ? 0 : 60.r,
+                ),
                 child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _computeLayout(constraints.maxWidth);
+                  builder: (context, constraints) {
+                    _computeLayout(constraints.maxWidth);
 
-                  final theme = Theme.of(context);
-                  final fp = widget.fileProvider;
-                  // Quantize the decode resolution into buckets so the tiny
-                  // per-frame card-width changes during the legend reflow don't
-                  // thrash _GameCardImage into re-decoding every card each frame
-                  // (it reloads whenever targetWidth changes). Also a general win
-                  // for any width change (window resize, card-size cycling).
-                  const decodeBucket = 64;
-                  final bucketed =
-                      ((_cardWidth * 1.5) / decodeBucket).ceil() * decodeBucket;
-                  final targetWidth = bucketed < decodeBucket
-                      ? decodeBucket
-                      : bucketed;
+                    final theme = Theme.of(context);
+                    final fp = widget.fileProvider;
+                    // Quantize the decode resolution into buckets so the tiny
+                    // per-frame card-width changes during the legend reflow don't
+                    // thrash _GameCardImage into re-decoding every card each frame
+                    // (it reloads whenever targetWidth changes). Also a general win
+                    // for any width change (window resize, card-size cycling).
+                    const decodeBucket = 64;
+                    final bucketed =
+                        ((_cardWidth * 1.5) / decodeBucket).ceil() *
+                        decodeBucket;
+                    final targetWidth = bucketed < decodeBucket
+                        ? decodeBucket
+                        : bucketed;
 
-                  final selRect = _selectedIndex < _cardRects.length
-                      ? _cardRects[_selectedIndex]
-                      : _cardRects.first;
-                  final hlDuration = Duration(
-                    milliseconds: _isNavigatingFast ? 120 : 300,
-                  );
+                    final selRect = _selectedIndex < _cardRects.length
+                        ? _cardRects[_selectedIndex]
+                        : _cardRects.first;
 
-                  // Row-cache gate: when the layout/decode/theme signature is
-                  // unchanged, buildRow returns the exact same Row instances it
-                  // built last time, so a selection/settle/RA/legend setState
-                  // that re-runs build() does NOT rebuild the ~50 visible cards
-                  // (Flutter short-circuits identical child widgets). Any real
-                  // change (reflow bumps _layoutGen, width change moves
-                  // targetWidth, theme flips) rotates the signature and rebuilds.
-                  final rowSig =
-                      '$_layoutGen|$targetWidth|${theme.brightness.index}';
-                  if (rowSig != _rowCacheSig) {
-                    _rowCacheSig = rowSig;
-                    _rowCache.clear();
-                  }
+                    // Row-cache gate: when the layout/decode/theme signature is
+                    // unchanged, buildRow returns the exact same Row instances it
+                    // built last time, so a selection/settle/RA/legend setState
+                    // that re-runs build() does NOT rebuild the ~50 visible cards
+                    // (Flutter short-circuits identical child widgets). Any real
+                    // change (reflow bumps _layoutGen, width change moves
+                    // targetWidth, theme flips) rotates the signature and rebuilds.
+                    final rowSig =
+                        '$_layoutGen|$targetWidth|${theme.brightness.index}';
+                    if (rowSig != _rowCacheSig) {
+                      _rowCacheSig = rowSig;
+                      _rowCache.clear();
+                    }
 
-                  Widget buildRow(BuildContext ctx, int rowIndex) {
-                    final cached = _rowCache[rowIndex];
-                    if (cached != null) return cached;
-                    final row = _rows[rowIndex];
-                    final cards = <Widget>[];
-                    for (int j = 0; j < row.count; j++) {
-                      final idx = row.startIndex + j;
-                      final rect = _cardRects[idx];
-                      _ensureDims(idx);
-                      final card = _buildCard(
-                        idx,
-                        rect,
-                        fp,
-                        targetWidth,
-                        theme,
-                      );
-                      cards.add(
-                        SizedBox(
-                          width: rect.width,
-                          height: rect.height,
-                          child: card,
+                    Widget buildRow(BuildContext ctx, int rowIndex) {
+                      final cached = _rowCache[rowIndex];
+                      if (cached != null) return cached;
+                      final row = _rows[rowIndex];
+                      final cards = <Widget>[];
+                      for (int j = 0; j < row.count; j++) {
+                        final idx = row.startIndex + j;
+                        final rect = _cardRects[idx];
+                        _ensureDims(idx);
+                        final card = _buildCard(
+                          idx,
+                          rect,
+                          fp,
+                          targetWidth,
+                          theme,
+                        );
+                        cards.add(
+                          SizedBox(
+                            width: rect.width,
+                            height: rect.height,
+                            // Anchor a per-card LayerLink so the selection cursor
+                            // can follow this card's real rendered box. Links are
+                            // cached per index (stable identity across row-cache
+                            // rebuilds); only built cards get one.
+                            child: CompositedTransformTarget(
+                              link: _cardLinks.putIfAbsent(
+                                idx,
+                                () => LayerLink(),
+                              ),
+                              child: card,
+                            ),
+                          ),
+                        );
+                      }
+                      final built = SizedBox(
+                        height: row.height + _spY,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: _interleaveSpacing(cards, _spX),
                         ),
                       );
+                      _rowCache[rowIndex] = built;
+                      return built;
                     }
-                    final built = SizedBox(
-                      height: row.height + _spY,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: _interleaveSpacing(cards, _spX),
+
+                    final borderColor = theme.colorScheme.secondary;
+                    final selLink = _cardLinks[_selectedIndex];
+
+                    return Listener(
+                      onPointerDown: _handlePointerDown,
+                      onPointerMove: _handlePointerMove,
+                      onPointerUp: _handlePointerUp,
+                      onPointerCancel: _handlePointerCancel,
+                      behavior: HitTestBehavior.translucent,
+                      child: Stack(
+                        children: [
+                          CustomScrollView(
+                            controller: _scrollController,
+                            slivers: [
+                              SliverPadding(
+                                padding: EdgeInsets.only(
+                                  top: 12,
+                                  bottom: 80,
+                                  left: 16,
+                                  right: 16,
+                                ),
+                                sliver: SliverList.builder(
+                                  itemCount: _rows.length,
+                                  itemBuilder: buildRow,
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Selection cursor. It follows the selected card's real
+                          // rendered box via a LayerLink, so it tracks the card
+                          // through scrolling AND the Select+B reflow (the card
+                          // grows, the leader layer moves, the border moves with it)
+                          // with no scroll-offset math — which is what kept the old
+                          // overlay drifting a row too low a few rows down. The
+                          // cross-card glide is driven by _cursorGlide: on selection
+                          // change the follower snaps to the new card and the border
+                          // eases from the old card's rect (Transform + size) to a
+                          // snug fit on the new one (translate 0, size == selRect).
+                          // Clip the cursor to the grid viewport. The follower's
+                          // render box is border-sized and sits at the Stack's
+                          // top-left; it only moves to the leader at composite time
+                          // via a layer transform, so the Stack's overflow-based
+                          // clip never fires and the border would otherwise paint
+                          // over the footer when a card scrolls past the bottom edge
+                          // during fast scrolling. An explicit ClipRect always
+                          // clips, regardless of the follower's reported size. The
+                          // Align fills the ClipRect (so it clips at the grid
+                          // bounds) while passing LOOSE constraints to the
+                          // follower — otherwise Positioned.fill's tight grid-sized
+                          // constraints would stretch the border Container to fill
+                          // the whole grid.
+                          if (selLink != null)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: ClipRect(
+                                  child: Align(
+                                    alignment: Alignment.topLeft,
+                                    child: CompositedTransformFollower(
+                                      link: selLink,
+                                      showWhenUnlinked: false,
+                                      targetAnchor: Alignment.topLeft,
+                                      followerAnchor: Alignment.topLeft,
+                                      child: AnimatedBuilder(
+                                        animation: _cursorGlide,
+                                        builder: (_, _) {
+                                          final t = Curves.easeOutQuart
+                                              .transform(_cursorGlide.value);
+                                          final inv = 1 - t;
+                                          final dx =
+                                              (_glideFromLeft - selRect.left) *
+                                              inv;
+                                          final dy =
+                                              (_glideFromTop - selRect.top) *
+                                              inv;
+                                          final w =
+                                              _glideFromWidth +
+                                              (selRect.width -
+                                                      _glideFromWidth) *
+                                                  t;
+                                          final h =
+                                              _glideFromHeight +
+                                              (selRect.height -
+                                                      _glideFromHeight) *
+                                                  t;
+                                          return Transform.translate(
+                                            offset: Offset(dx, dy),
+                                            child: Container(
+                                              width: w,
+                                              height: h,
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: borderColor,
+                                                  width: 4.r,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(12.r),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _cardSizeLabel,
+                            builder: (context, label, child) => AnimatedOpacity(
+                              opacity: label != null ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: label != null
+                                      ? Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 20.r,
+                                            vertical: 10.r,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary
+                                                .withValues(alpha: 0.9),
+                                            borderRadius: BorderRadius.circular(
+                                              24.r,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            label,
+                                            style: TextStyle(
+                                              color:
+                                                  theme.colorScheme.onPrimary,
+                                              fontSize: 18.r,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 2.r,
+                                            ),
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
-                    _rowCache[rowIndex] = built;
-                    return built;
-                  }
-
-                  final cursorOverlay = ListenableBuilder(
-                    listenable: _scrollController,
-                    builder: (_, child) {
-                      final offset = _scrollController.hasClients
-                          ? _scrollController.offset
-                          : 0.0;
-                      return Transform.translate(
-                        offset: Offset(0, -offset),
-                        child: IgnorePointer(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: theme.colorScheme.secondary,
-                                width: 4.r,
-                              ),
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-
-                  return Listener(
-                    onPointerDown: _handlePointerDown,
-                    onPointerMove: _handlePointerMove,
-                    onPointerUp: _handlePointerUp,
-                    onPointerCancel: _handlePointerCancel,
-                    behavior: HitTestBehavior.translucent,
-                    child: Stack(
-                      children: [
-                        CustomScrollView(
-                          controller: _scrollController,
-                          slivers: [
-                            SliverPadding(
-                              padding: EdgeInsets.only(
-                                top: 12,
-                                bottom: 80,
-                                left: 16,
-                                right: 16,
-                              ),
-                              sliver: SliverList.builder(
-                                itemCount: _rows.length,
-                                itemBuilder: buildRow,
-                              ),
-                            ),
-                          ],
-                        ),
-                        // Selection cursor. During the reflow the card rect
-                        // changes every frame; a plain Positioned matches it
-                        // exactly, whereas AnimatedPositioned — even at zero
-                        // duration — evaluates through its controller and renders
-                        // a frame behind, looking mis-sized. Normal navigation
-                        // keeps the eased AnimatedPositioned.
-                        _legendAnimating
-                            ? Positioned(
-                                key: const ValueKey('game_selector'),
-                                left: selRect.left + 16,
-                                top: selRect.top + 12,
-                                width: selRect.width,
-                                height: selRect.height,
-                                child: cursorOverlay,
-                              )
-                            : AnimatedPositioned(
-                                key: const ValueKey('game_selector'),
-                                duration: hlDuration,
-                                curve: Curves.easeOutQuart,
-                                left: selRect.left + 16,
-                                top: selRect.top + 12,
-                                width: selRect.width,
-                                height: selRect.height,
-                                child: cursorOverlay,
-                              ),
-                        ValueListenableBuilder<String?>(
-                          valueListenable: _cardSizeLabel,
-                          builder: (context, label, child) => AnimatedOpacity(
-                            opacity: label != null ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: IgnorePointer(
-                              child: Center(
-                                child: label != null
-                                    ? Container(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 20.r,
-                                          vertical: 10.r,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.primary
-                                              .withValues(alpha: 0.9),
-                                          borderRadius: BorderRadius.circular(
-                                            24.r,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          label,
-                                          style: TextStyle(
-                                            color: theme.colorScheme.onPrimary,
-                                            fontSize: 18.r,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 2.r,
-                                          ),
-                                        ),
-                                      )
-                                    : const SizedBox.shrink(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                  },
                 ),
               ),
             ),
@@ -1156,18 +1254,18 @@ class _GamesGridState extends State<GamesGrid> {
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can animate it without invalidating this memoized subtree.
     _chromeLegend = Consumer<SyncManager>(
-        builder: (context, syncManager, child) => GameActionButtons(
-          system: widget.system,
-          selectedGame: settledGame,
-          syncProvider: syncManager.active,
-          onBack: widget.onBack,
-          onFavorite: widget.onFavorite,
-          onViewMode: () =>
-              GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-          onSettings: widget.onSettings ?? () {},
-          onRandom: widget.onRandom,
-          onScrape: widget.onScrape,
-        ),
+      builder: (context, syncManager, child) => GameActionButtons(
+        system: widget.system,
+        selectedGame: settledGame,
+        syncProvider: syncManager.active,
+        onBack: widget.onBack,
+        onFavorite: widget.onFavorite,
+        onViewMode: () =>
+            GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+        onSettings: widget.onSettings ?? () {},
+        onRandom: widget.onRandom,
+        onScrape: widget.onScrape,
+      ),
     );
   }
 
@@ -1199,10 +1297,12 @@ class _GamesGridState extends State<GamesGrid> {
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
+        final from = _selectedIndex;
         setState(() {
           _selectedIndex = index;
           _settledIndex = index; // discrete tap: update chrome immediately
         });
+        _beginCursorGlide(from);
         _settleTimer?.cancel();
         widget.onGameSelected(game);
         _scheduleAchievementsLoad();
@@ -1316,10 +1416,12 @@ class _GamesGridState extends State<GamesGrid> {
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
+        final from = _selectedIndex;
         setState(() {
           _selectedIndex = index;
           _settledIndex = index; // discrete tap: update chrome immediately
         });
+        _beginCursorGlide(from);
         _settleTimer?.cancel();
         widget.onGameSelected(game);
         _scheduleAchievementsLoad();
@@ -1454,7 +1556,6 @@ class _GamesGridState extends State<GamesGrid> {
       ),
     );
   }
-
 }
 
 // ---- Card image with lazy loading ----

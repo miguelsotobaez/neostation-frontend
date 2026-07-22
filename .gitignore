@@ -292,3 +292,5 @@ ROMs/
 
 #linux media
 /media
+# Local scratch / handoff notes (ignored)
+*.local.md
