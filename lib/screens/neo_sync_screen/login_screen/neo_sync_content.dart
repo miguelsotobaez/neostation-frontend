@@ -63,6 +63,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
   static bool _plansLoadedThisSession = false;
   bool _isProfileLoading = false;
   bool _isConfiguringDuckstation = false;
+  bool _duckstationSyncControlsVisible = false;
   static bool _profileLoaded = false;
 
   late final FocusNode _upgradeButtonFocusNode;
@@ -791,57 +792,69 @@ class NeoSyncContentState extends State<NeoSyncContent>
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 4.r),
-          Text(
-            dataFolder.isEmpty
-                ? 'Select the DuckStation data folder that contains memcards'
-                : dataFolder,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(fontSize: 8.r),
-          ),
-          SizedBox(height: 6.r),
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: busy ? null : _selectDuckstationDataFolder,
-                  icon: Icon(Symbols.folder_special_rounded, size: 14.r),
+              const Spacer(),
+              Switch.adaptive(
+                value: _duckstationSyncControlsVisible,
+                onChanged: (enabled) =>
+                    setState(() => _duckstationSyncControlsVisible = enabled),
+              ),
+            ],
+          ),
+          if (_duckstationSyncControlsVisible) ...[
+            SizedBox(height: 4.r),
+            Text(
+              dataFolder.isEmpty
+                  ? 'Select the DuckStation data folder that contains memcards'
+                  : dataFolder,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 8.r),
+            ),
+            SizedBox(height: 6.r),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy ? null : _selectDuckstationDataFolder,
+                    icon: Icon(Symbols.folder_special_rounded, size: 14.r),
+                    label: Text(
+                      'Select Data Folder',
+                      style: TextStyle(fontSize: 8.r),
+                    ),
+                  ),
+                ),
+                if (dataFolder.isNotEmpty)
+                  IconButton(
+                    onPressed: busy
+                        ? null
+                        : () => context
+                              .read<SqliteConfigProvider>()
+                              .updateDuckstationDataFolderPath(''),
+                    icon: Icon(Symbols.restart_alt_rounded, size: 16.r),
+                    tooltip: 'Clear DuckStation Data Folder',
+                  ),
+              ],
+            ),
+            if (dataFolder.isNotEmpty) ...[
+              SizedBox(height: 5.r),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: busy
+                      ? null
+                      : () => context
+                            .read<NeoSyncProvider>()
+                            .syncDuckstationMemoryCards(),
+                  icon: Icon(Symbols.sync_rounded, size: 14.r),
                   label: Text(
-                    'Select Data Folder',
+                    'Sync DuckStation Saves',
                     style: TextStyle(fontSize: 8.r),
                   ),
                 ),
               ),
-              if (dataFolder.isNotEmpty)
-                IconButton(
-                  onPressed: busy
-                      ? null
-                      : () => context
-                            .read<SqliteConfigProvider>()
-                            .updateDuckstationDataFolderPath(''),
-                  icon: Icon(Symbols.restart_alt_rounded, size: 16.r),
-                  tooltip: 'Clear DuckStation Data Folder',
-                ),
             ],
-          ),
-          if (dataFolder.isNotEmpty) ...[
-            SizedBox(height: 5.r),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: busy
-                    ? null
-                    : () => context
-                          .read<NeoSyncProvider>()
-                          .syncDuckstationMemoryCards(),
-                icon: Icon(Symbols.sync_rounded, size: 14.r),
-                label: Text(
-                  'Sync DuckStation Saves',
-                  style: TextStyle(fontSize: 8.r),
-                ),
-              ),
-            ),
           ],
         ],
       ),
