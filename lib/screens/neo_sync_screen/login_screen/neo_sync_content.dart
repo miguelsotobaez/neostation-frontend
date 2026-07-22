@@ -785,22 +785,49 @@ class NeoSyncContentState extends State<NeoSyncContent>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'DuckStation Save Sync',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontSize: 10.r,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
           Row(
             children: [
-              const Spacer(),
+              Expanded(
+                child: Text(
+                  'DuckStation Save Sync',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontSize: 10.r,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
               Switch.adaptive(
                 value: _duckstationSyncControlsVisible,
                 onChanged: (enabled) =>
                     setState(() => _duckstationSyncControlsVisible = enabled),
               ),
             ],
+          ),
+          Text.rich(
+            TextSpan(
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 8.r),
+              children: [
+                const TextSpan(
+                  text:
+                      'Only compatible with the patched DuckStation version available from ',
+                ),
+                TextSpan(
+                  text: 'Joey’s Retro Handhelds',
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => launchUrl(
+                      Uri.parse(
+                        'https://github.com/JoeysRetroHandhelds/duckstation-patch',
+                      ),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                ),
+                const TextSpan(text: '.'),
+              ],
+            ),
           ),
           if (_duckstationSyncControlsVisible) ...[
             SizedBox(height: 4.r),
