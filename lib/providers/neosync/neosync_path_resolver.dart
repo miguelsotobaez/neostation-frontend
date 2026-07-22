@@ -2,6 +2,15 @@ part of '../neo_sync_provider.dart';
 
 /// Centraliza la resolución de rutas para NeoSync
 extension NeoSyncPathResolver on NeoSyncProvider {
+  /// Returns the `memcards` child of DuckStation's user-selected data folder.
+  Future<String?> getDuckstationMemcardsPath() async {
+    if (!Platform.isAndroid) return null;
+    final dataFolder = await ConfigRepository.getDuckstationDataFolderPath();
+    if (dataFolder.trim().isEmpty) return null;
+    final memcards = path.join(dataFolder, 'memcards');
+    return Directory(memcards).existsSync() ? memcards : null;
+  }
+
   /// Resuelve una lista de rutas de sincronización para un sistema
   Future<List<String>> resolveUniversalPaths(
     SystemModel system, {

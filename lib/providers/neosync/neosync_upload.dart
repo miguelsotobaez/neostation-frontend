@@ -1,6 +1,51 @@
 part of '../neo_sync_provider.dart';
 
 extension NeoSyncUpload on NeoSyncProvider {
+  /// Uploads every DuckStation memory card from its selected data folder.
+  Future<void> syncDuckstationMemoryCards({
+    bool respectAutoSyncEnabled = false,
+  }) async {
+    if (!isNeoSyncAuthenticated ||
+        (respectAutoSyncEnabled && !_autoSyncEnabled) ||
+        _isSyncing) {
+      return;
+    }
+    final memcardsPath = await getDuckstationMemcardsPath();
+    if (memcardsPath == null) return;
+
+    _setSyncing(true);
+    _error = null;
+    _syncProgress = 0;
+    _totalFiles = _processedFiles = _uploadedFiles = _skippedFiles = 0;
+    _processedItems = [];
+    _syncStatus = 'Scanning DuckStation memory cards...';
+    notify();
+    try {
+      final memoryCards = await _getSaveFiles(memcardsPath);
+      _totalFiles = memoryCards.length;
+      if (memoryCards.isEmpty) {
+        _syncStatus = 'No DuckStation memory cards found';
+        return;
+      }
+      for (final file in memoryCards) {
+        await _processAutoUploadFile(file, memcardsPath, isPs1MemoryCard: true);
+        _processedFiles++;
+        _syncProgress = _processedFiles / _totalFiles;
+        notify();
+      }
+      _syncProgress = 1;
+      _syncStatus =
+          'DuckStation sync completed: $_uploadedFiles uploaded, $_skippedFiles already synced';
+      _processedItems.add(_syncStatus);
+    } catch (e) {
+      _error = 'Error syncing DuckStation memory cards: $e';
+      _syncStatus = 'Error: $_error';
+      NeoSyncProvider._log.e(_error!);
+    } finally {
+      _setSyncing(false);
+    }
+  }
+
   /// Auto-sync solo para subidas (archivos locales nuevos o modificados)
   Future<void> autoSyncUploads() async {
     if (!isNeoSyncAuthenticated) {
@@ -227,6 +272,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     File file,
     String basePath, {
     bool isState = false,
+    bool isPs1MemoryCard = false,
   }) async {
     try {
       final isNandFile = file.path.contains(
@@ -238,11 +284,9 @@ extension NeoSyncUpload on NeoSyncProvider {
         return;
       }
 
-      String relativePath = _calculateRelativePath(
-        file,
-        basePath,
-        isState: isState,
-      );
+      final relativePath = isPs1MemoryCard
+          ? 'saves/PSX/${path.basename(file.path)}'
+          : _calculateRelativePath(file, basePath, isState: isState);
       final gameName = _extractGameNameFromPath(file.path);
 
       final result = await _neoSyncService.syncFile(

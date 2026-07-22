@@ -10,6 +10,8 @@ import '../providers/file_provider.dart';
 import '../models/system_model.dart';
 import '../models/game_model.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:provider/provider.dart';
+import '../providers/neo_sync_provider.dart';
 import '../services/game_service.dart';
 import '../services/game_launch_manager.dart';
 import '../utils/gamepad_nav.dart';
@@ -136,6 +138,16 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
   // ---------------------------------------------------------------------------
 
   Future<void> _performPostSync() async {
+    final systemFolderName =
+        widget.game.systemFolderName ?? widget.system.folderName;
+    if (systemFolderName == 'psx') {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      if (mounted) {
+        await context.read<NeoSyncProvider>().syncDuckstationMemoryCards(
+          respectAutoSyncEnabled: true,
+        );
+      }
+    }
     // End game session (saves playtime, unblocks Android native gamepad, clears state).
     await GameService.endGameSession();
     // Signal manager that everything is done → triggers closed phase → _closeDialog.

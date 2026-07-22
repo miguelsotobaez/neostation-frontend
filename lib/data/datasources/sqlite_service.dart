@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 102;
+  static const int _databaseVersion = 104;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1641,7 +1641,8 @@ class SqliteService {
         now_playing_dim_delay INTEGER DEFAULT 3,
         now_playing_dim_level INTEGER DEFAULT 100,
         fanart_dim_level INTEGER DEFAULT 25,
-        esde_folder_path TEXT DEFAULT ''
+        esde_folder_path TEXT DEFAULT '',
+        duckstation_data_folder_path TEXT DEFAULT ''
       );
       ''',
       '''
@@ -2373,6 +2374,7 @@ class SqliteService {
     int? nowPlayingDimLevel,
     int? fanartDimLevel,
     String? esdeFolderPath,
+    String? duckstationDataFolderPath,
   }) async {
     final db = await instance.database;
 
@@ -2477,6 +2479,9 @@ class SqliteService {
     }
     if (esdeFolderPath != null) {
       newConfig['esde_folder_path'] = esdeFolderPath;
+    }
+    if (duckstationDataFolderPath != null) {
+      newConfig['duckstation_data_folder_path'] = duckstationDataFolderPath;
     }
 
     await db.insert(

@@ -78,6 +78,12 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  Future<void> updateDuckstationDataFolderPath(String path) async {
+    _config = _config.copyWith(duckstationDataFolderPath: path);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   Future<void> updateHideRecentCard(bool value) async {
     _config = _config.copyWith(hideRecentCard: value);
     await SqliteConfigService.saveConfig(_config);

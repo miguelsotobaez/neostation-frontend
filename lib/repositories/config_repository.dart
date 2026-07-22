@@ -17,6 +17,11 @@ class ConfigRepository {
   static Future<Map<String, dynamic>?> getUserConfig() =>
       SqliteService.getUserConfig();
 
+  static Future<String> getDuckstationDataFolderPath() async {
+    final config = await getUserConfig();
+    return config?['duckstation_data_folder_path']?.toString() ?? '';
+  }
+
   // ── Theme settings ──────────────────────────────────────────────────────
 
   static Future<String> getThemeName() => SqliteService.getThemeName();

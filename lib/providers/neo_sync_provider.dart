@@ -16,6 +16,7 @@ import '../repositories/system_repository.dart';
 import '../repositories/sync_repository.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/emulator_repository.dart';
+import '../repositories/config_repository.dart';
 import '../services/config_service.dart';
 import '../services/retroarch_config_service.dart';
 

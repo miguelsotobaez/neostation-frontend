@@ -312,6 +312,12 @@ class SqliteMigrations {
       case 102:
         await _migrateToVersion102(db);
         break;
+      case 103:
+        // Reserved: version 103 was used by the independent ARMSX2 feature.
+        break;
+      case 104:
+        await _migrateToVersion104(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4926,6 +4932,19 @@ class SqliteMigrations {
       _log.e('Error in migration v102: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
+    }
+  }
+
+  /// Migration v104: configurable DuckStation data folder for NeoSync.
+  static Future<void> _migrateToVersion104(Database db) async {
+    final columns = db
+        .select('PRAGMA table_info(user_config)')
+        .map((column) => column['name'].toString())
+        .toSet();
+    if (!columns.contains('duckstation_data_folder_path')) {
+      db.execute(
+        "ALTER TABLE user_config ADD COLUMN duckstation_data_folder_path TEXT DEFAULT ''",
+      );
     }
   }
 }

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -10,6 +12,10 @@ import 'package:neostation/services/game_service.dart';
 import 'package:neostation/widgets/auth_form.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/services/notification_service.dart';
+import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/services/user_data_location_service.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/widgets/tv_directory_picker.dart';
 import 'package:neostation/services/neosync/billing_service.dart';
 import 'package:neostation/models/billing_models.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -56,6 +62,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
   List<PlanInfo> _plans = [];
   static bool _plansLoadedThisSession = false;
   bool _isProfileLoading = false;
+  bool _isConfiguringDuckstation = false;
   static bool _profileLoaded = false;
 
   late final FocusNode _upgradeButtonFocusNode;
@@ -543,6 +550,8 @@ class NeoSyncContentState extends State<NeoSyncContent>
                 ),
               ),
               SizedBox(height: 8.r),
+              _buildDuckstationSyncCard(),
+              SizedBox(height: 8.r),
               // Storage quota Steam-style (Compacto)
               if (neoSyncProvider.quota != null) ...[
                 Container(
@@ -701,6 +710,141 @@ class NeoSyncContentState extends State<NeoSyncContent>
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _selectDuckstationDataFolder() async {
+    if (_isConfiguringDuckstation) return;
+    setState(() => _isConfiguringDuckstation = true);
+    try {
+      String? selected;
+      if (await PermissionService.isTelevision()) {
+        if (!mounted) return;
+        selected = await TvDirectoryPicker.show(context);
+      } else {
+        final uri = await PermissionService.requestFolderAccess();
+        if (uri != null) {
+          final hasFiles = await PermissionService.hasAllFilesAccess();
+          selected =
+              await UserDataLocationService.resolveAndroidUserDataPath(
+                uri.toString(),
+                hasAllFilesAccess: hasFiles,
+              ) ??
+              UserDataLocationService.safUriToRealPath(uri.toString());
+        }
+      }
+      if (selected == null || !mounted) return;
+      selected = selected.replaceFirst(RegExp(r'[\\/]+$'), '');
+      if (!Directory(path.join(selected, 'memcards')).existsSync()) {
+        custom.AppNotification.showNotification(
+          context,
+          'The selected folder must contain a memcards folder',
+          type: custom.NotificationType.error,
+        );
+        return;
+      }
+      await context
+          .read<SqliteConfigProvider>()
+          .updateDuckstationDataFolderPath(selected);
+      if (mounted) {
+        await context.read<NeoSyncProvider>().syncDuckstationMemoryCards();
+      }
+    } catch (e) {
+      if (mounted) {
+        custom.AppNotification.showNotification(
+          context,
+          '$e',
+          type: custom.NotificationType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isConfiguringDuckstation = false);
+    }
+  }
+
+  Widget _buildDuckstationSyncCard() {
+    if (!Platform.isAndroid) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final dataFolder = context
+        .watch<SqliteConfigProvider>()
+        .config
+        .duckstationDataFolderPath
+        .trim();
+    final neoSync = context.watch<NeoSyncProvider>();
+    final busy = _isConfiguringDuckstation || neoSync.isSyncing;
+    return Container(
+      padding: EdgeInsets.all(8.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'DuckStation Save Sync',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontSize: 10.r,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 4.r),
+          Text(
+            dataFolder.isEmpty
+                ? 'Select the DuckStation data folder that contains memcards'
+                : dataFolder,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(fontSize: 8.r),
+          ),
+          SizedBox(height: 6.r),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : _selectDuckstationDataFolder,
+                  icon: Icon(Symbols.folder_special_rounded, size: 14.r),
+                  label: Text(
+                    'Select Data Folder',
+                    style: TextStyle(fontSize: 8.r),
+                  ),
+                ),
+              ),
+              if (dataFolder.isNotEmpty)
+                IconButton(
+                  onPressed: busy
+                      ? null
+                      : () => context
+                            .read<SqliteConfigProvider>()
+                            .updateDuckstationDataFolderPath(''),
+                  icon: Icon(Symbols.restart_alt_rounded, size: 16.r),
+                  tooltip: 'Clear DuckStation Data Folder',
+                ),
+            ],
+          ),
+          if (dataFolder.isNotEmpty) ...[
+            SizedBox(height: 5.r),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: busy
+                    ? null
+                    : () => context
+                          .read<NeoSyncProvider>()
+                          .syncDuckstationMemoryCards(),
+                icon: Icon(Symbols.sync_rounded, size: 14.r),
+                label: Text(
+                  'Sync DuckStation Saves',
+                  style: TextStyle(fontSize: 8.r),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

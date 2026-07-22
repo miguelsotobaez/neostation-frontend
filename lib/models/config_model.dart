@@ -145,6 +145,7 @@ class ConfigModel {
   /// `gamelists/` and `downloaded_media/`), or empty if not configured. Used
   /// by the ES-DE import and read-time fallback artwork resolution.
   final String esdeFolderPath;
+  final String duckstationDataFolderPath;
 
   const ConfigModel({
     this.romFolders = const [],
@@ -181,6 +182,7 @@ class ConfigModel {
     this.dockEnabled = true,
     this.dockSlotCount = 3,
     this.esdeFolderPath = '',
+    this.duckstationDataFolderPath = '',
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -326,6 +328,11 @@ class ConfigModel {
               .clamp(dockMinSlotCount, dockMaxSlotCount),
       esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
           .toString(),
+      duckstationDataFolderPath:
+          (json['duckstationDataFolderPath'] ??
+                  json['duckstation_data_folder_path'] ??
+                  '')
+              .toString(),
     );
   }
 
@@ -371,6 +378,7 @@ class ConfigModel {
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
       'esdeFolderPath': esdeFolderPath,
+      'duckstationDataFolderPath': duckstationDataFolderPath,
     };
   }
 
@@ -410,6 +418,7 @@ class ConfigModel {
     bool? dockEnabled,
     int? dockSlotCount,
     String? esdeFolderPath,
+    String? duckstationDataFolderPath,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -447,6 +456,8 @@ class ConfigModel {
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
       esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
+      duckstationDataFolderPath:
+          duckstationDataFolderPath ?? this.duckstationDataFolderPath,
     );
   }
 

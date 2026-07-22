@@ -243,6 +243,7 @@ extension NeoSyncCore on NeoSyncProvider {
 
     _processedItems.add('🚀 Checking for cloud updates on app start...');
     await autoSyncDownloads(); // Only download on initialization
+    await syncDuckstationMemoryCards(respectAutoSyncEnabled: true);
   }
 
   /// Resets the state of the quota exceeded dialog

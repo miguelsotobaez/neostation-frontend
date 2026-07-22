@@ -456,6 +456,7 @@ class _MyAppState extends State<MyApp> {
     // showing it fully-formed while the app is still cold-starting).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.sqliteConfigProvider.markAppReady();
+      widget.neoSyncProvider.syncOnAppStart();
     });
   }
 
