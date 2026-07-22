@@ -60,7 +60,7 @@ dependencies:
   sub_screen: ^0.1.9
   flutter_soloud: ^4.0.12
   audio_metadata_reader: ^1.6.0
-  wakelock_plus: ^1.6.1
+  wakelock_plus: ^1.7.0
   flutter_localization: ^0.4.1
   flutter_tilt: ^4.0.4
 
