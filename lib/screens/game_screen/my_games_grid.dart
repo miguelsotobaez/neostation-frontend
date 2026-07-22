@@ -144,6 +144,14 @@ class _GamesGridState extends State<GamesGrid> {
   // is always brought back into view. Steady scroll and dpad nav never set it
   // (nav scrolls via _ensureSelectedVisible).
   bool _recenterAfterLayout = false;
+  // When the pending recenter is instant (jumpTo) vs animated (animateTo).
+  // Only a legend toggle sets this: it keeps the same column count, so the
+  // selected card barely moves and jumpTo lands it dead-centre in one frame.
+  // Column-count changes (card-size cycle, pinch) and fanart↔box2d switches
+  // move the card many rows — a far jump that jumpTo would clamp short against
+  // the SliverList's under-reported extent, so those animate through instead
+  // (the scroll builds the intermediate rows so the true target is reachable).
+  bool _recenterInstant = false;
 
   // Per-card height/width ratio (aspect), which is INDEPENDENT of the card
   // width. Measuring it is the expensive part of layout (file-header reads +
@@ -667,6 +675,7 @@ class _GamesGridState extends State<GamesGrid> {
   void _onLegendVisibilityChanged() {
     if (!mounted) return;
     _recenterAfterLayout = true;
+    _recenterInstant = true; // same-column reflow: snap instantly, no drift
     setState(() {});
   }
 
@@ -688,15 +697,37 @@ class _GamesGridState extends State<GamesGrid> {
     );
   }
 
-  /// Jumps the scroll so the selected card sits at the vertical centre of the
-  /// viewport. The card (and its in-cell cursor) is the source of truth; this is
-  /// how the view follows it after any layout change. A card already centred
-  /// jumps to its own offset (a no-op), so there's no gratuitous movement.
+  /// Scrolls so the selected card sits at the vertical centre of the viewport.
+  /// The card (and its in-cell cursor) is the source of truth; this is how the
+  /// view follows it after any non-scroll layout change.
+  ///
+  /// Two modes, picked by [_recenterInstant]:
+  ///  • Instant (jumpTo) — a legend toggle. The column count is unchanged, so
+  ///    the selected card barely moves; snapping in the same frame keeps the
+  ///    cursor glued with no drift.
+  ///  • Animated (animateTo) — a card-size cycle, pinch, or fanart↔box2d
+  ///    switch. These move the card many rows (a far jump). jumpTo would be
+  ///    clamped short by the SliverList's under-reported max extent (it hasn't
+  ///    built the distant rows yet), landing on a view that doesn't even
+  ///    contain the card. animateTo scrolls THROUGH the intermediate offsets so
+  ///    the sliver builds rows along the way and its extent grows until the true
+  ///    centre is reachable — the same path wrap-around nav takes.
   void _centerOnSelected() {
     if (!_scrollController.hasClients || _cardRects.isEmpty) return;
+    final instant = _recenterInstant;
+    _recenterInstant = false;
     final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
     final viewportH = _scrollController.position.viewportDimension;
-    _scrollController.jumpTo(_centerTargetFor(rect, viewportH));
+    final target = _centerTargetFor(rect, viewportH);
+    if (instant) {
+      _scrollController.jumpTo(target);
+    } else {
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   @override
