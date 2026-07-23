@@ -148,7 +148,7 @@ class GameDetailsFooter extends StatelessWidget {
                       // Game rating.
                       if (game.rating > 0) ...[
                         _SteamStyleRating(game: game),
-                        SizedBox(width: 12.r),
+                        SizedBox(width: 8.r),
                       ],
 
                       // RetroAchievements Progress. When the legend is hidden
@@ -164,15 +164,24 @@ class GameDetailsFooter extends StatelessWidget {
                             child: _buildCompactAchievementsIndicator(
                               context,
                               availableWidth: constraints.maxWidth,
+                              hasPlayTime:
+                                  GameUtils.formatPlayTime(game.playTime ?? 0) !=
+                                  '0s',
                             ),
                           ),
                         ),
                       ),
-                      // Match the 12.r gap on the RA pill's left (rating side)
-                      // so it sits evenly between rating and PLAY when expanded.
-                      SizedBox(
-                        width: GameLegendVisibility.hidden.value ? 12.r : 8.r,
-                      ),
+                      // Accumulated play time, shown as its own pill to the
+                      // left of PLAY (only once the game has been played).
+                      if (GameUtils.formatPlayTime(game.playTime ?? 0) !=
+                          '0s') ...[
+                        SizedBox(width: 8.r),
+                        _PlayTimePill(game: game),
+                      ],
+
+                      // Consistent 8.r gap before PLAY, matching the spacing
+                      // between the rating, RA and play-time pills.
+                      SizedBox(width: 8.r),
 
                       // Primary Launch Control.
                       _buildPlayButtonCompact(context),
@@ -191,13 +200,12 @@ class GameDetailsFooter extends StatelessWidget {
   ///
   /// Includes visual feedback for gamepad focus and displays accumulated play-time statistics.
   Widget _buildPlayButtonCompact(BuildContext context) {
-    final playTimeText = GameUtils.formatPlayTime(game.playTime ?? 0);
     return Builder(
       builder: (context) {
         final isFocused = Focus.of(context).hasFocus;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 120.r,
+          width: 104.r,
           height: 45.r,
           decoration: BoxDecoration(
             color: isFocused
@@ -244,35 +252,15 @@ class GameDetailsFooter extends StatelessWidget {
                       color: Theme.of(context).colorScheme.onPrimary,
                     ),
                     SizedBox(width: 8.r),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.playButton.getString(context),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimary,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14.r,
-                            letterSpacing: 1.5,
-                            height: 1.0,
-                          ),
-                        ),
-                        if (playTimeText.isNotEmpty && playTimeText != '0s')
-                          Text(
-                            playTimeText.toUpperCase(),
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimary.withValues(alpha: 0.8),
-                              fontSize: 8.r,
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
+                    Text(
+                      AppLocale.playButton.getString(context),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14.r,
+                        letterSpacing: 1.5,
+                        height: 1.0,
+                      ),
                     ),
                   ],
                 ),
@@ -288,12 +276,16 @@ class GameDetailsFooter extends StatelessWidget {
   Widget _buildCompactAchievementsIndicator(
     BuildContext context, {
     required double availableWidth,
+    required bool hasPlayTime,
   }) {
     if (!hasRetroAchievements) return const SizedBox.shrink();
 
-    // With the legend hidden the badge fills its (Expanded) slot; when shown it
+    // The badge fills its (Expanded) slot when the legend is hidden, or when
+    // there is no play-time pill claiming the space to its right (otherwise it
+    // would leave dead space between itself and PLAY). When neither applies it
     // rests at 120.r. The width is animated so toggling eases in/out.
     final bool legendHidden = GameLegendVisibility.hidden.value;
+    final bool expand = legendHidden || !hasPlayTime;
     final bool noAchievements =
         !isLoadingAchievements &&
         (currentGameInfo == null || currentGameInfo!.numAchievements == 0);
@@ -335,7 +327,7 @@ class GameDetailsFooter extends StatelessWidget {
         // lockstep with the legend slide (one motion) rather than shifting
         // into place first and then easing its width (two steps).
         child: TweenAnimationBuilder<double>(
-          tween: Tween<double>(end: legendHidden ? 1.0 : 0.0),
+          tween: Tween<double>(end: expand ? 1.0 : 0.0),
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
           builder: (context, t, child) => Container(
@@ -474,7 +466,7 @@ class _SteamStyleRating extends StatelessWidget {
 
     return Container(
       height: 45.r,
-      padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 6.r),
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 6.r),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
         borderRadius:
@@ -497,17 +489,17 @@ class _SteamStyleRating extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(Symbols.star_rounded, color: ratingColor, size: 24.r),
-          SizedBox(width: 6.r),
-          // Reserve width for the widest possible value ("10.0") so the pill
-          // stays a static size regardless of the current score (e.g. "1.0"
-          // no longer renders narrower than "10.0"). Scale/font-independent.
+          SizedBox(width: 4.r),
+          // Reserve width for the widest possible value ("10") so the pill
+          // stays a static size regardless of the current score (e.g. "1"
+          // no longer renders narrower than "10"). Scale/font-independent.
           Stack(
             alignment: Alignment.centerLeft,
             children: [
               Opacity(
                 opacity: 0,
                 child: Text(
-                  '10.0',
+                  '10',
                   style: TextStyle(
                     fontSize: 22.r,
                     fontWeight: FontWeight.w900,
@@ -515,7 +507,7 @@ class _SteamStyleRating extends StatelessWidget {
                 ),
               ),
               Text(
-                ratingValue.toStringAsFixed(1),
+                ratingValue.toStringAsFixed(0),
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurface,
                   fontSize: 22.r,
@@ -523,6 +515,71 @@ class _SteamStyleRating extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact pill showing the accumulated play time for a game, styled to match
+/// the rating pill. Sits to the left of the PLAY button.
+class _PlayTimePill extends StatelessWidget {
+  final GameModel game;
+
+  const _PlayTimePill({required this.game});
+
+  /// Formats accumulated seconds as a zero-padded HH:MM:SS clock.
+  String _formatClock(int seconds) {
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    String pad(int v) => v.toString().padLeft(2, '0');
+    return '${pad(h)}:${pad(m)}:${pad(s)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 45.r,
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        borderRadius:
+            Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+            BorderRadius.circular(14.r),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline,
+          width: 1.r,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.5),
+            blurRadius: 3.r,
+            offset: Offset(2.0.r, 2.0.r),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            Symbols.schedule_rounded,
+            color: Theme.of(context).colorScheme.onSurface,
+            size: 14.r,
+          ),
+          SizedBox(height: 1.r),
+          Text(
+            _formatClock(game.playTime ?? 0),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 10.r,
+              fontWeight: FontWeight.w800,
+              height: 1.0,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
