@@ -110,17 +110,16 @@ class GameActionButtons extends StatelessWidget {
         onTap: selectedGame != null ? onSettings : null,
       ),
       // Compact NeoSync status indicator — always the last option.
-      if (syncProvider != null && selectedGame != null) ...[
-        SizedBox(height: 12.r),
+      // The icon renders nothing (SizedBox.shrink) when sync is unavailable
+      // for this system, so its top spacing lives inside the widget to avoid
+      // leaving a dangling gap below the settings button.
+      if (syncProvider != null && selectedGame != null)
         NeoSyncStatusIcon(
           system: system,
           game: selectedGame,
           syncProvider: syncProvider,
           size: 24.0,
         ),
-        SizedBox(height: 6.r),
-      ] else
-        SizedBox(height: 6.r),
     ];
   }
 
@@ -148,7 +147,6 @@ class GameActionButtons extends StatelessWidget {
         foregroundColor: scheme.onSecondary,
         onTap: onRandom,
       ),
-      SizedBox(height: 6.r),
     ];
   }
 }

@@ -75,7 +75,9 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
         theme.extension<CornerRadii>()?.radiusInternal ??
         BorderRadius.circular(8.r);
 
-    return AnimatedContainer(
+    return Padding(
+      padding: EdgeInsets.only(top: 12.r),
+      child: AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: widget.size.r,
       height: widget.size.r,
@@ -107,6 +109,7 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
             size: (widget.size * 0.6).r,
           ),
         ),
+      ),
       ),
     );
   }
