@@ -143,18 +143,27 @@ class GameDetailsFooter extends StatelessWidget {
                       ],
 
                       // RetroAchievements Progress. When the legend is hidden
-                      // the row gains width on the left, so let the indicator
-                      // stretch to fill the gap to PLAY instead of leaving a
-                      // Spacer void; otherwise keep it at natural width.
-                      if (GameLegendVisibility.hidden.value)
-                        Expanded(
-                          child: _buildCompactAchievementsIndicator(context),
-                        )
-                      else ...[
-                        _buildCompactAchievementsIndicator(context),
-                        const Spacer(),
-                      ],
-                      SizedBox(width: 8.r),
+                      // the row gains width on the left; the indicator eases out
+                      // to fill the gap to PLAY (LayoutBuilder gives it a
+                      // concrete target width so the change animates instead of
+                      // snapping). When shown it rests at its natural width,
+                      // left-aligned, and the rest of the slot stays empty.
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: _buildCompactAchievementsIndicator(
+                              context,
+                              availableWidth: constraints.maxWidth,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Match the 12.r gap on the RA pill's left (rating side)
+                      // so it sits evenly between rating and PLAY when expanded.
+                      SizedBox(
+                        width: GameLegendVisibility.hidden.value ? 12.r : 8.r,
+                      ),
 
                       // Primary Launch Control.
                       _buildPlayButtonCompact(context),
@@ -267,17 +276,15 @@ class GameDetailsFooter extends StatelessWidget {
   }
 
   /// Resolves the current RetroAchievements progress into a compact visual badge.
-  // Wraps [child] in an Expanded only when [expand] is true.
-  Widget _wrapExpandedIf(bool expand, Widget child) =>
-      expand ? Expanded(child: child) : child;
-
-  Widget _buildCompactAchievementsIndicator(BuildContext context) {
+  Widget _buildCompactAchievementsIndicator(
+    BuildContext context, {
+    required double availableWidth,
+  }) {
     if (!hasRetroAchievements) return const SizedBox.shrink();
 
-    // With the legend hidden the badge is wrapped in an Expanded by the caller,
-    // so let the pill and its inner text/progress bar grow to fill the gap.
+    // With the legend hidden the badge fills its (Expanded) slot; when shown it
+    // rests at 120.r. The width is animated so toggling eases in/out.
     final bool legendHidden = GameLegendVisibility.hidden.value;
-
     final bool noAchievements =
         !isLoadingAchievements &&
         (currentGameInfo == null || currentGameInfo!.numAchievements == 0);
@@ -314,27 +321,39 @@ class GameDetailsFooter extends StatelessWidget {
         highlightColor: Colors.transparent,
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8.r),
-        child: Container(
-          width: legendHidden ? double.infinity : 120.r,
-          height: 45.r,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
-                BorderRadius.circular(14.r),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline,
-              width: 1.r,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.shadow.withValues(alpha: 0.1),
-                blurRadius: 4.r,
-                offset: Offset(2.0.r, 2.0.r),
+        // Drive the width from a single 0..1 factor on the same 250ms /
+        // easeOutCubic timing as the sidebar margin, so the pill expands in
+        // lockstep with the legend slide (one motion) rather than shifting
+        // into place first and then easing its width (two steps).
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: legendHidden ? 1.0 : 0.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, child) => Container(
+            width: 120.r + (availableWidth - 120.r) * t,
+            height: 45.r,
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.9),
+              borderRadius:
+                  Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                  BorderRadius.circular(14.r),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline,
+                width: 1.r,
               ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.shadow.withValues(alpha: 0.1),
+                  blurRadius: 4.r,
+                  offset: Offset(2.0.r, 2.0.r),
+                ),
+              ],
+            ),
+            child: child,
           ),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 4.r, vertical: 4.r),
@@ -372,14 +391,13 @@ class GameDetailsFooter extends StatelessWidget {
                 // Progress bar and achievement count. When the legend is hidden
                 // the pill stretches, so let this column (and its bar) fill the
                 // extra width via Expanded; otherwise keep the fixed 70.r width.
-                _wrapExpandedIf(
-                  legendHidden,
-                  Column(
+                Expanded(
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
-                        width: legendHidden ? double.infinity : 70.r,
+                        width: double.infinity,
                         child: Text(
                           progressText.toUpperCase(),
                           style: TextStyle(
@@ -394,7 +412,7 @@ class GameDetailsFooter extends StatelessWidget {
                       ),
                       SizedBox(height: 4.r),
                       SizedBox(
-                        width: legendHidden ? double.infinity : 70.r,
+                        width: double.infinity,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(4.r),
                           child: LinearProgressIndicator(
