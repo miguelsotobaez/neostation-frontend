@@ -646,8 +646,9 @@ class _GamesGridState extends State<GamesGrid> {
         } catch (_) {}
       },
       onLeftStickClick: widget.onRandom,
-      onSelectButton: widget.onScrape,
+      onSelectModifierA: widget.onScrape, // Select + A - Scrape.
       onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
+      onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
     );
   }

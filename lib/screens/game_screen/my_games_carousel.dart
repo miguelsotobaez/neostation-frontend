@@ -303,8 +303,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
         } catch (_) {}
       },
       onLeftStickClick: widget.onRandom,
-      onSelectButton: widget.onScrape,
+      onSelectModifierA: widget.onScrape, // Select + A - Scrape.
       onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
+      onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,

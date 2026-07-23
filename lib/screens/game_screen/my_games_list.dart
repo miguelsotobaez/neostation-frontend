@@ -148,6 +148,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
   final Set<String> _scrapingGameRomnames = {};
   final Map<String, double> _scrapeProgress = {};
 
+  // Guards against re-entrant Select + A scrapes of the selected game (grid /
+  // carousel views, which have no details card to own the scrape).
+  bool _isScrapingSelectedGame = false;
+
   // Bumped whenever artwork is replaced so background/detail images rebuild.
   int _artworkVersion = 0;
 
@@ -1068,7 +1072,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onFavorite: _toggleFavorite,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
-      onScrape: () => _scrapeAction?.call(),
+      onScrape: _scrapeSelectedGame,
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
     );
@@ -1093,7 +1097,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onFavorite: _toggleFavorite,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
-      onScrape: () => _scrapeAction?.call(),
+      onScrape: _scrapeSelectedGame,
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
     );
@@ -1563,6 +1567,156 @@ class _SystemGamesListState extends State<SystemGamesList> {
       }
     } catch (e) {
       _log.e('Error updating game in list: $e');
+    }
+  }
+
+  /// Scrapes metadata/artwork for the currently selected game.
+  ///
+  /// The list view triggers scraping through the details card (which owns rich
+  /// tab/focus UX). Grid and carousel views have no details card, so this
+  /// view-mode-independent path drives the same [ScreenScraperService] flow and
+  /// feeds the [_scrapingGameRomnames]/[_scrapeProgress] overlay maps that those
+  /// grids already render. Bound to the Select + A chord in those views.
+  Future<void> _scrapeSelectedGame() async {
+    final game = _selectedGame;
+    if (game == null || _isScrapingSelectedGame) return;
+
+    final scrapeSystemId = widget.system.id;
+    if (scrapeSystemId == null) return;
+
+    if (!await ScreenScraperService.hasSavedCredentials()) {
+      if (!mounted) return;
+      AppNotification.showNotification(
+        context,
+        'Please log in to ScreenScraper in the Scraping tab first.',
+        type: NotificationType.info,
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    _isScrapingSelectedGame = true;
+
+    // Pause any preview playback to avoid resource contention during scraping.
+    _resetVideoState();
+
+    final isAllMode =
+        widget.system.folderName == SystemFolderNames.all ||
+        widget.system.folderName == SystemFolderNames.favorites;
+    final targetSystemFolder = isAllMode && game.systemFolderName != null
+        ? game.systemFolderName!
+        : widget.system.primaryFolderName;
+
+    final secondaryState = context.read<SecondaryDisplayState?>();
+    final isSecondaryActive =
+        _secondaryDisplayState?.value?.isSecondaryActive ?? false;
+
+    setState(() {
+      _scrapingGameRomnames.add(game.romname);
+      _scrapeProgress[game.romname] = 0.0;
+    });
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.scrapingGameData.getString(context),
+      type: NotificationType.info,
+    );
+
+    if (secondaryState != null && isSecondaryActive) {
+      secondaryState.updateState(
+        isScraping: true,
+        scrapeStatus: AppLocale.scrapingGameData.getString(context),
+        scrapeProgress: 0.0,
+      );
+    }
+
+    try {
+      // Mirror the card: overwrite existing metadata when a description is
+      // already present, otherwise only fill the gaps.
+      final forceOverwrite = game.getDescriptionForLanguage('en').trim().isNotEmpty;
+
+      final result = await ScreenScraperService.scrapeSingleGame(
+        appSystemId: scrapeSystemId,
+        romName: game.romname,
+        systemFolder: targetSystemFolder,
+        romPath: game.romPath ?? '',
+        gameName: game.name,
+        forceOverwrite: forceOverwrite,
+        onProgress: (statusKey, progress) {
+          if (!mounted) return;
+          setState(() {
+            _scrapeProgress[game.romname] = progress;
+          });
+          if (secondaryState != null && isSecondaryActive) {
+            secondaryState.updateState(
+              scrapeStatus: statusKey.getString(context),
+              scrapeProgress: progress,
+            );
+          }
+        },
+      );
+
+      if (!mounted) return;
+      if (result['success'] == true) {
+        // Evict cached artwork so the grid rebuilds with the new assets.
+        try {
+          final imagesToEvict = [
+            game.getScreenshotPath(targetSystemFolder, _fileProvider),
+            game.getImagePath(targetSystemFolder, 'wheels', _fileProvider),
+            game.getImagePath(targetSystemFolder, 'fanarts', _fileProvider),
+          ];
+          for (final imagePath in imagesToEvict) {
+            final imageFile = File(imagePath);
+            if (await imageFile.exists()) {
+              await FileImage(imageFile).evict();
+            }
+          }
+        } catch (e) {
+          _log.e('Image cache eviction failed: $e');
+        }
+
+        await _handleGameUpdated();
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.scrapeSuccessful.getString(context),
+            type: NotificationType.success,
+          );
+        }
+      } else {
+        AppNotification.showNotification(
+          context,
+          result['message'].toString().getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } catch (e) {
+      _log.e('Single game scrape (grid/carousel) failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.scrapeErrorGame.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } finally {
+      _isScrapingSelectedGame = false;
+      if (mounted) {
+        setState(() {
+          _scrapingGameRomnames.remove(game.romname);
+          _scrapeProgress.remove(game.romname);
+        });
+        if (secondaryState != null && isSecondaryActive) {
+          // Latency buffer so file descriptors release before the secondary
+          // screen clears its scrape state.
+          await Future.delayed(const Duration(milliseconds: 250));
+          secondaryState.updateState(
+            isScraping: false,
+            clearScrapeProgress: true,
+            clearScrapeStatus: true,
+          );
+        }
+      }
     }
   }
 }
