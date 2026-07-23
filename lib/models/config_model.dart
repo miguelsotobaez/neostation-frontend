@@ -99,6 +99,10 @@ class ConfigModel {
   /// Whether to hide the "Recently Played" card from the main dashboard.
   final bool hideRecentCard;
 
+  /// Whether the vertical action-button legend is hidden across every game view
+  /// (list, grid, carousel). Toggled by the Select + B chord.
+  final bool legendHidden;
+
   /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
   /// to never dim. Only meaningful when a secondary display is active.
   final int nowPlayingDimDelay;
@@ -168,6 +172,7 @@ class ConfigModel {
     this.systemSortOrder = 'asc',
     this.appLanguage = 'es',
     this.hideRecentCard = false,
+    this.legendHidden = false,
     this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
@@ -269,6 +274,10 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      legendHidden:
+          (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
+              '1' ||
+          (json['legendHidden'] ?? false).toString().toLowerCase() == 'true',
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
@@ -358,6 +367,7 @@ class ConfigModel {
       'systemSortOrder': systemSortOrder,
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
+      'legendHidden': legendHidden,
       'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
       'autoUpdateSystems': autoUpdateSystems,
@@ -397,6 +407,7 @@ class ConfigModel {
     String? systemSortOrder,
     String? appLanguage,
     bool? hideRecentCard,
+    bool? legendHidden,
     String? activeSyncProvider,
     bool? autoUpdateApp,
     bool? autoUpdateSystems,
@@ -433,6 +444,7 @@ class ConfigModel {
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
+      legendHidden: legendHidden ?? this.legendHidden,
       activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
       autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,

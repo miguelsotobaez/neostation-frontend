@@ -312,6 +312,9 @@ class SqliteMigrations {
       case 102:
         await _migrateToVersion102(db);
         break;
+      case 103:
+        await _migrateToVersion103(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4924,6 +4927,29 @@ class SqliteMigrations {
       _log.i('Migration v102 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v102: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v103: Persist the game action-button legend visibility so the
+  /// Select + B toggle survives restarts and upgrades.
+  static Future<void> _migrateToVersion103(Database db) async {
+    _log.i('Migration v103: Adding legend_hidden to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('legend_hidden')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN legend_hidden INTEGER DEFAULT 0',
+        );
+        _log.i('Column legend_hidden added via v103');
+      } else {
+        _log.i('Column legend_hidden already exists');
+      }
+      _log.i('Migration v103 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v103: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

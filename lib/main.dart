@@ -14,6 +14,7 @@ import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/sync/providers/neo_sync_adapter.dart';
 import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
@@ -301,6 +302,13 @@ void main() async {
   try {
     // 1. Inicializar ConfigProvider primero (sincroniza sistemas)
     await sqliteConfigProvider.initialize();
+
+    // Seed the game legend visibility from persisted config and wire its
+    // persistence sink so the Select + B toggle survives restarts/upgrades.
+    GameLegendVisibility.bind(
+      initialHidden: sqliteConfigProvider.config.legendHidden,
+      persist: sqliteConfigProvider.updateLegendHidden,
+    );
 
     // 2. Inicializar DatabaseProvider (carga juegos basandose en sistemas sincronizados)
     await sqliteDatabaseProvider.initialize(

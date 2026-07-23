@@ -84,6 +84,13 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether the game action-button legend is hidden (Select + B).
+  Future<void> updateLegendHidden(bool value) async {
+    _config = _config.copyWith(legendHidden: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   Future<void> updateActiveSyncProvider(String providerId) async {
     _config = _config.copyWith(activeSyncProvider: providerId);
     await SqliteConfigService.saveConfig(_config);

@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 102;
+  static const int _databaseVersion = 103;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1626,6 +1626,7 @@ class SqliteService {
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
+        legend_hidden INTEGER DEFAULT 0,
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         neostation_app_version TEXT DEFAULT '',
@@ -2358,6 +2359,7 @@ class SqliteService {
     String? appLanguage,
     String? activeTheme,
     int? hideRecentCard,
+    int? legendHidden,
     String? activeSyncProvider,
     String? systemsVersion,
     String? neostationAppVersion,
@@ -2432,6 +2434,9 @@ class SqliteService {
     }
     if (hideRecentCard != null) {
       newConfig['hide_recent_card'] = hideRecentCard;
+    }
+    if (legendHidden != null) {
+      newConfig['legend_hidden'] = legendHidden;
     }
     if (activeSyncProvider != null) {
       newConfig['active_sync_provider'] = activeSyncProvider;

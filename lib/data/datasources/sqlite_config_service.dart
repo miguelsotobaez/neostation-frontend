@@ -152,6 +152,10 @@ class SqliteConfigService {
             (int.tryParse(userConfig?['hide_recent_card']?.toString() ?? '0') ??
                 0) ==
             1,
+        legendHidden:
+            (int.tryParse(userConfig?['legend_hidden']?.toString() ?? '0') ??
+                0) ==
+            1,
         activeSyncProvider:
             userConfig?['active_sync_provider']?.toString() ?? 'neosync',
         autoUpdateApp:
@@ -230,6 +234,7 @@ class SqliteConfigService {
         appLanguage: config.appLanguage,
         themeName: config.themeName,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
+        legendHidden: config.legendHidden ? 1 : 0,
         activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
         autoUpdateSystems: config.autoUpdateSystems ? 1 : 0,
