@@ -165,14 +165,31 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
         // ignore: unawaited_futures
         updateDockApps(state.dockApps);
       } else if (_initialized &&
-          !listEquals(state.dockApps, _config.dockApps)) {
-        // No edit trigger, yet the shared dockApps disagrees with the persisted
-        // layout — this is a stale echo from the secondary, whose snapshot
-        // synced before our boot seed and shipped the old (usually empty)
-        // dockApps back, clobbering it. The main engine owns dockApps outside
-        // of user edits, so re-assert the persisted layout. (Guarded on
-        // _initialized so we don't fight before the config has loaded.)
-        _secondaryDisplayState?.updateState(dockApps: _config.dockApps);
+          (!listEquals(state.dockApps, _config.dockApps) ||
+              state.dockEnabled != _config.dockEnabled ||
+              state.dockSlotCount != _config.dockSlotCount ||
+              state.nowPlayingDimDelay != _config.nowPlayingDimDelay ||
+              state.nowPlayingDimLevel != _config.nowPlayingDimLevel ||
+              state.fanartDimLevel != _config.fanartDimLevel)) {
+        // No edit trigger, yet a main-owned field in the shared snapshot
+        // disagrees with the persisted config — this is a stale echo from the
+        // secondary, whose startup snapshot synced before (or raced) our boot
+        // seed and shipped its defaults back, clobbering the seeded values.
+        // Most visible as the dock slot count snapping back to its default (3)
+        // after a reboot when neostation is the home launcher and the secondary
+        // engine broadcasts its default state first. None of these fields are
+        // ever changed from the secondary engine (dock app edits go through
+        // dockEditTrigger above), so the main engine owns them and we re-assert
+        // the persisted values whenever they drift. (Guarded on _initialized so
+        // we don't fight before the config has loaded.)
+        _secondaryDisplayState?.updateState(
+          dockApps: _config.dockApps,
+          dockEnabled: _config.dockEnabled,
+          dockSlotCount: _config.dockSlotCount,
+          nowPlayingDimDelay: _config.nowPlayingDimDelay,
+          nowPlayingDimLevel: _config.nowPlayingDimLevel,
+          fanartDimLevel: _config.fanartDimLevel,
+        );
       }
     }
   }
