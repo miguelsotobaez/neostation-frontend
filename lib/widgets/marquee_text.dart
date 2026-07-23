@@ -34,7 +34,15 @@ class MarqueeText extends StatelessWidget {
 
         final bool overflows = textPainter.size.width > constraints.maxWidth;
         final double textHeight = textPainter.size.height;
-        final double contentHeight = height ?? textHeight;
+        // Some display fonts draw descenders (y, g, p) below their reported
+        // metric line height. The Marquee branch below scrolls inside a
+        // ListView, which clips to this box, so a box sized to exactly
+        // `textHeight` shears the bottoms off those glyphs. Add a small
+        // descender allowance (font-size relative) so the clip region covers
+        // them. Only applied when no explicit height is supplied.
+        final double descenderGuard = (effectiveStyle.fontSize ?? textHeight) *
+            0.2;
+        final double contentHeight = height ?? (textHeight + descenderGuard);
 
         return SizedBox(
           width: double.infinity,
