@@ -130,12 +130,13 @@ class GameActionButtons extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return [
-      // A — scrape the highlighted game.
+      // A — scrape the highlighted game. Secondary colors mark these as the
+      // Select-held chord shortcuts, distinct from the primary default actions.
       GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_A_button.png',
         symbol: Symbols.cloud_download_rounded,
-        color: scheme.primary,
-        foregroundColor: scheme.onPrimary,
+        color: scheme.secondary,
+        foregroundColor: scheme.onSecondary,
         onTap: selectedGame != null ? onScrape : null,
       ),
       SizedBox(height: 6.r),
@@ -143,8 +144,8 @@ class GameActionButtons extends StatelessWidget {
       GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
         symbol: Symbols.casino_rounded,
-        color: scheme.primary,
-        foregroundColor: scheme.onPrimary,
+        color: scheme.secondary,
+        foregroundColor: scheme.onSecondary,
         onTap: onRandom,
       ),
       SizedBox(height: 6.r),
