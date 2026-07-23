@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/app_themes.dart';
 import '../../../../models/system_model.dart';
@@ -141,10 +142,18 @@ class GameDetailsFooter extends StatelessWidget {
                         SizedBox(width: 12.r),
                       ],
 
-                      // RetroAchievements Progress.
-                      _buildCompactAchievementsIndicator(context),
-
-                      const Spacer(),
+                      // RetroAchievements Progress. When the legend is hidden
+                      // the row gains width on the left, so let the indicator
+                      // stretch to fill the gap to PLAY instead of leaving a
+                      // Spacer void; otherwise keep it at natural width.
+                      if (GameLegendVisibility.hidden.value)
+                        Expanded(
+                          child: _buildCompactAchievementsIndicator(context),
+                        )
+                      else ...[
+                        _buildCompactAchievementsIndicator(context),
+                        const Spacer(),
+                      ],
                       SizedBox(width: 8.r),
 
                       // Primary Launch Control.
@@ -258,8 +267,16 @@ class GameDetailsFooter extends StatelessWidget {
   }
 
   /// Resolves the current RetroAchievements progress into a compact visual badge.
+  // Wraps [child] in an Expanded only when [expand] is true.
+  Widget _wrapExpandedIf(bool expand, Widget child) =>
+      expand ? Expanded(child: child) : child;
+
   Widget _buildCompactAchievementsIndicator(BuildContext context) {
     if (!hasRetroAchievements) return const SizedBox.shrink();
+
+    // With the legend hidden the badge is wrapped in an Expanded by the caller,
+    // so let the pill and its inner text/progress bar grow to fill the gap.
+    final bool legendHidden = GameLegendVisibility.hidden.value;
 
     final bool noAchievements =
         !isLoadingAchievements &&
@@ -298,7 +315,7 @@ class GameDetailsFooter extends StatelessWidget {
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8.r),
         child: Container(
-          width: 120.r,
+          width: legendHidden ? double.infinity : 120.r,
           height: 45.r,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
@@ -352,42 +369,47 @@ class GameDetailsFooter extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 4.r),
-                // Progress bar and achievement count.
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 70.r,
-                      child: Text(
-                        progressText.toUpperCase(),
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface,
-                          fontSize: 10.r,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                // Progress bar and achievement count. When the legend is hidden
+                // the pill stretches, so let this column (and its bar) fill the
+                // extra width via Expanded; otherwise keep the fixed 70.r width.
+                _wrapExpandedIf(
+                  legendHidden,
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: legendHidden ? double.infinity : 70.r,
+                        child: Text(
+                          progressText.toUpperCase(),
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 10.r,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    SizedBox(height: 4.r),
-                    SizedBox(
-                      width: 70.r,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4.r),
-                        child: LinearProgressIndicator(
-                          value: isLoadingAchievements ? null : progress,
-                          minHeight: 5.r,
-                          backgroundColor: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.1),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            statusColor,
+                      SizedBox(height: 4.r),
+                      SizedBox(
+                        width: legendHidden ? double.infinity : 70.r,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4.r),
+                          child: LinearProgressIndicator(
+                            value: isLoadingAchievements ? null : progress,
+                            minHeight: 5.r,
+                            backgroundColor: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.1),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              statusColor,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
