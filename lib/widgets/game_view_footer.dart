@@ -340,7 +340,7 @@ class _CompactAchievementsIndicator extends StatelessWidget {
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: radii.radiusInternal,
         child: Container(
-          width: 98.r,
+          width: 101.r,
           height: 32.r,
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.9),
@@ -357,8 +357,8 @@ class _CompactAchievementsIndicator extends StatelessWidget {
           child: Padding(
             // Match the rating pill's 8.r horizontal inset so the trophy icon
             // doesn't hug the pill's left border (the pill's width above is
-            // widened to 98.r to absorb the extra padding without squeezing
-            // the 56.r text/progress column).
+            // widened to 101.r to absorb the padding + the 6.r icon→text gap
+            // without squeezing the 56.r text/progress column).
             padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
             child: Row(
               children: [
@@ -385,7 +385,7 @@ class _CompactAchievementsIndicator extends StatelessWidget {
                           ),
                   ),
                 ),
-                SizedBox(width: 3.r),
+                SizedBox(width: 6.r),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,8 +405,11 @@ class _CompactAchievementsIndicator extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: 2.r),
+                    // Bar is deliberately narrower than the 56.r text row so it
+                    // doesn't run to the pill's right edge — leaves a right
+                    // margin under the progress count.
                     SizedBox(
-                      width: 56.r,
+                      width: 46.r,
                       child: ClipRRect(
                         borderRadius: radii.radiusInternal,
                         child: LinearProgressIndicator(

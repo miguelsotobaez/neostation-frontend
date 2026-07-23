@@ -400,7 +400,7 @@ class GameDetailsFooter extends StatelessWidget {
                           ),
                   ),
                 ),
-                SizedBox(width: 4.r),
+                SizedBox(width: 8.r),
                 // Progress bar and achievement count. When the legend is hidden
                 // the pill stretches, so let this column (and its bar) fill the
                 // extra width via Expanded; otherwise keep the fixed 70.r width.
@@ -424,8 +424,11 @@ class GameDetailsFooter extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: 4.r),
-                      SizedBox(
-                        width: double.infinity,
+                      // Hold the bar short of the pill's right edge so it
+                      // doesn't run all the way across — mirrors the grid/
+                      // carousel pill's right margin under the progress count.
+                      Padding(
+                        padding: EdgeInsets.only(right: 10.r),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(4.r),
                           child: LinearProgressIndicator(
