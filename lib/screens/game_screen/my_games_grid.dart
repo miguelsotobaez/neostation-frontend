@@ -144,14 +144,6 @@ class _GamesGridState extends State<GamesGrid> {
   // is always brought back into view. Steady scroll and dpad nav never set it
   // (nav scrolls via _ensureSelectedVisible).
   bool _recenterAfterLayout = false;
-  // When the pending recenter is instant (jumpTo) vs animated (animateTo).
-  // Only a legend toggle sets this: it keeps the same column count, so the
-  // selected card barely moves and jumpTo lands it dead-centre in one frame.
-  // Column-count changes (card-size cycle, pinch) and fanart↔box2d switches
-  // move the card many rows — a far jump that jumpTo would clamp short against
-  // the SliverList's under-reported extent, so those animate through instead
-  // (the scroll builds the intermediate rows so the true target is reachable).
-  bool _recenterInstant = false;
 
   // Per-card height/width ratio (aspect), which is INDEPENDENT of the card
   // width. Measuring it is the expensive part of layout (file-header reads +
@@ -675,7 +667,6 @@ class _GamesGridState extends State<GamesGrid> {
   void _onLegendVisibilityChanged() {
     if (!mounted) return;
     _recenterAfterLayout = true;
-    _recenterInstant = true; // same-column reflow: snap instantly, no drift
     setState(() {});
   }
 
@@ -697,37 +688,25 @@ class _GamesGridState extends State<GamesGrid> {
     );
   }
 
-  /// Scrolls so the selected card sits at the vertical centre of the viewport.
-  /// The card (and its in-cell cursor) is the source of truth; this is how the
-  /// view follows it after any non-scroll layout change.
+  /// Smoothly scrolls so the selected card sits at the vertical centre of the
+  /// viewport. Used after any non-scroll layout change (legend toggle, card-size
+  /// cycle, pinch, fanart↔box2d switch).
   ///
-  /// Two modes, picked by [_recenterInstant]:
-  ///  • Instant (jumpTo) — a legend toggle. The column count is unchanged, so
-  ///    the selected card barely moves; snapping in the same frame keeps the
-  ///    cursor glued with no drift.
-  ///  • Animated (animateTo) — a card-size cycle, pinch, or fanart↔box2d
-  ///    switch. These move the card many rows (a far jump). jumpTo would be
-  ///    clamped short by the SliverList's under-reported max extent (it hasn't
-  ///    built the distant rows yet), landing on a view that doesn't even
-  ///    contain the card. animateTo scrolls THROUGH the intermediate offsets so
-  ///    the sliver builds rows along the way and its extent grows until the true
-  ///    centre is reachable — the same path wrap-around nav takes.
+  /// The target comes straight from the layout model (`_centerTargetFor`). This
+  /// is only correct because the list is a [SliverVariedExtentList] fed exact
+  /// per-row extents, so its absolute offsets match the model exactly — no lazy
+  /// estimate to diverge from. A single animateTo always lands.
   void _centerOnSelected() {
     if (!_scrollController.hasClients || _cardRects.isEmpty) return;
-    final instant = _recenterInstant;
-    _recenterInstant = false;
     final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
-    final viewportH = _scrollController.position.viewportDimension;
-    final target = _centerTargetFor(rect, viewportH);
-    if (instant) {
-      _scrollController.jumpTo(target);
-    } else {
-      _scrollController.animateTo(
-        target,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    final pos = _scrollController.position;
+    final target = _centerTargetFor(rect, pos.viewportDimension);
+    if ((pos.pixels - target).abs() <= 1.0) return;
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -950,14 +929,13 @@ class _GamesGridState extends State<GamesGrid> {
   void _ensureSelectedVisible() {
     if (!_scrollController.hasClients || _cardRects.isEmpty) return;
     final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
-    final viewportH = _scrollController.position.viewportDimension;
-    final target = _centerTargetFor(rect, viewportH);
+    final pos = _scrollController.position;
+    final target = _centerTargetFor(rect, pos.viewportDimension);
     // During a fast-nav burst, jump instantly rather than firing a fresh
-    // animateTo per keypress. Repeated overlapping animations let the viewport
-    // fall far behind _selectedIndex, so the selected card trails the logical
-    // selection by many rows until the scroll finally catches up. A synchronous
-    // jump keeps the selected card centered every frame. The trailing (settled)
-    // move still animates smoothly.
+    // animateTo per keypress. Overlapping animations let the viewport trail the
+    // selection by many rows; a synchronous jump keeps the selected card centred
+    // every frame. The trailing (settled) move still animates smoothly.
+    // Exact model offsets (SliverVariedExtentList) make both land correctly.
     if (_isNavigatingFast) {
       _scrollController.jumpTo(target);
       return;
@@ -1148,8 +1126,23 @@ class _GamesGridState extends State<GamesGrid> {
                                   left: 16,
                                   right: 16,
                                 ),
-                                sliver: SliverList.builder(
+                                // Exact per-row extents (known from
+                                // _positionCards) let the sliver compute exact
+                                // absolute offsets and maxScrollExtent for the
+                                // WHOLE list without building rows — no lazy
+                                // estimate, so model-based centring
+                                // (_centerTargetFor) always lands. This is what
+                                // fixes the "selection off-screen after resize /
+                                // fast-scroll" divergence while keeping lazy row
+                                // rendering.
+                                sliver: SliverVariedExtentList.builder(
                                   itemCount: _rows.length,
+                                  itemExtentBuilder: (index, _) {
+                                    if (index < 0 || index >= _rows.length) {
+                                      return 0;
+                                    }
+                                    return _rows[index].height + _spY;
+                                  },
                                   itemBuilder: buildRow,
                                 ),
                               ),
