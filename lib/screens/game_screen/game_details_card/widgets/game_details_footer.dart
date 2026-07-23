@@ -356,7 +356,11 @@ class GameDetailsFooter extends StatelessWidget {
             child: child,
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.r, vertical: 4.r),
+            // Symmetric 8.r horizontal inset so neither the trophy icon nor the
+            // progress bar hugs the pill border. The progress column is always
+            // Expanded, so it simply absorbs the padding at any pill width (the
+            // shown/hidden width animation never overflows).
+            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
             child: Row(
               children: [
                 // RetroAchievements game icon.
@@ -482,13 +486,31 @@ class _SteamStyleRating extends StatelessWidget {
         children: [
           Icon(Symbols.star_rounded, color: ratingColor, size: 24.r),
           SizedBox(width: 6.r),
-          Text(
-            ratingValue.toStringAsFixed(1),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 22.r,
-              fontWeight: FontWeight.w900,
-            ),
+          // Reserve width for the widest possible value ("10.0") so the pill
+          // stays a static size regardless of the current score (e.g. "1.0"
+          // no longer renders narrower than "10.0"). Scale/font-independent.
+          Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Opacity(
+                opacity: 0,
+                child: Text(
+                  '10.0',
+                  style: TextStyle(
+                    fontSize: 22.r,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                ratingValue.toStringAsFixed(1),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 22.r,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
         ],
       ),

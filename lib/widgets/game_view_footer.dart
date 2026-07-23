@@ -248,13 +248,31 @@ class _SteamStyleRating extends StatelessWidget {
         children: [
           Icon(Symbols.star_rounded, color: ratingColor, size: 15.r),
           SizedBox(width: 4.r),
-          Text(
-            ratingValue.toStringAsFixed(1),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 13.r,
-              fontWeight: FontWeight.w900,
-            ),
+          // Reserve width for the widest possible value ("10.0") so the pill
+          // stays a static size regardless of the current score (e.g. "1.0"
+          // no longer renders narrower than "10.0"). Scale/font-independent.
+          Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Opacity(
+                opacity: 0,
+                child: Text(
+                  '10.0',
+                  style: TextStyle(
+                    fontSize: 13.r,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                ratingValue.toStringAsFixed(1),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 13.r,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -315,7 +333,7 @@ class _CompactAchievementsIndicator extends StatelessWidget {
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: radii.radiusInternal,
         child: Container(
-          width: 88.r,
+          width: 98.r,
           height: 32.r,
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.9),
@@ -330,7 +348,11 @@ class _CompactAchievementsIndicator extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 3.r, vertical: 3.r),
+            // Match the rating pill's 8.r horizontal inset so the trophy icon
+            // doesn't hug the pill's left border (the pill's width above is
+            // widened to 98.r to absorb the extra padding without squeezing
+            // the 56.r text/progress column).
+            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
             child: Row(
               children: [
                 ClipRRect(
