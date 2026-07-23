@@ -1145,7 +1145,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
               width: 200.r,
               height: availableHeight,
               margin: EdgeInsets.only(
-                left: GameLegendVisibility.hidden.value ? 0 : 60.r,
+                left: GameLegendVisibility.hidden.value ? 12.r : 60.r,
                 top: 12.r,
                 bottom: 12.r,
               ),
