@@ -63,25 +63,32 @@ class GameViewFooter extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (game.showRomFileNameSubtitle) ...[
-                  Text(
-                    game.romname,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      fontSize: 12.r,
-                      fontWeight: FontWeight.w400,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 2.r,
-                          color: Colors.black.withValues(alpha: 0.45),
-                          offset: const Offset(2, 2),
-                        ),
-                      ],
-                    ),
+                // Always reserve the ROM-filename subtitle's line height so the
+                // identity column stays a constant height. Unscraped games have
+                // no subtitle; without this reservation the shorter column
+                // re-centers the rating/RA pill + PLAY row upward. The empty
+                // string still lays out a full line box via the forced strut.
+                Text(
+                  game.showRomFileNameSubtitle ? game.romname : '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  strutStyle: StrutStyle(
+                    fontSize: 12.r,
+                    forceStrutHeight: true,
                   ),
-                ],
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 12.r,
+                    fontWeight: FontWeight.w400,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 2.r,
+                        color: Colors.black.withValues(alpha: 0.45),
+                        offset: const Offset(2, 2),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
