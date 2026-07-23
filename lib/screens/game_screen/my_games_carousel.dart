@@ -991,12 +991,16 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 ),
               ),
             ),
+            // Tight letter-bar box (chip height, no vertical slack) sits low
+            // against the footer. Reclaiming the old slack in real layout (vs a
+            // visual translate) lets the carousel above grow into it, so the
+            // artwork gets slightly bigger with no gap beneath it.
             SizedBox(
-              height: 36.r,
+              height: 30.r,
               child: SingleChildScrollView(
                 controller: _letterBarController,
                 scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.symmetric(horizontal: 4.r, vertical: 2.r),
+                padding: EdgeInsets.symmetric(horizontal: 4.r),
                 child: Stack(
                   children: [
                     AnimatedPositioned(
@@ -1061,8 +1065,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
             // Footer pill driven by the debounced settled selection and
             // memoized (see _buildSettledChrome) so it is not rebuilt on every
             // fast-swipe frame.
+            // Flush to the bottom (no trailing spacer) so the footer sits at
+            // the same vertical position as the grid view's footer.
             _chromeFooter!,
-            SizedBox(height: 8.r),
           ],
         ),
         // Vertical action-button legend (shared with the game list view);
