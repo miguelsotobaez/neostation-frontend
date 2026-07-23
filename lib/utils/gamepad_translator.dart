@@ -95,6 +95,16 @@ class GamepadEventTranslator {
   /// State cache used to determine press and release transitions.
   final Map<String, Map<GamepadInputType, double>> _previousStates = {};
 
+  /// Last ACTION_DOWN time per Android keycode button, keyed by
+  /// "gamepadId/inputType". Recovers from this controller's unreliable
+  /// ACTION_UP: when a release is dropped, [_previousStates] stays stuck
+  /// "pressed" and normal edge-detection swallows the next press forever.
+  /// Auto-repeat DOWNs arrive far faster than [_keycodeRepressGapMs], so a
+  /// DOWN after a longer gap is a genuine fresh press even without a prior
+  /// release event.
+  final Map<String, DateTime> _lastKeycodeDownTimes = {};
+  static const int _keycodeRepressGapMs = 200;
+
   /// Tracks the last active direction per key to ensure correct release detection on desktop platforms.
   final Map<String, GamepadInputType> _lastDirectionByKey = {};
 
@@ -160,12 +170,20 @@ class GamepadEventTranslator {
 
       // Android keycode buttons: ACTION_DOWN=0.0 (pressed), ACTION_UP=1.0
       // (released). Standardize to 1.0 = pressed / 0.0 = released so these fire
-      // on press rather than release. Applied to the dpad and the shoulder
-      // buttons (L1/R1) — the latter otherwise triggered tab switches on release.
+      // on press rather than release. Applied to the dpad, the shoulder buttons
+      // (L1/R1) and the face buttons (A/B/X/Y) — all of which otherwise fired
+      // their action on release instead of press.
+      final isAndroidKeycodeButton =
+          Platform.isAndroid &&
+          (key == 'keycode_button_l1' ||
+              key == 'keycode_button_r1' ||
+              key == 'keycode_button_a' ||
+              key == 'keycode_button_b' ||
+              key == 'keycode_button_x' ||
+              key == 'keycode_button_y');
+
       if (Platform.isAndroid &&
-          (key.startsWith('keycode_dpad_') ||
-              key == 'keycode_button_l1' ||
-              key == 'keycode_button_r1')) {
+          (key.startsWith('keycode_dpad_') || isAndroidKeycodeButton)) {
         value = (value == 0.0) ? 1.0 : 0.0;
       }
 
@@ -200,7 +218,23 @@ class GamepadEventTranslator {
           ? _isDpadPressed(value, isAnalog: isAnalog)
           : value > 0.5;
 
-      final isPressed = !wasPressed && isNowPressed;
+      // Recover from a dropped ACTION_UP: if a keycode button reports pressed
+      // again after a gap far longer than the auto-repeat cadence, treat it as
+      // a fresh press even though [previousState] is still stuck "pressed".
+      var forcePress = false;
+      if (isAndroidKeycodeButton && isNowPressed) {
+        final downKey = '$gamepadId/$inputType';
+        final lastDown = _lastKeycodeDownTimes[downKey];
+        if (wasPressed &&
+            (lastDown == null ||
+                timestamp.difference(lastDown).inMilliseconds >
+                    _keycodeRepressGapMs)) {
+          forcePress = true;
+        }
+        _lastKeycodeDownTimes[downKey] = timestamp;
+      }
+
+      final isPressed = (!wasPressed && isNowPressed) || forcePress;
       final isReleased = wasPressed && !isNowPressed;
 
       // Update state for future comparisons.
@@ -854,6 +888,7 @@ class GamepadEventTranslator {
   /// Clears all internal state caches.
   void clearStates() {
     _previousStates.clear();
+    _lastKeycodeDownTimes.clear();
     _connectionTypeCache.clear();
     _systemInfoCache.clear();
     _lastDirectionByKey.clear();
