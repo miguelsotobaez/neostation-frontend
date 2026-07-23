@@ -104,26 +104,35 @@ class GameDetailsFooter extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            if (game.showRomFileNameSubtitle) ...[
-                              Text(
-                                game.romname,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  fontSize: 12.r,
-                                  fontWeight: FontWeight.w400,
-                                  height: 1.15,
-                                  shadows: [
-                                    Shadow(
-                                      blurRadius: 1.r,
-                                      color: Colors.black,
-                                      offset: const Offset(2, 2),
-                                    ),
-                                  ],
-                                ),
+                            // Always reserve the ROM-filename subtitle's line
+                            // height so the action row below keeps a constant
+                            // baseline. Unscraped games have no subtitle; without
+                            // this reservation the rating/RA pill + PLAY button
+                            // float up one line. The empty string still lays out
+                            // a full line box via the shared strut/style.
+                            Text(
+                              game.showRomFileNameSubtitle ? game.romname : '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              strutStyle: StrutStyle(
+                                fontSize: 12.r,
+                                height: 1.15,
+                                forceStrutHeight: true,
                               ),
-                            ],
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                fontSize: 12.r,
+                                fontWeight: FontWeight.w400,
+                                height: 1.15,
+                                shadows: [
+                                  Shadow(
+                                    blurRadius: 1.r,
+                                    color: Colors.black,
+                                    offset: const Offset(2, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
