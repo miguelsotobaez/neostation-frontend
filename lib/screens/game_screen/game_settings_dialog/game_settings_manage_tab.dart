@@ -95,20 +95,18 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   }
 
   int _previousEnabledIndex() {
-    int idx = _selectedIndex;
-    do {
-      idx = (idx - 1).clamp(0, _totalItems - 1);
+    // Clamp at the top like the other tabs (no wrap); just skip disabled rows.
+    for (int idx = _selectedIndex - 1; idx >= 0; idx--) {
       if (_isEnabledIndex(idx)) return idx;
-    } while (idx != _selectedIndex);
+    }
     return _selectedIndex;
   }
 
   int _nextEnabledIndex() {
-    int idx = _selectedIndex;
-    do {
-      idx = (idx + 1).clamp(0, _totalItems - 1);
+    // Clamp at the bottom like the other tabs (no wrap); just skip disabled rows.
+    for (int idx = _selectedIndex + 1; idx < _totalItems; idx++) {
       if (_isEnabledIndex(idx)) return idx;
-    } while (idx != _selectedIndex);
+    }
     return _selectedIndex;
   }
 
