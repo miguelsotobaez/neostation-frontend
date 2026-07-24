@@ -26,8 +26,12 @@ class EsdeImportResult {
   /// Number of `<game>` entries with no matching scanned ROM (skipped).
   final int gamesUnmatched;
 
-  /// Number of games whose favorite / last-played flags were updated.
+  /// Number of games whose favorite / play-stat fields were updated.
   final int statsUpdated;
+
+  /// Number of `<game>` entries marked `<hidden>true</hidden>` in ES-DE and
+  /// therefore not imported at all.
+  final int gamesHidden;
 
   /// Whether a `gamelists/` directory was found under the picked folder. When
   /// false, the selected folder is almost certainly not an ES-DE installation.
@@ -40,6 +44,7 @@ class EsdeImportResult {
     this.gamesImported = 0,
     this.gamesUnmatched = 0,
     this.statsUpdated = 0,
+    this.gamesHidden = 0,
     this.gamelistsDirFound = true,
   });
 
@@ -50,6 +55,7 @@ class EsdeImportResult {
     int gamesImported = 0,
     int gamesUnmatched = 0,
     int statsUpdated = 0,
+    int gamesHidden = 0,
   }) {
     return EsdeImportResult(
       systemsMatched: this.systemsMatched + systemsMatched,
@@ -58,6 +64,7 @@ class EsdeImportResult {
       gamesImported: this.gamesImported + gamesImported,
       gamesUnmatched: this.gamesUnmatched + gamesUnmatched,
       statsUpdated: this.statsUpdated + statsUpdated,
+      gamesHidden: this.gamesHidden + gamesHidden,
       gamelistsDirFound: gamelistsDirFound,
     );
   }
@@ -143,7 +150,8 @@ class EsdeImportService {
     _log.i(
       'ES-DE import done: systems matched=${result.systemsMatched} '
       'unmatched=${result.systemsUnmatched} skipped=${result.systemsSkipped}, '
-      'games imported=${result.gamesImported} noRomMatch=${result.gamesUnmatched}, '
+      'games imported=${result.gamesImported} noRomMatch=${result.gamesUnmatched} '
+      'hidden=${result.gamesHidden}, '
       'stats updated=${result.statsUpdated}',
     );
     return result;
@@ -181,9 +189,14 @@ class EsdeImportService {
     required EsdeImportResult accumulator,
   }) async {
     var result = accumulator;
-    XmlDocument doc;
+    // Parsed as a fragment, not a document: when the user picks a non-default
+    // emulator for a system, ES-DE writes an `<alternativeEmulator>` element as
+    // a SECOND root alongside `<gameList>`. That is invalid XML which ES-DE's
+    // own (lenient) parser accepts, and `XmlDocument.parse` rejects outright
+    // with "Unexpected root element" — silently skipping every such system.
+    XmlDocumentFragment doc;
     try {
-      doc = XmlDocument.parse(await gamelistFile.readAsString());
+      doc = XmlDocumentFragment.parse(await gamelistFile.readAsString());
     } catch (e) {
       _log.e('ES-DE import: failed to parse ${gamelistFile.path}: $e');
       return result._add(systemsSkipped: 1);
@@ -196,6 +209,15 @@ class EsdeImportService {
     for (final game in _selectGames(doc, esdeRoot, esdeDirName)) {
       final rawPath = _text(game, 'path');
       if (rawPath == null || rawPath.isEmpty) continue;
+
+      // `<hidden>true</hidden>` means the user deliberately hid the game in
+      // ES-DE. Importing its metadata would surface it in NeoStation, so drop
+      // the entry entirely — no metadata, no favorite/stat fill.
+      if (_flag(game, 'hidden')) {
+        result = result._add(gamesHidden: 1);
+        continue;
+      }
+
       final normalizedPath = rawPath.replaceAll('\\', '/');
       final filename = path.basename(normalizedPath);
       // ES-DE mirrors the ROM's subfolder (relative to the system's ROM dir)
@@ -207,7 +229,7 @@ class EsdeImportService {
       // Only import for ROMs NeoStation has already scanned.
       final rom = await db.query(
         'user_roms',
-        columns: ['filename', 'is_favorite', 'last_played'],
+        columns: ['filename', 'is_favorite', 'last_played', 'play_time'],
         where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
         whereArgs: [appSystemId, filename],
         limit: 1,
@@ -248,8 +270,8 @@ class EsdeImportService {
       );
       if (wroteMeta) result = result._add(gamesImported: 1);
 
-      // --- Favorites / last-played (fill-gaps into user_roms) ---
-      final favorite = _text(game, 'favorite')?.toLowerCase() == 'true';
+      // --- Favorites / play stats (fill-gaps into user_roms) ---
+      final favorite = _flag(game, 'favorite');
       final lastPlayed = _parseEsdeDateTime(_text(game, 'lastplayed'));
       final update = <String, dynamic>{};
 
@@ -263,6 +285,16 @@ class EsdeImportService {
           (curLastPlayed is num && curLastPlayed == 0);
       if (lastPlayed != null && lastPlayedEmpty) {
         update['last_played'] = lastPlayed.toIso8601String();
+      }
+
+      // ES-DE's `<playtime>` is in seconds, same unit as user_roms.play_time.
+      // Only fill when NeoStation has never timed this ROM, so an import can
+      // never overwrite (or double-count onto) time the user accrued here.
+      final esdePlayTime = int.tryParse(_text(game, 'playtime') ?? '');
+      final curPlayTime =
+          int.tryParse(rom.first['play_time']?.toString() ?? '0') ?? 0;
+      if (esdePlayTime != null && esdePlayTime > 0 && curPlayTime == 0) {
+        update['play_time'] = esdePlayTime;
       }
 
       if (update.isNotEmpty) {
@@ -380,7 +412,7 @@ class EsdeImportService {
   /// filename, preferring whichever subfolder actually holds downloaded media so
   /// the artwork fallback resolves correctly; otherwise keep the first seen.
   static List<XmlElement> _selectGames(
-    XmlDocument doc,
+    XmlNode doc,
     String esdeRoot,
     String esdeDirName,
   ) {
@@ -453,6 +485,11 @@ class EsdeImportService {
     return dir.startsWith('/') ? dir.substring(1) : dir;
   }
 
+  /// Reads an ES-DE boolean metadata tag (`<favorite>`, `<hidden>`, …).
+  /// ES-DE writes these as the literal strings `true` / `false`.
+  static bool _flag(XmlElement parent, String tag) =>
+      _text(parent, tag)?.toLowerCase() == 'true';
+
   static String? _text(XmlElement parent, String tag) {
     final el = parent.getElement(tag);
     if (el == null) return null;
@@ -477,7 +514,7 @@ class EsdeImportService {
 
   @visibleForTesting
   static List<XmlElement> selectGamesForTest(
-    XmlDocument doc,
+    XmlNode doc,
     String esdeRoot,
     String esdeDirName,
   ) => _selectGames(doc, esdeRoot, esdeDirName);
