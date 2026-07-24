@@ -187,6 +187,15 @@ class GamepadEventTranslator {
         value = (value == 0.0) ? 1.0 : 0.0;
       }
 
+      // A held shoulder button arrives as a stream of auto-repeat ACTION_DOWNs.
+      // Like the d-pad, those repeats are surfaced as continuous press events
+      // so holding L1/R1 keeps walking the tabs; the consumer paces them (see
+      // the shoulder pacing in GamepadNavigation). Without this the repeats
+      // were swallowed as "already pressed" and the hold stalled.
+      final isAndroidShoulderKeycode =
+          Platform.isAndroid &&
+          (key == 'keycode_button_l1' || key == 'keycode_button_r1');
+
       // LINUX: Invert Y-axis for analog sticks to follow standard conventions.
       if (Platform.isLinux &&
           (inputType == GamepadInputType.leftStickY ||
@@ -244,9 +253,11 @@ class GamepadEventTranslator {
       final isDirectional = GamepadEventTranslator.isDirectionalInput(
         inputType,
       );
-      if (isPressed || isReleased || (isDirectional && isNowPressed)) {
+      final isRepeatable = isDirectional || isAndroidShoulderKeycode;
+
+      if (isPressed || isReleased || (isRepeatable && isNowPressed)) {
         final effectiveIsPressed =
-            isPressed || (isDirectional && isNowPressed && !isReleased);
+            isPressed || (isRepeatable && isNowPressed && !isReleased);
         final effectiveIsReleased = isReleased;
 
         final translatedEvent = TranslatedGamepadEvent(
@@ -883,6 +894,18 @@ class GamepadEventTranslator {
     final vendorId = (_systemInfoCache[gamepadId]?['vendorId'] as String?)
         ?.toLowerCase();
     return vendorId == '054c';
+  }
+
+  /// Clears only the per-button press/release tracking, keeping the device
+  /// detection caches (mapping, connection type, names) intact.
+  ///
+  /// Used when a navigation layer is (re)activated: a button held while the
+  /// layer was inactive never delivers its release here, so the stale "still
+  /// pressed" state would swallow the next press of that button.
+  void clearButtonStates() {
+    _previousStates.clear();
+    _lastKeycodeDownTimes.clear();
+    _lastDirectionByKey.clear();
   }
 
   /// Clears all internal state caches.

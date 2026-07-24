@@ -92,15 +92,43 @@ class GamepadNavigation {
 
   StreamSubscription<GamepadEvent>? _subscription;
   DateTime? _lastDirectionalEventTime;
-  DateTime? _lastShoulderEventTime;
   DateTime? _lastActionEventTime;
 
   /// Throttle duration for directional inputs to prevent "drifting" or excessive navigation.
   static const int _directionalThrottleMs = 128;
 
-  /// Throttle duration for shoulder buttons (tab switching).
-  /// Slightly shorter than the action debounce so rapid LB/RB presses feel snappier.
-  static const int _shoulderThrottleMs = 80;
+  // ---------------------------------------------------------------------
+  // Shoulder (L1/R1) tab-switch pacing.
+  //
+  // These are STATIC on purpose: switching a tab swaps the active navigation
+  // layer, so consecutive presses are seen by *different* GamepadNavigation
+  // instances. Per-instance timers would reset on every switch and let a held
+  // bumper run away through the tabs.
+  //
+  // Android delivers a held bumper as a stream of auto-repeat ACTION_DOWNs.
+  // A press that arrives without an intervening release is that stream (the
+  // button is HELD) and is paced at [_shoulderRepeatIntervalMs]; a press after
+  // a release is a fresh, deliberate TAP and only has to clear
+  // [_shoulderTapDebounceMs].
+  // ---------------------------------------------------------------------
+
+  /// Last shoulder press actually turned into a tab switch.
+  static DateTime? _lastShoulderDispatchTime;
+
+  /// True once a shoulder release has been seen, i.e. the next press starts a
+  /// new tap rather than continuing a hold.
+  static bool _shoulderReleasedSinceDispatch = true;
+
+  /// Cadence at which a HELD bumper walks the tabs (~3 tabs/second).
+  static const int _shoulderRepeatIntervalMs = 300;
+
+  /// Debounce between two separate bumper TAPS. Short, so deliberate rapid
+  /// taps to skip several tabs all register.
+  static const int _shoulderTapDebounceMs = 50;
+
+  /// Safety net for a dropped release: a gap this long means the button can't
+  /// still be held, so the next press counts as a fresh tap regardless.
+  static const int _shoulderHoldLapsedMs = 500;
 
   /// Debounce duration for action buttons to prevent double-presses.
   static const int _actionDebounceMs = 128;
@@ -147,8 +175,11 @@ class GamepadNavigation {
 
   DateTime? _activationTime;
 
-  /// Grace period after activation during which inputs are ignored (prevents accidental inputs from previous screens).
-  static const int _reactivationGraceMs = 256;
+  /// Grace period after activation during which inputs are ignored (prevents
+  /// accidental inputs from previous screens). Kept just long enough to cover
+  /// the in-flight events of the press that caused the layer change; the
+  /// shoulder buttons bypass it entirely (see [_handleGamepadEvent]).
+  static const int _reactivationGraceMs = 150;
 
   String? _currentGamepadId;
   String? _currentGamepadName;
@@ -302,11 +333,17 @@ class GamepadNavigation {
       _activationTime = DateTime.now();
       // Clear any stale repeat timers that may have survived a prior deactivation.
       cancelAllRepeatTimers();
+      // Drop remembered button states: a button held while this layer was
+      // deactivated never delivered its release here, so the translator would
+      // still think it is down and would ignore the next press of it.
+      _translator.clearButtonStates();
     }
     _lastEventTime = null;
     _lastDirectionalEventTime = null;
-    _lastShoulderEventTime = null;
     _lastActionEventTime = null;
+    // Shoulder pacing is deliberately NOT reset here — it is shared across
+    // layers so a held bumper keeps its cadence while tabs (and therefore
+    // layers) change underneath it.
   }
 
   /// Disables input processing and cancels any active auto-repeat timers.
@@ -459,12 +496,10 @@ class GamepadNavigation {
   void _handleGamepadEvent(GamepadEvent event) async {
     if (!_isActive) return;
 
-    // Discard events occurring within the reactivation grace period.
-    if (_activationTime != null &&
-        DateTime.now().difference(_activationTime!).inMilliseconds <
-            _reactivationGraceMs) {
-      return;
-    }
+    // NOTE: the reactivation grace period is applied AFTER translation (see
+    // below) so the translator still observes every edge while the grace is
+    // running. Discarding raw events here left its press/release state stuck
+    // and swallowed the next genuine press.
 
     try {
       // Auto-detect and switch to the device emitting the event.
@@ -504,6 +539,29 @@ class GamepadNavigation {
 
       if (translatedEvent == null) return;
 
+      final isShoulderInput =
+          translatedEvent.inputType == GamepadInputType.buttonLB ||
+          translatedEvent.inputType == GamepadInputType.buttonRB;
+
+      // Reactivation grace: swallow inputs that leak in from the screen we just
+      // came from. The shoulder buttons are exempt — every tab switch rebuilds
+      // a navigation layer, so each switch restarted the grace and ate the next
+      // L1/R1 press, which is why tabs often needed a second press. A stray
+      // bumper only moves one tab and is trivially undone, unlike a stray A/B.
+      if (!isShoulderInput &&
+          _activationTime != null &&
+          now.difference(_activationTime!).inMilliseconds <
+              _reactivationGraceMs) {
+        return;
+      }
+
+      // A shoulder release ends the hold, so the next press is a fresh tap.
+      // Tracked statically because the release often lands on a different
+      // navigation layer than the press that switched the tab.
+      if (isShoulderInput && translatedEvent.isReleased) {
+        _shoulderReleasedSinceDispatch = true;
+      }
+
       if (translatedEvent.isPressed) {
         final isDirectional = [
           GamepadInputType.dpadUp,
@@ -514,9 +572,7 @@ class GamepadNavigation {
           GamepadInputType.leftStickY,
         ].contains(translatedEvent.inputType);
 
-        final isShoulder =
-            translatedEvent.inputType == GamepadInputType.buttonLB ||
-            translatedEvent.inputType == GamepadInputType.buttonRB;
+        final isShoulder = isShoulderInput;
 
         if (isDirectional) {
           if (!isWindows) {
@@ -528,12 +584,25 @@ class GamepadNavigation {
           }
           _lastDirectionalEventTime = now;
         } else if (isShoulder) {
-          if (_lastShoulderEventTime != null &&
-              now.difference(_lastShoulderEventTime!).inMilliseconds <
-                  _shoulderThrottleMs) {
+          // No release since the last switch means the bumper is still held:
+          // pace the repeats. A press after a release is a tap — let it
+          // through immediately.
+          final holdLapsed =
+              _lastShoulderDispatchTime != null &&
+              now.difference(_lastShoulderDispatchTime!).inMilliseconds >
+                  _shoulderHoldLapsedMs;
+          final isHeldRepeat = !_shoulderReleasedSinceDispatch && !holdLapsed;
+
+          final minIntervalMs = isHeldRepeat
+              ? _shoulderRepeatIntervalMs
+              : _shoulderTapDebounceMs;
+          if (_lastShoulderDispatchTime != null &&
+              now.difference(_lastShoulderDispatchTime!).inMilliseconds <
+                  minIntervalMs) {
             return;
           }
-          _lastShoulderEventTime = now;
+          _lastShoulderDispatchTime = now;
+          _shoulderReleasedSinceDispatch = false;
         } else {
           // Select and any face button that lands during a Select chord bypass
           // the action debounce so a quick chord isn't swallowed.
@@ -806,7 +875,14 @@ class GamepadNavigation {
 
     final isKeyDown = event is KeyDownEvent;
 
-    if (_activationTime != null &&
+    // Q/E (tab switching) bypass the reactivation grace for the same reason the
+    // shoulder buttons do: switching tabs rebuilds a navigation layer, so the
+    // grace would eat the next tab key press.
+    final isTabKey =
+        event.logicalKey == LogicalKeyboardKey.keyQ ||
+        event.logicalKey == LogicalKeyboardKey.keyE;
+    if (!isTabKey &&
+        _activationTime != null &&
         DateTime.now().difference(_activationTime!).inMilliseconds <
             _reactivationGraceMs) {
       return false;
