@@ -14,6 +14,7 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
+import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
@@ -1213,6 +1214,8 @@ class _GamesGridState extends State<GamesGrid> {
             child: _chromeLegend!,
           ),
         ),
+        // Touch: swipe-right from the left edge reveals a hidden legend.
+        const LegendEdgeReshowZone(),
       ],
     );
   }

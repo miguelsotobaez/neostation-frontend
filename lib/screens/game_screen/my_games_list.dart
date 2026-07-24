@@ -42,6 +42,7 @@ import '../../providers/system_background_provider.dart';
 import '../../models/secondary_display_state.dart';
 import '../../widgets/game_view_mode_dropdown.dart';
 import '../../widgets/game_action_buttons.dart';
+import '../../widgets/legend_edge_reshow_zone.dart';
 import '../../constants/system_folder_names.dart';
 import '../../utils/game_list_update.dart';
 import '../../themes/corner_radii.dart';
@@ -1212,23 +1213,27 @@ class _SystemGamesListState extends State<SystemGamesList> {
               duration: const Duration(milliseconds: 250),
               opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
               child: Consumer<SyncManager>(
-              builder: (context, syncManager, child) {
-                return GameActionButtons(
-                  system: widget.system,
-                  selectedGame: _selectedGame,
-                  syncProvider: syncManager.active,
-                  onBack: _goBack,
-                  onFavorite: _toggleFavorite,
-                  onViewMode: () =>
-                      GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-                  onSettings: _openGameSettingsDialog,
-                  onRandom: _showRandomGameDialog,
-                  onScrape: () => _scrapeAction?.call(),
-                );
-              },
+                builder: (context, syncManager, child) {
+                  return GameActionButtons(
+                    system: widget.system,
+                    selectedGame: _selectedGame,
+                    syncProvider: syncManager.active,
+                    onBack: _goBack,
+                    onFavorite: _toggleFavorite,
+                    onViewMode: () => GameViewModeDropdown
+                        .globalKey
+                        .currentState
+                        ?.showDropdown(),
+                    onSettings: _openGameSettingsDialog,
+                    onRandom: _showRandomGameDialog,
+                    onScrape: () => _scrapeAction?.call(),
+                  );
+                },
               ),
             ),
           ),
+        // Touch: swipe-right from the left edge reveals a hidden legend.
+        const LegendEdgeReshowZone(),
       ],
     );
   }
@@ -1632,7 +1637,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
     try {
       // Mirror the card: overwrite existing metadata when a description is
       // already present, otherwise only fill the gaps.
-      final forceOverwrite = game.getDescriptionForLanguage('en').trim().isNotEmpty;
+      final forceOverwrite = game
+          .getDescriptionForLanguage('en')
+          .trim()
+          .isNotEmpty;
 
       final result = await ScreenScraperService.scrapeSingleGame(
         appSystemId: scrapeSystemId,

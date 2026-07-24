@@ -4,10 +4,12 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../models/game_model.dart';
 import '../models/system_model.dart';
+import '../services/game_legend_visibility.dart';
 import '../sync/i_sync_provider.dart';
 import '../themes/corner_radii.dart';
 import '../utils/gamepad_nav.dart';
 import 'game_action_button.dart';
+import 'horizontal_swipe.dart';
 import 'neo_sync_status_icon.dart';
 
 /// Vertical action button column shared by the game list, grid, and carousel.
@@ -43,32 +45,76 @@ class GameActionButtons extends StatelessWidget {
     this.onScrape,
   });
 
+  /// Whether the Select (View) chord layer has any shortcuts to reveal.
+  bool get _hasChordActions => onScrape != null || onRandom != null;
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: GamepadNavigation.selectHeldNotifier,
       builder: (context, selectHeld, _) {
-        return Container(
-          padding: EdgeInsets.all(6.r),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
-                BorderRadius.circular(14.r),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline,
-              width: 1.r,
+        return HorizontalSwipe(
+          // Swipe left on the legend to hide it (touchscreen users have no
+          // Select+B chord). Reshow is a swipe-right from the screen edge,
+          // handled by the host view. Hiding slides the column off-screen via
+          // GameLegendVisibility.
+          onSwipeLeft: GameLegendVisibility.hide,
+          child: Container(
+            padding: EdgeInsets.all(6.r),
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.9),
+              borderRadius:
+                  Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                  BorderRadius.circular(14.r),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline,
+                width: 1.r,
+              ),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: selectHeld
-                ? _buildChordButtons(context)
-                : _buildDefaultButtons(context),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Touch affordance for the Select (View) modifier: tapping it
+                // latches the chord layer on/off, mirroring holding Select on a
+                // gamepad, so touchscreen users can reach the chord shortcuts.
+                if (_hasChordActions) ...[
+                  _buildViewToggle(context, active: selectHeld),
+                  SizedBox(height: 6.r),
+                ],
+                ...(selectHeld
+                    ? _buildChordButtons(context)
+                    : _buildDefaultButtons(context)),
+              ],
+            ),
           ),
         );
       },
     );
+  }
+
+  /// The tappable Select (View) pill. Latches the shared [selectHeldNotifier]
+  /// so both this column and the footer legend flip to the chord layer.
+  Widget _buildViewToggle(BuildContext context, {required bool active}) {
+    final scheme = Theme.of(context).colorScheme;
+    return GameActionButton(
+      iconPath: 'assets/images/gamepad/Xbox_View_button.png',
+      symbol: active ? Symbols.close_rounded : Symbols.more_horiz_rounded,
+      color: active ? scheme.secondary : scheme.primary,
+      foregroundColor: active ? scheme.onSecondary : scheme.onPrimary,
+      onTap: () => GamepadNavigation.selectHeldNotifier.value = !active,
+    );
+  }
+
+  /// Wraps a chord action so tapping it auto-reverts the latched chord layer
+  /// back to the default buttons (matches releasing Select on a gamepad).
+  VoidCallback? _withRevert(VoidCallback? action) {
+    if (action == null) return null;
+    return () {
+      action();
+      GamepadNavigation.selectHeldNotifier.value = false;
+    };
   }
 
   List<Widget> _buildDefaultButtons(BuildContext context) {
@@ -136,7 +182,7 @@ class GameActionButtons extends StatelessWidget {
         symbol: Symbols.cloud_download_rounded,
         color: scheme.secondary,
         foregroundColor: scheme.onSecondary,
-        onTap: selectedGame != null ? onScrape : null,
+        onTap: selectedGame != null ? _withRevert(onScrape) : null,
       ),
       SizedBox(height: 6.r),
       // Y — random game.
@@ -145,7 +191,7 @@ class GameActionButtons extends StatelessWidget {
         symbol: Symbols.casino_rounded,
         color: scheme.secondary,
         foregroundColor: scheme.onSecondary,
-        onTap: onRandom,
+        onTap: _withRevert(onRandom),
       ),
     ];
   }

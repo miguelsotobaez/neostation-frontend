@@ -28,8 +28,18 @@ class GameLegendVisibility {
     _persist = persist;
   }
 
-  static void toggle() {
-    hidden.value = !hidden.value;
-    _persist?.call(hidden.value);
+  static void toggle() => _set(!hidden.value);
+
+  /// Hides the legend (e.g. swipe-left on touch). No-op if already hidden.
+  static void hide() => _set(true);
+
+  /// Reveals the legend (e.g. swipe-right from the screen edge on touch).
+  /// No-op if already visible.
+  static void show() => _set(false);
+
+  static void _set(bool value) {
+    if (hidden.value == value) return;
+    hidden.value = value;
+    _persist?.call(value);
   }
 }
