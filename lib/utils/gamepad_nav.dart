@@ -43,6 +43,12 @@ class GamepadInfo {
   }
 }
 
+/// Axis whose held-direction repeats escalate into alphabetical letter jumps.
+///
+/// This is the axis the *items* run along in a given view: vertical for the
+/// list and grid, horizontal for the carousel.
+enum LetterJumpAxis { vertical, horizontal }
+
 /// Core service for managing gamepad and keyboard navigation within the application.
 ///
 /// Handles input translation, debouncing, auto-repeat logic, and callback dispatching.
@@ -72,6 +78,23 @@ class GamepadNavigation {
   final VoidCallback? onSelectModifierB;
   final VoidCallback? onSelectModifierX;
   final VoidCallback? onSelectModifierY;
+
+  /// ES-DE style alphabetical jumping. Once a direction on [letterJumpAxis] has
+  /// been held for longer than `_letterJumpAfter`, each repeat calls this with
+  /// `true` for forward (down / right) instead of moving one item, and then
+  /// dwells on the new letter so the user can release in time. Return `false`
+  /// to decline the jump (e.g. no further letter), which falls back to the
+  /// normal accelerated step repeat for that tick.
+  final bool Function(bool forward)? onLetterJump;
+
+  /// Axis [onLetterJump] applies to. Ignored when [onLetterJump] is null.
+  final LetterJumpAxis letterJumpAxis;
+
+  /// Whether held directions speed up the longer they are held (see
+  /// `_rampedRepeatInterval`). Off by default: in artwork-heavy views the
+  /// accelerated cadence outruns image loading, so the cards lag behind the
+  /// cursor — a fixed cadence there stays in step with the cache.
+  final bool accelerateRepeats;
 
   /// Optional override that reports whether a text field is currently focused
   /// in the active UI layer. When provided, it takes precedence over the global
@@ -108,8 +131,27 @@ class GamepadNavigation {
   /// Delay before the first repeat event occurs when a button is held.
   static const Duration _initialRepeatDelay = Duration(milliseconds: 300);
 
-  /// Interval between subsequent repeat events when a button is held.
+  /// Interval between the first few repeat events when a button is held.
   static const Duration _repeatInterval = Duration(milliseconds: 80);
+
+  /// Fastest repeat interval reached while a direction stays held. The interval
+  /// ramps from [_repeatInterval] down to this over [_rampRepeats] repeats, so
+  /// a long hold accelerates instead of crawling at a fixed speed.
+  static const Duration _minRepeatInterval = Duration(milliseconds: 35);
+
+  /// Repeats taken to ramp from [_repeatInterval] to [_minRepeatInterval].
+  static const int _rampRepeats = 14;
+
+  /// How long a direction must be held before repeats escalate from stepping
+  /// item-by-item to ES-DE style alphabetical jumping (see [onLetterJump]).
+  /// Long enough that the accelerated step scroll (~30 items by this point) is
+  /// the normal way to browse, and letter jumping only takes over on a
+  /// deliberate hold.
+  static const Duration _letterJumpAfter = Duration(milliseconds: 1600);
+
+  /// Dwell time on each letter while letter jumping — long enough to read the
+  /// letter and release on it, short enough to cross the alphabet quickly.
+  static const Duration _letterJumpInterval = Duration(milliseconds: 360);
 
   final Map<dynamic, Timer?> _repeatTimers = {};
 
@@ -184,6 +226,9 @@ class GamepadNavigation {
     this.onSelectModifierB,
     this.onSelectModifierX,
     this.onSelectModifierY,
+    this.onLetterJump,
+    this.letterJumpAxis = LetterJumpAxis.vertical,
+    this.accelerateRepeats = false,
     this.isTextFieldFocused,
   });
 
@@ -1028,26 +1073,93 @@ class GamepadNavigation {
   }
 
   /// Internal auto-repeat logic for held buttons.
+  ///
+  /// Repeats are self-rescheduling rather than a fixed [Timer.periodic] so the
+  /// cadence can change while the button stays down: the interval ramps from
+  /// [_repeatInterval] to [_minRepeatInterval], and after [_letterJumpAfter] a
+  /// direction on [letterJumpAxis] switches to alphabetical jumps that dwell
+  /// for [_letterJumpInterval] each.
   void _startRepeatTimer(dynamic key, Function action) {
     _repeatTimers[key]?.cancel();
 
-    _repeatTimers[key] = Timer(_initialRepeatDelay, () {
-      // Guard: if the key was removed (by _stopRepeatTimer or _cancelAllRepeatTimers)
-      // before this callback ran, do not create a periodic timer.
-      if (!_repeatTimers.containsKey(key)) return;
+    final heldSince = DateTime.now();
+    final bool canLetterJump =
+        onLetterJump != null && _isLetterJumpKey(key) != null;
+    final bool forward = _isLetterJumpKey(key) ?? false;
+    var repeats = 0;
 
-      _repeatTimers[key] = Timer.periodic(_repeatInterval, (timer) {
+    void schedule(Duration delay) {
+      _repeatTimers[key] = Timer(delay, () {
+        // Guard: if the key was removed (by _stopRepeatTimer or
+        // cancelAllRepeatTimers) before this callback ran, stop here.
+        if (!_repeatTimers.containsKey(key)) return;
         if (!_isActive) {
-          timer.cancel();
           _repeatTimers.remove(key);
+          return;
+        }
+
+        final held = DateTime.now().difference(heldSince);
+        if (canLetterJump &&
+            held >= _letterJumpAfter &&
+            onLetterJump!(forward)) {
+          SfxService().playNavSound();
+          schedule(_letterJumpInterval);
           return;
         }
 
         if (_runNavAction(action, true)) {
           SfxService().playNavSound();
         }
+        repeats++;
+        schedule(
+          accelerateRepeats ? _rampedRepeatInterval(repeats) : _repeatInterval,
+        );
       });
-    });
+    }
+
+    schedule(_initialRepeatDelay);
+  }
+
+  /// Repeat interval after [repeats] repeats, easing linearly from
+  /// [_repeatInterval] down to [_minRepeatInterval].
+  static Duration _rampedRepeatInterval(int repeats) {
+    if (repeats >= _rampRepeats) return _minRepeatInterval;
+
+    final from = _repeatInterval.inMilliseconds;
+    final to = _minRepeatInterval.inMilliseconds;
+    return Duration(
+      milliseconds: from + ((to - from) * repeats / _rampRepeats).round(),
+    );
+  }
+
+  /// Whether [key] is a direction on [letterJumpAxis], and if so whether it
+  /// points forward (down / right). Returns null for any other key.
+  bool? _isLetterJumpKey(dynamic key) {
+    if (letterJumpAxis == LetterJumpAxis.vertical) {
+      if (key == GamepadInputType.dpadDown ||
+          key == LogicalKeyboardKey.arrowDown ||
+          key == LogicalKeyboardKey.keyS) {
+        return true;
+      }
+      if (key == GamepadInputType.dpadUp ||
+          key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.keyW) {
+        return false;
+      }
+      return null;
+    }
+
+    if (key == GamepadInputType.dpadRight ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyD) {
+      return true;
+    }
+    if (key == GamepadInputType.dpadLeft ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.keyA) {
+      return false;
+    }
+    return null;
   }
 
   /// Cancels an active repeat timer for a specific key.
