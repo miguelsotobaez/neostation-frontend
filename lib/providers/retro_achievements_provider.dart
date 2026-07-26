@@ -10,6 +10,7 @@ import '../models/retro_achievements_dashboard_models.dart';
 import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
 import '../models/retro_achievements_user_awards.dart';
+import 'retro_achievements_credentials.dart';
 import 'retroachievements/strategy_factory.dart';
 
 /// Provider responsible for managing the integration with RetroAchievements.org.
@@ -465,14 +466,14 @@ class RetroAchievementsProvider extends ChangeNotifier {
           return;
         }
 
-        final savedUsername = await _loadRAUserFromConfig();
-        final savedApiKey = await _loadRAApiKeyFromConfig();
-        if (savedUsername == null ||
-            savedUsername.isEmpty ||
-            RetroAchievementsService.resolveApiKey(
-              savedApiKey,
-            ).trim().isEmpty ||
-            attempt == maxAttempts) {
+        final user = await _readRAUserFromConfig();
+        final apiKey = await _readRAApiKeyFromConfig();
+        // Keep retrying while a stored account exists — or while we cannot yet
+        // tell, because unreadable storage is exactly the cold-boot case this
+        // retry is here for.
+        final worthRetrying =
+            !user.ok || !apiKey.ok || (user.hasValue && apiKey.hasValue);
+        if (!worthRetrying || attempt == maxAttempts) {
           return;
         }
 
@@ -489,40 +490,42 @@ class RetroAchievementsProvider extends ChangeNotifier {
   /// Attempts to re-authenticate using the username persisted in the local configuration.
   Future<bool> tryAutoLogin() async {
     try {
-      final savedUsername = await _loadRAUserFromConfig();
-      final savedApiKey = await _loadRAApiKeyFromConfig();
+      final user = await _readRAUserFromConfig();
+      final apiKey = await _readRAApiKeyFromConfig();
 
-      if (savedUsername != null && savedUsername.isNotEmpty) {
-        if (RetroAchievementsService.resolveApiKey(
-          savedApiKey,
-        ).trim().isEmpty) {
-          _log.i(
-            'Skipping RetroAchievements auto-login for $savedUsername: no API key available',
-          );
-          return false;
-        }
+      switch (resolveRaAutoLoginAction(user: user, apiKey: apiKey)) {
+        case RaAutoLoginAction.attemptLogin:
+          final success = await connect(user.value!, apiKey: apiKey.value);
+          if (!success) {
+            _log.e(
+              'Auto-login failed for: ${user.value} (user preserved for retry)',
+            );
+          }
+          return success;
 
-        final success = await connect(savedUsername, apiKey: savedApiKey);
-        if (!success) {
-          _log.e(
-            'Auto-login failed for: $savedUsername (user preserved for retry)',
-          );
-        }
-        return success;
-      } else {
-        // No saved username. Older builds persisted the maintainer's shared
-        // API key here and authenticated everyone's traffic with it; the v94
-        // migration cleared the username to force a personal-key login. Since
-        // credentials are now always saved/cleared as a pair, a key with no
-        // username can only be that orphaned legacy key — drop it so it can
-        // never be reused.
-        if (savedApiKey != null && savedApiKey.isNotEmpty) {
+        case RaAutoLoginAction.clearOrphanedKey:
           await RetroAchievementsRepository.clearRAApiKey();
           _log.i(
             'Cleared orphaned RetroAchievements API key (legacy shared key)',
           );
-        }
-        return false;
+          return false;
+
+        case RaAutoLoginAction.skip:
+          if (!user.ok || !apiKey.ok) {
+            // Credential storage was unreadable — on a cold boot the database
+            // may still be on a mounting volume. Change nothing and let the
+            // caller retry; treating this as "signed out" would delete a valid
+            // account.
+            _log.w(
+              'Skipping RetroAchievements auto-login: credential storage '
+              'unreadable (credentials preserved)',
+            );
+          } else if (user.hasValue) {
+            _log.i(
+              'Skipping RetroAchievements auto-login for ${user.value}: no API key available',
+            );
+          }
+          return false;
       }
     } catch (e) {
       _log.e('Error loading user: $e (user preserved for retry)');
@@ -640,24 +643,26 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
   }
 
-  /// Retrieves the persisted RetroAchievements username from the configuration table.
-  Future<String?> _loadRAUserFromConfig() async {
+  /// Retrieves the persisted RetroAchievements username from the configuration
+  /// table, reporting whether the read itself succeeded.
+  Future<CredentialRead> _readRAUserFromConfig() async {
     try {
-      return await RetroAchievementsRepository.getRAUser();
+      return CredentialRead.ok(await RetroAchievementsRepository.getRAUser());
     } catch (e) {
       _log.e('Error loading RA user from DB: $e');
+      return const CredentialRead.failed();
     }
-    return null;
   }
 
-  /// Retrieves the persisted RetroAchievements API key from secure storage.
-  Future<String?> _loadRAApiKeyFromConfig() async {
+  /// Retrieves the persisted RetroAchievements API key from secure storage,
+  /// reporting whether the read itself succeeded.
+  Future<CredentialRead> _readRAApiKeyFromConfig() async {
     try {
-      return await RetroAchievementsRepository.getRAApiKey();
+      return CredentialRead.ok(await RetroAchievementsRepository.getRAApiKey());
     } catch (e) {
       _log.e('Error loading RA API key from secure storage: $e');
+      return const CredentialRead.failed();
     }
-    return null;
   }
 
   /// Removes the RetroAchievements username from persistent storage.
