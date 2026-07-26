@@ -4539,29 +4539,31 @@ class SqliteService {
         .toList();
   }
 
+  /// The systems the user has explicitly chosen an emulator for.
+  ///
+  /// Used to exclude those systems from automatic default management. Both
+  /// RetroArch alignment routines below previously answered "has the user
+  /// chosen anything, anywhere?" with a global `COUNT(*)` and skipped
+  /// wholesale if so. That made one deliberate pick on one system freeze
+  /// variant alignment for *every* system: a user on a non-aarch64 build hits a
+  /// launch failure, sets an emulator by hand to work around it, and thereby
+  /// disables the very repair that would have fixed the rest of their library.
+  /// Scoping the guard per system respects the same intent without the
+  /// collateral damage.
+  static const String _systemsWithUserDefaultSql =
+      'SELECT e.system_id FROM user_emulator_config uc '
+      'JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id '
+      'WHERE uc.is_user_default = 1 AND e.system_id IS NOT NULL';
+
   /// Updates [is_default] so that [preferredPackage] is the active RetroArch
-  /// variant on Android. Skips entirely if the user has made any custom
-  /// emulator selections (tracked in [user_emulator_config]). Sets only the
-  /// entries marked as [is_default_core] for the preferred package, and
-  /// clears conflicting standalone defaults.
+  /// variant on Android. Systems the user has explicitly configured are left
+  /// untouched (see [_systemsWithUserDefaultSql]). Sets only the entries marked
+  /// as [is_default_core] for the preferred package, and clears conflicting
+  /// standalone defaults.
   static Future<void> fixRetroArchDefaultForAndroid(
     String preferredPackage,
   ) async {
     final db = await instance.database;
-
-    // If user has made any emulator selections, respect them and skip
-    final userChoices = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM user_emulator_config WHERE is_user_default = 1',
-    );
-    final userChoiceCount = userChoices.isNotEmpty
-        ? (int.tryParse(userChoices.first['count']?.toString() ?? '0') ?? 0)
-        : 0;
-    if (userChoiceCount > 0) {
-      _log.i(
-        'Android: User has custom emulator choices ($userChoiceCount), skipping RA defaults',
-      );
-      return;
-    }
 
     final osResult = await db.query(
       'app_os',
@@ -4575,14 +4577,16 @@ class SqliteService {
       // Clear all RetroArch core defaults
       await txn.rawUpdate(
         'UPDATE app_emulators SET is_default = 0 '
-        'WHERE os_id = ? AND android_package_name LIKE ?',
+        'WHERE os_id = ? AND android_package_name LIKE ? '
+        'AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, 'com.retroarch%'],
       );
 
       // Set default only for entries with default_core marker
       await txn.rawUpdate(
         'UPDATE app_emulators SET is_default = 1 '
-        'WHERE os_id = ? AND android_package_name = ? AND is_default_core = 1',
+        'WHERE os_id = ? AND android_package_name = ? AND is_default_core = 1 '
+        'AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, preferredPackage],
       );
 
@@ -4592,7 +4596,7 @@ class SqliteService {
         'WHERE os_id = ? AND is_standalone = 1 AND system_id IN ('
         'SELECT DISTINCT system_id FROM app_emulators '
         'WHERE os_id = ? AND android_package_name = ? AND is_default_core = 1 AND is_default = 1'
-        ')',
+        ') AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, osId, preferredPackage],
       );
     });
@@ -4608,25 +4612,11 @@ class SqliteService {
   }
 
   /// Clears all RetroArch core defaults on Android when no RetroArch variant
-  /// is installed. Skips entirely if the user has made custom selections.
-  /// For systems that lose their default, falls back to the first available
-  /// standalone emulator.
+  /// is installed. Systems the user has explicitly configured are left
+  /// untouched (see [_systemsWithUserDefaultSql]). For systems that lose their
+  /// default, falls back to the first available standalone emulator.
   static Future<void> clearRetroArchDefaultsForAndroid() async {
     final db = await instance.database;
-
-    // If user has made any emulator selections, respect them and skip
-    final userChoices = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM user_emulator_config WHERE is_user_default = 1',
-    );
-    final userChoiceCount = userChoices.isNotEmpty
-        ? (int.tryParse(userChoices.first['count']?.toString() ?? '0') ?? 0)
-        : 0;
-    if (userChoiceCount > 0) {
-      _log.i(
-        'Android: User has custom emulator choices ($userChoiceCount), skipping RA default clear',
-      );
-      return;
-    }
 
     final osResult = await db.query(
       'app_os',
@@ -4640,7 +4630,8 @@ class SqliteService {
       // Reset all RetroArch core defaults
       await txn.rawUpdate(
         'UPDATE app_emulators SET is_default = 0 '
-        'WHERE os_id = ? AND android_package_name LIKE ?',
+        'WHERE os_id = ? AND android_package_name LIKE ? '
+        'AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, 'com.retroarch%'],
       );
 
@@ -4654,7 +4645,7 @@ class SqliteService {
         ') AND NOT EXISTS ('
         'SELECT 1 FROM app_emulators e2 '
         'WHERE e2.system_id = app_emulators.system_id AND e2.os_id = ? AND e2.is_default = 1'
-        ')',
+        ') AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, osId, 'com.retroarch%', osId],
       );
     });

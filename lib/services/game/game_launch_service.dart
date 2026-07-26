@@ -364,20 +364,35 @@ class GameLaunchService {
     String coreName,
   ) async {
     try {
-      final packages = await EmulatorRepository.getAndroidRetroArchPackages();
+      // Installed variants only. The database lists every RetroArch package
+      // that exists (com.retroarch, .ra32, .aarch64), so taking `.first` of the
+      // raw list addressed the intent to whichever one the seed happened to
+      // return — routinely one the user does not have, which fails with no
+      // explanation the user can act on.
+      final packages =
+          await EmulatorRepository.getInstalledAndroidRetroArchPackages();
 
       if (packages.isNotEmpty) {
         try {
           final defaultEmu =
               await EmulatorRepository.getDefaultEmulatorForSystem(system.id!);
-          if (defaultEmu != null &&
-              defaultEmu.androidPackageName != null &&
-              defaultEmu.androidPackageName!.isNotEmpty) {
-            final specificPackage = defaultEmu.androidPackageName!;
-            _log.i(
-              'Android: User selected specific RetroArch package: $specificPackage',
-            );
-            packages.insert(0, specificPackage);
+          final specificPackage = defaultEmu?.androidPackageName;
+          if (specificPackage != null && specificPackage.isNotEmpty) {
+            // Promote the configured variant only if it is really present.
+            // `is_default` is stale whenever variant alignment has been skipped,
+            // and an absent package must never outrank an installed one.
+            if (packages.contains(specificPackage)) {
+              _log.i(
+                'Android: Using configured RetroArch package: $specificPackage',
+              );
+              packages.remove(specificPackage);
+              packages.insert(0, specificPackage);
+            } else {
+              _log.w(
+                'Android: Configured RetroArch package "$specificPackage" is '
+                'not installed; falling back to ${packages.first}',
+              );
+            }
           }
         } catch (e) {
           _log.e('Error getting default emulator package: $e');
@@ -1187,7 +1202,19 @@ class GameLaunchService {
         system.id!,
       );
       if (defaultEmu != null && defaultEmu.isRetroArch) {
-        resolved = defaultEmu.androidPackageName!;
+        final candidate = defaultEmu.androidPackageName!;
+        // Substitute only a variant that is actually installed. `is_default`
+        // records which variant was *configured*, not which one exists, and
+        // trusting it blindly is how a launch gets addressed to a RetroArch
+        // build the user never had.
+        if (await EmulatorRepository.isRetroArchVariantInstalled(candidate)) {
+          resolved = candidate;
+        } else {
+          _log.w(
+            'Android: Configured RetroArch variant "$candidate" is not '
+            'installed; keeping "$package"',
+          );
+        }
       }
     } catch (e) {
       _log.e('Error resolving RetroArch package variant: $e');

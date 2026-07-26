@@ -59,6 +59,18 @@ class CoreEmulatorModel {
   /// Package prefix shared by every RetroArch variant.
   static const String retroArchPackagePrefix = 'com.retroarch';
 
+  /// Every RetroArch variant, best first.
+  ///
+  /// "Best" means most capable on the widest range of current devices, so an
+  /// arm64 build outranks the legacy universal one, which outranks the 32-bit
+  /// build. Callers that must choose between several *installed* variants
+  /// should follow this order rather than whatever order the database returns.
+  static const List<String> retroArchPackagePriority = [
+    'com.retroarch.aarch64',
+    'com.retroarch',
+    'com.retroarch.ra32',
+  ];
+
   const CoreEmulatorModel({
     required this.uniqueId,
     required this.osId,

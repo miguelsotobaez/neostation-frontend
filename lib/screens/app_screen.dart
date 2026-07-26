@@ -16,7 +16,6 @@ import 'neo_sync_screen/login_screen/neo_sync_content.dart';
 import 'neo_sync_screen/neo_sync_tab.dart';
 import '../widgets/scraper_content.dart';
 import 'package:neostation/services/game_service.dart';
-import 'package:neostation/services/android_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
 import 'dart:async';
@@ -213,32 +212,14 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     if (!Platform.isAndroid) return;
 
     try {
-      final packages = await EmulatorRepository.getAndroidRetroArchPackages();
-      if (packages.isEmpty) {
-        await EmulatorRepository.clearRetroArchDefaultsForAndroid();
-        _log.i('Android: No RetroArch found, cleared RetroArch defaults');
-        return;
-      }
+      // Already filtered to installed variants and ordered best-first, so the
+      // first entry is the one to promote. Only promote a variant that is
+      // actually installed: falling back to an uninstalled package would
+      // silently replace working standalone defaults with a broken core one.
+      final installed =
+          await EmulatorRepository.getInstalledAndroidRetroArchPackages();
 
-      const priorityOrder = [
-        'com.retroarch.aarch64',
-        'com.retroarch',
-        'com.retroarch.ra32',
-      ];
-
-      String? chosenPackage;
-      for (final pkg in priorityOrder) {
-        if (packages.contains(pkg) &&
-            await AndroidService.isPackageInstalled(pkg)) {
-          chosenPackage = pkg;
-          break;
-        }
-      }
-
-      // Only promote a RetroArch variant to default if it is actually
-      // installed. Falling back to an uninstalled package would silently
-      // replace working standalone defaults with a broken core default.
-      if (chosenPackage == null) {
+      if (installed.isEmpty) {
         await EmulatorRepository.clearRetroArchDefaultsForAndroid();
         _log.i(
           'Android: No RetroArch variant installed; cleared RA defaults so standalone defaults remain active',
@@ -246,6 +227,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         return;
       }
 
+      final chosenPackage = installed.first;
       await EmulatorRepository.fixRetroArchDefaultForAndroid(chosenPackage);
       _log.i('Android: Set RetroArch default package to $chosenPackage');
     } catch (e) {
