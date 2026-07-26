@@ -318,6 +318,9 @@ class SqliteMigrations {
       case 104:
         await _migrateToVersion104(db);
         break;
+      case 105:
+        await _migrateToVersion105(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -4995,6 +4998,60 @@ class SqliteMigrations {
       _log.i('Migration v104 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v104: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v105: Collapse duplicate system-default emulators.
+  ///
+  /// `user_emulator_config.is_user_default` is the user's explicit "this is the
+  /// emulator for this system" pick, and [getUserDefaultEmulatorForSystem] reads
+  /// it with a `LIMIT 1`. `setDefaultCore` *set* that flag but never cleared it
+  /// for a previously-chosen core, so switching emulators left two winners on the
+  /// same system and the unordered read returned the *oldest* one — pick a core,
+  /// then a standalone, and the core still launches (and vice versa for
+  /// core → core). The setters now clear every competing marker first, but that
+  /// only helps the next selection: installs already carrying two flagged rows
+  /// stay broken until the persisted state is repaired. That is this migration.
+  ///
+  /// For each system we keep the most recently updated flagged emulator and
+  /// clear the rest. `updated_at` is stamped on every user selection, so the
+  /// keeper is the user's latest choice — exactly what they expect to launch.
+  /// Config rows with no matching `app_emulators` entry are left alone: they
+  /// belong to no system, so they can't be part of a per-system conflict.
+  static Future<void> _migrateToVersion105(Database db) async {
+    _log.i('Migration v105: Collapsing duplicate system-default emulators');
+    try {
+      db.execute('DROP TABLE IF EXISTS temp._emu_default_keepers');
+
+      // Bare-column-with-MAX(): SQLite guarantees the non-aggregate columns come
+      // from the row holding the max, so `uid` is the latest pick per system.
+      db.execute('''
+        CREATE TEMP TABLE _emu_default_keepers AS
+        SELECT e.system_id AS sid,
+               uc.emulator_unique_id AS uid,
+               MAX(uc.updated_at) AS upd
+        FROM user_emulator_config uc
+        JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id
+        WHERE uc.is_user_default = 1
+        GROUP BY e.system_id
+      ''');
+
+      db.execute('''
+        UPDATE user_emulator_config
+        SET is_user_default = 0
+        WHERE is_user_default = 1
+          AND emulator_unique_id IN (SELECT unique_identifier FROM app_emulators)
+          AND emulator_unique_id NOT IN (SELECT uid FROM _emu_default_keepers)
+      ''');
+
+      final cleared = db.updatedRows;
+      db.execute('DROP TABLE IF EXISTS temp._emu_default_keepers');
+
+      _log.i('Migration v105 completed (cleared $cleared stale default(s))');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v105: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

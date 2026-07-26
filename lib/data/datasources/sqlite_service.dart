@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 104;
+  static const int _databaseVersion = 105;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1241,6 +1241,7 @@ class SqliteService {
         tableNames.contains('app_emulators')) {
       try {
         await _fixEmulatorDefaults(db);
+        await logEmulatorDefaultAnomalies(db);
       } catch (e) {
         _log.e('Minor fix for defaults failed (expected in first run): $e');
       }
@@ -3420,6 +3421,85 @@ class SqliteService {
     });
   }
 
+  /// Makes [uniqueIdentifier] the one and only default emulator for [systemId],
+  /// clearing every competing marker first.
+  ///
+  /// The system default is expressed across two tables — `app_emulators.is_default`
+  /// (cores) and `user_emulator_config.is_user_default` (the user's explicit pick,
+  /// core or standalone) — and [getUserDefaultEmulatorForSystem] reads the latter
+  /// with a `LIMIT 1`. Anything that leaves a second `is_user_default = 1` row on
+  /// the system therefore makes the resolved default non-deterministic, and in
+  /// practice the *oldest* selection wins: pick a core, then a standalone, and the
+  /// core still launches. Both setters funnel through here so that can't happen.
+  ///
+  /// The `is_user_default` clear is deliberately system-wide rather than
+  /// system+OS: `user_emulator_config`'s primary key is `emulator_unique_id`
+  /// alone, so a single row is shared across operating systems and anything
+  /// narrower cannot make the invariant hold.
+  static Future<void> _applySystemDefaultEmulator(
+    TransactionAdapter txn,
+    String systemId,
+    String uniqueIdentifier,
+    int osId, {
+    required bool isStandalone,
+  }) async {
+    // 1. Clear the core default across the whole system+OS — standalone rows
+    //    included, in case a seed ever flagged one.
+    await txn.rawUpdate(
+      'UPDATE app_emulators SET is_default = 0 WHERE system_id = ? AND os_id = ?',
+      [systemId, osId],
+    );
+
+    // 2. Clear every explicit user default belonging to this system.
+    await txn.rawUpdate(
+      'UPDATE user_emulator_config SET is_user_default = 0 '
+      'WHERE emulator_unique_id IN '
+      '(SELECT unique_identifier FROM app_emulators WHERE system_id = ?)',
+      [systemId],
+    );
+
+    // 3. Cores additionally carry the app-level default flag.
+    if (!isStandalone) {
+      await txn.update(
+        'app_emulators',
+        {'is_default': 1},
+        where: 'os_id = ? AND unique_identifier = ?',
+        whereArgs: [osId, uniqueIdentifier],
+      );
+    }
+
+    _log.i(
+      '[EmuSel] set system default: system=$systemId emulator=$uniqueIdentifier '
+      'osId=$osId standalone=$isStandalone',
+    );
+
+    // 4. Record the user's pick so emulator auto-detection cannot override it
+    //    on subsequent startups.
+    final now = DateTime.now().toIso8601String();
+    final existing = await txn.query(
+      'user_emulator_config',
+      columns: ['emulator_unique_id'],
+      where: 'emulator_unique_id = ?',
+      whereArgs: [uniqueIdentifier],
+    );
+    if (existing.isNotEmpty) {
+      await txn.update(
+        'user_emulator_config',
+        {'is_user_default': 1, 'updated_at': now},
+        where: 'emulator_unique_id = ?',
+        whereArgs: [uniqueIdentifier],
+      );
+    } else {
+      await txn.insert('user_emulator_config', {
+        'emulator_unique_id': uniqueIdentifier,
+        'emulator_path': '', // Path resolution is handled during launch.
+        'is_user_default': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+  }
+
   /// Sets the primary emulator core for a given system.
   static Future<void> setDefaultCore(
     String systemId,
@@ -3429,54 +3509,13 @@ class SqliteService {
     final db = await instance.database;
 
     await db.transaction((txn) async {
-      // Reset defaults for all cores within the target system and OS.
-      await txn.rawUpdate(
-        'UPDATE app_emulators SET is_default = 0 WHERE system_id = ? AND os_id = ? AND is_standalone = 0',
-        [systemId, osId],
+      await _applySystemDefaultEmulator(
+        txn,
+        systemId,
+        uniqueIdentifier,
+        osId,
+        isStandalone: false,
       );
-
-      // Mutually exclusive: Disable standalone defaults when a core is selected.
-      await txn.rawUpdate(
-        'UPDATE user_emulator_config SET is_user_default = 0 '
-        'WHERE emulator_unique_id IN (SELECT unique_identifier FROM app_emulators WHERE system_id = ? AND os_id = ? AND is_standalone = 1)',
-        [systemId, osId],
-      );
-
-      // Assign the new default core.
-      await txn.update(
-        'app_emulators',
-        {'is_default': 1},
-        where: 'os_id = ? AND unique_identifier = ?',
-        whereArgs: [osId, uniqueIdentifier],
-      );
-
-      // Track user selection in user_emulator_config so RA auto-detection
-      // does not override it on subsequent startups.
-      final existing = await txn.query(
-        'user_emulator_config',
-        columns: ['emulator_unique_id'],
-        where: 'emulator_unique_id = ?',
-        whereArgs: [uniqueIdentifier],
-      );
-      if (existing.isNotEmpty) {
-        await txn.update(
-          'user_emulator_config',
-          {
-            'is_user_default': 1,
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'emulator_unique_id = ?',
-          whereArgs: [uniqueIdentifier],
-        );
-      } else {
-        await txn.insert('user_emulator_config', {
-          'emulator_unique_id': uniqueIdentifier,
-          'emulator_path': '',
-          'is_user_default': 1,
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      }
     });
 
     // Enforce disk persistence via WAL checkpoint.
@@ -3523,56 +3562,25 @@ class SqliteService {
   ) async {
     final db = await instance.database;
 
-    final emulators = await getStandaloneEmulatorsBySystemId(systemId);
+    final osRow = await db.rawQuery('SELECT id FROM app_os WHERE name = ?', [
+      getCurrentOs(),
+    ]);
+    final osId = osRow.isEmpty
+        ? null
+        : int.tryParse(osRow.first['id']?.toString() ?? '');
+    if (osId == null) {
+      _log.e('Cannot set standalone default: OS context unresolved');
+      return;
+    }
 
     await db.transaction((txn) async {
-      // 1. Unset user defaults for all standalone emulators belonging to this system.
-      for (final emu in emulators) {
-        final uniqueId = emu['unique_identifier']?.toString();
-        if (uniqueId != null) {
-          await txn.rawUpdate(
-            'UPDATE user_emulator_config SET is_user_default = 0 WHERE emulator_unique_id = ?',
-            [uniqueId],
-          );
-        }
-      }
-
-      // 2. Unset core defaults for the system (exclusive relationship).
-      final currentOs = getCurrentOs();
-      await txn.rawUpdate(
-        'UPDATE app_emulators SET is_default = 0 '
-        'WHERE system_id = ? AND os_id = (SELECT id FROM app_os WHERE name = ?) AND is_standalone = 0',
-        [systemId, currentOs],
+      await _applySystemDefaultEmulator(
+        txn,
+        systemId,
+        emulatorUniqueId,
+        osId,
+        isStandalone: true,
       );
-
-      // 3. Assign and persist the new standalone default.
-      final existing = await txn.query(
-        'user_emulator_config',
-        columns: ['emulator_unique_id'],
-        where: 'emulator_unique_id = ?',
-        whereArgs: [emulatorUniqueId],
-      );
-
-      if (existing.isNotEmpty) {
-        await txn.update(
-          'user_emulator_config',
-          {
-            'is_user_default': 1,
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'emulator_unique_id = ?',
-          whereArgs: [emulatorUniqueId],
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-      } else {
-        await txn.insert('user_emulator_config', {
-          'emulator_unique_id': emulatorUniqueId,
-          'emulator_path': '', // Path resolution is handled during launch.
-          'is_user_default': 1,
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      }
     });
 
     try {
@@ -3600,90 +3608,172 @@ class SqliteService {
     return results.map((row) => CoreEmulatorModel.fromMap(row)).toList();
   }
 
-  /// Heuristic logic to fix inconsistencies in default emulator assignments.
+  /// Seeds a sane app-level default emulator for any system that lacks one, and
+  /// removes app/user default contradictions. Runs on every launch.
+  ///
+  /// Two hard rules, both learned from bugs this routine used to cause:
+  ///
+  /// 1. **It never writes `user_emulator_config.is_user_default`.** That column
+  ///    means "the user picked this", and [_resolveDefaultInstalledEmulator]
+  ///    honors it outright — installed or not — precisely because it is a
+  ///    deliberate choice. Auto-seeding it made a guess indistinguishable from a
+  ///    choice, and the old PS1 branch went further and *cleared* a real user
+  ///    choice on every single launch, silently reverting anyone who picked a
+  ///    standalone for PS1. Seeding belongs in `app_emulators.is_default`, which
+  ///    [getDefaultEmulatorForSystem] already falls back to and which resolves
+  ///    standalones just as well as cores.
+  /// 2. **Every statement is scoped to the current OS.** The old writes cleared
+  ///    `is_default` for a system across *all* operating systems, corrupting the
+  ///    other platforms' state in a synced database.
+  ///
+  /// Ordering is explicit throughout so the seeded pick is reproducible rather
+  /// than whatever the storage engine happened to return first.
+  @visibleForTesting
+  static Future<void> normalizeEmulatorDefaultsForTesting(
+    DatabaseExecutorAdapter db,
+  ) => instance._fixEmulatorDefaults(db);
+
+  /// Logs any system whose default-emulator state is self-contradictory.
+  ///
+  /// The invariant is "at most one `is_user_default` per system, and no app
+  /// default contradicting it". Violations are what made a chosen emulator
+  /// launch a different one, so surface them at startup rather than waiting for
+  /// a user to notice the wrong emulator booting. Silent when everything is
+  /// consistent, which is the normal case.
+  static Future<void> logEmulatorDefaultAnomalies(
+    DatabaseExecutorAdapter db,
+  ) async {
+    try {
+      // NB: messages here deliberately avoid a word ending in "y" immediately
+      // before a colon — `y` is a redacted query parameter, so "ANOMALY: system
+      // ds" gets scrubbed to "ANOMALY: <redacted> ds" by the log redactor.
+      final dupes = await db.rawQuery('''
+        SELECT e.system_id AS sid,
+               COUNT(*) AS n,
+               GROUP_CONCAT(uc.emulator_unique_id) AS uids
+        FROM user_emulator_config uc
+        JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id
+        WHERE uc.is_user_default = 1
+        GROUP BY e.system_id
+        HAVING COUNT(*) > 1
+      ''');
+
+      for (final row in dupes) {
+        _log.w(
+          '[EmuSel] anomaly - system=${row['sid']} has ${row['n']} user '
+          'defaults (${row['uids']})',
+        );
+      }
+
+      // Scoped to the current OS: `is_default` is per (system, os), so an
+      // unscoped check reports another platform's perfectly valid default as a
+      // contradiction on this one.
+      final contradictions = await db.rawQuery(
+        '''
+        SELECT DISTINCT e.system_id AS sid
+        FROM app_emulators e
+        WHERE e.is_default = 1
+          AND e.os_id = (SELECT id FROM app_os WHERE name = ?)
+          AND EXISTS (
+            SELECT 1 FROM user_emulator_config uc
+            JOIN app_emulators e2
+              ON e2.unique_identifier = uc.emulator_unique_id
+            WHERE uc.is_user_default = 1
+              AND e2.system_id = e.system_id
+              AND e2.os_id = e.os_id
+              AND e2.unique_identifier != e.unique_identifier
+          )
+        ''',
+        [getCurrentOs()],
+      );
+
+      for (final row in contradictions) {
+        _log.w(
+          '[EmuSel] anomaly - system=${row['sid']} has an app default that '
+          'contradicts the user-selected default',
+        );
+      }
+
+      if (dupes.isEmpty && contradictions.isEmpty) {
+        _log.i('[EmuSel] default-emulator state consistent across all systems');
+      }
+    } catch (e) {
+      _log.w('[EmuSel] Could not scan for default-emulator anomalies: $e');
+    }
+  }
+
   Future<void> _fixEmulatorDefaults(DatabaseExecutorAdapter db) async {
     try {
-      final systems = await db.query(
-        'app_systems',
-        columns: ['id', 'folder_name'],
-      );
+      final systems = await db.query('app_systems', columns: ['id']);
       final currentOs = getCurrentOs();
+
+      final osRow = await db.rawQuery('SELECT id FROM app_os WHERE name = ?', [
+        currentOs,
+      ]);
+      if (osRow.isEmpty) {
+        _log.w(
+          'Skipping emulator default normalization: unknown OS $currentOs',
+        );
+        return;
+      }
+      final osId = int.tryParse(osRow.first['id']?.toString() ?? '');
+      if (osId == null) return;
 
       for (final system in systems) {
         final systemId = system['id'].toString();
-        final folderName = system['folder_name'].toString();
 
         final cores = await db.rawQuery(
-          'SELECT * FROM app_emulators WHERE system_id = ? AND is_standalone = 0 AND os_id = (SELECT id FROM app_os WHERE name = ?)',
-          [systemId, currentOs],
+          'SELECT * FROM app_emulators '
+          'WHERE system_id = ? AND is_standalone = 0 AND os_id = ? '
+          'ORDER BY name ASC',
+          [systemId, osId],
         );
         final standalones = await db.rawQuery(
           '''
-          SELECT e.*, uc.is_user_default 
-          FROM app_emulators e 
-          LEFT JOIN user_emulator_config uc ON e.unique_identifier = uc.emulator_unique_id 
-          WHERE e.system_id = ? AND e.is_standalone = 1 AND e.os_id = (SELECT id FROM app_os WHERE name = ?)
+          SELECT e.*, uc.is_user_default
+          FROM app_emulators e
+          LEFT JOIN user_emulator_config uc ON e.unique_identifier = uc.emulator_unique_id
+          WHERE e.system_id = ? AND e.is_standalone = 1 AND e.os_id = ?
+          ORDER BY e.name ASC
           ''',
-          [systemId, currentOs],
+          [systemId, osId],
         );
 
-        final coreDefault = cores.firstWhere(
-          (c) => c['is_default'] == 1,
-          orElse: () => {},
-        );
-        final standaloneDefault = standalones.firstWhere(
+        final hasCoreDefault = cores.any((c) => c['is_default'] == 1);
+        final hasUserDefault = standalones.any(
           (s) => s['is_user_default'] == 1,
-          orElse: () => {},
         );
 
-        bool hasCoreDefault = coreDefault.isNotEmpty;
-        bool hasStandaloneDefault = standaloneDefault.isNotEmpty;
+        if (hasUserDefault) {
+          // The user made a choice. It outranks any app-level default, so drop
+          // the contradicting `is_default` rather than the choice.
+          if (hasCoreDefault) {
+            await db.rawUpdate(
+              'UPDATE app_emulators SET is_default = 0 '
+              'WHERE system_id = ? AND os_id = ?',
+              [systemId, osId],
+            );
+          }
+          continue;
+        }
 
-        // RULE: PS1/PSX systems should prioritize cores unless overridden.
-        if (folderName == 'ps1' ||
-            folderName == 'psx' ||
-            folderName == 'sony-psx' ||
-            folderName == 'playstation') {
-          if (hasCoreDefault && hasStandaloneDefault) {
-            await db.rawUpdate(
-              'UPDATE user_emulator_config SET is_user_default = 0 '
-              'WHERE emulator_unique_id IN (SELECT unique_identifier FROM app_emulators WHERE system_id = ? AND is_standalone = 1)',
-              [systemId],
-            );
-          }
-        }
-        // GENERAL RULE: Prioritize user-selected standalone if both defaults are set.
-        else if (hasCoreDefault && hasStandaloneDefault) {
+        if (hasCoreDefault) continue;
+
+        // Nothing designated at all — seed the app-level default. Preference:
+        // the core the systems JSON marks as canonical, then any standalone
+        // (more likely to work out of the box than an unverifiable core), then
+        // any core.
+        final seed =
+            cores.where((c) => c['is_default_core'] == 1).firstOrNull ??
+            standalones.firstOrNull ??
+            cores.firstOrNull;
+
+        if (seed != null) {
           await db.rawUpdate(
-            'UPDATE app_emulators SET is_default = 0 WHERE system_id = ? AND is_standalone = 0',
-            [systemId],
+            'UPDATE app_emulators SET is_default = 1 '
+            'WHERE unique_identifier = ? AND os_id = ?',
+            [seed['unique_identifier'], osId],
           );
-        }
-        // FALLBACK: Assign the first available default_core, then standalone, then any core.
-        else if (!hasCoreDefault && !hasStandaloneDefault) {
-          // Prefer the core marked as default_core in JSON
-          final defaultCore = cores.firstWhere(
-            (c) => c['is_default_core'] == 1,
-            orElse: () => {},
-          );
-          if (defaultCore.isNotEmpty) {
-            await db.rawUpdate(
-              'UPDATE app_emulators SET is_default = 1 WHERE unique_identifier = ? AND os_id = ?',
-              [defaultCore['unique_identifier'], defaultCore['os_id']],
-            );
-          } else if (standalones.isNotEmpty) {
-            // Fall back to the first standalone
-            await db.rawUpdate(
-              'UPDATE user_emulator_config SET is_user_default = 1 WHERE emulator_unique_id = ?',
-              [standalones.first['unique_identifier']],
-            );
-          } else if (cores.isNotEmpty) {
-            // Absolute fallback: any core
-            await db.rawUpdate(
-              'UPDATE app_emulators SET is_default = 1 WHERE unique_identifier = ? AND os_id = ?',
-              [cores.first['unique_identifier'], cores.first['os_id']],
-            );
-          }
         }
       }
     } catch (e) {
@@ -3730,6 +3820,7 @@ class SqliteService {
       JOIN app_os os ON e.os_id = os.id
       JOIN user_emulator_config uc ON e.unique_identifier = uc.emulator_unique_id
       WHERE e.system_id = ? AND os.name = ? AND uc.is_user_default = 1
+      ORDER BY uc.updated_at DESC
       LIMIT 1
       ''',
       [systemId, currentOs],

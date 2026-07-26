@@ -106,16 +106,46 @@ class GameLaunchService {
         configFileName,
       );
 
-      if (configLoaded) {
-        String? preferredPlayerId = game.emulatorName;
+      // Resolved once and threaded through every fallback below. `isExplicit`
+      // distinguishes a choice the user actually made (a per-game override, or a
+      // system default they set) from one we guessed for them — only the former
+      // is worth failing the launch over.
+      String? preferredPlayerId = game.emulatorName;
+      bool isExplicitChoice = preferredPlayerId != null;
+      String source = isExplicitChoice ? 'per-game override' : 'none';
 
-        if (preferredPlayerId == null) {
+      if (preferredPlayerId == null && system.id != null) {
+        final userDefault =
+            await EmulatorRepository.getUserDefaultEmulatorForSystem(
+              system.id!,
+            );
+        if (userDefault != null) {
+          preferredPlayerId = userDefault.uniqueId;
+          isExplicitChoice = true;
+          source = 'system default (user-selected)';
+        } else {
           final defaultEmu = await _resolveDefaultInstalledEmulator(system);
           if (defaultEmu != null) {
             preferredPlayerId = defaultEmu.uniqueId;
+            source = 'auto-resolved default';
           }
         }
+      }
 
+      // Emulator selection has been the source of repeated, hard-to-reproduce
+      // reports ("I picked melonDS, RetroArch launched"). One tagged line per
+      // launch makes the decision auditable from a user's logcat without any
+      // debug build or flag.
+      _log.i(
+        '[EmuSel] ${system.folderName}/${game.romname}: '
+        'emulator=${preferredPlayerId ?? "<none>"} source=$source '
+        'explicit=$isExplicitChoice configLoaded=$configLoaded',
+      );
+      if (system.id != null) {
+        await _logSystemEmulatorState(system);
+      }
+
+      if (configLoaded) {
         final launchCmd = LauncherService.instance.getLaunchCommand(
           system,
           game,
@@ -222,10 +252,23 @@ class GameLaunchService {
         }
       }
 
-      final standaloneEmulator = await _getStandaloneEmulatorForSystem(system);
+      _log.i(
+        '[EmuSel] JSON launch path did not handle '
+        '${preferredPlayerId ?? "<none>"}; trying standalone fallback',
+      );
+
+      final standaloneEmulator = await _getStandaloneEmulatorForSystem(
+        system,
+        preferredUniqueId: preferredPlayerId,
+      );
       if (!context.mounted) return GameLaunchResult.failure('', '');
 
       if (standaloneEmulator != null) {
+        _log.i(
+          '[EmuSel] route=standalone '
+          'emulator=${standaloneEmulator['unique_identifier']} '
+          '(${standaloneEmulator['name']})',
+        );
         if (Platform.isAndroid) {
           return await _launchStandaloneAndroid(
             context,
@@ -248,13 +291,42 @@ class GameLaunchService {
         }
       }
 
-      final coreName = await _getCoreForSystem(system);
+      final coreName = await _getCoreForSystem(
+        system,
+        preferredUniqueId: preferredPlayerId,
+      );
       if (!context.mounted) return GameLaunchResult.failure('', '');
 
       if (coreName == null) {
         return GameLaunchResult.failure(
           AppLocale.coreNotConfigured.getString(context),
           'No core found for system ${system.folderName}',
+        );
+      }
+
+      // Every route above declined to launch the emulator the user actually
+      // picked, and the only thing left is a core we chose for them. Launching
+      // it would silently substitute a *different* emulator — the exact failure
+      // that made a deliberate melonDS/standalone selection boot a RetroArch
+      // core. Surface the misconfiguration by name instead.
+      _log.i('[EmuSel] route=core core=$coreName');
+
+      final bool substitutesUserChoice =
+          isExplicitChoice &&
+          preferredPlayerId != null &&
+          !await _emulatorProvidesCore(system, preferredPlayerId, coreName);
+      if (!context.mounted) return GameLaunchResult.failure('', '');
+
+      if (substitutesUserChoice) {
+        _log.e(
+          'Refusing to substitute a fallback core for the user-selected '
+          'emulator "$preferredPlayerId" on ${system.folderName}',
+        );
+        return GameLaunchResult.failure(
+          AppLocale.emulatorNotConfigured.getString(context),
+          'The selected emulator "$preferredPlayerId" could not be launched '
+          'for ${system.folderName}. Re-select it in the system or per-game '
+          'emulator settings, or check that it is installed.',
         );
       }
 
@@ -722,8 +794,112 @@ class GameLaunchService {
     return configured;
   }
 
+  /// Logs the raw default-emulator state for [system] under the `[EmuSel]` tag.
+  ///
+  /// The bugs in this area were all *state* bugs — two emulators flagged as the
+  /// system default, or an app default contradicting the user's pick — and they
+  /// are invisible in a launch trace that only reports the winner. This prints
+  /// the underlying rows so a log alone is enough to diagnose a report.
+  static Future<void> _logSystemEmulatorState(SystemModel system) async {
+    try {
+      // Deliberately `loadEmulatorsForSystem`, the same probe the resolver uses,
+      // NOT getEmulatorsForSystemCurrentOs: the latter's `is_installed` is
+      // derived from a configured desktop executable path, so it reports 0 for
+      // every emulator on Android and would make this dump actively misleading.
+      final all = await loadEmulatorsForSystem(system);
+      final userDefault =
+          await EmulatorRepository.getUserDefaultEmulatorForSystem(system.id!);
+      final appDefaults = all.where((e) => e.isDefault).toList();
+
+      _log.i(
+        '[EmuSel]   available=${all.length} '
+        'userDefault=${userDefault?.uniqueId ?? "<none>"} '
+        'appDefaults=${appDefaults.map((e) => e.uniqueId).join(",")}',
+      );
+      if (appDefaults.length > 1) {
+        _log.w(
+          '[EmuSel]   anomaly - ${appDefaults.length} app defaults flagged for '
+          '${system.folderName}',
+        );
+      }
+      for (final e in all) {
+        _log.i(
+          '[EmuSel]     - ${e.uniqueId} name="${e.name}" '
+          'standalone=${e.isStandalone} installed=${e.isInstalled} '
+          'isDefault=${e.isDefault} core=${e.coreFilename ?? "-"} '
+          'pkg=${e.androidPackageName ?? "-"}',
+        );
+      }
+    } catch (e) {
+      _log.w('[EmuSel] Could not dump emulator state: $e');
+    }
+  }
+
+  /// Whether [uniqueId] is the emulator that supplies [coreName] for [system].
+  ///
+  /// Used to tell "we fell back to a core, but it happens to be the very core
+  /// the user picked" (fine) from "we fell back to somebody else's core" (a
+  /// silent substitution of the user's choice).
+  static Future<bool> _emulatorProvidesCore(
+    SystemModel system,
+    String uniqueId,
+    String coreName,
+  ) async {
+    if (system.id == null) return false;
+    try {
+      final all = await EmulatorRepository.getEmulatorsForSystemCurrentOs(
+        system.id!,
+      );
+      for (final e in all) {
+        if (e.uniqueId != uniqueId) continue;
+        final file = e.coreFilename;
+        if (file == null || file.isEmpty) return false;
+        return file == coreName || _stripLibraryExtension(file) == coreName;
+      }
+    } catch (e) {
+      // Enumeration failed — don't block a launch on a diagnostic check.
+      _log.w('Could not verify emulator/core correspondence: $e');
+      return true;
+    }
+    return false;
+  }
+
+  /// Strips a platform dynamic-library extension from a core filename.
+  static String _stripLibraryExtension(String coreFilename) {
+    if (coreFilename.endsWith('.dll')) {
+      return coreFilename.substring(0, coreFilename.length - 4);
+    }
+    if (coreFilename.endsWith('.so')) {
+      return coreFilename.substring(0, coreFilename.length - 3);
+    }
+    return coreFilename;
+  }
+
   /// Resolves the identifier for the core assigned to the given system.
-  static Future<String?> _getCoreForSystem(SystemModel system) async {
+  ///
+  /// When [preferredUniqueId] names an emulator that is itself a core, that core
+  /// wins: the caller already resolved the user's choice and re-deriving the
+  /// system default here would discard it.
+  static Future<String?> _getCoreForSystem(
+    SystemModel system, {
+    String? preferredUniqueId,
+  }) async {
+    if (preferredUniqueId != null && system.id != null) {
+      try {
+        final all = await EmulatorRepository.getEmulatorsForSystemCurrentOs(
+          system.id!,
+        );
+        for (final e in all) {
+          if (e.uniqueId != preferredUniqueId) continue;
+          final file = e.coreFilename;
+          if (file == null || file.isEmpty) break;
+          return Platform.isAndroid ? file : _stripLibraryExtension(file);
+        }
+      } catch (e) {
+        _log.w('Could not resolve preferred core "$preferredUniqueId": $e');
+      }
+    }
+
     final emulator = await EmulatorRepository.getDefaultEmulatorForSystem(
       system.id!,
     );
@@ -750,9 +926,16 @@ class GameLaunchService {
   }
 
   /// Retrieves the user-assigned standalone emulator for a system if applicable.
+  ///
+  /// [preferredUniqueId] is the emulator the caller already resolved for this
+  /// launch (a per-game override or the system default). If it names one of this
+  /// system's standalones, it wins outright — re-deriving the default here is
+  /// what used to drop the user's choice on the floor when the JSON launch path
+  /// declined to handle it.
   static Future<Map<String, dynamic>?> _getStandaloneEmulatorForSystem(
-    SystemModel system,
-  ) async {
+    SystemModel system, {
+    String? preferredUniqueId,
+  }) async {
     if (system.id == null) return null;
 
     try {
@@ -764,10 +947,22 @@ class GameLaunchService {
       }
 
       Map<String, dynamic>? userDefault;
-      for (final standalone in standalones) {
-        if (standalone['is_user_default'] == 1) {
-          userDefault = standalone;
-          break;
+      if (preferredUniqueId != null) {
+        for (final standalone in standalones) {
+          if (standalone['unique_identifier']?.toString() ==
+              preferredUniqueId) {
+            userDefault = standalone;
+            break;
+          }
+        }
+      }
+
+      if (userDefault == null) {
+        for (final standalone in standalones) {
+          if (standalone['is_user_default'] == 1) {
+            userDefault = standalone;
+            break;
+          }
         }
       }
 
