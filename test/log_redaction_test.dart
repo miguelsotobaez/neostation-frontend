@@ -107,4 +107,73 @@ void main() {
       expect(redactSecrets(once), once);
     });
   });
+
+  group('redactSecrets — does not eat ordinary words (false positives)', () {
+    // Every sensitive name was matched without a leading word boundary, so any
+    // word *ending* in one of them scrubbed the following token. Observed live:
+    // "[EmuSel] ANOMALY: system ds has 2 user defaults" lost the word "system"
+    // because "ANOMALY" ends in "y", the RetroAchievements API key parameter.
+    const survivors = <String, String>{
+      'ANOMALY: system ds has 2 user defaults': 'system',
+      'Summary: 12 games scanned': '12',
+      'Directory: /storage/emulated/0/roms': '/storage/emulated/0/roms',
+      'Activity: com.retroarch.browser.RetroActivity':
+          'com.retroarch.browser.RetroActivity',
+      'Query: SELECT * FROM user_roms': 'SELECT',
+      'Priority: high': 'high',
+      'Body: null': 'null',
+      'monkey: banana': 'banana',
+      'bypass: true': 'true',
+      'oauth: disabled': 'disabled',
+    };
+
+    survivors.forEach((line, mustSurvive) {
+      test('leaves "$line" alone', () {
+        final redacted = redactSecrets(line);
+        expect(redacted, contains(mustSurvive));
+        expect(redacted, isNot(contains(redactedPlaceholder)));
+      });
+    });
+  });
+
+  group('redactSecrets — still redacts real credentials', () {
+    test('a standalone key/token/password field is still redacted', () {
+      for (final line in [
+        'key: abc123',
+        'token: abc123',
+        'password: abc123',
+        'secret = abc123',
+        '"api_key": "abc123"',
+      ]) {
+        final redacted = redactSecrets(line);
+        expect(redacted, isNot(contains('abc123')), reason: line);
+        expect(redacted, contains(redactedPlaceholder), reason: line);
+      }
+    });
+
+    test('the RA api key is still redacted as a query parameter', () {
+      final redacted = redactSecrets('https://ra.org/API/x.php?u=me&y=SECRET1');
+      expect(redacted, isNot(contains('SECRET1')));
+      expect(redacted, contains('y=<redacted>'));
+    });
+  });
+
+  group('redactSecrets — snake_case credential fields', () {
+    // The word-boundary that fixes the false positives must NOT treat `_` as a
+    // word character: snake_case is how credentials appear in SQLite columns
+    // and JSON payloads here, and excluding `_` silently un-redacted them.
+    test('a snake_case credential field is still redacted', () {
+      for (final line in [
+        'user_password: hunter2',
+        'ra_key: hunter2',
+        'dev_password=hunter2',
+        '{ss_password: hunter2}',
+        '"refresh_token": "hunter2"',
+      ]) {
+        final redacted = redactSecrets(line);
+        expect(redacted, isNot(contains('hunter2')), reason: line);
+        expect(redacted, contains(redactedPlaceholder), reason: line);
+      }
+    });
+  });
 }
