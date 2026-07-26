@@ -157,6 +157,12 @@ class GamepadNavigation {
   /// Debounce duration for action buttons to prevent double-presses.
   static const int _actionDebounceMs = 128;
 
+  /// True for the raw Android keycodes of the L1/R1 bumpers.
+  static bool _isAndroidShoulderKeycode(String key) {
+    final k = key.toLowerCase();
+    return k == 'keycode_button_l1' || k == 'keycode_button_r1';
+  }
+
   /// Delay before the first repeat event occurs when a button is held.
   static const Duration _initialRepeatDelay = Duration(milliseconds: 300);
 
@@ -598,6 +604,22 @@ class GamepadNavigation {
           _onSelectUp(now);
         }
         return;
+      }
+
+      // Shoulder RELEASE is read from the RAW key, before translation, for the
+      // same reason Select is (above). A tab switch activates a new navigation
+      // layer, which clears its translator's button states; the release that
+      // follows then looks like "no edge" to that layer and is dropped, so
+      // [_shoulderReleasedSinceDispatch] stayed false and the next deliberate
+      // TAP was misclassified as a held auto-repeat and paced at
+      // [_shoulderRepeatIntervalMs] — a quick second tab switch was swallowed.
+      // The raw event reaches every layer regardless of translator state.
+      // A genuine hold emits no ACTION_UP, so held pacing is unaffected.
+      // Values are inverted on this platform: 0.0 = down, 1.0 = up.
+      if (isAndroid &&
+          _isAndroidShoulderKeycode(event.key) &&
+          event.value > 0.5) {
+        _shoulderReleasedSinceDispatch = true;
       }
 
       final translatedEvent = _translator.translateEvent(event);
