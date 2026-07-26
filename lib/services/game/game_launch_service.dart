@@ -905,20 +905,25 @@ class GameLaunchService {
     );
 
     if (emulator != null) {
-      final coreFilename = emulator['core_filename'].toString();
+      // `?.` matters: a SQL NULL arrives as Dart null, and `null.toString()`
+      // launders it into the string "null", which passes every null check
+      // downstream and reaches RetroArch as LIBRETRO="null" — a blank screen
+      // with nothing in the log to explain it. Emulators that supply no core of
+      // their own (a standalone, a malformed config entry) can hold the system
+      // default, so this is a reachable state, not a defensive one.
+      final coreFilename = emulator['core_filename']?.toString();
 
-      if (Platform.isAndroid) {
-        return coreFilename;
-      } else {
-        String coreName = coreFilename;
-        if (coreName.endsWith('.dll')) {
-          coreName = coreName.substring(0, coreName.length - 4);
-        } else if (coreName.endsWith('.so')) {
-          coreName = coreName.substring(0, coreName.length - 3);
-        }
-
-        return coreName;
+      if (coreFilename == null || coreFilename.isEmpty) {
+        _log.e(
+          'Default emulator "${emulator['unique_identifier']}" for system '
+          '${system.folderName} has no core filename',
+        );
+        return null;
       }
+
+      return Platform.isAndroid
+          ? coreFilename
+          : _stripLibraryExtension(coreFilename);
     }
 
     _log.e('No default emulator found for system ${system.folderName}');
