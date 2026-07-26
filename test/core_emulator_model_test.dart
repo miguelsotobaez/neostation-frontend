@@ -50,4 +50,48 @@ void main() {
       },
     );
   });
+
+  group('CoreEmulatorModel install state', () {
+    test('a database row alone never claims the emulator is installed', () {
+      // The trap this guards: `getEmulatorsForSystemCurrentOs` used to alias a
+      // desktop-only "has a configured executable path" column as
+      // `is_installed`, so every Android emulator read as uninstalled while the
+      // field's name promised a real answer. A row cannot answer it — only
+      // `loadEmulatorsForSystem`, which probes packages and core files, can.
+      final row = CoreEmulatorModel.fromMap({
+        'unique_identifier': 'ds.ra64.melondsds',
+        'os_id': 2,
+        'system_id': 'ds',
+        'name': 'RetroArch64 MelonDSDS',
+        'is_standalone': 0,
+        'is_default': 1,
+        'is_ra_compatible': 1,
+        'has_configured_path': 1,
+      });
+
+      expect(row.isInstalled, isFalse);
+      expect(row.hasConfiguredPath, isTrue);
+    });
+
+    test('hasConfiguredPath is false when no path is configured', () {
+      final row = CoreEmulatorModel.fromMap({
+        'unique_identifier': 'ds.ra64.melondsds',
+        'os_id': 2,
+        'system_id': 'ds',
+        'name': 'RetroArch64 MelonDSDS',
+        'is_standalone': 0,
+        'is_default': 1,
+        'is_ra_compatible': 1,
+        'has_configured_path': 0,
+      });
+
+      expect(row.hasConfiguredPath, isFalse);
+    });
+
+    test('the two flags survive copyWith independently', () {
+      final verified = emu().copyWith(isInstalled: true);
+      expect(verified.isInstalled, isTrue);
+      expect(verified.hasConfiguredPath, isFalse);
+    });
+  });
 }

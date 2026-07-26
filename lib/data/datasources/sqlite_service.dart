@@ -3328,6 +3328,13 @@ class SqliteService {
       getAllSystems();
 
   /// Retrieves all emulator cores available for a specific system and operating system.
+  ///
+  /// The `isInstalled` on the returned models is a *package-level* check: on
+  /// Android it means the emulator app is present, which for a RetroArch entry
+  /// says nothing about whether the libretro core itself is there; on desktop it
+  /// is unconditionally true. `loadEmulatorsForSystem` is the enumerator that
+  /// verifies cores as well — prefer it unless you specifically want the cheaper
+  /// package-only answer.
   static Future<List<CoreEmulatorModel>> getCoresBySystemId(
     String systemId,
   ) async {
@@ -4186,6 +4193,12 @@ class SqliteService {
   }
 
   /// Retrieves all emulators available for a system on the current operating system.
+  ///
+  /// The returned models carry `isInstalled = false`: a database row cannot say
+  /// whether an emulator is actually present. Callers that need install state
+  /// must use `loadEmulatorsForSystem`, which verifies packages and core files.
+  /// `hasConfiguredPath` is the only install-adjacent signal available here, and
+  /// it is desktop-only.
   static Future<List<CoreEmulatorModel>> getEmulatorsForSystemCurrentOs(
     String systemId,
   ) async {
@@ -4197,7 +4210,7 @@ class SqliteService {
         CASE
           WHEN uc.emulator_path IS NOT NULL AND uc.emulator_path != '' THEN 1
           ELSE 0
-        END as is_installed
+        END as has_configured_path
       FROM app_emulators e
       JOIN app_os os ON e.os_id = os.id
       LEFT JOIN user_emulator_config uc ON uc.emulator_unique_id = e.unique_identifier

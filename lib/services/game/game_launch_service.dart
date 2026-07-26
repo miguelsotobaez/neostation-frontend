@@ -803,9 +803,9 @@ class GameLaunchService {
   static Future<void> _logSystemEmulatorState(SystemModel system) async {
     try {
       // Deliberately `loadEmulatorsForSystem`, the same probe the resolver uses,
-      // NOT getEmulatorsForSystemCurrentOs: the latter's `is_installed` is
-      // derived from a configured desktop executable path, so it reports 0 for
-      // every emulator on Android and would make this dump actively misleading.
+      // NOT getEmulatorsForSystemCurrentOs: the latter cannot answer the install
+      // question from a database row at all and leaves `isInstalled` false,
+      // which would make this dump actively misleading.
       final all = await loadEmulatorsForSystem(system);
       final userDefault =
           await EmulatorRepository.getUserDefaultEmulatorForSystem(system.id!);

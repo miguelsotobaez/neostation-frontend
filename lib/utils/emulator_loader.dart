@@ -70,6 +70,15 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
       // genuinely-installed core.
       final retroArchPath =
           await EmulatorRepository.getRetroArchExecutablePath();
+
+      // Baseline: on desktop a configured executable path is the only evidence
+      // the database holds, so it stands in as the install verdict for anything
+      // the core probe below does not refine. Without this, emulators would be
+      // reported uninstalled whenever RetroArch itself is unconfigured.
+      emulators = emulators
+          .map((e) => e.copyWith(isInstalled: e.hasConfiguredPath))
+          .toList();
+
       if (retroArchPath != null && retroArchPath.isNotEmpty) {
         final coresDir =
             '${File(retroArchPath).parent.path}'
@@ -82,7 +91,7 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
               uid.contains('.ra.') ||
               uid.contains('.ra32.') ||
               uid.contains('.ra64.');
-          if (isRaCore && !e.isInstalled) {
+          if (isRaCore && !e.hasConfiguredPath) {
             var installed = true; // fail-open default
             if (coresDirReadable &&
                 e.coreFilename != null &&
@@ -91,7 +100,7 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
             }
             updated.add(e.copyWith(isInstalled: installed));
           } else {
-            updated.add(e);
+            updated.add(e); // keeps the baseline set above
           }
         }
         emulators = updated;
