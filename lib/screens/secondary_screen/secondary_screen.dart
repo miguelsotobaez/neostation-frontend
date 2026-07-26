@@ -873,8 +873,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        // Select (View), not Start — mute is a
+                                        // Select tap, matching the primary
+                                        // screen's hint.
                                         Image.asset(
-                                          'assets/images/gamepad/Xbox_Menu_button.png',
+                                          'assets/images/gamepad/Xbox_View_button.png',
                                           width: 32.r,
                                           height: 32.r,
                                           color: Colors.white,

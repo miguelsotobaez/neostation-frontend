@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -24,6 +26,12 @@ class GameViewFooter extends StatelessWidget {
   final GameInfoAndUserProgress? currentGameInfo;
   final VoidCallback? onShowAchievements;
 
+  /// Toggles global video sound. The grid and carousel have no video surface of
+  /// their own — the preview plays on the secondary display — so this pill is
+  /// their only mute affordance, mirroring the Select hint on the details card.
+  /// Omit it to hide the pill.
+  final VoidCallback? onToggleMute;
+
   const GameViewFooter({
     super.key,
     required this.game,
@@ -32,6 +40,7 @@ class GameViewFooter extends StatelessWidget {
     this.isLoadingAchievements = false,
     this.currentGameInfo,
     this.onShowAchievements,
+    this.onToggleMute,
   });
 
   @override
@@ -99,6 +108,10 @@ class GameViewFooter extends StatelessWidget {
           ExcludeFocus(
             child: Row(
               children: [
+                if (onToggleMute != null) ...[
+                  _MuteHintPill(onToggleMute: onToggleMute!),
+                  SizedBox(width: 6.r),
+                ],
                 if (game.rating > 0) ...[
                   _SteamStyleRating(game: game),
                   SizedBox(width: 6.r),
@@ -474,6 +487,67 @@ class _CompactAchievementsIndicator extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Select-tap hint + current sound state for the preview video, tappable for
+/// touchscreen users. Watches the config provider on its own so the memoized
+/// footer instance around it never has to rebuild when sound is toggled.
+class _MuteHintPill extends StatelessWidget {
+  final VoidCallback onToggleMute;
+
+  const _MuteHintPill({required this.onToggleMute});
+
+  @override
+  Widget build(BuildContext context) {
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
+    final scheme = Theme.of(context).colorScheme;
+
+    return Selector<SqliteConfigProvider, bool>(
+      selector: (_, provider) => !provider.config.videoSound,
+      builder: (context, isMuted, _) {
+        return Material(
+          color: scheme.surface.withValues(alpha: 0.9),
+          borderRadius: radii.radiusExternal,
+          child: InkWell(
+            onTap: () {
+              SfxService().playNavSound();
+              onToggleMute();
+            },
+            canRequestFocus: false,
+            borderRadius: radii.radiusExternal,
+            child: Container(
+              height: 32.r,
+              padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
+              decoration: BoxDecoration(
+                borderRadius: radii.radiusExternal,
+                border: Border.all(color: scheme.outline, width: 1.r),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/images/gamepad/Xbox_View_button.png',
+                    width: 15.r,
+                    height: 15.r,
+                    color: scheme.onSurface,
+                  ),
+                  SizedBox(width: 4.r),
+                  Icon(
+                    isMuted
+                        ? Symbols.volume_off_rounded
+                        : Symbols.volume_up_rounded,
+                    size: 15.r,
+                    color: scheme.onSurface,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

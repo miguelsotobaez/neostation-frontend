@@ -307,6 +307,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       onLetterJump: _letterJump, // Held D-pad left/right → alphabet skipping.
       letterJumpAxis: LetterJumpAxis.horizontal,
       onLeftStickClick: widget.onRandom,
+      onSelectButton: _toggleVideoMute, // Select tap - Mute preview video.
       onSelectModifierA: widget.onScrape, // Select + A - Scrape.
       onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSelectModifierY: widget.onRandom, // Select + Y - Random game.
@@ -345,6 +346,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
     // across dozens of entries would still be running when the next hop fires.
     _carouselKey.currentState?.jumpToPage(target);
     return true;
+  }
+
+  /// Select tap — toggles global video sound. The preview plays on the
+  /// secondary display in this view; the config mutator propagates the new
+  /// mute state to it, so there is nothing local to re-apply.
+  void _toggleVideoMute() {
+    if (!mounted) return;
+    context.read<SqliteConfigProvider>().toggleVideoSound();
   }
 
   void _cleanupGamepad() {
@@ -411,6 +420,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       isLoadingAchievements: _isLoadingAchievements,
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
+      onToggleMute: _toggleVideoMute,
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can slide it without invalidating this memoized subtree.

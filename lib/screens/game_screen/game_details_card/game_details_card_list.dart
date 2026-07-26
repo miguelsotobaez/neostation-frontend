@@ -442,9 +442,12 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   }
 
   void _handleSelectAction() {
+    // Achievements owns Select for its refresh; everywhere else the preview
+    // video is what's playing, so Select mutes it (the general tab included —
+    // that's where the video is usually watched).
     if (_currentTab == DetailTab.achievements) {
       refreshAchievements();
-    } else if (_currentTab == DetailTab.gameInfo) {
+    } else {
       _toggleVideoMute();
     }
   }
