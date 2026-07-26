@@ -233,7 +233,7 @@ void main() {
       },
     );
 
-    test('import skips games ES-DE marks hidden', () async {
+    test('import does not skip games ES-DE marks hidden', () async {
       await db.execute(
         "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('sonic.smc', '/roms/snes/sonic.smc', 'snes')",
       );
@@ -261,18 +261,18 @@ void main() {
       ''');
 
       final result = await EsdeImportService.import(tempRoot.path);
-      expect(result.gamesImported, 1);
-      expect(result.gamesHidden, 1);
+      expect(result.gamesImported, 2);
 
-      // No metadata row, and the hidden entry's favorite flag is not applied.
+      // Hiding a game in ES-DE must not withhold its metadata or stats here:
+      // the user may well have forgotten they hid it.
       final rows = await db.rawQuery(
-        'SELECT filename FROM user_screenscraper_metadata',
+        'SELECT filename FROM user_screenscraper_metadata ORDER BY filename',
       );
-      expect(rows.map((r) => r['filename']), ['sonic.smc']);
+      expect(rows.map((r) => r['filename']), ['secret.smc', 'sonic.smc']);
       final hiddenRom = await db.rawQuery(
         "SELECT is_favorite FROM user_roms WHERE filename = 'secret.smc'",
       );
-      expect(hiddenRom.first['is_favorite'], 0);
+      expect(hiddenRom.first['is_favorite'], 1);
     });
 
     test('import fills play_time only when NeoStation has none', () async {
@@ -315,5 +315,37 @@ void main() {
       expect(rows[1]['filename'], 'streets.smc');
       expect(rows[1]['play_time'], 900);
     });
+
+    test(
+      'import links art for a system that has downloaded_media but no gamelist',
+      () async {
+        final tempRoot = Directory.systemTemp.createTempSync('esde_test_');
+        addTearDown(() => tempRoot.deleteSync(recursive: true));
+
+        // snes has a gamelist; nes has artwork only. ES-DE leaves systems in
+        // this state whenever media outlives (or precedes) a gamelist.
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('nes', 'NES', 'nes', 3)",
+        );
+        Directory('${tempRoot.path}/gamelists/snes').createSync(recursive: true);
+        File(
+          '${tempRoot.path}/gamelists/snes/gamelist.xml',
+        ).writeAsStringSync('<gameList></gameList>');
+        Directory(
+          '${tempRoot.path}/downloaded_media/nes/covers',
+        ).createSync(recursive: true);
+
+        await EsdeImportService.import(tempRoot.path);
+
+        final rows = await db.rawQuery(
+          "SELECT app_system_id, esde_media_dir FROM user_system_settings WHERE esde_media_dir IS NOT NULL ORDER BY app_system_id",
+        );
+        expect(rows.map((r) => r['app_system_id']).toList(), [
+          'nes',
+          'snes',
+        ]);
+        expect(rows.first['esde_media_dir'], 'nes');
+      },
+    );
   });
 }

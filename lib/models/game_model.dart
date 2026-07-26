@@ -322,23 +322,14 @@ class GameModel {
       // ES-DE read-time fallback: use the user's ES-DE downloaded_media art
       // when NeoStation has no art of its own. A later NeoStation scrape writes
       // into NeoStation's media folder (checked above) and takes precedence.
-      final esdePng = fileProvider.getEsdeMediaPath(
+      for (final candidate in fileProvider.getEsdeMediaCandidates(
         systemFolderName,
         imageType,
         romname,
-        'png',
-      );
-      if (esdePng != null && File(esdePng).existsSync()) {
-        return esdePng;
-      }
-      final esdeJpg = fileProvider.getEsdeMediaPath(
-        systemFolderName,
-        imageType,
-        romname,
-        'jpg',
-      );
-      if (esdeJpg != null && File(esdeJpg).existsSync()) {
-        return esdeJpg;
+      )) {
+        if (File(candidate).existsSync()) {
+          return candidate;
+        }
       }
 
       return pngPath;

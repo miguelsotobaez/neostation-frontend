@@ -598,36 +598,16 @@ class ScraperRepository {
       );
       final row = existing.isNotEmpty ? existing.first : null;
 
-      final toWrite = <String, dynamic>{};
-      esde.forEach((col, val) {
-        if (val == null) return;
-        if (val is String && val.trim().isEmpty) return;
-        final cur = row?[col];
-        final curEmpty = cur == null || (cur is String && cur.trim().isEmpty);
-        if (curEmpty) toWrite[col] = val;
-      });
-
-      // Media subfolder is ES-DE bookkeeping (mirrors the ROM's subfolder inside
-      // downloaded_media), not user-visible metadata — always keep it current so
-      // read-time fallback can resolve nested artwork, even when nothing else
-      // needs filling.
-      if (mediaSubdir != null &&
-          (row == null || row['esde_media_subdir'] != mediaSubdir)) {
-        toWrite['esde_media_subdir'] = mediaSubdir;
-      }
-
-      if (toWrite.isEmpty) return false;
-      toWrite['updated_at'] = DateTime.now().toIso8601String();
+      final toWrite = buildEsdeMetadataWrite(
+        appSystemId: appSystemId,
+        filename: filename,
+        row: row,
+        esde: esde,
+        mediaSubdir: mediaSubdir,
+      );
+      if (toWrite == null) return false;
 
       if (row == null) {
-        toWrite['app_system_id'] = appSystemId;
-        toWrite['filename'] = filename;
-        toWrite['is_fully_scraped'] = 0;
-        // Provenance marker so reset() can remove ES-DE-created rows without
-        // touching NeoStation's own partially-scraped rows. Only set on insert
-        // (rows the import creates from scratch); gap-fills into pre-existing
-        // NeoStation rows are left unmarked so reset() won't delete them.
-        toWrite['esde_imported'] = 1;
         await db.insert(
           'user_screenscraper_metadata',
           toWrite,
@@ -646,6 +626,56 @@ class ScraperRepository {
       _log.e('Error merging ES-DE metadata: $e');
       return false;
     }
+  }
+
+  /// Computes the fill-gaps write for [esde] against [row] — the game's current
+  /// `user_screenscraper_metadata` row, or null when it has none.
+  ///
+  /// Returns null when nothing needs writing. When [row] is null the returned
+  /// map is a complete insert (keys, `is_fully_scraped`, provenance marker);
+  /// otherwise it holds only the columns to update.
+  ///
+  /// Pure — no database access — so a bulk importer that already has the rows
+  /// in hand can reuse the precedence rules and batch the writes itself.
+  static Map<String, dynamic>? buildEsdeMetadataWrite({
+    required String appSystemId,
+    required String filename,
+    required Map<String, Object?>? row,
+    required Map<String, dynamic> esde,
+    String? mediaSubdir,
+  }) {
+    final toWrite = <String, dynamic>{};
+    esde.forEach((col, val) {
+      if (val == null) return;
+      if (val is String && val.trim().isEmpty) return;
+      final cur = row?[col];
+      final curEmpty = cur == null || (cur is String && cur.trim().isEmpty);
+      if (curEmpty) toWrite[col] = val;
+    });
+
+    // Media subfolder is ES-DE bookkeeping (mirrors the ROM's subfolder inside
+    // downloaded_media), not user-visible metadata — always keep it current so
+    // read-time fallback can resolve nested artwork, even when nothing else
+    // needs filling.
+    if (mediaSubdir != null &&
+        (row == null || row['esde_media_subdir'] != mediaSubdir)) {
+      toWrite['esde_media_subdir'] = mediaSubdir;
+    }
+
+    if (toWrite.isEmpty) return null;
+    toWrite['updated_at'] = DateTime.now().toIso8601String();
+
+    if (row == null) {
+      toWrite['app_system_id'] = appSystemId;
+      toWrite['filename'] = filename;
+      toWrite['is_fully_scraped'] = 0;
+      // Provenance marker so reset() can remove ES-DE-created rows without
+      // touching NeoStation's own partially-scraped rows. Only set on insert
+      // (rows the import creates from scratch); gap-fills into pre-existing
+      // NeoStation rows are left unmarked so reset() won't delete them.
+      toWrite['esde_imported'] = 1;
+    }
+    return toWrite;
   }
 
   /// Resolves an ES-DE system folder name (e.g. `psx`, `megadrive`) to a
