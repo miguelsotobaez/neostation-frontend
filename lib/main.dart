@@ -24,6 +24,7 @@ import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:fvp/fvp.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
@@ -188,6 +190,12 @@ void main() async {
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
+
+  // Resolve the user-data location before anything reads it, so the cold-boot
+  // wait happens once (behind the loading screen) rather than once per caller.
+  if (Platform.isAndroid) {
+    await _awaitUserDataStorage();
+  }
 
   // Inicializar window_manager para desktop con tamano minimo 640x480
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
@@ -373,86 +381,241 @@ void main() async {
   });
 }
 
-/// Lightweight root displayed while the app waits for its persisted data.
-/// It reads the device locale directly because the saved app language is in
-/// the database that may still be on a mounting SD card.
-class StartupLoadingApp extends StatelessWidget {
-  const StartupLoadingApp({super.key});
+/// Startup strings for the current device locale.
+///
+/// The startup screens run before [FlutterLocalization] is initialized (the
+/// saved app language lives in the database, which may still be on a mounting
+/// SD card), so they read the raw locale maps directly. Unsupported device
+/// locales fall back to English — the same default the app itself uses — and
+/// missing keys degrade to an empty string rather than crashing the very
+/// first frame.
+Map<String, dynamic> _startupStrings() {
+  final locale = WidgetsBinding.instance.platformDispatcher.locale;
+  final languageTag = locale.toLanguageTag().replaceAll('-', '_');
+  const translations = <String, Map<String, dynamic>>{
+    'en': appLocaleEn,
+    'es': appLocaleEs,
+    'pt': appLocalePt,
+    'ru': appLocaleRu,
+    'zh': appLocaleZh,
+    'zh_Hant': appLocaleZhHant,
+    'fr': appLocaleFr,
+    'de': appLocaleDe,
+    'it': appLocaleIt,
+    'id': appLocaleId,
+    'ja': appLocaleJa,
+    'ko': appLocaleKo,
+  };
+  return translations[languageTag] ??
+      translations[locale.languageCode] ??
+      appLocaleEn;
+}
+
+String _startupString(String key) {
+  final value = _startupStrings()[key];
+  return value is String ? value : '';
+}
+
+/// Shared chrome for the pre-initialization screens: logo, wordmark and a
+/// caller-supplied status area.
+class _StartupScaffold extends StatelessWidget {
+  const _StartupScaffold({required this.children, this.onKeyEvent});
+
+  final List<Widget> children;
+
+  /// Raw key handler used by the error screen. The gamepad navigation manager
+  /// is not running this early, so gamepad buttons are read straight from the
+  /// key events instead.
+  final KeyEventResult Function(KeyEvent)? onKeyEvent;
 
   @override
   Widget build(BuildContext context) {
-    final locale = WidgetsBinding.instance.platformDispatcher.locale;
-    final languageTag = locale.toLanguageTag().replaceAll('-', '_');
-    final translations = <String, Map<String, dynamic>>{
-      'en': appLocaleEn,
-      'es': appLocaleEs,
-      'pt': appLocalePt,
-      'ru': appLocaleRu,
-      'zh': appLocaleZh,
-      'zh_Hant': appLocaleZhHant,
-      'fr': appLocaleFr,
-      'de': appLocaleDe,
-      'it': appLocaleIt,
-      'id': appLocaleId,
-      'ja': appLocaleJa,
-      'ko': appLocaleKo,
-    };
-    final strings =
-        translations[languageTag] ?? translations[locale.languageCode]!;
-    final message = strings[AppLocale.startupLoading] as String;
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: const Color(0xFF090B10),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'assets/images/logo_transparent.png',
-                  width: 112,
-                  height: 112,
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'NeoStation',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
+        body: Focus(
+          autofocus: onKeyEvent != null,
+          onKeyEvent: onKeyEvent == null
+              ? null
+              : (_, event) => onKeyEvent!(event),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/logo_transparent.png',
+                    width: 112,
+                    height: 112,
                   ),
-                ),
-                const SizedBox(height: 24),
-                const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: Color(0xFF70C8FF),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFFC4CBD6),
-                      fontSize: 16,
+                  const SizedBox(height: 24),
+                  const Text(
+                    'NeoStation',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  ...children,
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Lightweight root displayed while the app waits for its persisted data.
+class StartupLoadingApp extends StatelessWidget {
+  const StartupLoadingApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StartupScaffold(
+      children: [
+        const SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            color: Color(0xFF70C8FF),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Text(
+            _startupString(AppLocale.startupLoading),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFFC4CBD6), fontSize: 16),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown when the configured user-data volume never appeared. Without this the
+/// failure was swallowed by the catch-alls in `main()` and the app booted onto
+/// an empty database, looking freshly installed.
+class StartupStorageErrorApp extends StatelessWidget {
+  const StartupStorageErrorApp({
+    super.key,
+    required this.storagePath,
+    required this.onRetry,
+    required this.onUseDefault,
+  });
+
+  final String? storagePath;
+  final VoidCallback onRetry;
+  final VoidCallback onUseDefault;
+
+  KeyEventResult _handleKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.gameButtonA ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      onRetry();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.gameButtonB ||
+        key == LogicalKeyboardKey.escape) {
+      onUseDefault();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _StartupScaffold(
+      onKeyEvent: _handleKey,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _startupString(AppLocale.startupStorageUnavailable),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFC4CBD6), fontSize: 16),
+              ),
+              if (storagePath != null && storagePath!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  storagePath!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF8A93A3),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    onPressed: onRetry,
+                    child: Text(_startupString(AppLocale.startupStorageRetry)),
+                  ),
+                  const SizedBox(width: 16),
+                  TextButton(
+                    onPressed: onUseDefault,
+                    child: Text(
+                      _startupString(AppLocale.startupStorageUseDefault),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Resolves the user-data location once, up front, while the loading screen is
+/// on screen.
+///
+/// [ConfigService.getUserDataPath] has a dozen call sites; before this, each
+/// one could serially block for the full cold-boot timeout. Doing it here means
+/// the wait happens exactly once and its failure is visible to the user
+/// instead of being degraded into an empty library by downstream catch-alls.
+Future<void> _awaitUserDataStorage() async {
+  while (!await ConfigService.ensureUserDataStorageReady()) {
+    final decision = Completer<void>();
+    var useDefault = false;
+    runApp(
+      StartupStorageErrorApp(
+        storagePath: ConfigService.unavailableStoragePath,
+        onRetry: () {
+          ConfigService.resetStorageAvailability();
+          if (!decision.isCompleted) decision.complete();
+        },
+        onUseDefault: () {
+          useDefault = true;
+          if (!decision.isCompleted) decision.complete();
+        },
+      ),
+    );
+    await decision.future;
+    runApp(const StartupLoadingApp());
+    if (useDefault) {
+      ConfigService.continueWithDefaultUserDataPath();
+      return;
+    }
   }
 }
 

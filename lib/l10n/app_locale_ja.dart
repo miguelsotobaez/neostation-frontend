@@ -18,6 +18,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.download: 'ダウンロード',
   AppLocale.stop: '停止',
   AppLocale.reset: 'リセット',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation はデータの保存先フォルダーにアクセスできませんでした。SD カードまたはドライブが接続されているか確認してください。',
+  AppLocale.startupStorageRetry: '再試行',
+  AppLocale.startupStorageUseDefault: 'このまま続行',
   AppLocale.startupLoading: 'NeoStation を準備中です。ストレージとサービスを待機しています…',
 
   AppLocale.play: 'プレイ',

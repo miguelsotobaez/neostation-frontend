@@ -18,6 +18,10 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.download: 'Download',
   AppLocale.stop: 'Stop',
   AppLocale.reset: 'Reset',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation could not reach the folder where your data is stored. Check that the SD card or drive is connected.',
+  AppLocale.startupStorageRetry: 'Retry',
+  AppLocale.startupStorageUseDefault: 'Continue without it',
   AppLocale.startupLoading:
       'Preparing NeoStation. Waiting for storage and services...',
 

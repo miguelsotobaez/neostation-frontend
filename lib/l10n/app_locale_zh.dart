@@ -18,6 +18,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.download: '下载',
   AppLocale.stop: '停止',
   AppLocale.reset: '重置',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation 无法访问保存数据的文件夹。请确认 SD 卡或存储设备已连接。',
+  AppLocale.startupStorageRetry: '重试',
+  AppLocale.startupStorageUseDefault: '继续（不使用）',
   AppLocale.startupLoading: '正在准备 NeoStation，等待存储和服务就绪…',
 
   AppLocale.play: '开始游戏',

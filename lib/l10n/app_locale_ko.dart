@@ -18,6 +18,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.download: '다운로드',
   AppLocale.stop: '중지',
   AppLocale.reset: '재설정',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation이 데이터가 저장된 폴더에 접근하지 못했습니다. SD 카드나 드라이브가 연결되어 있는지 확인하세요.',
+  AppLocale.startupStorageRetry: '다시 시도',
+  AppLocale.startupStorageUseDefault: '이대로 계속',
   AppLocale.startupLoading: 'NeoStation을 준비 중입니다. 저장소와 서비스를 기다리고 있습니다…',
 
   AppLocale.play: '플레이',

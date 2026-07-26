@@ -18,6 +18,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.download: '下載',
   AppLocale.stop: '停止',
   AppLocale.reset: '重置',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation 無法存取儲存資料的資料夾。請確認 SD 卡或儲存裝置已連接。',
+  AppLocale.startupStorageRetry: '重試',
+  AppLocale.startupStorageUseDefault: '繼續（不使用）',
   AppLocale.startupLoading: '正在準備 NeoStation，等待儲存空間與服務就緒…',
 
   AppLocale.play: '開始遊戲',
