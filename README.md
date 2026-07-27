@@ -71,6 +71,24 @@ flatpak-builder --user --install-deps-from=flathub \
   build-dir linux/flatpak/com.neogamelab.neostation.yml
 ```
 
+### Steam Deck
+
+Download the x86_64 AppImage, then **add it to Steam and launch it from there** —
+either from Game Mode, or from the desktop with Steam running:
+
+1. Steam → *Games → Add a Non-Steam Game to My Library* → *Browse*
+2. Set the file filter to *All Files* (the picker hides `.AppImage` by default)
+3. Select the AppImage, then launch NeoStation from your library
+
+This matters for the controls. With Steam not running, the Deck's controller sits
+in **lizard mode**, where the hardware emulates a keyboard and mouse instead of a
+gamepad: the D-pad sends arrow keys, A/B send Enter/Escape, the trackpad moves the
+mouse pointer, and **the bumpers send nothing at all**. Running through Steam hands
+the app a proper virtual gamepad, and every button works.
+
+So if the shoulder buttons seem dead, or A/B behave oddly, or a mouse cursor sits on
+screen, the app isn't at fault — it's being run outside Steam.
+
 ### Build from source
 
 ```bash
