@@ -13,7 +13,9 @@ import '../now_playing_helpers.dart';
 ///
 /// Pure, input-driven subtree — the owning [SecondaryScreen] passes the current
 /// state snapshot plus the three slot callbacks, so the dock re-reads no
-/// provider state of its own.
+/// provider state of its own. Mounting is the owner's call: it keeps the dock
+/// alive through its slide-out after `dockEnabled` flips false, so this widget
+/// deliberately does not blank itself on that flag.
 class AppDock extends StatelessWidget {
   const AppDock({
     super.key,
@@ -42,7 +44,6 @@ class AppDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!value.dockEnabled) return const SizedBox.shrink();
     final apps = ConfigModel.normalizeDock(value.dockApps);
     final scheme = panelScheme(value);
     // Screen Return off → guard filled slots (see [onOpenAccessibilitySettings]).

@@ -47,6 +47,23 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// still slides in shortly after the screen appears. See [_buildDockOverlay].
   Timer? _dockRevealFallback;
 
+  /// How long the dock takes to slide in — and, in reverse, back out. Shared by
+  /// the reveal tween and [_dockSlideOutTimer] so the unmount can't fire before
+  /// the animation has finished.
+  static const Duration _dockRevealDuration = Duration(milliseconds: 550);
+
+  /// The last `dockEnabled` this engine observed, so [_onStateChanged] can spot
+  /// the user toggling the dock off. Null until the first state push.
+  bool? _dockEnabledSeen;
+
+  /// Keeps the dock overlay mounted while it slides out after being disabled.
+  /// The setting flips instantly, so without this the subtree would be dropped
+  /// mid-frame and the dock would blink out instead of leaving the way it came.
+  bool _dockSlidingOut = false;
+
+  /// Unmounts the dock overlay once [_dockSlidingOut] has run its course.
+  Timer? _dockSlideOutTimer;
+
   /// A BuildContext captured from *under* this screen's MaterialApp (and its
   /// Localizations). The _buildXxx helpers below run as methods on this State,
   /// so a bare `context` resolves to `this.context` — which sits ABOVE the
@@ -216,6 +233,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _maybeResetInGamePage(state);
     _applySessionPower(state);
     _maybeStartCelebration(state);
+    _syncDockMount(state);
 
     if (state.isGameLaunching) {
       _stopVideo();
@@ -246,6 +264,30 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         _videoController!.setVolume(state.isVideoMuted ? 0.0 : 1.0);
       }
     }
+  }
+
+  /// Keeps the dock overlay mounted long enough to animate out when the user
+  /// turns the dock off in settings. Enabling is symmetrical and needs no
+  /// bookkeeping: the overlay mounts on the next build and the reveal tween
+  /// eases it up from its parked position, exactly as it does at boot.
+  void _syncDockMount(SecondaryDisplayStateData state) {
+    final was = _dockEnabledSeen;
+    _dockEnabledSeen = state.dockEnabled;
+    if (was == null || was == state.dockEnabled) return;
+
+    _dockSlideOutTimer?.cancel();
+    _dockSlideOutTimer = null;
+    if (state.dockEnabled) {
+      // Re-enabled, possibly mid-slide-out — the tween picks up from wherever
+      // the dock currently sits and carries it back into place.
+      if (_dockSlidingOut) setState(() => _dockSlidingOut = false);
+      return;
+    }
+    setState(() => _dockSlidingOut = true);
+    _dockSlideOutTimer = Timer(_dockRevealDuration, () {
+      if (!mounted) return;
+      setState(() => _dockSlidingOut = false);
+    });
   }
 
   /// Triggers (or refreshes) the celebration banner when a new set of
@@ -555,6 +597,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _playTimeTicker?.cancel();
     _dimTimer?.cancel();
     _dockRevealFallback?.cancel();
+    _dockSlideOutTimer?.cancel();
     _stopVideo();
     super.dispose();
   }
@@ -901,7 +944,11 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                             // stays visible while browsing systems and on the
                             // Now Playing page — hidden on the achievement pages
                             // and dimmed together with the panel's idle scrim.
-                            if (value.dockEnabled) _buildDockOverlay(value),
+                            // Stays mounted for one animation after being
+                            // disabled so it can slide back out (see
+                            // [_syncDockMount]).
+                            if (value.dockEnabled || _dockSlidingOut)
+                              _buildDockOverlay(value),
 
                             // Scraping Overlay
                             _buildScrapingOverlay(value),
@@ -1104,9 +1151,16 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           // reports its first frame via `appReady`, then eases into place. This
           // syncs the dock's arrival with the app becoming usable instead of
           // firing on the secondary display's own (earlier) first paint.
+          //
+          // Turning the dock off in settings drives the same tween back to t=1,
+          // so it leaves the way it arrived; [_syncDockMount] holds the subtree
+          // mounted until it lands.
           child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 1.0, end: _dockRevealed ? 0.0 : 1.0),
-            duration: const Duration(milliseconds: 550),
+            tween: Tween(
+              begin: 1.0,
+              end: _dockRevealed && value.dockEnabled ? 0.0 : 1.0,
+            ),
+            duration: _dockRevealDuration,
             curve: Curves.easeOutCubic,
             builder: (context, t, child) =>
                 Transform.translate(offset: Offset(0, t * 140.r), child: child),
