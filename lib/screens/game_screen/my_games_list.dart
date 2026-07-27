@@ -130,6 +130,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     milliseconds: 1500,
   ); // Debounce for video playback.
   bool _lastShowInfo = false; // Memoizes 'showGameInfo' config state.
+  String? _lastGameViewMode; // Memoizes 'gameViewMode' config state.
   bool _isGameLaunching =
       false; // Critical flag to suppress media tasks during transitions.
 
@@ -248,13 +249,23 @@ class _SystemGamesListState extends State<SystemGamesList> {
     final newShowInfo = configProvider.config.showGameInfo;
     final gameViewMode = configProvider.config.gameViewMode;
 
-    try {
-      if (gameViewMode == 'grid' || gameViewMode == 'carousel') {
-        _gamepadNav.deactivate();
-      } else {
-        _gamepadNav.activate();
-      }
-    } catch (_) {}
+    // Hand input to whichever layer owns the new view mode — but ONLY on an
+    // actual mode change. Re-asserting this on every config write is not free:
+    // deactivate() resets the shared Select chord-modifier state, so any
+    // setting written while Select is held (the legend toggle persists
+    // `legend_hidden`, for one) would drop the legend back to its default layer
+    // mid-hold, and `SelectTap.reset()` means it can't recover until Select is
+    // released and pressed again.
+    if (gameViewMode != _lastGameViewMode) {
+      _lastGameViewMode = gameViewMode;
+      try {
+        if (gameViewMode == 'grid' || gameViewMode == 'carousel') {
+          _gamepadNav.deactivate();
+        } else {
+          _gamepadNav.activate();
+        }
+      } catch (_) {}
+    }
 
     if (newShowInfo != _lastShowInfo) {
       _lastShowInfo = newShowInfo;
