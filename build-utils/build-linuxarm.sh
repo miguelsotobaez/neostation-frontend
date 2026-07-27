@@ -224,13 +224,63 @@ for audiolib in libFLAC.so.* libFLAC++.so.* libogg.so.* libvorbis.so.* libvorbis
   copy_lib_to_appdir "$audiolib" || true
 done
 
+# ...and put them where the loader will actually look. usr/lib is NOT on any
+# runtime search path: AppRun deliberately leaves LD_LIBRARY_PATH unset (see the
+# note there — setting it shadows system GL/EGL and breaks video), so the only
+# bundled directory that resolves is usr/bin/lib, via the executable's
+# RUNPATH of $ORIGIN/lib. libflutter_soloud_plugin.so is dlopen'd from there and
+# needs its FLAC/Xiph deps alongside it, or audio silently fails on any host that
+# doesn't happen to ship the same FLAC SONAME as the build machine.
+mkdir -p "$APPDIR/usr/bin/lib"
+for audiolib in libFLAC.so.* libFLAC++.so.* libogg.so.* libvorbis.so.* libvorbisenc.so.* libvorbisfile.so.* libopus.so.*; do
+  for lib_path in "$APPDIR"/usr/lib/$audiolib; do
+    [ -f "$lib_path" ] && cp -L "$lib_path" "$APPDIR/usr/bin/lib/" 2>/dev/null || true
+  done
+done
+
 # Verify critical audio libraries were bundled. Fedora/Asahi places them under /usr/lib64,
 # while Debian/Ubuntu uses /usr/lib/aarch64-linux-gnu. If the build machine lacks the
 # -devel/-dev package, CMake may link against a versioned SONAME that we then fail to ship.
-if [ ! -f "$APPDIR/usr/lib/libFLAC.so.12" ] && [ ! -f "$APPDIR/usr/lib/libFLAC.so.14" ]; then
+# Checked in usr/bin/lib, since a copy anywhere else cannot be loaded, and matched by
+# glob rather than by SONAME so the next FLAC bump doesn't silently slip through.
+if ! ls "$APPDIR"/usr/bin/lib/libFLAC.so.* >/dev/null 2>&1; then
   echo "ERROR: libFLAC was not bundled. Ensure libflac/libflac-dev is installed and found in one of:"
   printf '  %s\n' "${LIB_SEARCH_PATHS[@]}"
   exit 1
+fi
+
+# Copying the libraries next to the plugin is necessary but NOT sufficient: the
+# plugin is dlopen'd, and its own DT_NEEDED entries are resolved using ITS RUNPATH,
+# not the executable's. CMake bakes in a RUNPATH pointing at the build machine
+# (linux/flutter/ephemeral/.plugin_symlinks/...), which exists on no user's system,
+# so resolution falls through to the system paths and finds libFLAC only on hosts
+# that happen to ship the same SONAME. Point it at its own directory instead.
+SOLOUD_PLUGIN="$APPDIR/usr/bin/lib/libflutter_soloud_plugin.so"
+if [ -f "$SOLOUD_PLUGIN" ]; then
+  if ! command -v patchelf >/dev/null 2>&1; then
+    echo "ERROR: patchelf is required to fix the SoLoud plugin's RUNPATH (see the dependency list at the top of this script)."
+    exit 1
+  fi
+  patchelf --set-rpath '$ORIGIN' "$SOLOUD_PLUGIN"
+  echo "Set RUNPATH=\$ORIGIN on libflutter_soloud_plugin.so"
+fi
+
+# Belt and braces: the plugin is dlopen'd, so a dependency it cannot find surfaces
+# only as a silent "no audio" on the user's machine. Assert every Xiph/FLAC library
+# it declares is actually sitting next to it. This reads DT_NEEDED rather than using
+# ldd on purpose — ldd resolves against the BUILD HOST's /usr/lib and would pass
+# happily while shipping an AppImage that loads nowhere else.
+if command -v objdump >/dev/null 2>&1 && [ -f "$SOLOUD_PLUGIN" ]; then
+  MISSING_AUDIO_DEPS=""
+  for dep in $(objdump -p "$SOLOUD_PLUGIN" 2>/dev/null | awk '/NEEDED/{print $2}' | grep -E '^lib(FLAC|ogg|vorbis|opus)'); do
+    [ -f "$APPDIR/usr/bin/lib/$dep" ] || MISSING_AUDIO_DEPS="$MISSING_AUDIO_DEPS $dep"
+  done
+  if [ -n "$MISSING_AUDIO_DEPS" ]; then
+    echo "ERROR: libflutter_soloud_plugin.so needs these libraries, which are not in usr/bin/lib:$MISSING_AUDIO_DEPS"
+    echo "       Only usr/bin/lib is on the runtime search path (RUNPATH \$ORIGIN/lib);"
+    echo "       a copy in usr/lib cannot be loaded."
+    exit 1
+  fi
 fi
 
 # Analyze and copy additional binary dependencies
