@@ -14,8 +14,8 @@ import 'neo_sync_status_icon.dart';
 
 /// Vertical action button column shared by the game list, grid, and carousel.
 ///
-/// Normally renders back, favorite, view-mode, an optional NeoSync status icon,
-/// and the game-settings shortcut. While Select (View) is held it swaps to the
+/// Normally renders back, view-mode, favorite, the game-settings shortcut and
+/// an optional NeoSync status icon. While Select (View) is held it swaps to the
 /// chord shortcuts it unlocks — A scrapes and Y picks a random game.
 class GameActionButtons extends StatelessWidget {
   final SystemModel system;
@@ -134,21 +134,21 @@ class GameActionButtons extends StatelessWidget {
       ),
       SizedBox(height: 6.r),
       GameActionButton(
-        iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
-        symbol: Symbols.favorite_rounded,
-        color: scheme.tertiaryFixed,
-        foregroundColor: scheme.onTertiaryFixed,
-        sound: GameActionButtonSound.nav,
-        onTap: selectedGame != null ? onFavorite : null,
-      ),
-      SizedBox(height: 6.r),
-      GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_X_button.png',
         symbol: Symbols.grid_view_rounded,
         color: scheme.tertiaryFixed,
         foregroundColor: scheme.onTertiaryFixed,
         sound: GameActionButtonSound.nav,
         onTap: onViewMode,
+      ),
+      SizedBox(height: 6.r),
+      GameActionButton(
+        iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
+        symbol: Symbols.favorite_rounded,
+        color: scheme.tertiaryFixed,
+        foregroundColor: scheme.onTertiaryFixed,
+        sound: GameActionButtonSound.nav,
+        onTap: selectedGame != null ? onFavorite : null,
       ),
       SizedBox(height: 6.r),
       // Game settings — second-to-last option.

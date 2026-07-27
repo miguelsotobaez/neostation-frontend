@@ -1172,13 +1172,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
         ),
 
         // Floating action buttons on the left side of the game list. Select + B
-        // slides this legend off the left edge (in sync with the sidebar margin).
+        // slides this legend off the left edge (in sync with the sidebar
+        // margin). The column is 40.r wide, so a 10.r inset centres it in the
+        // 60.r gutter — equal air either side of it.
         if (!isMusic)
           AnimatedPositioned(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
             top: 12.r,
-            left: GameLegendVisibility.hidden.value ? -60.r : 12.r,
+            left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 250),
               opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,

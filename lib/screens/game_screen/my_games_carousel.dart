@@ -1112,7 +1112,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
           top: 12.r,
-          left: GameLegendVisibility.hidden.value ? -60.r : 12.r,
+          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 250),
             opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
