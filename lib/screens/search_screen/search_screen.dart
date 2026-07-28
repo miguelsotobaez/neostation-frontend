@@ -459,9 +459,9 @@ class _SearchScreenState extends State<SearchScreen> {
       case _FocusRegion.filters:
         setState(() => _region = _FocusRegion.search);
       case _FocusRegion.search:
-        // Top of the search tab: fall back to the Systems tab rather than
-        // popping — as a tab there is no route of our own to dismiss.
-        AppNavigation.goToTab(AppTabs.systems);
+        // Top of the search tab: stay put. Like every other tab, B does not
+        // leave the tab — only the bumpers/tab strip change tabs.
+        break;
     }
   }
 
