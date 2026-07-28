@@ -147,7 +147,18 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       onSelectItem: () {
         if (_isSelectingFolder || _isSelectingUserDataFolder) return;
 
-        if (_isImportingEsde) return;
+        if (_isImportingEsde || _isDownloadingArt) return;
+        // Mirror the on-screen button's disabled state on the final step: while
+        // the theme manifest is still in flight we can't tell whether a pack is
+        // available, and letting A through would finish setup with no art.
+        if (_isLastStep) {
+          final neoAssets = context.read<NeoAssetsProvider>();
+          if (neoAssets.loading &&
+              !neoAssets.hasActiveTheme &&
+              neoAssets.themes.isEmpty) {
+            return;
+          }
+        }
         if (_currentStep == _stepScanning) {
           // A advances to the ES-DE step once the scan is done.
           final provider = Provider.of<SqliteConfigProvider>(
@@ -155,10 +166,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
             listen: false,
           );
           if (provider.scanCompleted) _handleMainAction();
-        } else if (_isLastStep) {
-          // Final (art-pack) step: A finishes setup.
-          _finishSetup();
         } else {
+          // Every step — including the final art-pack one — goes through the
+          // same primary action as the on-screen button. Shortcutting the last
+          // step to _finishSetup() here meant an A press completed setup
+          // without ever downloading/applying the art pack.
           _handleMainAction();
         }
       },
