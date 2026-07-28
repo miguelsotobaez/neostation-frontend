@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -1040,6 +1041,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// The value picker overlay opened from a filter chip.
+  ///
+  /// Sized against the real viewport rather than a fixed `.r` height: 360.r is
+  /// most of a 1080p handheld's screen, which pushed a long list (platforms,
+  /// years) to full height and slid its title under the global tab strip. The
+  /// overlay covers the whole tab area — which starts behind the header — so it
+  /// carries the same 64.r header clearance the tab content does.
   Widget _buildFilterMenu(ThemeData theme, String key) {
     final scheme = theme.colorScheme;
     final labels = _menuLabels(key);
@@ -1050,55 +1057,69 @@ class _SearchScreenState extends State<SearchScreen> {
         onTap: _cancelFilterMenu,
         child: ColoredBox(
           color: Colors.black.withValues(alpha: 0.6),
-          child: Center(
-            child: GestureDetector(
-              onTap: () {},
-              child: Container(
-                width: 320.r,
-                constraints: BoxConstraints(maxHeight: 360.r),
-                padding: EdgeInsets.all(12.r),
-                decoration: BoxDecoration(
-                  color: scheme.surface,
-                  borderRadius: BorderRadius.circular(16.r),
-                  border: Border.all(
-                    color: scheme.primary.withValues(alpha: 0.4),
-                    width: 1.r,
+          child: LayoutBuilder(
+            builder: (context, viewport) {
+              final topInset = 64.r + 12.r;
+              final available = viewport.maxHeight - topInset - 12.r;
+              return Padding(
+                padding: EdgeInsets.only(top: topInset, bottom: 12.r),
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: Container(
+                      width: 320.r,
+                      constraints: BoxConstraints(
+                        maxHeight: math.max(
+                          0,
+                          math.min(available, viewport.maxHeight * 0.6),
+                        ),
+                      ),
+                      padding: EdgeInsets.all(12.r),
+                      decoration: BoxDecoration(
+                        color: scheme.surface,
+                        borderRadius: BorderRadius.circular(16.r),
+                        border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.4),
+                          width: 1.r,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
+                            child: Text(
+                              _filterLabel(key),
+                              style: TextStyle(
+                                fontSize: 15.r,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          Flexible(
+                            child: ListView.builder(
+                              controller: _menuScroll,
+                              shrinkWrap: true,
+                              itemExtent: _menuExtent.r,
+                              itemCount: labels.length,
+                              itemBuilder: (context, i) => _buildMenuOption(
+                                theme,
+                                key,
+                                labels[i],
+                                i,
+                                selected,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
-                      child: Text(
-                        _filterLabel(key),
-                        style: TextStyle(
-                          fontSize: 15.r,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    Flexible(
-                      child: ListView.builder(
-                        controller: _menuScroll,
-                        shrinkWrap: true,
-                        itemExtent: _menuExtent.r,
-                        itemCount: labels.length,
-                        itemBuilder: (context, i) => _buildMenuOption(
-                          theme,
-                          key,
-                          labels[i],
-                          i,
-                          selected,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
