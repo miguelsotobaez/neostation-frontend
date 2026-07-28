@@ -20,6 +20,7 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_launch_utils.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/screens/game_screen/my_games_list.dart';
+import 'package:neostation/screens/app_screen.dart';
 
 /// Library-wide ROM search & filter overlay.
 ///
@@ -29,13 +30,6 @@ import 'package:neostation/screens/game_screen/my_games_list.dart';
 /// result launches it through the standard [launchGameWithDialog] flow.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
-
-  /// Pushes the search screen onto [context]'s navigator.
-  static Future<void> open(BuildContext context) {
-    return Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SearchScreen()));
-  }
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -120,6 +114,12 @@ class _SearchScreenState extends State<SearchScreen> {
       onNavigateRight: _navigateRight,
       onSelectItem: _handleSelect,
       onBack: _handleBack,
+      // Search runs as a tab and owns the input layer while it is on screen,
+      // so it has to keep the bumper/tab cycling working itself.
+      onPreviousTab: AppNavigation.previousTab,
+      onNextTab: AppNavigation.nextTab,
+      onLeftBumper: AppNavigation.previousTab,
+      onRightBumper: AppNavigation.nextTab,
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -384,7 +384,9 @@ class _SearchScreenState extends State<SearchScreen> {
       case _FocusRegion.filters:
         setState(() => _region = _FocusRegion.search);
       case _FocusRegion.search:
-        Navigator.of(context).maybePop();
+        // Top of the search tab: fall back to the Systems tab rather than
+        // popping — as a tab there is no route of our own to dismiss.
+        AppNavigation.goToTab(AppTabs.systems);
     }
   }
 
@@ -570,8 +572,11 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// Closes search and opens the result's system game list with that game
-  /// pre-selected, so the user lands on it in the normal browsing view.
+  /// Opens the result's system game list with that game pre-selected, so the
+  /// user lands on it in the normal browsing view.
+  ///
+  /// Search is a tab rather than an overlay, so this pushes on top of the tab
+  /// and backing out of the game list returns here with the query intact.
   Future<void> _goToGame(DatabaseGameModel dbGame) async {
     final folder = dbGame.systemFolderName;
     if (folder == null || folder.isEmpty) return;
@@ -581,9 +586,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (!mounted) return;
 
     final game = GameModel.fromDatabaseModel(dbGame);
-    final navigator = Navigator.of(context);
-    navigator.pop(); // close the search overlay
-    navigator.push(
+    Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SystemGamesList(
           system: system,
@@ -599,42 +602,35 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        backgroundColor: theme.colorScheme.surface,
-        title: Text(AppLocale.searchTitle.getString(context)),
-        leading: IconButton(
-          icon: const Icon(Symbols.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                Padding(
-                  padding: EdgeInsets.all(12.r),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildSearchRow(theme),
-                      if (_filtersExpanded) ...[
-                        SizedBox(height: 8.r),
-                        _buildFilterChips(theme),
-                      ],
-                      SizedBox(height: 10.r),
-                      Expanded(child: _buildResults(theme)),
+    // Tab content sits under the global header, so it carries no Scaffold or
+    // AppBar of its own — the leading SizedBox clears the header the same way
+    // the other tabs do (32.r tab strip + margin).
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12.r),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(height: 64.r),
+                    _buildSearchRow(theme),
+                    if (_filtersExpanded) ...[
+                      SizedBox(height: 8.r),
+                      _buildFilterChips(theme),
                     ],
-                  ),
+                    SizedBox(height: 10.r),
+                    Expanded(child: _buildResults(theme)),
+                  ],
                 ),
-                if (_region == _FocusRegion.filterMenu && _menuKey != null)
-                  _buildFilterMenu(theme, _menuKey!),
-                if (_region == _FocusRegion.action && _actionTarget != null)
-                  _buildActionChooser(theme, _actionTarget!),
-              ],
-            ),
-    );
+              ),
+              if (_region == _FocusRegion.filterMenu && _menuKey != null)
+                _buildFilterMenu(theme, _menuKey!),
+              if (_region == _FocusRegion.action && _actionTarget != null)
+                _buildActionChooser(theme, _actionTarget!),
+            ],
+          );
   }
 
   /// Modal overlay offering Go-to-game / Play for a selected result.

@@ -41,9 +41,7 @@ extension _GamepadGridNav on _SystemCardGridViewState {
       onXButton: () {
         HeaderSortDropdown.globalKey.currentState?.showDropdown();
       },
-      onSelectButton: () {
-        if (mounted) SearchScreen.open(context);
-      },
+      onSelectButton: () => AppNavigation.goToTab(AppTabs.search),
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,

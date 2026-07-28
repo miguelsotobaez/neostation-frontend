@@ -12,7 +12,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
-import 'package:neostation/screens/search_screen/search_screen.dart';
+import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -46,7 +46,10 @@ class HeaderState extends State<Header> {
   @override
   void initState() {
     super.initState();
-    _tabFocusNodes = List.generate(5, (_) => FocusNode(skipTraversal: true));
+    _tabFocusNodes = List.generate(
+      AppTabs.count,
+      (_) => FocusNode(skipTraversal: true),
+    );
     _getBatteryLevel();
     _listenToBatteryState();
     _updateTime();
@@ -186,15 +189,12 @@ class HeaderState extends State<Header> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              if (widget.selectedTabIndex == 0)
+              if (widget.selectedTabIndex == AppTabs.systems)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      HeaderSortDropdown(),
-                      _buildSearchButton(context),
-                    ],
+                    children: [HeaderSortDropdown()],
                   ),
                 ),
 
@@ -263,7 +263,7 @@ class HeaderState extends State<Header> {
                                 height: 32.r,
                                 child: _buildTabButton(
                                   context,
-                                  0,
+                                  AppTabs.systems,
                                   "assets/images/icons/grids.webp",
                                   AppLocale.systems.getString(context),
                                 ),
@@ -273,7 +273,18 @@ class HeaderState extends State<Header> {
                                 height: 32.r,
                                 child: _buildTabButton(
                                   context,
-                                  1,
+                                  AppTabs.search,
+                                  null,
+                                  AppLocale.searchTitle.getString(context),
+                                  iconData: Symbols.search_rounded,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 32.r,
+                                height: 32.r,
+                                child: _buildTabButton(
+                                  context,
+                                  AppTabs.sync,
                                   "assets/images/icons/cloud-add.webp",
                                   'Sync',
                                 ),
@@ -283,7 +294,7 @@ class HeaderState extends State<Header> {
                                 height: 32.r,
                                 child: _buildTabButton(
                                   context,
-                                  2,
+                                  AppTabs.achievements,
                                   "assets/images/icons/enhance-prize.webp",
                                   AppLocale.achievements.getString(context),
                                 ),
@@ -293,7 +304,7 @@ class HeaderState extends State<Header> {
                                 height: 32.r,
                                 child: _buildTabButton(
                                   context,
-                                  3,
+                                  AppTabs.scraper,
                                   "assets/images/icons/box-search.webp",
                                   AppLocale.scraping.getString(context),
                                 ),
@@ -303,7 +314,7 @@ class HeaderState extends State<Header> {
                                 height: 32.r,
                                 child: _buildTabButton(
                                   context,
-                                  4,
+                                  AppTabs.settings,
                                   "assets/images/icons/setting.webp",
                                   AppLocale.settings.getString(context),
                                 ),
@@ -401,14 +412,21 @@ class HeaderState extends State<Header> {
     );
   }
 
-  // Steam-style tab button
+  // Steam-style tab button.
+  //
+  // Most tabs use a webp asset; [iconData] is the fallback for tabs with no
+  // matching asset (Search), rendered at the same box size and tint.
   Widget _buildTabButton(
     BuildContext context,
     int tabIndex,
-    String icon,
-    String label,
-  ) {
+    String? icon,
+    String label, {
+    IconData? iconData,
+  }) {
     final bool isSelected = tabIndex == widget.selectedTabIndex;
+    final Color tint = isSelected
+        ? Theme.of(context).colorScheme.onPrimary
+        : Theme.of(context).colorScheme.onSurface;
 
     return Material(
       color: Colors.transparent,
@@ -425,12 +443,9 @@ class HeaderState extends State<Header> {
         },
         child: Container(
           padding: EdgeInsets.all(8.r),
-          child: Image.asset(
-            icon,
-            color: isSelected
-                ? Theme.of(context).colorScheme.onPrimary
-                : Theme.of(context).colorScheme.onSurface,
-          ),
+          child: iconData != null
+              ? Icon(iconData, size: 16.r, color: tint)
+              : Image.asset(icon!, color: tint),
         ),
       ),
     );
@@ -452,19 +467,6 @@ class HeaderState extends State<Header> {
           color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
-    );
-  }
-
-  /// Library-wide ROM search entry (Systems tab only).
-  Widget _buildSearchButton(BuildContext context) {
-    return IconButton(
-      tooltip: AppLocale.searchOpen.getString(context),
-      icon: Icon(
-        Symbols.search_rounded,
-        size: 22.r,
-        color: Theme.of(context).colorScheme.onSurface,
-      ),
-      onPressed: () => SearchScreen.open(context),
     );
   }
 }
