@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wiiu",
+    "multidisc": false,
     "name": "Nintendo Wii U",
     "short_name": "Wii U",
     "details": {
@@ -34,7 +35,7 @@
   "emulators": [
     {
       "name": "Standalone CEMU",
-      "default": true,
+      "default_standalone": true,
       "unique_id": "wiiu.info.cemu.cemu",
       "description": "Supported extensions: wua, wud, wux, rpx.",
       "is_retroachievements_compatible": false,

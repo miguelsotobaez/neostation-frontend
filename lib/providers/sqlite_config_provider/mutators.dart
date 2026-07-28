@@ -1,0 +1,276 @@
+part of '../sqlite_config_provider.dart';
+
+/// Trivial configuration mutators for [SqliteConfigProvider].
+///
+/// Each method writes a single field to the in-memory [ConfigModel], persists it
+/// via [SqliteConfigService], and notifies listeners (some also push the value to
+/// the secondary display). Extracted verbatim from the host, which retains the
+/// class declaration, all state, and the scan/secondary-display orchestration.
+extension SqliteConfigMutators on SqliteConfigProvider {
+  /// Updates the entire list of ROM folders and triggers a configuration save.
+  Future<void> updateRomFolders(List<String> romFolders) async {
+    _config = _config.copyWith(
+      romFolders: romFolders,
+      lastScan: DateTime.now(),
+    );
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Convenience method to update the primary ROM folder.
+  Future<void> updateRomFolder(String path) async {
+    if (_config.romFolders.isNotEmpty) {
+      final newList = List<String>.from(_config.romFolders);
+      newList[0] = path;
+      await updateRomFolders(newList);
+    } else {
+      await addRomFolder(path);
+    }
+  }
+
+  /// Updates the preferred UI layout mode for game lists.
+  Future<void> updateGameViewMode(String gameViewMode) async {
+    _config = _config.copyWith(gameViewMode: gameViewMode);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the preferred UI layout mode for system carousels/grids.
+  Future<void> updateSystemViewMode(String systemViewMode) async {
+    _config = _config.copyWith(systemViewMode: systemViewMode);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the preferred grid column density for the systems grid.
+  Future<void> updateSystemGridColumns(String systemGridColumns) async {
+    _config = _config.copyWith(systemGridColumns: systemGridColumns);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the preferred grid column density for the games grid.
+  Future<void> updateGameGridColumns(String gameGridColumns) async {
+    _config = _config.copyWith(gameGridColumns: gameGridColumns);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the preferred card style for the game carousel ('fanart' or 'box').
+  Future<void> updateGameCarouselCardStyle(String cardStyle) async {
+    _config = _config.copyWith(gameCarouselCardStyle: cardStyle);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Toggles the application's fullscreen state.
+  Future<void> updateIsFullscreen(bool value) async {
+    _config = _config.copyWith(isFullscreen: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Persists the user's ES-DE application folder path (used by ES-DE import
+  /// and read-time fallback artwork resolution).
+  Future<void> updateEsdeFolderPath(String path) async {
+    _config = _config.copyWith(esdeFolderPath: path);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  Future<void> updateHideRecentCard(bool value) async {
+    _config = _config.copyWith(hideRecentCard: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Persists whether the game action-button legend is hidden (Select + B).
+  Future<void> updateLegendHidden(bool value) async {
+    _config = _config.copyWith(legendHidden: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  Future<void> updateActiveSyncProvider(String providerId) async {
+    _config = _config.copyWith(activeSyncProvider: providerId);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Toggles the visibility of detailed game metadata in the UI.
+  Future<void> updateShowGameInfo(bool show) async {
+    _config = _config.copyWith(showGameInfo: show);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Configures whether the application should shut down the host OS upon exit (Arcade/Cabinet mode).
+  Future<void> updateBartopExitPoweroff(bool value) async {
+    _config = _config.copyWith(bartopExitPoweroff: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates whether startup scan is enabled
+  Future<void> updateScanOnStartup(bool value) async {
+    _config = _config.copyWith(scanOnStartup: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates whether hidden files/folders are ignored during ROM scans.
+  Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
+    _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates whether the header clock uses a 12-hour (AM/PM) format.
+  Future<void> updateUse12HourClock(bool value) async {
+    _config = _config.copyWith(use12HourClock: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates whether UI navigation SFX sounds are enabled
+  Future<void> updateSfxEnabled(bool value) async {
+    _config = _config.copyWith(sfxEnabled: value);
+    await SqliteConfigService.saveConfig(_config);
+    // Apply immediately to the running service — no restart needed.
+    SfxService().setEnabled(value);
+    _notify();
+  }
+
+  /// Updates the app display language and applies it immediately
+  Future<void> updateAppLanguage(String langCode) async {
+    _config = _config.copyWith(appLanguage: langCode);
+    await SqliteConfigService.saveConfig(_config);
+    FlutterLocalization.instance.translate(langCode);
+    _notify();
+  }
+
+  /// Updates the global audio mute state for game preview videos.
+  ///
+  /// Automatically synchronizes the mute state with the secondary display if connected.
+  Future<void> updateVideoSound(bool value) async {
+    if (_config.videoSound == value) return;
+    _config = _config.copyWith(videoSound: value);
+    // ignore: unawaited_futures
+    SqliteConfigService.saveConfig(_config); // No await to avoid lag
+
+    // Sincronizar con pantalla secundaria si está activa
+    if (_secondaryDisplayState != null) {
+      final current = _secondaryDisplayState!.value;
+      if (current != null) {
+        _secondaryDisplayState!.updateState(isVideoMuted: !value);
+      }
+    }
+
+    _notify();
+  }
+
+  /// Toggles the current video audio mute state.
+  Future<void> toggleVideoSound() async {
+    await updateVideoSound(!_config.videoSound);
+  }
+
+  /// Sets the inactivity delay (seconds) before the secondary Now Playing panel
+  /// dims; `0` disables dimming. Persists and pushes the value to the secondary
+  /// display.
+  Future<void> updateNowPlayingDimDelay(int seconds) async {
+    _config = _config.copyWith(nowPlayingDimDelay: seconds);
+    await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(nowPlayingDimDelay: seconds);
+    _notify();
+  }
+
+  /// Sets how dark the secondary Now Playing panel goes when dimmed (0–100%).
+  /// Persists and pushes the value to the secondary display.
+  Future<void> updateNowPlayingDimLevel(int percent) async {
+    final clamped = percent.clamp(0, 100);
+    _config = _config.copyWith(nowPlayingDimLevel: clamped);
+    await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(nowPlayingDimLevel: clamped);
+    _notify();
+  }
+
+  /// Sets how much the game fanart/background art is dimmed behind the logo on
+  /// the secondary screen (percentage 0–100, 0 = off). Persists and pushes it.
+  Future<void> updateFanartDimLevel(int percent) async {
+    final clamped = percent.clamp(0, 100);
+    _config = _config.copyWith(fanartDimLevel: clamped);
+    await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(fanartDimLevel: clamped);
+    _notify();
+  }
+
+  /// Persists the secondary app-dock slot assignments (one package name per
+  /// slot, empty string = free) and pushes them to the secondary display.
+  Future<void> updateDockApps(List<String> apps) async {
+    final normalized = ConfigModel.normalizeDock(apps);
+    _config = _config.copyWith(dockApps: normalized);
+    await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(dockApps: normalized);
+    _notify();
+  }
+
+  /// Enables or disables the secondary Now Playing app dock. Persists and
+  /// pushes the value to the secondary display.
+  Future<void> updateDockEnabled(bool enabled) async {
+    _config = _config.copyWith(dockEnabled: enabled);
+    await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(dockEnabled: enabled);
+    _notify();
+  }
+
+  /// Sets how many secondary dock slots are visible, clamped to
+  /// [ConfigModel.dockMinSlotCount]–[ConfigModel.dockMaxSlotCount]. Persists and
+  /// pushes the value to the secondary display.
+  Future<void> updateDockSlotCount(int count) async {
+    final clamped = count.clamp(
+      ConfigModel.dockMinSlotCount,
+      ConfigModel.dockMaxSlotCount,
+    );
+    _config = _config.copyWith(dockSlotCount: clamped);
+    await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(dockSlotCount: clamped);
+    _notify();
+  }
+
+  /// Marks the initial application onboarding as completed.
+  Future<void> completeSetup() async {
+    _config = _config.copyWith(setupCompleted: true);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  Future<void> updateAutoUpdateApp(bool value) async {
+    _config = _config.copyWith(autoUpdateApp: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  Future<void> updateAutoUpdateSystems(bool value) async {
+    _config = _config.copyWith(autoUpdateSystems: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the sorting criteria for the system list.
+  Future<void> updateSystemSortBy(String sortBy) async {
+    if (_config.systemSortBy == sortBy) return;
+    _config = _config.copyWith(systemSortBy: sortBy);
+    _sortDetectedSystems();
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the sorting direction (ascending or descending) for the system list.
+  Future<void> updateSystemSortOrder(String order) async {
+    if (_config.systemSortOrder == order) return;
+    _config = _config.copyWith(systemSortOrder: order);
+    _sortDetectedSystems();
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+}

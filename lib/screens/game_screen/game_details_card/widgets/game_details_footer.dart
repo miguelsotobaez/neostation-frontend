@@ -3,20 +3,21 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/themes/app_themes.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../models/retro_achievements_game_info.dart';
-import '../../../../models/neo_sync_models.dart';
 import '../../../../sync/i_sync_provider.dart';
+import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../../../../widgets/marquee_text.dart';
 import '../../music/music_player.dart';
-import 'glass_button.dart';
 
 /// A sticky footer component for the game details card that provides actionable controls and status summaries.
 ///
-/// Manages high-level game interactions (Play, Favorite, Scrape), summarizes cloud synchronization
+/// Manages high-level game interactions (Play), summarizes cloud synchronization
 /// health, and provides quick access to trophy progress. Dynamically adjusts for specialized
 /// systems like the Music Player.
 class GameDetailsFooter extends StatelessWidget {
@@ -24,16 +25,11 @@ class GameDetailsFooter extends StatelessWidget {
   final GameModel game;
   final bool isMusicSystem;
   final bool hasScreenScraper;
-  final bool isScrapingGame;
-  final String? localizedDescription;
   final bool isSecondaryScreenActive;
-  final bool isFavorite;
   final bool cloudSyncEnabled;
   final ISyncProvider syncProvider;
   final AnimationController? syncIconController;
   final VoidCallback onPlayGame;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onScrapeGame;
   final VoidCallback onShowAchievements;
   final bool hasRetroAchievements;
   final bool isLoadingAchievements;
@@ -45,16 +41,11 @@ class GameDetailsFooter extends StatelessWidget {
     required this.game,
     required this.isMusicSystem,
     required this.hasScreenScraper,
-    required this.isScrapingGame,
-    this.localizedDescription,
     required this.isSecondaryScreenActive,
-    required this.isFavorite,
     required this.cloudSyncEnabled,
     required this.syncProvider,
     this.syncIconController,
     required this.onPlayGame,
-    required this.onToggleFavorite,
-    required this.onScrapeGame,
     required this.onShowAchievements,
     required this.hasRetroAchievements,
     required this.isLoadingAchievements,
@@ -78,7 +69,7 @@ class GameDetailsFooter extends StatelessWidget {
       bottom: -0.5.r,
       left: -0.5.r,
       right: -0.5.r,
-      height: 98.r,
+      height: 105.r,
       child: ClipRRect(
         child: RepaintBoundary(
           child: Container(
@@ -87,14 +78,10 @@ class GameDetailsFooter extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Identity Section: Title, Rating, and ROM Filename.
+                // Identity Section: Title and ROM Filename.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (game.rating > 0) ...[
-                      _SteamStyleRating(game: game),
-                      SizedBox(width: 8.r),
-                    ],
                     Expanded(
                       child: RepaintBoundary(
                         child: Column(
@@ -110,35 +97,42 @@ class GameDetailsFooter extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                                 shadows: [
                                   Shadow(
-                                    blurRadius: 2.r,
+                                    blurRadius: 1.r,
                                     color: Colors.black,
-                                    offset: const Offset(0, 0),
+                                    offset: const Offset(2, 2),
                                   ),
                                 ],
                               ),
                             ),
-                            if (game.showRomFileNameSubtitle) ...[
-                              Text(
-                                game.romname,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  fontSize: 12.r,
-                                  fontWeight: FontWeight.w400,
-                                  height: 1.15,
-                                  shadows: [
-                                    Shadow(
-                                      blurRadius: 2.r,
-                                      color: Colors.black.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                      offset: const Offset(2, 2),
-                                    ),
-                                  ],
-                                ),
+                            // Always reserve the ROM-filename subtitle's line
+                            // height so the action row below keeps a constant
+                            // baseline. Unscraped games have no subtitle; without
+                            // this reservation the rating/RA pill + PLAY button
+                            // float up one line. The empty string still lays out
+                            // a full line box via the shared strut/style.
+                            Text(
+                              game.showRomFileNameSubtitle ? game.romname : '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              strutStyle: StrutStyle(
+                                fontSize: 12.r,
+                                height: 1.15,
+                                forceStrutHeight: true,
                               ),
-                            ],
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                fontSize: 12.r,
+                                fontWeight: FontWeight.w400,
+                                height: 1.15,
+                                shadows: [
+                                  Shadow(
+                                    blurRadius: 1.r,
+                                    color: Colors.black,
+                                    offset: const Offset(2, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -151,55 +145,48 @@ class GameDetailsFooter extends StatelessWidget {
                 ExcludeFocus(
                   child: Row(
                     children: [
-                      ...(() {
-                        final List<Widget> leftSide = [];
+                      // Game rating.
+                      if (game.rating > 0) ...[
+                        _SteamStyleRating(game: game),
+                        SizedBox(width: 8.r),
+                      ],
 
-                        // Cloud Sync Status.
-                        final neoSync = _buildCompactNeoSyncIndicator(context);
-                        if (neoSync is! SizedBox ||
-                            (neoSync.width != null && neoSync.width! > 0)) {
-                          leftSide.add(Expanded(flex: 1, child: neoSync));
-                        }
+                      // RetroAchievements Progress. When the legend is hidden
+                      // the row gains width on the left; the indicator eases out
+                      // to fill the gap to PLAY (LayoutBuilder gives it a
+                      // concrete target width so the change animates instead of
+                      // snapping). When shown it rests at its natural width,
+                      // left-aligned, and the rest of the slot stays empty.
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: _buildCompactAchievementsIndicator(
+                              context,
+                              availableWidth: constraints.maxWidth,
+                              hasPlayTime:
+                                  GameUtils.formatPlayTime(
+                                    game.playTime ?? 0,
+                                  ) !=
+                                  '0s',
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Accumulated play time, shown as its own pill to the
+                      // left of PLAY (only once the game has been played).
+                      if (GameUtils.formatPlayTime(game.playTime ?? 0) !=
+                          '0s') ...[
+                        SizedBox(width: 8.r),
+                        _PlayTimePill(game: game),
+                      ],
 
-                        // RetroAchievements Progress.
-                        final ach = _buildCompactAchievementsIndicator(context);
-                        if (ach is! SizedBox ||
-                            (ach.width != null && ach.width! > 0)) {
-                          if (leftSide.isNotEmpty) {
-                            leftSide.add(SizedBox(width: 8.r));
-                          }
-                          leftSide.add(Expanded(flex: 1, child: ach));
-                        }
-
-                        // Metadata Scraping Control.
-                        final scrape = _buildScrapeButtonCompact(context);
-                        if (scrape is! SizedBox) {
-                          if (leftSide.isNotEmpty) {
-                            leftSide.add(SizedBox(width: 8.r));
-                          }
-                          leftSide.add(Expanded(flex: 1, child: scrape));
-                        }
-
-                        // Library Favorite Toggle.
-                        final fav = _buildFavoriteButtonCompact(context);
-                        if (fav is! SizedBox) {
-                          if (leftSide.isNotEmpty) {
-                            leftSide.add(SizedBox(width: 8.r));
-                          }
-                          leftSide.add(Expanded(flex: 1, child: fav));
-                        }
-
-                        return leftSide;
-                      })(),
-
-                      const Spacer(),
+                      // Consistent 8.r gap before PLAY, matching the spacing
+                      // between the rating, RA and play-time pills.
                       SizedBox(width: 8.r),
 
                       // Primary Launch Control.
-                      Expanded(
-                        flex: 2,
-                        child: _buildPlayButtonCompact(context),
-                      ),
+                      _buildPlayButtonCompact(context),
                     ],
                   ),
                 ),
@@ -211,48 +198,31 @@ class GameDetailsFooter extends StatelessWidget {
     );
   }
 
-  /// Specialized button for toggling the game's favorite status in the library.
-  Widget _buildFavoriteButtonCompact(BuildContext context) {
-    final isFav = game.isFavorite ?? false;
-    return GlassButton(
-      onTap: () {
-        SfxService().playNavSound();
-        onToggleFavorite();
-      },
-      iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
-      iconData: isFav
-          ? Symbols.favorite_rounded
-          : Symbols.favorite_border_rounded,
-      iconColor: isFav
-          ? Colors.redAccent
-          : Theme.of(context).colorScheme.onSurface,
-      label: isFav
-          ? AppLocale.favorite.getString(context)
-          : AppLocale.addFav.getString(context),
-      isActive: isFav,
-    );
-  }
-
   /// High-contrast primary button for launching the emulator.
   ///
   /// Includes visual feedback for gamepad focus and displays accumulated play-time statistics.
   Widget _buildPlayButtonCompact(BuildContext context) {
-    final playTimeText = GameUtils.formatPlayTime(game.playTime ?? 0);
     return Builder(
       builder: (context) {
         final isFocused = Focus.of(context).hasFocus;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: 40.r,
+          width: 104.r,
+          height: 45.r,
           decoration: BoxDecoration(
             color: isFocused
                 ? const Color(0xFF36F184)
                 : const Color(0xFF2ECC71),
-            borderRadius: BorderRadius.circular(8.r),
+            borderRadius:
+                Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                BorderRadius.circular(14.r),
+            border: Border.all(color: Color(0xFF36F184), width: 1.r),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 2.r,
+                color: Theme.of(
+                  context,
+                ).colorScheme.shadow.withValues(alpha: 0.1),
+                blurRadius: 4.r,
                 offset: Offset(2.0.r, 2.0.r),
               ),
             ],
@@ -265,50 +235,34 @@ class GameDetailsFooter extends StatelessWidget {
               hoverColor: Colors.transparent,
               highlightColor: Colors.transparent,
               splashColor: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12.r),
+              borderRadius:
+                  Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                  BorderRadius.circular(14.r),
               onTap: () {
                 SfxService().playEnterSound();
                 onPlayGame();
               },
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12.r),
+                padding: EdgeInsets.only(left: 0.r, right: 10.r),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Image.asset(
                       'assets/images/gamepad/Xbox_A_button.png',
-                      width: 22.r,
-                      height: 22.r,
+                      width: 32.r,
+                      height: 32.r,
                       color: Theme.of(context).colorScheme.onPrimary,
                     ),
                     SizedBox(width: 8.r),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.playButton.getString(context),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimary,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14.r,
-                            letterSpacing: 1.5,
-                            height: 1.0,
-                          ),
-                        ),
-                        if (playTimeText.isNotEmpty && playTimeText != '0s')
-                          Text(
-                            playTimeText.toUpperCase(),
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimary.withValues(alpha: 0.8),
-                              fontSize: 8.r,
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
-                            ),
-                          ),
-                      ],
+                    Text(
+                      AppLocale.playButton.getString(context),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14.r,
+                        letterSpacing: 1.5,
+                        height: 1.0,
+                      ),
                     ),
                   ],
                 ),
@@ -320,223 +274,42 @@ class GameDetailsFooter extends StatelessWidget {
     );
   }
 
-  /// Metadata fetching control that contextually switches between 'Scrape' and 'Rescrape'.
-  Widget _buildScrapeButtonCompact(BuildContext context) {
-    if (!hasScreenScraper) return const SizedBox.shrink();
-    final description =
-        localizedDescription ??
-        (game.getDescriptionForLanguage('en').isEmpty
-            ? AppLocale.noDescription.getString(context)
-            : game.getDescriptionForLanguage('en'));
-
-    final bool isDescriptionMissing =
-        description.isEmpty ||
-        description == AppLocale.noDescription.getString(context) ||
-        description.trim().isEmpty;
-
-    return GlassButton(
-      onTap: () {
-        SfxService().playNavSound();
-        onScrapeGame();
-      },
-      iconPath: 'assets/images/gamepad/Xbox_View_button.png',
-      iconData: isDescriptionMissing
-          ? Symbols.search_rounded
-          : Symbols.refresh_rounded,
-      label: isDescriptionMissing
-          ? AppLocale.scrape.getString(context)
-          : AppLocale.rescrape.getString(context),
-      isLoading: isScrapingGame,
-    );
-  }
-
-  /// Resolves the current cloud synchronization state into a compact visual badge.
-  ///
-  /// Handles transition states (syncing), error states (quota, network), and
-  /// arbitration states (conflict detected).
-  Widget _buildCompactNeoSyncIndicator(BuildContext context) {
-    if (!system.neosync.sync) return const SizedBox.shrink();
-    if (system.folderName == 'android') return const SizedBox.shrink();
-
-    final isNeoSyncConnected = syncProvider.isAuthenticated;
-    if (!isNeoSyncConnected) return const SizedBox.shrink();
-    if (system.screenscraperId == null || system.screenscraperId == 0) {
-      return const SizedBox.shrink();
-    }
-
-    final gameState = syncProvider.getGameSyncState(game.romname);
-    final isSyncing = syncProvider.status == SyncProviderStatus.syncing;
-    final isCloudSyncDisabled = cloudSyncEnabled == false;
-
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-
-    if (isCloudSyncDisabled) {
-      statusColor = Theme.of(context).colorScheme.onSurface;
-      statusIcon = Symbols.cloud_off_rounded;
-      statusText = AppLocale.cloudSyncDisabled.getString(context);
-    } else if (isSyncing) {
-      statusColor = Colors.lightBlue;
-      statusIcon = Symbols.sync_rounded;
-      statusText = AppLocale.syncing.getString(context);
-    } else if (syncProvider.lastError != null) {
-      statusColor = const Color(0xFFE53E3E);
-      statusIcon = Symbols.error_outline_rounded;
-      statusText = AppLocale.error.getString(context);
-    } else if (gameState != null) {
-      switch (gameState.status) {
-        case GameSyncStatus.upToDate:
-          statusColor = const Color(0xFF79AA41);
-          statusIcon = Symbols.check_circle_outline_rounded;
-          statusText = AppLocale.synced.getString(context);
-          break;
-        case GameSyncStatus.localOnly:
-          statusColor = Colors.orange;
-          statusIcon = Symbols.cloud_upload_rounded;
-          statusText = AppLocale.upload.getString(context);
-          break;
-        case GameSyncStatus.cloudOnly:
-          statusColor = Colors.lightBlue;
-          statusIcon = Symbols.cloud_download_rounded;
-          statusText = AppLocale.download.getString(context);
-          break;
-        case GameSyncStatus.syncing:
-          statusColor = Colors.lightBlue;
-          statusIcon = Symbols.sync_rounded;
-          statusText = AppLocale.syncing.getString(context);
-          break;
-        case GameSyncStatus.disabled:
-          if (!isCloudSyncDisabled) {
-            statusColor = Colors.lightBlue;
-            statusIcon = Symbols.sync_rounded;
-            statusText = AppLocale.ready.getString(context);
-          } else {
-            statusColor = Colors.grey;
-            statusIcon = Symbols.cloud_off_rounded;
-            statusText = AppLocale.cloudSyncDisabled.getString(context);
-          }
-          break;
-        case GameSyncStatus.quotaExceeded:
-          statusColor = Colors.redAccent;
-          statusIcon = Symbols.storage_rounded;
-          statusText = AppLocale.quota.getString(context);
-          break;
-        case GameSyncStatus.noSaveFound:
-          statusColor = Colors.grey;
-          statusIcon = Symbols.save_alt_rounded;
-          statusText = AppLocale.noSave.getString(context);
-          break;
-        case GameSyncStatus.missingEmulator:
-          statusColor = Colors.orange;
-          statusIcon = Symbols.videogame_asset_off_rounded;
-          statusText = AppLocale.noEmulator.getString(context);
-          break;
-        case GameSyncStatus.error:
-          statusColor = Colors.red;
-          statusIcon = Symbols.error_outline_rounded;
-          statusText = AppLocale.error.getString(context);
-          break;
-      }
-    } else {
-      statusColor = Colors.lightBlue;
-      statusIcon = Symbols.sync_rounded;
-      statusText = AppLocale.ready.getString(context);
-    }
-
-    Widget neoSyncContent = AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      height: 40.r,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 2.r,
-            offset: Offset(2.0.r, 2.0.r),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.r),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Render a rotating sync icon during active I/O.
-                statusIcon == Symbols.sync_rounded && syncIconController != null
-                    ? AnimatedBuilder(
-                        animation: syncIconController!,
-                        builder: (context, child) {
-                          return Transform.rotate(
-                            angle: syncIconController!.value * 2 * 3.14159,
-                            child: Icon(
-                              statusIcon,
-                              color: statusColor,
-                              size: 16.r,
-                            ),
-                          );
-                        },
-                      )
-                    : Icon(statusIcon, color: statusColor, size: 16.r),
-                if (gameState?.status == GameSyncStatus.error) ...[
-                  SizedBox(width: 4.r),
-                  Image.asset(
-                    'assets/images/gamepad/Xbox_L-click.png',
-                    width: 16.r,
-                    height: 16.r,
-                    color: Theme.of(context).colorScheme.onSurface,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Symbols.radio_button_checked_rounded,
-                      color: Theme.of(context).colorScheme.onSurface,
-                      size: 16.r,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            SizedBox(height: 2.r),
-            Text(
-              statusText.toUpperCase(),
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 8.r,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-
-    return neoSyncContent;
-  }
-
   /// Resolves the current RetroAchievements progress into a compact visual badge.
-  Widget _buildCompactAchievementsIndicator(BuildContext context) {
+  Widget _buildCompactAchievementsIndicator(
+    BuildContext context, {
+    required double availableWidth,
+    required bool hasPlayTime,
+  }) {
     if (!hasRetroAchievements) return const SizedBox.shrink();
 
+    // The badge fills its (Expanded) slot when the legend is hidden, or when
+    // there is no play-time pill claiming the space to its right (otherwise it
+    // would leave dead space between itself and PLAY). When neither applies it
+    // rests at 120.r. The width is animated so toggling eases in/out.
+    final bool legendHidden = GameLegendVisibility.hidden.value;
+    final bool expand = legendHidden || !hasPlayTime;
     final bool noAchievements =
         !isLoadingAchievements &&
         (currentGameInfo == null || currentGameInfo!.numAchievements == 0);
+
+    final int awarded = currentGameInfo?.numAwardedToUser ?? 0;
+    final int total = currentGameInfo?.numAchievements ?? 0;
+    final double progress = total > 0 ? awarded / total : 0.0;
 
     final String progressText = isLoadingAchievements
         ? AppLocale.loading.getString(context)
         : (noAchievements
               ? AppLocale.noAchievements.getString(context)
-              : '${currentGameInfo!.numAwardedToUser}/${currentGameInfo!.numAchievements}');
+              : '$awarded/$total');
 
     final theme = Theme.of(context);
     final Color statusColor = noAchievements
         ? theme.colorScheme.onSurface
         : Colors.orange;
+
+    final String? gameIconUrl = currentGameInfo?.imageIcon.isNotEmpty == true
+        ? 'https://media.retroachievements.org${currentGameInfo!.imageIcon}'
+        : null;
 
     return Material(
       color: Colors.transparent,
@@ -551,50 +324,120 @@ class GameDetailsFooter extends StatelessWidget {
         highlightColor: Colors.transparent,
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8.r),
-        child: Container(
-          height: 40.r,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(8.r),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 2.r,
-                offset: Offset(2.0.r, 2.0.r),
+        // Drive the width from a single 0..1 factor on the same 250ms /
+        // easeOutCubic timing as the sidebar margin, so the pill expands in
+        // lockstep with the legend slide (one motion) rather than shifting
+        // into place first and then easing its width (two steps).
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: expand ? 1.0 : 0.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, child) => Container(
+            width: 120.r + (availableWidth - 120.r) * t,
+            height: 45.r,
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.9),
+              borderRadius:
+                  Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                  BorderRadius.circular(14.r),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline,
+                width: 1.r,
               ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.shadow.withValues(alpha: 0.1),
+                  blurRadius: 4.r,
+                  offset: Offset(2.0.r, 2.0.r),
+                ),
+              ],
+            ),
+            child: child,
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6.r),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            // Symmetric 8.r horizontal inset so neither the trophy icon nor the
+            // progress bar hugs the pill border. The progress column is always
+            // Expanded, so it simply absorbs the padding at any pill width (the
+            // shown/hidden width animation never overflows).
+            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
+            child: Row(
               children: [
-                if (isLoadingAchievements)
-                  SizedBox(
-                    width: 16.r,
-                    height: 16.r,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  )
-                else
-                  Icon(
-                    Symbols.emoji_events_rounded,
-                    color: statusColor,
-                    size: 16.r,
+                // RetroAchievements game icon.
+                ClipRRect(
+                  borderRadius:
+                      Theme.of(
+                        context,
+                      ).extension<CornerRadii>()?.radiusInternal ??
+                      BorderRadius.circular(14.r),
+                  child: Container(
+                    width: 32.r,
+                    height: 32.r,
+                    color: theme.colorScheme.surface,
+                    child: gameIconUrl != null
+                        ? Image.network(
+                            gameIconUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Icon(
+                              Symbols.emoji_events_rounded,
+                              color: statusColor,
+                              size: 16.r,
+                            ),
+                          )
+                        : Icon(
+                            Symbols.emoji_events_rounded,
+                            color: statusColor,
+                            size: 16.r,
+                          ),
                   ),
-                SizedBox(height: 2.r),
-                Text(
-                  progressText.toUpperCase(),
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface,
-                    fontSize: 8.r,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
+                ),
+                SizedBox(width: 8.r),
+                // Progress bar and achievement count. When the legend is hidden
+                // the pill stretches, so let this column (and its bar) fill the
+                // extra width via Expanded; otherwise keep the fixed 70.r width.
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: Text(
+                          progressText.toUpperCase(),
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 10.r,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(height: 4.r),
+                      // Hold the bar short of the pill's right edge so it
+                      // doesn't run all the way across — mirrors the grid/
+                      // carousel pill's right margin under the progress count.
+                      Padding(
+                        padding: EdgeInsets.only(right: 10.r),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4.r),
+                          child: LinearProgressIndicator(
+                            value: isLoadingAchievements ? null : progress,
+                            minHeight: 5.r,
+                            backgroundColor: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.1),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              statusColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -616,36 +459,125 @@ class _SteamStyleRating extends StatelessWidget {
     // Normalizes a 0-20 score to a 0.0-10.0 scale for color interpolation.
     final ratingValue = (game.rating / 2).clamp(0.0, 10.0);
     final colorRatio = (ratingValue - 1) / 9;
+    final customColors = AppThemes.getCustomColors(context);
     final ratingColor = Color.lerp(
-      Colors.redAccent,
-      Colors.lightGreenAccent,
+      customColors.errorColor,
+      customColors.successColor,
       colorRatio,
     )!;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 6.r),
+      height: 45.r,
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 6.r),
       decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(6.r),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        borderRadius:
+            Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+            BorderRadius.circular(14.r),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline,
+          width: 1.r,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 2.r,
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.5),
+            blurRadius: 3.r,
             offset: Offset(2.0.r, 2.0.r),
           ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(Symbols.star_rounded, color: ratingColor, size: 24.r),
-          SizedBox(width: 6.r),
+          SizedBox(width: 4.r),
+          // Reserve width for the widest possible value ("10") so the pill
+          // stays a static size regardless of the current score (e.g. "1"
+          // no longer renders narrower than "10"). Scale/font-independent.
+          Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Opacity(
+                opacity: 0,
+                child: Text(
+                  '10',
+                  style: TextStyle(fontSize: 22.r, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Text(
+                ratingValue.toStringAsFixed(0),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 22.r,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact pill showing the accumulated play time for a game, styled to match
+/// the rating pill. Sits to the left of the PLAY button.
+class _PlayTimePill extends StatelessWidget {
+  final GameModel game;
+
+  const _PlayTimePill({required this.game});
+
+  /// Formats accumulated seconds as a zero-padded HH:MM:SS clock.
+  String _formatClock(int seconds) {
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    String pad(int v) => v.toString().padLeft(2, '0');
+    return '${pad(h)}:${pad(m)}:${pad(s)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 45.r,
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        borderRadius:
+            Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+            BorderRadius.circular(14.r),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline,
+          width: 1.r,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.5),
+            blurRadius: 3.r,
+            offset: Offset(2.0.r, 2.0.r),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            Symbols.schedule_rounded,
+            color: Theme.of(context).colorScheme.onSurface,
+            size: 14.r,
+          ),
+          SizedBox(height: 1.r),
           Text(
-            ratingValue.toStringAsFixed(1),
+            _formatClock(game.playTime ?? 0),
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 20.r,
-              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 10.r,
+              fontWeight: FontWeight.w800,
+              height: 1.0,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

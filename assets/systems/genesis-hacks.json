@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gen-hacks",
+    "multidisc": false,
     "name": "Sega Genesis Hacks",
     "short_name": "GENH",
     "details": {
@@ -81,6 +82,7 @@
     },
     {
       "name": "RetroArch64 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "genesis-hacks.ra64.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -114,6 +116,7 @@
     },
     {
       "name": "RetroArch32 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "genesis-hacks.ra32.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -147,7 +150,7 @@
     },
     {
       "name": "RetroArch Genesis Plus GX",
-      "default": true,
+      "default_core": true,
       "unique_id": "genesis-hacks.ra.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,

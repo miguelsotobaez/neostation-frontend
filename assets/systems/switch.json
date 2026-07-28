@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "switch",
+    "multidisc": false,
     "name": "Nintendo Switch",
     "short_name": "Switch",
     "details": {
@@ -43,7 +44,7 @@
     },
     {
       "name": "Standalone Eden",
-      "default": true,
+      "default_standalone": true,
       "unique_id": "switch.dev.eden.eden_emulator",
       "description": "Supported extensions: nro, nso, nca, xci, nsp.",
       "is_retroachievements_compatible": false,

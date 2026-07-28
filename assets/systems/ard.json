@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ard",
+    "multidisc": false,
     "name": "Arduboy",
     "short_name": "ARD",
     "details": {
@@ -52,7 +53,7 @@
     },
     {
       "name": "RetroArch Ardens",
-      "default": true,
+      "default_core": true,
       "unique_id": "ard.ra.ardens",
       "description": "Supported extensions: hex, arduboy.",
       "is_retroachievements_compatible": true,
@@ -87,6 +88,7 @@
     },
     {
       "name": "RetroArch64 Ardens",
+      "default_core": true,
       "unique_id": "ard.ra64.ardens",
       "description": "Supported extensions: hex, arduboy.",
       "is_retroachievements_compatible": true,
@@ -109,6 +111,7 @@
     },
     {
       "name": "RetroArch32 Ardens",
+      "default_core": true,
       "unique_id": "ard.ra32.ardens",
       "description": "Supported extensions: hex, arduboy.",
       "is_retroachievements_compatible": true,

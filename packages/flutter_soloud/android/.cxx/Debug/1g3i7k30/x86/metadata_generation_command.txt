@@ -1,0 +1,18 @@
+                        -H/home/neil/dev/neostation-search/packages/flutter_soloud/android
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=21
+-DANDROID_PLATFORM=android-21
+-DANDROID_ABI=x86
+-DCMAKE_ANDROID_ARCH_ABI=x86
+-DANDROID_NDK=/home/neil/Android/Sdk/ndk/28.2.13676358
+-DCMAKE_ANDROID_NDK=/home/neil/Android/Sdk/ndk/28.2.13676358
+-DCMAKE_TOOLCHAIN_FILE=/home/neil/Android/Sdk/ndk/28.2.13676358/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/home/neil/Android/Sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/home/neil/dev/neostation-search/build/flutter_soloud/intermediates/cxx/Debug/1g3i7k30/obj/x86
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/home/neil/dev/neostation-search/build/flutter_soloud/intermediates/cxx/Debug/1g3i7k30/obj/x86
+-DCMAKE_BUILD_TYPE=Debug
+-B/home/neil/dev/neostation-search/packages/flutter_soloud/android/.cxx/Debug/1g3i7k30/x86
+-GNinja
+                        Build command args: []
+                        Version: 2

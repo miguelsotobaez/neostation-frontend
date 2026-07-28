@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ast",
+    "multidisc": false,
     "name": "Atari ST",
     "short_name": "AST",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "ast",
       "atarist",
-      "Atari ST"
+      "Atari ST",
+      "atari-st"
     ],
     "colors": [
       "#BDBDBD",
@@ -36,6 +38,7 @@
   "emulators": [
     {
       "name": "RetroArch64 hatari",
+      "default_core": true,
       "unique_id": "ast.atarist.ra64.hatari",
       "description": "Supported extensions: dim, ipf, m3u, msa, st, stx, zip.",
       "is_retroachievements_compatible": false,
@@ -47,6 +50,7 @@
     },
     {
       "name": "RetroArch32 hatari",
+      "default_core": true,
       "unique_id": "ast.atarist.ra32.hatari",
       "description": "Supported extensions: dim, ipf, m3u, msa, st, stx, zip.",
       "is_retroachievements_compatible": false,
@@ -58,7 +62,7 @@
     },
     {
       "name": "RetroArch hatari",
-      "default": true,
+      "default_core": true,
       "unique_id": "ast.atarist.ra.hatari",
       "description": "Supported extensions: dim, ipf, m3u, msa, st, stx, zip.",
       "is_retroachievements_compatible": false,

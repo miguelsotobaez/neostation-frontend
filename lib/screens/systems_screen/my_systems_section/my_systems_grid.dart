@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/responsive.dart';
@@ -10,6 +9,7 @@ import 'package:neostation/models/system_model.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:provider/provider.dart';
+import '../../../themes/corner_radii.dart';
 import '../../../utils/gamepad_nav.dart';
 import '../../../services/game_service.dart';
 import '../../../utils/game_launch_utils.dart';
@@ -20,11 +20,14 @@ import '../../../providers/file_provider.dart';
 import '../../../widgets/system_scan_progress_widget.dart';
 import '../../game_screen/my_games_list.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'grid_geometry.dart';
+import 'widgets/grid_loading_state.dart';
+import 'widgets/grid_empty_state.dart';
 import 'my_systems_carousel.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
 import 'package:neostation/sync/sync_manager.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/screens/search_screen/search_screen.dart';
@@ -34,7 +37,13 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/models/secondary_display_state.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/providers/system_background_provider.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:neostation/services/secondary_achievements_controller.dart';
 import 'system_list_builder.dart';
+
+part 'my_systems_grid/gamepad_grid_nav.dart';
+part 'my_systems_grid/theme_background.dart';
+part 'my_systems_grid/pull_to_refresh.dart';
 
 /// Primary widget for the 'My Systems' view, supporting both Grid and Carousel layouts.
 ///
@@ -67,12 +76,12 @@ class MySystems extends StatelessWidget {
           // PHASE 1: Blocking Initialization.
           // If a high-priority system scan is active (e.g., first run), show a blocking status.
           if (configProvider.isGlobalScanning) {
-            return _buildLoadingState(context);
+            return const GridLoadingState();
           }
 
           // PHASE 2: Empty Library State.
           if (!configProvider.hasDetectedSystems) {
-            return _buildEmptyState(context, configProvider);
+            return GridEmptyState(configProvider: configProvider);
           }
 
           // PHASE 3: Content Presentation.
@@ -131,228 +140,6 @@ class MySystems extends StatelessWidget {
     );
   }
 
-  /// Renders a premium loading interface for the initial library setup.
-  Widget _buildLoadingState(BuildContext context) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.surface,
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(14.r),
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 0.15),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 16.r,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Dynamic branding icon with atmospheric glow.
-            Container(
-              padding: EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(12.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Symbols.sync_rounded,
-                color: Colors.white,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              AppLocale.settingUpLibrary.getString(context),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              AppLocale.detectingSystems.getString(context),
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            SystemScanProgressWidget(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Renders the 'Empty State' view with clear CTA for library configuration.
-  Widget _buildEmptyState(
-    BuildContext context,
-    SqliteConfigProvider configProvider,
-  ) {
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.surface,
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: Image.asset(
-                  'assets/images/icons/folder-add-bulk.png',
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              configProvider.hasRomFolders
-                  ? AppLocale.noSystemsFoundTitle.getString(context)
-                  : AppLocale.welcomeNeoStation.getString(context),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              configProvider.hasRomFolders
-                  ? AppLocale.noSystemsFoundDesc.getString(context)
-                  : AppLocale.selectRomFolderDescShort.getString(context),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            // Primary Call to Action Button.
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(8.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  canRequestFocus: false,
-                  focusColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                  splashColor: Colors.transparent,
-                  borderRadius: BorderRadius.circular(8.r),
-                  onTap: () {
-                    SfxService().playEnterSound();
-                    configProvider.selectRomFolder(context: context);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Symbols.folder_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          AppLocale.selectRomFolderButton.getString(context),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Aggregates all logical systems (recent games + detected systems) into a unified list.
   List<SystemInfo> _buildAllSystems(
     BuildContext context,
@@ -394,7 +181,7 @@ class MySystems extends StatelessWidget {
               crossAxisCount: Responsive.getSystemsCrossAxisCountFromSize(
                 configProvider.config.systemGridColumns,
               ),
-              childAspectRatio: 1,
+              childAspectRatio: 0.80,
               selectedIndex: selectedIndex,
               onCardTapped: onCardTapped,
               systems: allSystems,
@@ -513,6 +300,26 @@ class MySystems extends StatelessWidget {
           context.read<SystemBackgroundProvider>().clear();
         }
 
+        // Drive the in-game RetroAchievements panel on the secondary display.
+        // This launch path lives on the stateless [MySystems] widget, so the
+        // controller is scoped to this session: the periodic poll keeps itself
+        // alive via the event loop, and the onGameClosed/onLaunchFailed
+        // callbacks stop it. The app-lifetime shared state lives on the config
+        // provider (the grid/footer have no per-widget instance of their own).
+        final achievementsController = SecondaryAchievementsController();
+        // ignore: unawaited_futures
+        achievementsController.pushForLaunch(
+          state: configProvider.secondaryDisplayState,
+          provider: context.read<RetroAchievementsProvider>(),
+          game: systemInfo.gameModel!,
+          systemFolderName: gameSystemModel.primaryFolderName,
+          boxartPath: SecondaryAchievementsController.resolveBoxart(
+            systemInfo.gameModel!,
+            gameSystemModel.primaryFolderName,
+            fileProvider,
+          ),
+        );
+
         await launchGameWithDialog(
           context: context,
           game: systemInfo.gameModel!,
@@ -520,6 +327,8 @@ class MySystems extends StatelessWidget {
           fileProvider: fileProvider,
           syncProvider: syncProvider,
           onGameClosed: () {
+            // Stop the poll and hide the panel so it fades back to the art.
+            achievementsController.stop(hidePanel: true);
             MySystems.gridLaunchNotifier.value = false;
             GamepadNavigationManager.reactivate();
             Provider.of<SqliteDatabaseProvider>(
@@ -528,6 +337,7 @@ class MySystems extends StatelessWidget {
             ).refresh();
           },
           onLaunchFailed: (ctx, r) async {
+            achievementsController.stop(hidePanel: true);
             MySystems.gridLaunchNotifier.value = false;
             GamepadNavigationManager.reactivate();
           },
@@ -632,28 +442,15 @@ class MySystems extends StatelessWidget {
     if (secondaryState == null) return;
     final folder = system.primaryFolderName ?? system.folderName ?? 'all';
 
-    // UI Asset Mapping logic — resolve the same way as the hover path
-    // (_updateSecondaryScreenName): prefer a custom logo, then the active
-    // theme's logo, then the bundled asset. Resolving the theme asset here
-    // (instead of always falling back to the bundled asset) is what keeps the
-    // correct system art on the secondary display when returning from a
-    // system, rather than reverting to the default logo until the user hovers
-    // another system. See NeoAssetsProvider (returns null when no theme).
     final neoAssets = Provider.of<NeoAssetsProvider>(context, listen: false);
 
     final String? customLogo = system.customLogoPath?.isNotEmpty == true
         ? system.customLogoPath
         : null;
-    final String? themeLogo = customLogo == null
-        ? neoAssets.getLogoForSystemSync(folder)
-        : null;
     final String? systemLogo = system.isGame
         ? system.customWheelImage
-        : (customLogo ??
-              themeLogo ??
-              'assets/images/systems/logos/$folder.webp');
-    final bool isLogoAsset =
-        !system.isGame && customLogo == null && themeLogo == null;
+        : (customLogo ?? 'assets/images/logos/$folder.webp');
+    final bool isLogoAsset = !system.isGame && customLogo == null;
 
     final String? customBg = system.customBackgroundPath;
     final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
@@ -663,11 +460,8 @@ class MySystems extends StatelessWidget {
     final String? systemBackground = hasCustomBg ? customBg : themeBg;
     final bool isBackgroundAsset = false;
 
-    final paletteProvider = Provider.of<PaletteProvider>(
-      context,
-      listen: false,
-    );
-    final isOled = paletteProvider.isOled;
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isOled = themeProvider.isOled;
 
     secondaryState.updateState(
       systemName: system.title ?? "NEOSTATION",
@@ -731,6 +525,7 @@ class SystemCardGridView extends StatefulWidget {
     super.key,
     required this.crossAxisCount,
     this.childAspectRatio = 1,
+    this.aspectRatios,
     this.selectedIndex = 0,
     this.onCardTapped,
     this.onEnterPressed,
@@ -740,6 +535,13 @@ class SystemCardGridView extends StatefulWidget {
 
   final int crossAxisCount;
   final double childAspectRatio;
+
+  /// Optional per-card aspect ratios. When supplied, each card is laid out with
+  /// its own height (width / aspectRatio). This is used to render systems with
+  /// hidden logos as perfect 1:1 squares while keeping the logo footer space
+  /// for the rest.
+  final List<double>? aspectRatios;
+
   final int selectedIndex;
   final Function(int index)? onCardTapped;
   final VoidCallback? onEnterPressed;
@@ -786,7 +588,6 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   SecondaryDisplayState? _secondaryDisplayState;
 
   final Map<String, String?> _themeBackgrounds = {};
-  final Map<String, String?> _themeLogos = {};
   String _lastThemeFolder = '';
 
   List<List<int>>? _cachedVirtualGrid;
@@ -805,6 +606,10 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     return SystemInfo.fromSystemMetadata(s);
   }).toList();
 
+  /// Bridge so extension parts can request a rebuild
+  /// (`State.setState` is `@protected`).
+  void rebuild(VoidCallback fn) => setState(fn);
+
   @override
   void initState() {
     super.initState();
@@ -813,7 +618,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     _initializeGamepad();
 
     if (Platform.isAndroid) {
-      _secondaryDisplayState = SecondaryDisplayState();
+      _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
 
@@ -830,188 +635,9 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   }
 
   bool _prevIsSecondaryActive = false;
-
-  // When secondary display signals it's active (startup or reconnect),
-  // immediately push current system state so default logo never shows.
-  void _onSecondaryStateChanged() {
-    if (!mounted) return;
-    final isActive = _secondaryDisplayState?.value?.isSecondaryActive ?? false;
-    // Update the guard BEFORE pushing state. _updateSecondaryScreenName() calls
-    // updateState(), which synchronously re-enters this listener via
-    // notifyListeners(); if _prevIsSecondaryActive were still false the
-    // edge-condition below would stay true and recurse until the stack
-    // overflows (a CPU spike per tab switch on devices with a secondary screen).
-    final wasActive = _prevIsSecondaryActive;
-    _prevIsSecondaryActive = isActive;
-    if (isActive && !wasActive) {
-      _updateSecondaryScreenName();
-    }
-  }
-
-  void _loadThemeAssetsForSystems() {
-    if (!mounted) return;
-
-    final neoAssets = context.read<NeoAssetsProvider>();
-    final themeFolder = neoAssets.activeThemeFolder;
-
-    if (themeFolder == _lastThemeFolder) return;
-    _lastThemeFolder = themeFolder;
-
-    if (themeFolder.isEmpty) {
-      if (_themeBackgrounds.isNotEmpty || _themeLogos.isNotEmpty) {
-        setState(() {
-          _themeBackgrounds.clear();
-          _themeLogos.clear();
-        });
-      }
-      return;
-    }
-
-    final systems = widget.systems.map((s) {
-      return s is SystemInfo ? s : SystemInfo.fromSystemMetadata(s);
-    }).toList();
-
-    final folderNames = systems
-        .where((s) => !s.isGame)
-        .map((s) => s.primaryFolderName ?? s.folderName ?? '')
-        .where((f) => f.isNotEmpty)
-        .toSet();
-
-    final Map<String, String?> newBgs = {};
-    final Map<String, String?> newLogos = {};
-
-    for (final folder in folderNames) {
-      newBgs[folder] = neoAssets.getBackgroundForSystemSync(folder);
-      newLogos[folder] = neoAssets.getLogoForSystemSync(folder);
-    }
-
-    setState(() {
-      _themeBackgrounds
-        ..clear()
-        ..addAll(newBgs);
-      _themeLogos
-        ..clear()
-        ..addAll(newLogos);
-    });
-  }
-
-  void _precacheSystemBackgrounds() {
-    if (!mounted) return;
-    final systems = _toSystemCards(widget.systems);
-    for (final sys in systems) {
-      if (sys.isGame) {
-        final wheel = sys.customWheelImage;
-        if (wheel != null && wheel.isNotEmpty) {
-          final file = File(wheel);
-          if (file.existsSync()) {
-            precacheImage(ResizeImage(FileImage(file), width: 256), context);
-          }
-        }
-        final customBg = sys.customBackgroundPath;
-        if (customBg != null && customBg.isNotEmpty) {
-          final file = File(customBg);
-          if (file.existsSync()) {
-            precacheImage(ResizeImage(FileImage(file), width: 1024), context);
-          }
-        }
-      } else {
-        final customBg = sys.customBackgroundPath;
-        if (customBg != null && customBg.isNotEmpty) {
-          final file = File(customBg);
-          if (file.existsSync()) {
-            precacheImage(ResizeImage(FileImage(file), width: 512), context);
-          }
-        } else {
-          final folderName = sys.primaryFolderName ?? sys.folderName ?? '';
-          final themeBg = _themeBackgrounds[folderName];
-          if (themeBg != null && themeBg.isNotEmpty) {
-            final file = File(themeBg);
-            if (file.existsSync()) {
-              precacheImage(ResizeImage(FileImage(file), width: 512), context);
-            }
-          }
-        }
-
-        final customLogo = sys.customLogoPath;
-        if (customLogo != null && customLogo.isNotEmpty) {
-          final file = File(customLogo);
-          if (file.existsSync()) {
-            precacheImage(ResizeImage(FileImage(file), width: 512), context);
-          }
-        } else {
-          final folderName = sys.primaryFolderName ?? sys.folderName ?? '';
-          final themeLogo = _themeLogos[folderName];
-          if (themeLogo != null && themeLogo.isNotEmpty) {
-            final file = File(themeLogo);
-            if (file.existsSync()) {
-              precacheImage(ResizeImage(FileImage(file), width: 512), context);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  /// Synchronizes the current selection with the secondary hardware display.
-  void _updateSecondaryScreenName() {
-    if (!Platform.isAndroid) return;
-    if (_secondaryDisplayState == null) return;
-    if (widget.selectedIndex < 0 ||
-        widget.selectedIndex >= widget.systems.length) {
-      return;
-    }
-
-    final system = widget.systems[widget.selectedIndex];
-    final info = system is SystemInfo
-        ? system
-        : SystemInfo.fromSystemMetadata(system);
-    final folder = info.primaryFolderName ?? info.folderName ?? 'all';
-
-    final String? customLogo = info.customLogoPath?.isNotEmpty == true
-        ? info.customLogoPath
-        : null;
-    final String? themeLogo = customLogo == null ? _themeLogos[folder] : null;
-    final String? systemLogo = info.isGame
-        ? info.customWheelImage
-        : (customLogo ??
-              themeLogo ??
-              'assets/images/systems/logos/$folder.webp');
-    final bool isLogoAsset =
-        !info.isGame && customLogo == null && themeLogo == null;
-
-    final String? customBg = info.customBackgroundPath;
-    final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
-    final String? themeBg = hasCustomBg ? null : _themeBackgrounds[folder];
-    final String? systemBackground = hasCustomBg ? customBg : themeBg;
-
-    final paletteProvider = Provider.of<PaletteProvider>(
-      context,
-      listen: false,
-    );
-    final isOled = paletteProvider.isOled;
-
-    _secondaryDisplayState?.updateState(
-      systemName: (info.shortName ?? info.title ?? "NEOSTATION").toUpperCase(),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor.toARGB32(),
-      systemLogo: systemLogo,
-      isLogoAsset: isLogoAsset,
-      systemBackground: systemBackground,
-      clearSystemBackground: systemBackground == null,
-      isBackgroundAsset: false,
-      useShader: systemBackground == null,
-      shaderColor1: info.color1AsColor?.toARGB32(),
-      shaderColor2: info.color2AsColor?.toARGB32(),
-      isGameSelected: false,
-      clearFanart: true,
-      clearScreenshot: true,
-      clearWheel: true,
-      clearVideo: true,
-      clearImageBytes: true,
-      clearGameId: true,
-      useFluidShader: false,
-      isOled: isOled,
-    );
-  }
+  // Tracks the scan-active state across builds so we can re-push the settled
+  // selection to the secondary display exactly when the initial scan finishes.
+  bool _wasScanning = false;
 
   @override
   void didChangeDependencies() {
@@ -1055,78 +681,20 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   void dispose() {
     _cardSizeLabelTimer?.cancel();
     _cardSizeLabel.dispose();
+    // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _cleanupGamepad();
     _scrollController.dispose();
-    _secondaryDisplayState?.dispose();
     super.dispose();
-  }
-
-  /// Configures the gamepad navigation layer for the systems grid.
-  void _initializeGamepad() {
-    _gamepadNav = GamepadNavigation(
-      onNavigateUp: (isRepeat) {
-        if (_isNavigatingFast != isRepeat) {
-          setState(() => _isNavigatingFast = isRepeat);
-        }
-        _navigateGrid('up');
-      },
-      onNavigateDown: (isRepeat) {
-        if (_isNavigatingFast != isRepeat) {
-          setState(() => _isNavigatingFast = isRepeat);
-        }
-        _navigateGrid('down');
-      },
-      onNavigateLeft: (isRepeat) {
-        if (_isNavigatingFast != isRepeat) {
-          setState(() => _isNavigatingFast = isRepeat);
-        }
-        _navigateGrid('left');
-      },
-      onNavigateRight: (isRepeat) {
-        if (_isNavigatingFast != isRepeat) {
-          setState(() => _isNavigatingFast = isRepeat);
-        }
-        _navigateGrid('right');
-      },
-      onSelectItem: () => widget.onEnterPressed?.call(),
-      onSettings: () => widget.onEscapePressed?.call(),
-      onXButton: () {
-        HeaderSortDropdown.globalKey.currentState?.showDropdown();
-      },
-      onSelectButton: () {
-        if (mounted) SearchScreen.open(context);
-      },
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-      onLeftBumper: AppNavigation.previousTab,
-      onRightBumper: AppNavigation.nextTab,
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _gamepadNav.initialize();
-      GamepadNavigationManager.pushLayer(
-        'my_systems_list',
-        onActivate: () => _gamepadNav.activate(),
-        onDeactivate: () => _gamepadNav.deactivate(),
-      );
-    });
-  }
-
-  void _cleanupGamepad() {
-    GamepadNavigationManager.popLayer('my_systems_list');
-    _gamepadNav.dispose();
-  }
-
-  void _navigateGrid(String direction) {
-    if (!mounted) return;
-    _navigateVirtual(direction);
   }
 
   /// Generates a logical 2D representation of the grid to resolve complex
   /// directional navigation across items with varying spans.
   ///
   /// Returns a matrix where each cell [row][col] points to the item index.
+  /// Memoized wrapper around the pure [buildVirtualGrid]: caches the last
+  /// packed grid so repeated navigation/scroll passes over an unchanged card
+  /// set skip the recompute.
   List<List<int>> _buildVirtualGrid(List<SystemInfo> cards, int cols) {
     if (_cachedVirtualGrid != null &&
         _cachedGridCols == cols &&
@@ -1134,61 +702,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
       return _cachedVirtualGrid!;
     }
 
-    final List<List<int>> grid = [];
-
-    // 'Recent Games' cards expand to 3x2 on high-resolution displays.
-    int getSpanW(SystemInfo card) => (card.isGame && cols >= 3) ? 3 : 1;
-    int getSpanH(SystemInfo card) => (card.isGame && cols >= 3) ? 2 : 1;
-
-    for (int i = 0; i < cards.length; i++) {
-      final card = cards[i];
-      final w = getSpanW(card);
-      final h = getSpanH(card);
-
-      // Recursive scan for the first available spatial slot that fits the component spans.
-      int foundRow = 0;
-      int foundCol = 0;
-      bool fits = false;
-
-      while (!fits) {
-        while (grid.length <= foundRow + h - 1) {
-          grid.add(List<int>.filled(cols, -1));
-        }
-
-        if (foundCol + w <= cols) {
-          bool overlap = false;
-          for (int r = foundRow; r < foundRow + h; r++) {
-            for (int c = foundCol; c < foundCol + w; c++) {
-              if (grid[r][c] != -1) {
-                overlap = true;
-                break;
-              }
-            }
-            if (overlap) break;
-          }
-
-          if (!overlap) {
-            fits = true;
-          } else {
-            foundCol++;
-            if (foundCol >= cols) {
-              foundCol = 0;
-              foundRow++;
-            }
-          }
-        } else {
-          foundCol = 0;
-          foundRow++;
-        }
-      }
-
-      // Commit the spatial allocation to the grid matrix.
-      for (int r = foundRow; r < foundRow + h; r++) {
-        for (int c = foundCol; c < foundCol + w; c++) {
-          grid[r][c] = i;
-        }
-      }
-    }
+    final grid = buildVirtualGrid(cards, cols);
 
     _cachedVirtualGrid = grid;
     _cachedGridCols = cols;
@@ -1196,183 +710,16 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     return grid;
   }
 
-  /// Resolve the next focused index based on the virtual spatial grid.
-  void _navigateVirtual(String direction) {
-    final cards = _systemCards;
-    final cols = _cols;
-    final current = widget.selectedIndex;
-
-    final grid = _buildVirtualGrid(cards, cols);
-
-    // Resolve current 2D coordinates.
-    int curRow = -1, curCol = -1;
-    outer:
-    for (int r = 0; r < grid.length; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (grid[r][c] == current) {
-          curRow = r;
-          curCol = c;
-          break outer;
-        }
-      }
-    }
-    if (curRow == -1) return;
-
-    int newIndex = current;
-
-    switch (direction) {
-      case 'up':
-        int targetRow = curRow;
-        int idx = current;
-        int safety = 0;
-        while ((idx == current || idx == -1) && safety < grid.length) {
-          targetRow = (targetRow - 1 + grid.length) % grid.length;
-          idx = grid[targetRow][curCol.clamp(0, cols - 1)];
-          if (idx == -1) {
-            idx = _findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
-          }
-          safety++;
-        }
-        newIndex = idx >= 0 ? idx : current;
-      case 'down':
-        int targetRow = curRow;
-        int idx = current;
-        int safety = 0;
-        while ((idx == current || idx == -1) && safety < grid.length) {
-          targetRow = (targetRow + 1) % grid.length;
-          idx = grid[targetRow][curCol.clamp(0, cols - 1)];
-          if (idx == -1) {
-            idx = _findNearestInRow(grid, targetRow, curCol.clamp(0, cols - 1));
-          }
-          safety++;
-        }
-        newIndex = idx >= 0 ? idx : current;
-      case 'left':
-        int firstCol = curCol;
-        while (firstCol > 0 && grid[curRow][firstCol - 1] == current) {
-          firstCol--;
-        }
-        if (firstCol > 0) {
-          final idx = grid[curRow][firstCol - 1];
-          newIndex = idx >= 0 ? idx : current;
-        } else {
-          int targetRow = (curRow - 1 + grid.length) % grid.length;
-          for (int c = cols - 1; c >= 0; c--) {
-            if (grid[targetRow][c] != -1 && grid[targetRow][c] != current) {
-              newIndex = grid[targetRow][c];
-              break;
-            }
-          }
-        }
-      case 'right':
-        int lastCol = curCol;
-        while (lastCol < cols - 1 && grid[curRow][lastCol + 1] == current) {
-          lastCol++;
-        }
-        if (lastCol < cols - 1) {
-          final idx = grid[curRow][lastCol + 1];
-          newIndex = idx >= 0 ? idx : current;
-        } else {
-          int targetRow = (curRow + 1) % grid.length;
-          for (int c = 0; c < cols; c++) {
-            if (grid[targetRow][c] != -1 && grid[targetRow][c] != current) {
-              newIndex = grid[targetRow][c];
-              break;
-            }
-          }
-        }
-    }
-
-    if (newIndex != current) {
-      widget.onCardTapped?.call(newIndex);
-    }
-  }
-
-  /// Spatial search for the nearest neighbor in a row with potential layout gaps.
-  int _findNearestInRow(List<List<int>> grid, int row, int col) {
-    final rowItems = grid[row];
-    final cols = rowItems.length;
-
-    for (int dist = 1; dist < cols; dist++) {
-      if (col - dist >= 0 && rowItems[col - dist] != -1) {
-        return rowItems[col - dist];
-      }
-      if (col + dist < cols && rowItems[col + dist] != -1) {
-        return rowItems[col + dist];
-      }
-    }
-    return -1;
-  }
-
-  /// Dynamically computes grid layout dimensions based on viewport constraints.
+  /// Resolves the live viewport width (net of the outer inset) and delegates to
+  /// the pure [calculateGridDimensions]. [customWidth], when supplied (e.g. from
+  /// a `LayoutBuilder`'s constraints), is used as-is without the inset.
   Map<String, double> _calculateGridDimensions([double? customWidth]) {
     final screenWidth =
         customWidth ?? (MediaQuery.of(context).size.width - 12.0.r);
-    final crossAxisSpacing = 6.0.r;
-    final mainAxisSpacing = 6.0.r;
-
-    final totalSpacing = crossAxisSpacing * (_cols - 1);
-    final availableWidth = screenWidth - totalSpacing;
-    final itemWidth = availableWidth / _cols;
-
-    final itemHeight = itemWidth / widget.childAspectRatio;
-    final rowHeight = itemHeight + mainAxisSpacing;
-
-    return {
-      'itemWidth': itemWidth,
-      'itemHeight': itemHeight,
-      'rowHeight': rowHeight,
-      'crossAxisSpacing': crossAxisSpacing,
-      'mainAxisSpacing': mainAxisSpacing,
-    };
-  }
-
-  /// Automatically adjusts scroll position to keep the selected item centered in the viewport.
-  void _ensureSelectedItemVisibleUniversal() {
-    if (!_scrollController.hasClients || widget.systems.isEmpty) return;
-
-    final cards = _systemCards;
-    final cols = _cols;
-    final grid = _buildVirtualGrid(cards, cols);
-
-    int selectedRow = -1;
-    for (int r = 0; r < grid.length; r++) {
-      if (grid[r].contains(widget.selectedIndex)) {
-        selectedRow = r;
-        break;
-      }
-    }
-    if (selectedRow == -1) return;
-
-    final selectedCard = cards[widget.selectedIndex];
-    final spanH = (selectedCard.isGame && cols >= 3) ? 2 : 1;
-
-    final dimensions = _calculateGridDimensions();
-    final rowHeight = dimensions['rowHeight']!;
-    final itemHeight = dimensions['itemHeight']!;
-    final mainAxisSpacing = dimensions['mainAxisSpacing']!;
-
-    final viewportHeight = _scrollController.position.viewportDimension;
-    final maxScrollExtent = _scrollController.position.maxScrollExtent;
-    final minScrollExtent = _scrollController.position.minScrollExtent;
-
-    final double itemActualHeight =
-        spanH * itemHeight + (spanH - 1) * mainAxisSpacing;
-
-    final double itemTop = selectedRow * rowHeight;
-    final double itemCenter = itemTop + (itemActualHeight / 2);
-
-    final double targetOffset = (itemCenter - (viewportHeight / 2)).clamp(
-      minScrollExtent,
-      maxScrollExtent,
-    );
-
-    _scrollController.animateTo(
-      targetOffset,
-      duration: _isNavigatingFast
-          ? const Duration(milliseconds: 180)
-          : const Duration(milliseconds: 360),
-      curve: Curves.easeOutQuart,
+    return calculateGridDimensions(
+      screenWidth: screenWidth,
+      cols: _cols,
+      childAspectRatio: widget.childAspectRatio,
     );
   }
 
@@ -1386,11 +733,32 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
         final neoThemeFolder = context.select<NeoAssetsProvider, String>(
           (p) => p.activeThemeFolder,
         );
+        final isScanning = context.select<SqliteConfigProvider, bool>(
+          (p) => p.isScanning,
+        );
         if (neoThemeFolder != _lastThemeFolder) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _loadThemeAssetsForSystems();
+            // Theme assets (and thus _themeBackgrounds) have only just resolved.
+            // Re-push the current selection so the secondary display picks up the
+            // now-available background — otherwise the initially-settled system
+            // (e.g. the 'All' virtual system) stays blank on the secondary until
+            // the user navigates and triggers a push.
+            // Skip while scanning so the background doesn't pop in over the scan
+            // display; the scan-settle branch below re-pushes once the scan ends.
+            if (!isScanning) _updateSecondaryScreenName();
           });
         }
+        // When the initial scan settles, re-push the settled selection so the
+        // secondary display reveals its background at the same moment the primary
+        // screen settles — not partway through the scan.
+        if (_wasScanning && !isScanning) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _loadThemeAssetsForSystems();
+            _updateSecondaryScreenName();
+          });
+        }
+        _wasScanning = isScanning;
 
         Widget grid = Theme(
           data: _cachedThemeData ?? Theme.of(context),
@@ -1504,105 +872,11 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     );
   }
 
-  void _handlePointerDown(PointerDownEvent event) {
-    _activePointers[event.pointer] = event.position;
-  }
-
-  void _handlePointerMove(PointerMoveEvent event) {
-    _activePointers[event.pointer] = event.position;
-    if (_activePointers.length < 2) return;
-
-    final now = DateTime.now();
-    if (_lastPinchTime != null &&
-        now.difference(_lastPinchTime!).inMilliseconds < 120) {
-      return;
-    }
-
-    final positions = _activePointers.values.toList();
-    final distance = (positions[0] - positions[1]).distance;
-
-    if (_lastPinchDistance != null) {
-      final deltaDistance = distance - _lastPinchDistance!;
-      if (deltaDistance > 35) {
-        _adjustGridDensity(1);
-        _lastPinchDistance = distance;
-        _lastPinchTime = now;
-      } else if (deltaDistance < -35) {
-        _adjustGridDensity(-1);
-        _lastPinchDistance = distance;
-        _lastPinchTime = now;
-      }
-    } else {
-      _lastPinchDistance = distance;
-    }
-  }
-
-  void _handlePointerUp(PointerUpEvent event) {
-    _activePointers.remove(event.pointer);
-    if (_activePointers.length < 2) {
-      _lastPinchDistance = null;
-    }
-    if (_activePointers.isEmpty && _pullReady) {
-      _pullReady = false;
-      _pullProgress.value = 0.0;
-      _triggerRefresh();
-    }
-  }
-
-  void _handlePointerCancel(PointerCancelEvent event) {
-    _activePointers.remove(event.pointer);
-    if (_activePointers.length < 2) {
-      _lastPinchDistance = null;
-    }
-    if (_activePointers.isEmpty && _pullReady) {
-      _pullReady = false;
-      _pullProgress.value = 0.0;
-      _triggerRefresh();
-    }
-  }
-
-  /// Triggers ROM directory rescan when pull-to-refresh reaches 100%.
-  void _triggerRefresh() {
-    try {
-      final configProvider = context.read<SqliteConfigProvider>();
-      if (!configProvider.isScanning) {
-        SfxService().playNavSound();
-        configProvider.scanSystems();
-      }
-    } catch (_) {
-      // Ignore if context/provider is no longer valid.
-    }
-  }
-
-  /// Adjusts grid column density based on pinch gesture direction.
-  void _adjustGridDensity(int delta) {
-    try {
-      final provider = context.read<SqliteConfigProvider>();
-      final sizes = ['S', 'M', 'L', 'XL'];
-      final currentIndex = sizes.indexOf(provider.config.systemGridColumns);
-      if (currentIndex == -1) return;
-      final newIndex = (currentIndex + delta).clamp(0, sizes.length - 1);
-      if (newIndex != currentIndex) {
-        final newSize = sizes[newIndex];
-        provider.updateSystemGridColumns(newSize);
-        _cols = Responsive.getSystemsCrossAxisCountFromSize(newSize);
-        _cachedVirtualGrid = null;
-        _cachedGridCols = null;
-        _showCardSizeLabel(newSize);
-        setState(() {});
-      }
-    } catch (_) {}
-  }
-
-  void _showCardSizeLabel(String size) {
-    _cardSizeLabelTimer?.cancel();
-    _cardSizeLabel.value = size;
-    _cardSizeLabelTimer = Timer(const Duration(milliseconds: 1200), () {
-      _cardSizeLabel.value = null;
-    });
-  }
-
   /// Renders a non-linear grid by manually positioning components according to their spans.
+  ///
+  /// System cards can now have per-card aspect ratios (e.g. 1:1 when the system
+  /// logo is hidden). Each row's height is derived from the tallest card in that
+  /// row, eliminating empty footer space inside the card itself.
   Widget _buildWideCardGrid(
     BuildContext context,
     List<SystemInfo> systemCards,
@@ -1614,15 +888,53 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
       builder: (context, constraints) {
         final dims = _calculateGridDimensions(constraints.maxWidth);
         final colWidth = dims['itemWidth']!;
-        final rowHeight = dims['itemHeight']!;
         final spX = dims['crossAxisSpacing']!;
         final spY = dims['mainAxisSpacing']!;
 
-        final double totalHeight =
-            grid.length * rowHeight + (grid.length - 1) * spY;
+        /// Resolves the aspect ratio for a card, falling back to the widget default.
+        double cardAspectRatio(int index) {
+          final ratios = widget.aspectRatios;
+          if (ratios != null && index >= 0 && index < ratios.length) {
+            return ratios[index];
+          }
+          return widget.childAspectRatio;
+        }
+
+        /// Computes the item height for each row based on the tallest occupant.
+        final rowItemHeights = List<double>.filled(grid.length, 0);
+        final rowHeights = List<double>.filled(grid.length, 0);
+        for (int r = 0; r < grid.length; r++) {
+          final seen = <int>{};
+          double maxHeight = 0;
+          for (int c = 0; c < grid[r].length; c++) {
+            final cardIdx = grid[r][c];
+            if (cardIdx == -1 || seen.contains(cardIdx)) continue;
+            seen.add(cardIdx);
+            final height = colWidth / cardAspectRatio(cardIdx);
+            if (height > maxHeight) maxHeight = height;
+          }
+          rowItemHeights[r] = maxHeight;
+          rowHeights[r] = maxHeight + spY;
+        }
+
+        /// Accumulated top offset for a given row.
+        double rowTop(int row) {
+          double top = 0;
+          for (int i = 0; i < row; i++) {
+            top += rowHeights[i];
+          }
+          return top;
+        }
+
+        /// Total scrollable height (last row doesn't add trailing spacing).
+        final totalHeight = rowHeights.isEmpty
+            ? 0.0
+            : rowHeights.reduce((a, b) => a + b) - spY;
 
         final List<Widget> cardWidgets = [];
         final Set<int> placedIndices = {};
+
+        double? selLeft, selTop, selWidth, selHeight;
 
         for (int r = 0; r < grid.length; r++) {
           for (int c = 0; c < grid[r].length; c++) {
@@ -1634,16 +946,37 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             final spanH = (card.isGame && cols >= 3) ? 2 : 1;
 
             final left = c * (colWidth + spX);
-            final top = r * (rowHeight + spY);
             final width = spanW * colWidth + (spanW - 1) * spX;
-            final height = spanH * rowHeight + (spanH - 1) * spY;
+
+            double cardHeight;
+            double top;
+            if (card.isGame) {
+              cardHeight = 0;
+              for (int i = 0; i < spanH && r + i < rowItemHeights.length; i++) {
+                cardHeight += rowItemHeights[r + i];
+              }
+              cardHeight += (spanH - 1) * spY;
+              top = rowTop(r);
+            } else {
+              cardHeight = colWidth / cardAspectRatio(cardIdx);
+              // Center the card vertically inside the row band.
+              final rowItemHeight = rowItemHeights[r];
+              top = rowTop(r) + (rowItemHeight - cardHeight) / 2;
+            }
+
+            if (cardIdx == widget.selectedIndex) {
+              selLeft = left;
+              selTop = top;
+              selWidth = width;
+              selHeight = cardHeight;
+            }
 
             cardWidgets.add(
               Positioned(
                 left: left,
                 top: top,
                 width: width,
-                height: height,
+                height: cardHeight,
                 child: RepaintBoundary(
                   child: SystemCard(
                     key: ValueKey('system_card_${card.title}_$cardIdx'),
@@ -1673,62 +1006,64 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           }
         }
 
-        // Focused Item Highlight calculations.
-        double? highlightLeft, highlightTop, highlightWidth, highlightHeight;
-        if (widget.selectedIndex != -1) {
-          for (int r = 0; r < grid.length; r++) {
-            for (int c = 0; c < grid[r].length; c++) {
-              if (grid[r][c] == widget.selectedIndex) {
-                final card = systemCards[widget.selectedIndex];
-                final spanW = (card.isGame && cols >= 3) ? 3 : 1;
-                final spanH = (card.isGame && cols >= 3) ? 2 : 1;
-
-                highlightLeft = c * (colWidth + spX);
-                highlightTop = r * (rowHeight + spY);
-                highlightWidth = spanW * colWidth + (spanW - 1) * spX;
-                highlightHeight = spanH * rowHeight + (spanH - 1) * spY;
-                break;
-              }
-            }
-            if (highlightLeft != null) break;
-          }
-        }
+        final focusIndicator =
+            (selLeft != null &&
+                selTop != null &&
+                selWidth != null &&
+                selHeight != null)
+            ? AnimatedPositioned(
+                key: const ValueKey('focus_indicator'),
+                duration: const Duration(milliseconds: 256),
+                curve: Curves.fastOutSlowIn,
+                left: selLeft + 1.r,
+                top: selTop + 1.r,
+                width: selWidth - 2.r,
+                height: selHeight - 2.r,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          Theme.of(
+                            context,
+                          ).extension<CornerRadii>()?.radiusExternal ??
+                          BorderRadius.circular(14.r),
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.28),
+                          Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.08),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.35, 1.0],
+                      ),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.55),
+                        width: 2.r,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink();
 
         return SingleChildScrollView(
           controller: _scrollController,
+          clipBehavior: Clip.none,
           physics: const BouncingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
           ),
           child: SizedBox(
             height: totalHeight,
             child: Stack(
-              children: [
-                ...cardWidgets,
-                if (highlightLeft != null)
-                  AnimatedPositioned(
-                    duration: Duration(
-                      milliseconds: _isNavigatingFast ? 120 : 300,
-                    ),
-                    curve: Curves.easeOutQuart,
-                    left: highlightLeft,
-                    top: highlightTop!,
-                    width: highlightWidth!,
-                    height: highlightHeight!,
-                    child: RepaintBoundary(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.secondary,
-                              width: 4.r,
-                            ),
-                            borderRadius: BorderRadius.circular(14.r),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+              clipBehavior: Clip.none,
+              children: [...cardWidgets, focusIndicator],
             ),
           ),
         );

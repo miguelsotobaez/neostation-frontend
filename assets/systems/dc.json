@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "dc",
+    "multidisc": true,
     "name": "Sega Dreamcast",
     "short_name": "DC",
     "details": {
@@ -72,6 +73,7 @@
     },
     {
       "name": "RetroArch64 Flycast",
+      "default_core": true,
       "unique_id": "dc.ra64.flycast",
       "description": "Supported extensions: cdi, gdi, chd, cue, bin, elf, zip, 7z, lst, m3u, zip.",
       "is_retroachievements_compatible": true,
@@ -83,6 +85,7 @@
     },
     {
       "name": "RetroArch32 Flycast",
+      "default_core": true,
       "unique_id": "dc.ra32.flycast",
       "description": "Supported extensions: cdi, gdi, chd, cue, bin, elf, zip, 7z, lst, m3u, zip.",
       "is_retroachievements_compatible": true,
@@ -94,7 +97,7 @@
     },
     {
       "name": "RetroArch Flycast",
-      "default": true,
+      "default_core": true,
       "unique_id": "dc.ra.flycast",
       "description": "Supported extensions: cdi, gdi, chd, cue, bin, elf, zip, 7z, lst, m3u, zip.",
       "is_retroachievements_compatible": true,

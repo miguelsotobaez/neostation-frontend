@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:neostation/themes/app_palettes.dart';
+import 'package:neostation/themes/app_themes.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class ThemeCard extends StatefulWidget {
@@ -9,16 +9,23 @@ class ThemeCard extends StatefulWidget {
     super.key,
     required this.themeName,
     required this.displayName,
-    required this.logoPath,
     this.onTap,
+    this.onLongPress,
+    this.onDelete,
     this.isSelected = false,
     this.isFocused = false,
   });
 
   final String themeName;
   final String displayName;
-  final String logoPath;
   final VoidCallback? onTap;
+
+  /// Optional long-press handler, used to delete imported (custom) themes.
+  final VoidCallback? onLongPress;
+
+  /// When set, a small ✕ badge is shown on the card to delete the theme (used
+  /// for imported/custom themes). Complements [onLongPress] and gamepad delete.
+  final VoidCallback? onDelete;
   final bool isSelected;
   final bool isFocused;
 
@@ -85,13 +92,11 @@ class _ThemeCardState extends State<ThemeCard> {
                               .instance
                               .platformDispatcher
                               .platformBrightness;
-                          themeData = AppPalettes.getPaletteDataByName(
-                            brightness == Brightness.dark
-                                ? 'nsdark'
-                                : 'nslight',
+                          themeData = AppThemes.getThemeDataByName(
+                            brightness == Brightness.dark ? 'dark' : 'light',
                           );
                         } else {
-                          themeData = AppPalettes.getPaletteDataByName(
+                          themeData = AppThemes.getThemeDataByName(
                             widget.themeName,
                           );
                         }
@@ -139,9 +144,37 @@ class _ThemeCardState extends State<ThemeCard> {
                           SfxService().playEnterSound();
                           widget.onTap?.call();
                         },
+                        onLongPress: widget.onLongPress,
                       ),
                     ),
                   ),
+                  // Delete badge for imported themes (on top of the InkWell so
+                  // it receives its own taps).
+                  if (widget.onDelete != null)
+                    Positioned(
+                      top: 4.r,
+                      right: 4.r,
+                      child: Material(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          canRequestFocus: false,
+                          onTap: () {
+                            SfxService().playEnterSound();
+                            widget.onDelete!.call();
+                          },
+                          child: Padding(
+                            padding: EdgeInsets.all(3.r),
+                            child: Icon(
+                              Symbols.close_rounded,
+                              color: Colors.white,
+                              size: 16.r,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -331,4 +364,93 @@ class _AppMockupPainter extends CustomPainter {
       old.surface != surface ||
       old.primary != primary ||
       old.secondary != secondary;
+}
+
+/// Grid tile that triggers the "import custom theme" flow. Rendered as the last
+/// item in the theme grid, styled to match [ThemeCard] (same footprint, focus
+/// border and label) but with a dashed "+" placeholder instead of a preview.
+class ImportThemeCard extends StatelessWidget {
+  const ImportThemeCard({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.isFocused = false,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final bool isFocused;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Container(
+            margin: EdgeInsets.symmetric(vertical: 4.h),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: isFocused
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                width: 2.r,
+              ),
+              boxShadow: isFocused
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.3),
+                        blurRadius: 8.r,
+                        spreadRadius: 1.r,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6.r),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  canRequestFocus: false,
+                  onTap: () {
+                    SfxService().playEnterSound();
+                    onTap?.call();
+                  },
+                  child: Center(
+                    child: Icon(
+                      Symbols.add_rounded,
+                      color: isFocused
+                          ? accent
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      size: 32.r,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: 4.r),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: isFocused
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12.r,
+          ),
+        ),
+      ],
+    );
+  }
 }

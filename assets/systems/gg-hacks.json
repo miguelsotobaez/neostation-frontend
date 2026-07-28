@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gg-hacks",
+    "multidisc": false,
     "name": "Sega Game Gear Hacks",
     "short_name": "GGH",
     "details": {
@@ -82,6 +83,7 @@
     },
     {
       "name": "RetroArch64 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "gg-hacks.ra64.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -137,6 +139,7 @@
     },
     {
       "name": "RetroArch32 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "gg-hacks.ra32.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -192,7 +195,7 @@
     },
     {
       "name": "RetroArch Genesis Plus GX",
-      "default": true,
+      "default_core": true,
       "unique_id": "gg-hacks.ra.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,

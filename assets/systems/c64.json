@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "c64",
+    "multidisc": false,
     "name": "Commodore 64",
     "short_name": "C64",
     "details": {
@@ -74,6 +75,7 @@
     },
     {
       "name": "RetroArch64 vice_x64",
+      "default_core": true,
       "unique_id": "c64.ra64.vice_x64",
       "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
       "is_retroachievements_compatible": false,
@@ -107,6 +109,7 @@
     },
     {
       "name": "RetroArch32 vice_x64",
+      "default_core": true,
       "unique_id": "c64.ra32.vice_x64",
       "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
       "is_retroachievements_compatible": false,
@@ -152,7 +155,7 @@
     },
     {
       "name": "RetroArch vice_x64",
-      "default": true,
+      "default_core": true,
       "unique_id": "c64.ra.vice_x64",
       "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
       "is_retroachievements_compatible": false,

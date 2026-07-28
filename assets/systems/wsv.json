@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wsv",
+    "multidisc": false,
     "name": "Watara Supervision",
     "short_name": "WSV",
     "details": {
@@ -33,6 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch64 Potator",
+      "default_core": true,
       "unique_id": "wsv.ra64.potator",
       "description": "Supported extensions: bin, sv, zip, 7z",
       "is_retroachievements_compatible": true,
@@ -44,6 +46,7 @@
     },
     {
       "name": "RetroArch32 Potator",
+      "default_core": true,
       "unique_id": "wsv.ra32.potator",
       "description": "Supported extensions: bin, sv, zip, 7z",
       "is_retroachievements_compatible": true,
@@ -55,7 +58,7 @@
     },
     {
       "name": "RetroArch Potator",
-      "default": true,
+      "default_core": true,
       "unique_id": "wsv.ra.potator",
       "description": "Supported extensions: bin, sv, zip, 7z",
       "is_retroachievements_compatible": true,

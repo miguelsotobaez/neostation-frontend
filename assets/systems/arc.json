@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "arc",
+    "multidisc": false,
     "name": "Arcade",
     "short_name": "Arcade",
     "details": {
@@ -32,7 +33,7 @@
   "emulators": [
     {
       "name": "RetroArch FBNeo",
-      "default": true,
+      "default_core": true,
       "unique_id": "arc.ra.fbneo",
       "description": "Supported extensions: 7z, ccd, cue, zip.",
       "is_retroachievements_compatible": true,
@@ -79,6 +80,7 @@
     },
     {
       "name": "RetroArch64 FBNeo",
+      "default_core": true,
       "unique_id": "arc.ra64.fbneo",
       "description": "Supported extensions: 7z, ccd, cue, zip.",
       "is_retroachievements_compatible": true,
@@ -101,6 +103,7 @@
     },
     {
       "name": "RetroArch32 FBNeo",
+      "default_core": true,
       "unique_id": "arc.ra32.fbneo",
       "description": "Supported extensions: 7z, ccd, cue, zip.",
       "is_retroachievements_compatible": true,

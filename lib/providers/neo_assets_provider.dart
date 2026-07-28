@@ -101,7 +101,7 @@ class NeoAssetsProvider extends ChangeNotifier {
         if (plan.forceRedownload) {
           await NeoAssetsService.downloadAllThemeAssets(
             themeFolder,
-            systemFolderNames,
+            plan.systemsToDownload,
             forceRedownload: true,
             onProgress: (done, t) {
               _downloadProgress = t == 0 ? 1.0 : done / t;
@@ -111,7 +111,7 @@ class NeoAssetsProvider extends ChangeNotifier {
         } else {
           await NeoAssetsService.downloadMissingThemeAssets(
             themeFolder,
-            systemFolderNames,
+            plan.systemsToDownload,
             missingTotal: plan.totalAssetsToDownload,
             onProgress: (done, t) {
               _downloadProgress = t == 0 ? 1.0 : done / t;
@@ -158,18 +158,14 @@ class NeoAssetsProvider extends ChangeNotifier {
     );
   }
 
-  /// Resolves the absolute path to a system logo within the active theme.
+  /// Logos are no longer loaded from remote themes.
+  /// Returns null to fall through to bundled local assets.
   Future<String?> getLogoForSystem(String systemFolderName) async {
-    if (!hasActiveTheme) return null;
-    return NeoAssetsService.getCachedLogo(_activeThemeFolder, systemFolderName);
+    return null;
   }
 
-  /// Synchronous variant for resolving logo paths.
+  /// Synchronous variant — always returns null.
   String? getLogoForSystemSync(String systemFolderName) {
-    if (!hasActiveTheme) return null;
-    return NeoAssetsService.logoCachePathSync(
-      _activeThemeFolder,
-      systemFolderName,
-    );
+    return null;
   }
 }

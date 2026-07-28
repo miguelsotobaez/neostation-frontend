@@ -1,7 +1,18 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../models/database_game_model.dart';
+import '../models/retro_achievements_dashboard_models.dart';
 
 /// Repository for RetroAchievements data access.
 class RetroAchievementsRepository {
+  static const String _raApiKeyStorageKey = 'ra_api_key';
+  // Do not let a transient Android Keystore error erase credentials. This can
+  // happen during cold boot on some launchers, and the default resetOnError
+  // behaviour turns a temporary read failure into a permanent logout.
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: false, migrateWithBackup: true),
+  );
+
   /// Returns local ROM counts: total and RA-compatible (has ra_hash).
   static Future<({int totalRoms, int raCompatibleRoms})>
   getLocalRomStats() async {
@@ -38,6 +49,21 @@ class RetroAchievementsRepository {
   static Future<void> saveRAUser(String username) =>
       SqliteService.updateRAUser(username);
 
+  /// Persists the RA API key securely.
+  static Future<void> saveRAApiKey(String apiKey) async {
+    await _storage.write(key: _raApiKeyStorageKey, value: apiKey);
+  }
+
+  /// Returns the persisted RA API key, or null if not set.
+  static Future<String?> getRAApiKey() async {
+    return _storage.read(key: _raApiKeyStorageKey);
+  }
+
+  /// Clears the stored RA API key.
+  static Future<void> clearRAApiKey() async {
+    await _storage.delete(key: _raApiKeyStorageKey);
+  }
+
   /// Clears the stored RA username.
   static Future<void> clearRAUser() async {
     final db = await SqliteService.getDatabase();
@@ -69,15 +95,38 @@ class RetroAchievementsRepository {
   // ── ROM RA-data update ─────────────────────────────────────────────────────
 
   /// Finds a matching entry in app_ra_game_list by [consoleName] LIKE and
-  /// [titleLikePattern] LIKE. Returns {hash, gameId} or null.
+  /// [titleLikePattern] LIKE. Normal games are preferred over subsets and
+  /// hacks, unless [preferHackMatches] is true. Returns {hash, gameId} or null.
   static Future<({String hash, int? gameId})?> findRAHashByConsoleName(
     String consoleName,
-    String titleLikePattern,
-  ) async {
+    String titleLikePattern, {
+    bool preferHackMatches = false,
+  }) async {
     final db = await SqliteService.getDatabase();
     final results = await db.rawQuery(
-      'SELECT hash, game_id FROM app_ra_game_list WHERE console_name LIKE ? AND title LIKE ? LIMIT 1',
-      ['%$consoleName%', titleLikePattern],
+      '''
+      SELECT hash, game_id
+      FROM app_ra_game_list
+      WHERE console_name LIKE ? AND title LIKE ?
+      ORDER BY
+        CASE
+          WHEN ? = 1 AND title LIKE '~Hack~%' THEN 0
+          WHEN ? = 1 THEN 1
+          WHEN ? = 0 AND title LIKE '~Hack~%' THEN 1
+          ELSE 0
+        END,
+        CASE WHEN title LIKE '%[Subset%' THEN 1 ELSE 0 END,
+        LENGTH(title) ASC,
+        title ASC
+      LIMIT 1
+      ''',
+      [
+        '%$consoleName%',
+        titleLikePattern,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+      ],
     );
     if (results.isEmpty) return null;
     return (
@@ -154,6 +203,7 @@ class RetroAchievementsRepository {
     // LIKE match with normalized search pattern
     final searchPattern =
         '%${filenameWithoutExt.replaceAll(' - ', ' ').replaceAll(':', '').replaceAll(' ', '%').trim()}%';
+    final preferHackMatches = filenameWithoutExt.toLowerCase().contains('hack');
 
     final likeResults = await db.rawQuery(
       '''
@@ -163,19 +213,59 @@ class RetroAchievementsRepository {
         AND g.title LIKE ? 
       ORDER BY
         CASE
-          WHEN g.title LIKE '~Hack~%' THEN 1
-          WHEN g.title LIKE '%Subset%' THEN 1
+          WHEN ? = 1 AND g.title LIKE '~Hack~%' THEN 0
+          WHEN ? = 1 THEN 1
+          WHEN ? = 0 AND g.title LIKE '~Hack~%' THEN 1
           ELSE 0
         END,
+        CASE WHEN g.title LIKE '%[Subset%' THEN 1 ELSE 0 END,
+        LENGTH(g.title) ASC,
         g.title ASC
       LIMIT 1
       ''',
-      [systemFolderName, searchPattern],
+      [
+        systemFolderName,
+        searchPattern,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+      ],
     );
     if (likeResults.isNotEmpty) {
       return int.tryParse(likeResults.first['game_id']?.toString() ?? '0') ?? 0;
     }
 
     return null;
+  }
+
+  static Future<OwnedWeekGameResolution?> findBestLocalGameByRaGameId(
+    int raGameId,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        ur.*,
+        s.folder_name AS system_folder_name,
+        s.real_name AS system_real_name,
+        s.short_name AS system_short_name
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      WHERE ur.id_ra = ?
+      ORDER BY
+        CASE WHEN ur.last_played IS NULL THEN 1 ELSE 0 END ASC,
+        ur.last_played DESC,
+        ur.is_favorite DESC,
+        LOWER(COALESCE(ur.title_name, ur.filename)) ASC
+      LIMIT 1
+      ''',
+      [raGameId],
+    );
+    if (results.isEmpty) return null;
+
+    final game = DatabaseGameModel.fromJson(
+      Map<String, dynamic>.from(results.first),
+    );
+    return OwnedWeekGameResolution(raGameId: raGameId, game: game);
   }
 }

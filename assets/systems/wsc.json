@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wsc",
+    "multidisc": false,
     "name": "WonderSwan Color",
     "short_name": "WSC",
     "details": {
@@ -18,7 +19,8 @@
       "WonderSwan Color",
       "Bandai WonderSwan Color",
       "WonderSwanColor",
-      "wswanc"
+      "wswanc",
+      "wonderswan-color"
     ],
     "colors": [
       "#EC407A",
@@ -46,6 +48,7 @@
     },
     {
       "name": "Retroarch64 Beetle Cygne",
+      "default_core": true,
       "unique_id": "wsc.ra64.mednafen_wswan",
       "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
       "is_retroachievements_compatible": true,
@@ -57,6 +60,7 @@
     },
     {
       "name": "Retroarch32 Beetle Cygne",
+      "default_core": true,
       "unique_id": "wsc.ra32.mednafen_wswan",
       "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
       "is_retroachievements_compatible": true,
@@ -68,7 +72,7 @@
     },
     {
       "name": "Retroarch Beetle Cygne",
-      "default": true,
+      "default_core": true,
       "unique_id": "wsc.ra.mednafen_wswan",
       "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
       "is_retroachievements_compatible": true,

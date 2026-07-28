@@ -14,7 +14,7 @@ jobs:
     name: Lint, Analysis & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -56,17 +56,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Create .env from secrets
         shell: bash
         env:
-          RA_API_KEY: ${{ secrets.RA_API_KEY }}
           SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
           SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
         run: |
           : > .env
-          [ -n "$RA_API_KEY" ] && echo "RA_API_KEY=$RA_API_KEY" >> .env
           [ -n "$SCREENSCRAPER_DEV_ID" ] && echo "SCREENSCRAPER_DEV_ID=$SCREENSCRAPER_DEV_ID" >> .env
           [ -n "$SCREENSCRAPER_DEV_PASSWORD" ] && echo "SCREENSCRAPER_DEV_PASSWORD=$SCREENSCRAPER_DEV_PASSWORD" >> .env
           echo ".env created with $(wc -l < .env) lines"
@@ -95,7 +93,7 @@ jobs:
           flutter precache --linux
 
       - name: Cache Flutter and Gradle
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.pub-cache
@@ -146,7 +144,7 @@ jobs:
 
       - name: Cache Linux build tools
         if: matrix.target == 'linux-x64' || matrix.target == 'linux-arm'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             .cache/build-tools
@@ -190,7 +188,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

@@ -1,7 +1,41 @@
+import 'dart:convert';
+
 import 'emulator_model.dart';
 
 /// Represents the global application configuration and user preferences.
 class ConfigModel {
+  /// Maximum number of storable slots in the secondary "Now Playing" app dock.
+  /// The dock always persists this many slots so assignments in higher slots
+  /// survive when the user shrinks the visible count ([dockSlotCount]).
+  static const int dockMaxSlots = 5;
+
+  /// Smallest and largest number of dock slots the user may choose to show.
+  static const int dockMinSlotCount = 1;
+  static const int dockMaxSlotCount = dockMaxSlots;
+
+  /// Coerces an arbitrary value into a fixed-length [dockMaxSlots] list of
+  /// package-name strings, accepting either a `List` or a JSON-encoded string.
+  static List<String> normalizeDock(dynamic raw) {
+    List<dynamic> list;
+    if (raw is List) {
+      list = raw;
+    } else if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        list = decoded is List ? decoded : const [];
+      } catch (_) {
+        list = const [];
+      }
+    } else {
+      list = const [];
+    }
+    final out = List<String>.filled(dockMaxSlots, '');
+    for (var i = 0; i < dockMaxSlots && i < list.length; i++) {
+      out[i] = list[i]?.toString() ?? '';
+    }
+    return out;
+  }
+
   /// List of absolute paths to directories containing game ROMs.
   final List<String> romFolders;
 
@@ -20,8 +54,8 @@ class ConfigModel {
   /// Preferred display mode for the system list (e.g., 'grid', 'list').
   final String systemViewMode;
 
-  /// Identifier of the currently active UI palette.
-  final String paletteName;
+  /// Identifier of the currently active UI theme.
+  final String themeName;
 
   /// Whether to display detailed game metadata by default.
   final bool showGameInfo;
@@ -65,6 +99,34 @@ class ConfigModel {
   /// Whether to hide the "Recently Played" card from the main dashboard.
   final bool hideRecentCard;
 
+  /// Whether the vertical action-button legend is hidden across every game view
+  /// (list, grid, carousel). Toggled by the Select + B chord.
+  final bool legendHidden;
+
+  /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
+  /// to never dim. Only meaningful when a secondary display is active.
+  final int nowPlayingDimDelay;
+
+  /// How dark the secondary "Now Playing" panel goes when it dims, as a
+  /// percentage 0–100 (0 = no dim, 100 = pure black).
+  final int nowPlayingDimLevel;
+
+  /// How much the game fanart/background art is dimmed behind the logo on the
+  /// secondary screen, as a percentage 0–100 (0 = off/full brightness). Keeps
+  /// the logo at full brightness so it stands out against busy fanart.
+  final int fanartDimLevel;
+
+  /// Package names occupying the secondary "Now Playing" app dock, one entry
+  /// per slot. Always [dockMaxSlots] long; an empty string marks a free slot.
+  final List<String> dockApps;
+
+  /// Whether the secondary "Now Playing" app dock is shown at all.
+  final bool dockEnabled;
+
+  /// How many dock slots are visible, from [dockMinSlotCount] to
+  /// [dockMaxSlotCount]. Slots beyond this stay persisted but hidden.
+  final int dockSlotCount;
+
   /// ID of the active sync provider (matches [ISyncProvider.providerId]).
   final String activeSyncProvider;
 
@@ -83,6 +145,11 @@ class ConfigModel {
   /// Preferred card style for the game carousel ('fanart' or 'box').
   final String gameCarouselCardStyle;
 
+  /// Absolute path to the user's ES-DE application folder (the one containing
+  /// `gamelists/` and `downloaded_media/`), or empty if not configured. Used
+  /// by the ES-DE import and read-time fallback artwork resolution.
+  final String esdeFolderPath;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -90,7 +157,7 @@ class ConfigModel {
     this.emulators = const {},
     this.gameViewMode = 'list',
     this.systemViewMode = 'grid',
-    this.paletteName = 'system',
+    this.themeName = 'system',
     this.showGameInfo = false,
     this.isFullscreen = true,
     this.bartopExitPoweroff = false,
@@ -105,12 +172,20 @@ class ConfigModel {
     this.systemSortOrder = 'asc',
     this.appLanguage = 'es',
     this.hideRecentCard = false,
+    this.legendHidden = false,
     this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
     this.systemGridColumns = 'M',
     this.gameGridColumns = 'M',
     this.gameCarouselCardStyle = 'fanart',
+    this.nowPlayingDimDelay = 3,
+    this.nowPlayingDimLevel = 100,
+    this.fanartDimLevel = 25,
+    this.dockApps = const ['', '', '', '', ''],
+    this.dockEnabled = true,
+    this.dockSlotCount = 3,
+    this.esdeFolderPath = '',
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -151,7 +226,7 @@ class ConfigModel {
       emulators: emulators,
       gameViewMode: (json['gameViewMode'] ?? 'list').toString(),
       systemViewMode: (json['systemViewMode'] ?? 'grid').toString(),
-      paletteName: (json['paletteName'] ?? 'system').toString(),
+      themeName: (json['themeName'] ?? 'system').toString(),
       showGameInfo:
           (json['showGameInfo'] ?? false).toString().toLowerCase() == 'true',
       isFullscreen:
@@ -199,6 +274,10 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      legendHidden:
+          (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
+              '1' ||
+          (json['legendHidden'] ?? false).toString().toLowerCase() == 'true',
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
@@ -225,6 +304,37 @@ class ConfigModel {
                   json['game_carousel_card_style'] ??
                   'fanart')
               .toString(),
+      nowPlayingDimDelay:
+          int.tryParse(
+            (json['nowPlayingDimDelay'] ?? json['now_playing_dim_delay'] ?? 3)
+                .toString(),
+          ) ??
+          3,
+      nowPlayingDimLevel:
+          int.tryParse(
+            (json['nowPlayingDimLevel'] ?? json['now_playing_dim_level'] ?? 100)
+                .toString(),
+          ) ??
+          100,
+      fanartDimLevel:
+          int.tryParse(
+            (json['fanartDimLevel'] ?? json['fanart_dim_level'] ?? 25)
+                .toString(),
+          ) ??
+          25,
+      dockApps: normalizeDock(json['dockApps'] ?? json['dock_apps']),
+      dockEnabled:
+          (json['dockEnabled'] ?? true).toString().toLowerCase() == 'true' ||
+          (json['dock_enabled'] ?? 1).toString() == '1',
+      dockSlotCount:
+          (int.tryParse(
+                    (json['dockSlotCount'] ?? json['dock_slot_count'] ?? 3)
+                        .toString(),
+                  ) ??
+                  3)
+              .clamp(dockMinSlotCount, dockMaxSlotCount),
+      esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
+          .toString(),
     );
   }
 
@@ -242,7 +352,7 @@ class ConfigModel {
       'emulators': emulatorsJson,
       'gameViewMode': gameViewMode,
       'systemViewMode': systemViewMode,
-      'paletteName': paletteName,
+      'themeName': themeName,
       'showGameInfo': showGameInfo,
       'isFullscreen': isFullscreen,
       'bartopExitPoweroff': bartopExitPoweroff,
@@ -257,12 +367,20 @@ class ConfigModel {
       'systemSortOrder': systemSortOrder,
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
+      'legendHidden': legendHidden,
       'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
       'autoUpdateSystems': autoUpdateSystems,
       'systemGridColumns': systemGridColumns,
       'gameGridColumns': gameGridColumns,
       'gameCarouselCardStyle': gameCarouselCardStyle,
+      'nowPlayingDimDelay': nowPlayingDimDelay,
+      'nowPlayingDimLevel': nowPlayingDimLevel,
+      'fanartDimLevel': fanartDimLevel,
+      'dockApps': dockApps,
+      'dockEnabled': dockEnabled,
+      'dockSlotCount': dockSlotCount,
+      'esdeFolderPath': esdeFolderPath,
     };
   }
 
@@ -274,7 +392,7 @@ class ConfigModel {
     Map<String, EmulatorModel>? emulators,
     String? gameViewMode,
     String? systemViewMode,
-    String? paletteName,
+    String? themeName,
     bool? showGameInfo,
     bool? isFullscreen,
     bool? bartopExitPoweroff,
@@ -289,12 +407,20 @@ class ConfigModel {
     String? systemSortOrder,
     String? appLanguage,
     bool? hideRecentCard,
+    bool? legendHidden,
     String? activeSyncProvider,
     bool? autoUpdateApp,
     bool? autoUpdateSystems,
     String? systemGridColumns,
     String? gameGridColumns,
     String? gameCarouselCardStyle,
+    int? nowPlayingDimDelay,
+    int? nowPlayingDimLevel,
+    int? fanartDimLevel,
+    List<String>? dockApps,
+    bool? dockEnabled,
+    int? dockSlotCount,
+    String? esdeFolderPath,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -303,7 +429,7 @@ class ConfigModel {
       emulators: emulators ?? this.emulators,
       gameViewMode: gameViewMode ?? this.gameViewMode,
       systemViewMode: systemViewMode ?? this.systemViewMode,
-      paletteName: paletteName ?? this.paletteName,
+      themeName: themeName ?? this.themeName,
       showGameInfo: showGameInfo ?? this.showGameInfo,
       isFullscreen: isFullscreen ?? this.isFullscreen,
       bartopExitPoweroff: bartopExitPoweroff ?? this.bartopExitPoweroff,
@@ -318,6 +444,7 @@ class ConfigModel {
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
+      legendHidden: legendHidden ?? this.legendHidden,
       activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
       autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,
@@ -325,6 +452,13 @@ class ConfigModel {
       gameGridColumns: gameGridColumns ?? this.gameGridColumns,
       gameCarouselCardStyle:
           gameCarouselCardStyle ?? this.gameCarouselCardStyle,
+      nowPlayingDimDelay: nowPlayingDimDelay ?? this.nowPlayingDimDelay,
+      nowPlayingDimLevel: nowPlayingDimLevel ?? this.nowPlayingDimLevel,
+      fanartDimLevel: fanartDimLevel ?? this.fanartDimLevel,
+      dockApps: dockApps ?? this.dockApps,
+      dockEnabled: dockEnabled ?? this.dockEnabled,
+      dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
     );
   }
 

@@ -95,6 +95,16 @@ class GamepadEventTranslator {
   /// State cache used to determine press and release transitions.
   final Map<String, Map<GamepadInputType, double>> _previousStates = {};
 
+  /// Last ACTION_DOWN time per Android keycode button, keyed by
+  /// "gamepadId/inputType". Recovers from this controller's unreliable
+  /// ACTION_UP: when a release is dropped, [_previousStates] stays stuck
+  /// "pressed" and normal edge-detection swallows the next press forever.
+  /// Auto-repeat DOWNs arrive far faster than [_keycodeRepressGapMs], so a
+  /// DOWN after a longer gap is a genuine fresh press even without a prior
+  /// release event.
+  final Map<String, DateTime> _lastKeycodeDownTimes = {};
+  static const int _keycodeRepressGapMs = 200;
+
   /// Tracks the last active direction per key to ensure correct release detection on desktop platforms.
   final Map<String, GamepadInputType> _lastDirectionByKey = {};
 
@@ -158,11 +168,33 @@ class GamepadEventTranslator {
         eventType,
       );
 
-      // Android keycode_dpad: ACTION_DOWN=0.0 (pressed), ACTION_UP=1.0 (released).
-      // Standardize to 1.0 = pressed / 0.0 = released to match axis_hat behavior.
-      if (Platform.isAndroid && key.startsWith('keycode_dpad_')) {
+      // Android keycode buttons: ACTION_DOWN=0.0 (pressed), ACTION_UP=1.0
+      // (released). Standardize to 1.0 = pressed / 0.0 = released so these fire
+      // on press rather than release. Applied to the dpad, the shoulder buttons
+      // (L1/R1) and the face buttons (A/B/X/Y) — all of which otherwise fired
+      // their action on release instead of press.
+      final isAndroidKeycodeButton =
+          Platform.isAndroid &&
+          (key == 'keycode_button_l1' ||
+              key == 'keycode_button_r1' ||
+              key == 'keycode_button_a' ||
+              key == 'keycode_button_b' ||
+              key == 'keycode_button_x' ||
+              key == 'keycode_button_y');
+
+      if (Platform.isAndroid &&
+          (key.startsWith('keycode_dpad_') || isAndroidKeycodeButton)) {
         value = (value == 0.0) ? 1.0 : 0.0;
       }
+
+      // A held shoulder button arrives as a stream of auto-repeat ACTION_DOWNs.
+      // Like the d-pad, those repeats are surfaced as continuous press events
+      // so holding L1/R1 keeps walking the tabs; the consumer paces them (see
+      // the shoulder pacing in GamepadNavigation). Without this the repeats
+      // were swallowed as "already pressed" and the hold stalled.
+      final isAndroidShoulderKeycode =
+          Platform.isAndroid &&
+          (key == 'keycode_button_l1' || key == 'keycode_button_r1');
 
       // LINUX: Invert Y-axis for analog sticks to follow standard conventions.
       if (Platform.isLinux &&
@@ -195,7 +227,23 @@ class GamepadEventTranslator {
           ? _isDpadPressed(value, isAnalog: isAnalog)
           : value > 0.5;
 
-      final isPressed = !wasPressed && isNowPressed;
+      // Recover from a dropped ACTION_UP: if a keycode button reports pressed
+      // again after a gap far longer than the auto-repeat cadence, treat it as
+      // a fresh press even though [previousState] is still stuck "pressed".
+      var forcePress = false;
+      if (isAndroidKeycodeButton && isNowPressed) {
+        final downKey = '$gamepadId/$inputType';
+        final lastDown = _lastKeycodeDownTimes[downKey];
+        if (wasPressed &&
+            (lastDown == null ||
+                timestamp.difference(lastDown).inMilliseconds >
+                    _keycodeRepressGapMs)) {
+          forcePress = true;
+        }
+        _lastKeycodeDownTimes[downKey] = timestamp;
+      }
+
+      final isPressed = (!wasPressed && isNowPressed) || forcePress;
       final isReleased = wasPressed && !isNowPressed;
 
       // Update state for future comparisons.
@@ -205,9 +253,11 @@ class GamepadEventTranslator {
       final isDirectional = GamepadEventTranslator.isDirectionalInput(
         inputType,
       );
-      if (isPressed || isReleased || (isDirectional && isNowPressed)) {
+      final isRepeatable = isDirectional || isAndroidShoulderKeycode;
+
+      if (isPressed || isReleased || (isRepeatable && isNowPressed)) {
         final effectiveIsPressed =
-            isPressed || (isDirectional && isNowPressed && !isReleased);
+            isPressed || (isRepeatable && isNowPressed && !isReleased);
         final effectiveIsReleased = isReleased;
 
         final translatedEvent = TranslatedGamepadEvent(
@@ -243,6 +293,17 @@ class GamepadEventTranslator {
     String gamepadId,
     KeyType eventType,
   ) {
+    // WINDOWS: The GameInput backend emits standardized, named keys
+    // (a/b/x/y, dpadUp, leftShoulder, leftThumbstickX, leftTrigger, ...) with a
+    // consistent layout across all XInput-class controllers, so we map them
+    // directly and skip the WinMM positional/POV heuristics entirely.
+    if (Platform.isWindows) {
+      final gameInput = _translateGameInputKey(key);
+      if (gameInput != null) {
+        return gameInput;
+      }
+    }
+
     // LINUX: Utilize native event type from the plugin.
     if (Platform.isLinux) {
       if (eventType == KeyType.button) {
@@ -272,6 +333,71 @@ class GamepadEventTranslator {
     }
 
     return GamepadInputType.unknown;
+  }
+
+  /// Maps a Windows GameInput named key to a [GamepadInputType].
+  ///
+  /// GameInput reports a standardized Xbox-style layout, so this mapping is the
+  /// same for every controller regardless of vendor/VID/PID. Keys arrive
+  /// lower-cased. Returns null for keys that aren't part of the GameInput
+  /// gamepad vocabulary. Note: GameInput's standard gamepad state has no guide
+  /// button, so there is no Home mapping on Windows.
+  GamepadInputType? _translateGameInputKey(String key) {
+    switch (key) {
+      // Face buttons.
+      case 'a':
+        return GamepadInputType.buttonA;
+      case 'b':
+        return GamepadInputType.buttonB;
+      case 'x':
+        return GamepadInputType.buttonX;
+      case 'y':
+        return GamepadInputType.buttonY;
+
+      // D-pad (reported as digital buttons: 1.0 pressed, 0.0 released).
+      case 'dpadup':
+        return GamepadInputType.dpadUp;
+      case 'dpaddown':
+        return GamepadInputType.dpadDown;
+      case 'dpadleft':
+        return GamepadInputType.dpadLeft;
+      case 'dpadright':
+        return GamepadInputType.dpadRight;
+
+      // Shoulders and triggers. Triggers arrive as analog [0, 1]; the press
+      // edge is detected against the 0.5 threshold downstream.
+      case 'leftshoulder':
+        return GamepadInputType.buttonLB;
+      case 'rightshoulder':
+        return GamepadInputType.buttonRB;
+      case 'lefttrigger':
+        return GamepadInputType.buttonLT;
+      case 'righttrigger':
+        return GamepadInputType.buttonRT;
+
+      // System buttons.
+      case 'menu':
+        return GamepadInputType.buttonStart;
+      case 'view':
+        return GamepadInputType.buttonSelect;
+
+      // Stick clicks.
+      case 'leftthumbstick':
+        return GamepadInputType.leftStickButton;
+      case 'rightthumbstick':
+        return GamepadInputType.rightStickButton;
+
+      // Analog sticks, [-1, 1] with 0 centered (+Y is up, +X is right).
+      case 'leftthumbstickx':
+        return GamepadInputType.leftStickX;
+      case 'leftthumbsticky':
+        return GamepadInputType.leftStickY;
+      case 'rightthumbstickx':
+        return GamepadInputType.rightStickX;
+      case 'rightthumbsticky':
+        return GamepadInputType.rightStickY;
+    }
+    return null;
   }
 
   /// Determines if a key identifier corresponds to a D-pad (directional) input.
@@ -685,29 +811,14 @@ class GamepadEventTranslator {
   /// Determines if a D-pad or analog input should be considered "pressed" based on platform-specific thresholds.
   bool _isDpadPressed(double value, {bool isAnalog = false}) {
     if (Platform.isWindows) {
-      // Windows POV: Specific values indicate pressed directions.
-      // 65535.0 can indicate POV Neutral (centered) OR a stick at its maximum range.
-      if (!isAnalog && (value == -1.0 || value == 65535.0 || value < 0)) {
-        return false;
+      // GameInput reports normalized values: analog sticks in [-1, 1] centered
+      // at 0, and digital D-pad buttons as 0.0 (released) / 1.0 (pressed).
+      if (isAnalog) {
+        // Deadzone for the press/release edge; the nav layer applies its own
+        // (larger) directional threshold for the actual action.
+        return value.abs() > 0.5;
       }
-
-      // POV: Values within [0, 36000] are active directions.
-      if (value >= 0.0 && value <= 36000.0) {
-        return true;
-      }
-
-      // Flexible center detection for analog sticks on Windows.
-      final distFrom32767 = (value - 32767).abs();
-      final distFromZero = value.abs();
-
-      // Deadzone for neutral position:
-      // 32767 is standard. 0 is only neutral if noise is minimal.
-      if (distFrom32767 < 8000 || distFromZero < 1000) {
-        return false;
-      }
-
-      // Active if far enough from both potential center points.
-      return distFrom32767 > 20000 || distFromZero > 20000;
+      return value > 0.5;
     }
 
     if (Platform.isAndroid) {
@@ -785,9 +896,22 @@ class GamepadEventTranslator {
     return vendorId == '054c';
   }
 
+  /// Clears only the per-button press/release tracking, keeping the device
+  /// detection caches (mapping, connection type, names) intact.
+  ///
+  /// Used when a navigation layer is (re)activated: a button held while the
+  /// layer was inactive never delivers its release here, so the stale "still
+  /// pressed" state would swallow the next press of that button.
+  void clearButtonStates() {
+    _previousStates.clear();
+    _lastKeycodeDownTimes.clear();
+    _lastDirectionByKey.clear();
+  }
+
   /// Clears all internal state caches.
   void clearStates() {
     _previousStates.clear();
+    _lastKeycodeDownTimes.clear();
     _connectionTypeCache.clear();
     _systemInfoCache.clear();
     _lastDirectionByKey.clear();

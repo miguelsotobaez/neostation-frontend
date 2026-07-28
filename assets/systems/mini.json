@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "mini",
+    "multidisc": false,
     "name": "Pokémon Mini",
     "short_name": "Mini",
     "details": {
@@ -33,6 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch64 Pokémini",
+      "default_core": true,
       "unique_id": "mini.ra64.pokemini",
       "description": "Supported extensions: min.",
       "is_retroachievements_compatible": true,
@@ -44,6 +46,7 @@
     },
     {
       "name": "RetroArch32 Pokémini",
+      "default_core": true,
       "unique_id": "mini.ra32.pokemini",
       "description": "Supported extensions: min.",
       "is_retroachievements_compatible": true,
@@ -55,7 +58,7 @@
     },
     {
       "name": "RetroArch Pokémini",
-      "default": true,
+      "default_core": true,
       "unique_id": "mini.ra.pokemini",
       "description": "Supported extensions: min.",
       "is_retroachievements_compatible": true,

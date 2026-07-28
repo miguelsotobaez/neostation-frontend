@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "vect",
+    "multidisc": false,
     "name": "Vectrex",
     "short_name": "Vect",
     "details": {
@@ -31,6 +32,7 @@
   "emulators": [
     {
       "name": "RetroArch64 Vecx",
+      "default_core": true,
       "unique_id": "vect.ra64.vecx",
       "description": "Supported extensions: bin, vec, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -42,6 +44,7 @@
     },
     {
       "name": "RetroArch32 Vecx",
+      "default_core": true,
       "unique_id": "vect.ra32.vecx",
       "description": "Supported extensions: bin, vec, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -53,7 +56,7 @@
     },
     {
       "name": "RetroArch Vecx",
-      "default": true,
+      "default_core": true,
       "unique_id": "vect.ra.vecx",
       "description": "Supported extensions: bin, vec, zip, 7z.",
       "is_retroachievements_compatible": true,

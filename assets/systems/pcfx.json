@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pcfx",
+    "multidisc": false,
     "name": "NEC PC-FX",
     "short_name": "PC-FX",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "pcfx",
-      "NEC PC-FX"
+      "NEC PC-FX",
+      "pc-fx"
     ],
     "colors": [
       "#F5F5F5",
@@ -32,6 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch64 Beetle PC-FX",
+      "default_core": true,
       "unique_id": "pcfx.ra64.mednafen_pcfx",
       "description": "Supported extensions: cue, ccd, toc, chd.",
       "is_retroachievements_compatible": false,
@@ -43,6 +46,7 @@
     },
     {
       "name": "RetroArch32 Beetle PC-FX",
+      "default_core": true,
       "unique_id": "pcfx.ra32.mednafen_pcfx",
       "description": "Supported extensions: cue, ccd, toc, chd.",
       "is_retroachievements_compatible": false,
@@ -54,7 +58,7 @@
     },
     {
       "name": "RetroArch Beetle PC-FX",
-      "default": true,
+      "default_core": true,
       "unique_id": "pcfx.ra.mednafen_pcfx",
       "description": "Supported extensions: cue, ccd, toc, chd.",
       "is_retroachievements_compatible": false,

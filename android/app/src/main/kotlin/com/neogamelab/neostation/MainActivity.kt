@@ -30,10 +30,14 @@ import java.io.ByteArrayOutputStream
 import android.view.Display
 import com.hcoderlee.subscreen.sub_screen.MultiDisplayFlutterActivity
 import com.hcoderlee.subscreen.sub_screen.FlutterPresentation
+import com.hcoderlee.subscreen.sub_screen.SharedStateManager
 import androidx.core.content.FileProvider
 
 class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     private val CHANNEL = "com.neogamelab.neostation/game"
+    // Max size the dock/picker renders an app icon at; icons are rasterized to
+    // this (in px) before encoding so we don't ship/decode full-res drawables.
+    private val ICON_TARGET_DP = 56f
     private val LAUNCHER_CHANNEL = "com.neogamelab.neostation/launcher"
     var keyListener: ((KeyEvent) -> Boolean)? = null
     var motionListener: ((MotionEvent) -> Boolean)? = null
@@ -44,6 +48,13 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     private var secondaryDisplayChannel: MethodChannel? = null // Canal para pantalla secundaria
     private var gameLaunchTimestamp: Long = 0 // Timestamp del lanzamiento del juego
     private var displayListener: android.hardware.display.DisplayManager.DisplayListener? = null
+    // Bridges the device's real screen on/off state to the secondary engine, which
+    // never receives Android lifecycle callbacks, so its live SESSION timer can
+    // freeze while the device sleeps instead of counting phantom play time.
+    private var screenStateReceiver: android.content.BroadcastReceiver? = null
+    // True while the Now Playing presentation is hidden to reveal a dock-launched
+    // app on the secondary display; restored when NeoStation resumes.
+    private var presentationHiddenForApp = false
 
     // Usar directorio por defecto para cores; no verificar existencia por permisos
     private fun getDefaultLibretroDirectory(retroArchPackage: String): String {
@@ -55,7 +66,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     }
 
     override fun createSubScreenPresentation(display: Display): FlutterPresentation? {
-        return null
+        // Custom presentation that registers a secondary-engine-only MethodChannel
+        // so the bottom-screen app dock can list/launch Android apps directly
+        // (the secondary engine can't reach the main "/game" channel).
+        return SecondaryAppsPresentation(this, display, getSubScreenEntryPoint())
     }
 
     override fun onLaunchSubScreen(display: Display) {
@@ -100,6 +114,11 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The secondary engine can survive a main-engine restart (cached engine
+        // group), so its retained shared state may still say a game is "now
+        // playing" from before the quit. Clear it before super.onCreate launches
+        // the sub screen, so the stale Now Playing panel never renders.
+        clearStaleSecondaryNowPlaying()
         super.onCreate(savedInstanceState)
 
         // Disable focus highlight for the entire activity
@@ -120,6 +139,71 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 View.SYSTEM_UI_FLAG_FULLSCREEN
             )
         }
+
+        registerScreenStateReceiver()
+    }
+
+    /// Listens for the device screen turning on/off and mirrors it into the
+    /// secondary display's shared state as [deviceScreenOn]. A play session runs
+    /// the game in a separate app, so this Activity is paused the whole time and
+    /// its lifecycle can't tell "playing" from "sleeping" — only the screen state
+    /// can, and it's the signal the secondary engine's SESSION timer needs.
+    private fun registerScreenStateReceiver() {
+        if (screenStateReceiver != null) return
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                when (intent?.action) {
+                    android.content.Intent.ACTION_SCREEN_OFF -> {
+                        pushDeviceScreenOn(false)
+                        notifyFlutterScreenState(false)
+                    }
+                    android.content.Intent.ACTION_SCREEN_ON -> {
+                        pushDeviceScreenOn(true)
+                        notifyFlutterScreenState(true)
+                    }
+                }
+            }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_SCREEN_ON)
+            addAction(android.content.Intent.ACTION_SCREEN_OFF)
+        }
+        registerReceiver(receiver, filter)
+        screenStateReceiver = receiver
+    }
+
+    /// Merges the screen-on flag into the retained secondary display state,
+    /// preserving every other field (same read-modify-write pattern as
+    /// [clearStaleSecondaryNowPlaying]).
+    private fun pushDeviceScreenOn(on: Boolean) {
+        try {
+            val type = "SecondaryDisplayState"
+            val current = SharedStateManager.getState(type)?.toMutableMap() ?: return
+            if (current["deviceScreenOn"] == on) return
+            current["deviceScreenOn"] = on
+            SharedStateManager.updateState(type, current)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "pushDeviceScreenOn: ${e.message}")
+        }
+    }
+
+    // As a HOME launcher, this Activity is NOT paused when the device screen
+    // turns off, so Flutter never sees AppLifecycleState.paused on lock. Bridge
+    // the raw screen on/off state to Dart so it can release the shared audio
+    // engine while locked (its output device otherwise keeps the SoC awake and
+    // drains the battery). Independent of pushDeviceScreenOn(), which no-ops on
+    // single-screen devices.
+    private fun notifyFlutterScreenState(on: Boolean) {
+        runOnUiThread {
+            try {
+                methodChannel?.invokeMethod(
+                    if (on) "onDeviceScreenOn" else "onDeviceScreenOff",
+                    null
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "notifyFlutterScreenState: ${e.message}")
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -128,6 +212,14 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
             dm.unregisterDisplayListener(it)
         }
+        screenStateReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: IllegalArgumentException) {
+                // Already unregistered; ignore.
+            }
+        }
+        screenStateReceiver = null
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -176,6 +268,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     }
                 }
 
+                "isCoreInstalled" -> {
+                    val packageName = call.argument<String>("packageName")
+                    val coreFilename = call.argument<String>("coreFilename")
+                    if (packageName != null && coreFilename != null) {
+                        isCoreInstalled(packageName, coreFilename, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "packageName and coreFilename are required", null)
+                    }
+                }
+
                 "getInstalledApps" -> {
                     val includeSystemApps = call.argument<Boolean>("includeSystemApps") ?: false
                     getInstalledApps(includeSystemApps, result)
@@ -206,6 +308,14 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 "openSafDirectoryPicker" -> {
                     openSafDirectoryPicker(result)
                 }
+                "hasPermission" -> {
+                    val uriString = call.argument<String>("uri")
+                    if (uriString != null) {
+                        hasSafPermission(uriString, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI is required", null)
+                    }
+                }
                 "openAllFilesAccessSettings" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         try {
@@ -231,6 +341,35 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                         listSafDirectory(uriString, result)
                     } else {
                         result.error("INVALID_ARGUMENTS", "URI is required", null)
+                    }
+                }
+                "createSafDirectory" -> {
+                    val uriString = call.argument<String>("uri")
+                    val name = call.argument<String>("name")
+                    if (uriString != null && name != null) {
+                        createSafDirectory(uriString, name, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI and name are required", null)
+                    }
+                }
+                "moveSafFile" -> {
+                    val sourceUri = call.argument<String>("sourceUri")
+                    val targetUri = call.argument<String>("targetUri")
+                    val name = call.argument<String>("name")
+                    if (sourceUri != null && targetUri != null && name != null) {
+                        moveSafFile(sourceUri, targetUri, name, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "Source, target, and name are required", null)
+                    }
+                }
+                "writeSafFile" -> {
+                    val uriString = call.argument<String>("uri")
+                    val name = call.argument<String>("name")
+                    val contents = call.argument<ByteArray>("contents")
+                    if (uriString != null && name != null && contents != null) {
+                        writeSafFile(uriString, name, contents, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI, name, and contents are required", null)
                     }
                 }
                 "readSafFileRange" -> {
@@ -279,12 +418,34 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 "startSecondaryDisplay" -> {
                     result.success(true)
                 }
+                "isScreenshotAccessEnabled" -> {
+                    result.success(isScreenshotAccessEnabled())
+                }
+                "openScreenshotAccessSettings" -> {
+                    openScreenshotAccessSettings()
+                    result.success(true)
+                }
+                "takeSystemScreenshot" -> {
+                    if (!isScreenshotAccessEnabled()) {
+                        result.success(false)
+                    } else {
+                        result.success(ScreenshotAccessibilityService.takeScreenshot())
+                    }
+                }
                 "installApk" -> {
                     val filePath = call.argument<String>("filePath")
                     if (filePath != null) {
                         installApk(filePath, result)
                     } else {
                         result.error("INVALID_ARGUMENTS", "File path is required", null)
+                    }
+                }
+                "deleteSafFile" -> {
+                    val uriString = call.argument<String>("uri")
+                    if (uriString != null) {
+                        deleteSafFile(uriString, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI is required", null)
                     }
                 }
                 else -> {
@@ -303,6 +464,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     result.success(true)
                 }
                 else -> result.notImplemented()
+            }
+        }
+
+        // When the accessibility service connects (user just enabled it), notify
+        // the main engine so it re-pushes the screenshot/return state to the
+        // secondary display — even while a game keeps the main engine
+        // backgrounded. Hop to the UI thread: onServiceConnected runs off it.
+        ScreenshotAccessibilityService.onConnected = {
+            runOnUiThread {
+                secondaryDisplayChannel?.invokeMethod("onAccessibilityConnected", null)
             }
         }
 
@@ -379,6 +550,92 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
+    /**
+     * Clears the in-game flags in the retained secondary-display shared state so
+     * a Now Playing panel left over from a quit-mid-game session doesn't render
+     * when the main engine restarts. No-op on a cold start (no retained state).
+     */
+    private fun clearStaleSecondaryNowPlaying() {
+        try {
+            val type = "SecondaryDisplayState"
+            val current = SharedStateManager.getState(type)?.toMutableMap() ?: return
+            current["nowPlayingActive"] = false
+            current["showAchievementPanel"] = false
+            SharedStateManager.updateState(type, current)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "clearStaleSecondaryNowPlaying: ${e.message}")
+        }
+    }
+
+    /** True when the user has enabled our screenshot accessibility service. */
+    private fun isScreenshotAccessEnabled(): Boolean {
+        // A connected service is the most reliable signal; fall back to the
+        // settings list in case the static reference isn't bound yet.
+        if (ScreenshotAccessibilityService.isConnected) return true
+        val enabled = android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        // Build the component via ComponentName so the class keeps its real
+        // namespace (com.neogamelab.neostation.*) while the package picks up the
+        // flavor's applicationId suffix (.dev/.featuretest). A hand-built
+        // "$packageName/$packageName.Foo" string gets the class package wrong on
+        // suffixed flavors and never matches.
+        val component = android.content.ComponentName(
+            this,
+            ScreenshotAccessibilityService::class.java,
+        ).flattenToString()
+        return enabled.split(':').any { it.equals(component, ignoreCase = true) }
+    }
+
+    /**
+     * Opens accessibility settings so the user can grant access. Deep-links
+     * straight to NeoStation's own service page (ACTION_ACCESSIBILITY_DETAILS_SETTINGS)
+     * so the user only has to flip one toggle + confirm, rather than hunting for
+     * NeoStation in the full list. Falls back to the general list if the details
+     * screen isn't available.
+     */
+    internal fun openScreenshotAccessSettings() {
+        val component = android.content.ComponentName(
+            this,
+            ScreenshotAccessibilityService::class.java,
+        ).flattenToString()
+
+        // Details page (API 30+): lands directly on our service's toggle.
+        try {
+            // Literal action string ("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            // rather than the Settings constant, which isn't exposed on all
+            // compile SDKs.
+            val intent = android.content.Intent(
+                "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
+            )
+            // The Settings details screen reads the target component from these
+            // fragment-arg extras.
+            val args = android.os.Bundle().apply {
+                putString(":settings:fragment_args_key", component)
+            }
+            intent.putExtra(":settings:fragment_args_key", component)
+            intent.putExtra(":settings:show_fragment_args", args)
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            return
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "MainActivity",
+                "Accessibility details screen unavailable, falling back: ${e.message}",
+            )
+        }
+
+        // Fallback: the general accessibility list.
+        try {
+            val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Cannot open accessibility settings: ${e.message}")
+        }
+    }
+
     private fun isPackageInstalled(packageName: String, result: MethodChannel.Result) {
         try {
             // Try to get package info
@@ -394,6 +651,61 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             result.success(false)
         } catch (e: Exception) {
             result.success(false)
+        }
+    }
+
+    /**
+     * Determines whether a specific RetroArch libretro core (.so) is actually present,
+     * as opposed to merely having the RetroArch app installed. RetroArch stores its
+     * cores in its own private data dir ({dataDir}/cores/), which this app's sandbox
+     * usually cannot read — so a plain File.exists() from here returns false even when
+     * the core IS installed. We therefore return a TRI-STATE:
+     *   true  = core file positively confirmed present
+     *   false = core file positively confirmed absent (cores dir was readable, or root)
+     *   null  = could not determine (dir unreadable and no root) → caller must fail OPEN
+     * This lets the Ready badge stay accurate where we can tell, without hiding genuinely
+     * installed cores on non-rooted devices. See issue #192.
+     */
+    private fun isCoreInstalled(retroArchPackage: String, coreFilename: String, result: MethodChannel.Result) {
+        try {
+            val coresDir = try {
+                val appInfo = packageManager.getApplicationInfo(retroArchPackage, 0)
+                "${appInfo.dataDir}/cores/"
+            } catch (e: Exception) {
+                "/data/user/0/$retroArchPackage/cores/"
+            }
+            // The DB stores core_filename as the bare base (e.g. "ppsspp"); the actual
+            // Android core is "<base>_libretro_android.so". Probe both the reconstructed
+            // name and the raw value in case a full filename was ever stored.
+            val base = coreFilename
+                .removeSuffix("_libretro_android.so")
+                .removeSuffix("_libretro.so")
+            val candidates = linkedSetOf(
+                "${base}_libretro_android.so",
+                coreFilename,
+            )
+
+            // 1. Direct filesystem check. Trustworthy only if we can actually read the
+            //    cores directory (usually we can't — it's RetroArch's private 0700 dir).
+            if (candidates.any { java.io.File(coresDir, it).exists() }) {
+                result.success(true)
+                return
+            }
+            val dir = java.io.File(coresDir)
+            if (dir.exists() && dir.canRead()) {
+                // Directory readable and none of the candidates were in it → absent.
+                result.success(false)
+                return
+            }
+
+            // 2. Directory unreadable from our sandbox (RetroArch's private 0700 dir).
+            //    We deliberately do NOT escalate to `su` here — requesting root would
+            //    pop a Superuser prompt on rooted devices at game-launch time. Report
+            //    unknown (null) → the caller fails open (treats the core as installed),
+            //    which matches non-rooted/production behavior.
+            result.success(null)
+        } catch (e: Exception) {
+            result.success(null)
         }
     }
 
@@ -485,7 +797,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     override fun onResume() {
         super.onResume()
-        
+
+        // Bring back the Now Playing panel if it was hidden for a dock-launched app.
+        restoreSecondaryAfterApp()
+
         if (isGameActive) {
             // Calcular tiempo transcurrido desde el lanzamiento (si tenemos timestamp)
             var elapsedSeconds = 0
@@ -582,7 +897,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     // --- NEW ANDROID APPS/GAMES LOGIC (SCAN EVERYTHING) ---
 
-    private fun getInstalledApps(includeSystemApps: Boolean, result: MethodChannel.Result) {
+    internal fun getInstalledApps(includeSystemApps: Boolean, result: MethodChannel.Result) {
         Thread {
             try {
                 val pm = packageManager
@@ -616,23 +931,18 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     val isGame = false
 
                     val label = resolveInfo.loadLabel(pm).toString()
-                    
-                    var firstInstallTime: Long = 0
-                    var versionName = ""
-                    try {
-                        val pInfo = pm.getPackageInfo(packageName, 0)
-                        firstInstallTime = pInfo.firstInstallTime
-                        versionName = pInfo.versionName ?: ""
-                    } catch (e: Exception) { }
 
+                    // Only name+package are consumed by the dock/picker on the
+                    // Dart side, so we deliberately skip the extra per-app
+                    // pm.getPackageInfo() round-trip that used to fetch
+                    // firstInstallTime/versionName here — on a device with many
+                    // installed apps that second PackageManager hit per app was
+                    // the bulk of the "app drawer takes seconds to wake up" lag.
                     apps.add(mapOf(
                         "name" to label,
                         "package" to packageName,
                         "isSystemApp" to isSystemApp,
-                        "isGame" to isGame,
-                        "firstInstallTime" to firstInstallTime,
-                        "version" to versionName,
-                        "description" to "Android Application ($versionName)"
+                        "isGame" to isGame
                     ))
                 }
                 
@@ -673,23 +983,102 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
-    private fun getAppIcon(packageName: String, result: MethodChannel.Result) {
+    /**
+     * Launches [packageName] preferring the secondary (bottom) display, falling
+     * back to the default display if the OS rejects the targeted launch. Used by
+     * the bottom-screen app dock.
+     */
+    internal fun launchPackageOnSecondaryDisplay(packageName: String, result: MethodChannel.Result) {
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent == null) {
+                result.error("LAUNCH_FAILED", "Could not find launch intent for package", null)
+                return
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Block gamepad briefly to avoid accidental inputs on return.
+            setGamepadBlockInternal(true, 2000)
+
+            val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+            val secondaryDisplay = dm.displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }
+
+            if (secondaryDisplay != null) {
+                try {
+                    val options = android.app.ActivityOptions.makeBasic()
+                        .setLaunchDisplayId(secondaryDisplay.displayId)
+                    startActivity(intent, options.toBundle())
+                    // The Now Playing presentation is a TYPE_PRESENTATION window
+                    // that layers above normal activities, so it would hide the
+                    // app we just launched on the same display. Hide it (keeping
+                    // the engine + dock state alive) and restore it on resume.
+                    hideSecondaryForApp(packageName, secondaryDisplay.displayId)
+                    result.success(true)
+                    return
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Secondary-display launch failed, falling back: ${e.message}")
+                }
+            }
+
+            // Fallback: launch on the default (top) display.
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("LAUNCH_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * Hides the Now Playing presentation so a dock-launched app is visible, and
+     * (if the accessibility service is granted) watches the secondary display so
+     * Now Playing is restored the moment the app is dismissed.
+     */
+    private fun hideSecondaryForApp(packageName: String, displayId: Int) {
+        try {
+            subScreenPresentation?.let {
+                if (it.isShowing) {
+                    it.hide()
+                    presentationHiddenForApp = true
+                }
+            }
+            ScreenshotAccessibilityService.startWatch(packageName, displayId) {
+                Handler(Looper.getMainLooper()).post { restoreSecondaryAfterApp() }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Hiding secondary for app failed: ${e.message}")
+        }
+    }
+
+    /** Restores the Now Playing presentation hidden by a dock launch. */
+    private fun restoreSecondaryAfterApp() {
+        ScreenshotAccessibilityService.stopWatch()
+        if (!presentationHiddenForApp) return
+        presentationHiddenForApp = false
+        try {
+            subScreenPresentation?.show()
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Restoring secondary after app failed: ${e.message}")
+        }
+    }
+
+    internal fun getAppIcon(packageName: String, result: MethodChannel.Result) {
         Thread {
             try {
                 val iconDrawable = packageManager.getApplicationIcon(packageName)
-                val bitmap = if (iconDrawable is BitmapDrawable) {
-                    iconDrawable.bitmap
-                } else {
-                    val bitmap = android.graphics.Bitmap.createBitmap(
-                        iconDrawable.intrinsicWidth,
-                        iconDrawable.intrinsicHeight,
-                        android.graphics.Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = android.graphics.Canvas(bitmap)
-                    iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
-                    iconDrawable.draw(canvas)
-                    bitmap
-                }
+                // The dock/picker never renders an icon larger than ~56dp, so
+                // rasterize straight into a small target bitmap instead of
+                // encoding the source drawable at its native resolution
+                // (adaptive icons are often 192-432px). This shrinks both the
+                // PNG encode here and the Image.memory decode on the Dart side,
+                // which was making the dock feel sluggish while icons loaded.
+                val targetPx = (ICON_TARGET_DP * resources.displayMetrics.density).toInt()
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    targetPx,
+                    targetPx,
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(bitmap)
+                iconDrawable.setBounds(0, 0, targetPx, targetPx)
+                iconDrawable.draw(canvas)
 
                 val stream = ByteArrayOutputStream()
                 bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
@@ -826,6 +1215,172 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 runOnUiThread {
                     result.error("LIST_FAILED", e.message, null)
                 }
+            }
+        }.start()
+    }
+
+    private fun hasSafPermission(uriString: String, result: MethodChannel.Result) {
+        try {
+            val uri = Uri.parse(uriString)
+            val hasPermission = contentResolver.persistedUriPermissions.any { permission ->
+                permission.uri == uri && permission.isReadPermission && permission.isWritePermission
+            }
+            result.success(hasPermission)
+        } catch (e: Exception) {
+            result.success(false)
+        }
+    }
+
+    private fun deleteSafFile(uriString: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val uri = Uri.parse(uriString)
+
+                // Determine the document ID: supports both tree URIs and document URIs
+                val docId = if (android.provider.DocumentsContract.isDocumentUri(this, uri)) {
+                    android.provider.DocumentsContract.getDocumentId(uri)
+                } else {
+                    android.provider.DocumentsContract.getTreeDocumentId(uri)
+                }
+
+                // Build the child document URI if needed
+                val deleteUri = if (android.provider.DocumentsContract.isTreeUri(uri)) {
+                    android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, docId)
+                } else {
+                    uri
+                }
+
+                val deleted = android.provider.DocumentsContract.deleteDocument(contentResolver, deleteUri)
+                runOnUiThread { result.success(deleted) }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "deleteSafFile error: ${e.message}")
+                runOnUiThread { result.error("DELETE_FAILED", e.message, null) }
+            }
+        }.start()
+    }
+
+    private fun safDocumentUri(uriString: String): Uri {
+        val uri = Uri.parse(uriString)
+        val documentId = if (android.provider.DocumentsContract.isDocumentUri(this, uri)) {
+            android.provider.DocumentsContract.getDocumentId(uri)
+        } else {
+            android.provider.DocumentsContract.getTreeDocumentId(uri)
+        }
+        return if (android.provider.DocumentsContract.isTreeUri(uri)) {
+            android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, documentId)
+        } else {
+            uri
+        }
+    }
+
+    private fun createSafDirectory(uriString: String, name: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val created = android.provider.DocumentsContract.createDocument(
+                    contentResolver,
+                    safDocumentUri(uriString),
+                    android.provider.DocumentsContract.Document.MIME_TYPE_DIR,
+                    name
+                )
+                runOnUiThread { result.success(created?.toString()) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("CREATE_DIRECTORY_FAILED", e.message, null) }
+            }
+        }.start()
+    }
+
+    private fun moveSafFile(
+        sourceUriString: String,
+        targetUriString: String,
+        name: String,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            try {
+                val sourceUri = Uri.parse(sourceUriString)
+                val targetUri = safDocumentUri(targetUriString)
+                val created = android.provider.DocumentsContract.createDocument(
+                    contentResolver,
+                    targetUri,
+                    "application/octet-stream",
+                    name
+                ) ?: throw java.io.IOException("Could not create target file")
+
+                contentResolver.openInputStream(sourceUri)?.use { input ->
+                    contentResolver.openOutputStream(created, "w")?.use { output ->
+                        input.copyTo(output)
+                    } ?: throw java.io.IOException("Could not open target file")
+                } ?: throw java.io.IOException("Could not open source file")
+
+                if (!android.provider.DocumentsContract.deleteDocument(contentResolver, sourceUri)) {
+                    throw java.io.IOException("Could not remove source file")
+                }
+                runOnUiThread { result.success(true) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("MOVE_FILE_FAILED", e.message, null) }
+            }
+        }.start()
+    }
+
+    private fun writeSafFile(
+        uriString: String,
+        name: String,
+        contents: ByteArray,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            try {
+                val parentUri = Uri.parse(uriString)
+                val parentDocumentUri = safDocumentUri(uriString)
+                val treeUri = if (android.provider.DocumentsContract.isTreeUri(parentUri)) {
+                    parentUri
+                } else {
+                    android.provider.DocumentsContract.buildTreeDocumentUri(
+                        parentUri.authority!!,
+                        android.provider.DocumentsContract.getDocumentId(parentUri)
+                    )
+                }
+                val parentId = android.provider.DocumentsContract.getDocumentId(parentDocumentUri)
+                val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+                    treeUri,
+                    parentId
+                )
+                var fileUri: Uri? = null
+                contentResolver.query(
+                    childrenUri,
+                    arrayOf(
+                        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    ),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(1) == name) {
+                            fileUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                                treeUri,
+                                cursor.getString(0)
+                            )
+                            break
+                        }
+                    }
+                }
+                if (fileUri == null) {
+                    fileUri = android.provider.DocumentsContract.createDocument(
+                        contentResolver,
+                        parentDocumentUri,
+                        "audio/x-mpegurl",
+                        name
+                    )
+                }
+                val outputUri = fileUri ?: throw java.io.IOException("Could not create playlist")
+                contentResolver.openOutputStream(outputUri, "w")?.use { output ->
+                    output.write(contents)
+                } ?: throw java.io.IOException("Could not open playlist")
+                runOnUiThread { result.success(true) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("WRITE_FILE_FAILED", e.message, null) }
             }
         }.start()
     }

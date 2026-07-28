@@ -10,6 +10,12 @@ class NativeCarousel extends StatefulWidget {
   final ValueChanged<double>? onPageScrolled;
   final int initialIndex;
 
+  /// When non-null, each page is sized so the card can keep its natural
+  /// square artwork plus this footer height below it (width = height - footerHeight).
+  /// This makes the carousel page match the aspect ratio used by SystemCard in
+  /// the grid, where the footer is rendered under the artwork.
+  final double? footerHeight;
+
   const NativeCarousel({
     super.key,
     required this.itemCount,
@@ -17,6 +23,7 @@ class NativeCarousel extends StatefulWidget {
     this.onPageChanged,
     this.onPageScrolled,
     this.initialIndex = 0,
+    this.footerHeight,
   });
 
   @override
@@ -130,17 +137,29 @@ class NativeCarouselState extends State<NativeCarousel> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        // Calculate viewportFraction so each page is square sized to fill height.
-        // Page width = available height (square), fraction = pageWidth / viewportWidth.
-        final oneCardFraction = (availableWidth > 0)
-            ? constraints.maxHeight / availableWidth
+        final maxHeight = constraints.maxHeight;
+
+        final double pageWidth;
+        final double pageAspectRatio;
+        if (widget.footerHeight != null && widget.footerHeight! > 0) {
+          // Match the grid's SystemCard aspect ratio: square artwork plus a
+          // footer row below it (page width = page height - footer height).
+          pageWidth = (maxHeight - widget.footerHeight!).clamp(0.0, maxHeight);
+          pageAspectRatio = maxHeight > 0 ? pageWidth / maxHeight : 1.0;
+        } else {
+          // Default: square pages that fill the available height.
+          pageWidth = maxHeight;
+          pageAspectRatio = 1.0;
+        }
+
+        final vpFraction = (availableWidth > 0)
+            ? (pageWidth / availableWidth).clamp(0.18, 1.0)
             : 0.3;
-        final vpFraction = oneCardFraction.clamp(0.18, 1.0);
 
         _ensureController(vpFraction);
 
         return SizedBox(
-          height: constraints.maxHeight,
+          height: maxHeight,
           child: Listener(
             behavior: HitTestBehavior.translucent,
             onPointerDown: (_) {
@@ -153,9 +172,23 @@ class NativeCarouselState extends State<NativeCarousel> {
               allowImplicitScrolling: true,
               itemCount: widget.itemCount,
               itemBuilder: (context, index) {
+                // Build the card exactly once and pass it as the
+                // ValueListenableBuilder's `child`. Only the cheap
+                // Opacity/Transform.scale envelope reacts to per-frame page
+                // scroll updates — the card subtree (which does disk reads and
+                // Image.file decoding) is NOT rebuilt on every scroll frame.
+                // RepaintBoundary lets the card's raster be cached and reused
+                // as the scale/opacity animate.
+                final card = RepaintBoundary(
+                  child: AspectRatio(
+                    aspectRatio: pageAspectRatio,
+                    child: widget.itemBuilder(context, index),
+                  ),
+                );
                 return ValueListenableBuilder<double>(
                   valueListenable: _pageNotifier,
-                  builder: (context, page, _) {
+                  child: card,
+                  builder: (context, page, child) {
                     final distance = (index - page).abs() - 0.6;
                     final scale = (1.0 - distance * 0.4).clamp(0.25, 1.0);
                     final opacity = (0.6 - distance * 1).clamp(0.1, 1.0);
@@ -165,10 +198,7 @@ class NativeCarouselState extends State<NativeCarousel> {
                       child: Transform.scale(
                         scale: scale,
                         alignment: Alignment.center,
-                        child: AspectRatio(
-                          aspectRatio: 1,
-                          child: widget.itemBuilder(context, index),
-                        ),
+                        child: child,
                       ),
                     );
                   },

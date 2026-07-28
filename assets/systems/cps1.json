@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "cps1",
+    "multidisc": false,
     "name": "CP System I",
     "short_name": "CPSI",
     "details": {
@@ -37,6 +38,7 @@
   "emulators": [
     {
       "name": "RetroArch64 FBNeo",
+      "default_core": true,
       "unique_id": "cps1.ra64.fbneo",
       "description": "Supported extensions: 7z, zip.",
       "is_retroachievements_compatible": true,
@@ -70,6 +72,7 @@
     },
     {
       "name": "RetroArch32 FBNeo",
+      "default_core": true,
       "unique_id": "cps1.ra32.fbneo",
       "description": "Supported extensions: 7z, zip.",
       "is_retroachievements_compatible": true,
@@ -103,7 +106,7 @@
     },
     {
       "name": "RetroArch FBNeo",
-      "default": true,
+      "default_core": true,
       "unique_id": "cps1.ra.fbneo",
       "description": "Supported extensions: 7z, zip.",
       "is_retroachievements_compatible": true,

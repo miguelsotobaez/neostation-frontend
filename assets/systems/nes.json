@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "nes",
+    "multidisc": false,
     "name": "Nintendo Entertainment System",
     "short_name": "NES",
     "details": {
@@ -71,6 +72,7 @@
     },
     {
       "name": "RetroArch64 FCEUmm",
+      "default_core": true,
       "unique_id": "nes.ra64.fceumm",
       "description": "Supported extensions: fds, nes, unf, unif.",
       "is_retroachievements_compatible": true,
@@ -126,6 +128,7 @@
     },
     {
       "name": "RetroArch32 FCEUmm",
+      "default_core": true,
       "unique_id": "nes.ra32.fceumm",
       "description": "Supported extensions: fds, nes, unf, unif.",
       "is_retroachievements_compatible": true,
@@ -193,7 +196,7 @@
     },
     {
       "name": "RetroArch FCEUmm",
-      "default": true,
+      "default_core": true,
       "unique_id": "nes.ra.fceumm",
       "description": "Supported extensions: fds, nes, unf, unif.",
       "is_retroachievements_compatible": true,

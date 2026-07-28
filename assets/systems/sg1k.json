@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "sg1k",
+    "multidisc": false,
     "name": "Sega SG-1000",
     "short_name": "SG1K",
     "details": {
@@ -46,6 +47,7 @@
   "emulators": [
     {
       "name": "RetroArch64 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "sg1k.ra64.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -90,6 +92,7 @@
     },
     {
       "name": "RetroArch32 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "sg1k.ra32.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -134,7 +137,7 @@
     },
     {
       "name": "RetroArch Genesis Plus GX",
-      "default": true,
+      "default_core": true,
       "unique_id": "sg1k.ra.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,

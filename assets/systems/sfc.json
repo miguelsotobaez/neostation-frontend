@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "sfc",
+    "multidisc": false,
     "name": "Super Family Computer",
     "short_name": "SFC",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "sfc",
-      "Super Famicom"
+      "Super Famicom",
+      "sfam"
     ],
     "colors": [
       "#EEEEEE",
@@ -54,6 +56,7 @@
     },
     {
       "name": "RetroArch64 Snes9x",
+      "default_core": true,
       "unique_id": "sfc.ra64.snes9x",
       "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -263,6 +266,7 @@
     },
     {
       "name": "RetroArch32 Snes9x",
+      "default_core": true,
       "unique_id": "sfc.ra32.snes9x",
       "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -472,7 +476,7 @@
     },
     {
       "name": "RetroArch Snes9x",
-      "default": true,
+      "default_core": true,
       "unique_id": "sfc.ra.snes9x",
       "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
       "is_retroachievements_compatible": true,

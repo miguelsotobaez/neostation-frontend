@@ -97,9 +97,6 @@ class SystemRepository {
   static Future<void> setHideBrackets(String systemId, bool value) =>
       SqliteService.setSystemHideBrackets(systemId, value);
 
-  static Future<void> setHideLogo(String systemId, bool value) =>
-      SqliteService.setSystemHideLogo(systemId, value);
-
   static Future<void> setCustomImages(
     String systemId, {
     String? backgroundPath,

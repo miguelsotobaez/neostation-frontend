@@ -18,7 +18,7 @@ class RetroAchievementsGOTW {
   /// List of recent unlocks by users during the event.
   final List<Unlock> unlocks;
 
-  /// Total count of unlocks in casual (softcore) mode.
+  /// Total count of unlocks in casual mode.
   final int unlocksCount;
 
   /// Total count of unlocks in hardcore mode.
@@ -166,8 +166,8 @@ class Unlock {
   /// Hardcore points earned.
   final String raPoints;
 
-  /// Softcore points earned.
-  final String raSoftcorePoints;
+  /// Casual points earned.
+  final String raCasualPoints;
 
   /// Indicates if the unlock was in hardcore mode (1) or casual mode (0).
   final int hardcoreMode;
@@ -178,7 +178,7 @@ class Unlock {
   Unlock({
     required this.user,
     required this.raPoints,
-    required this.raSoftcorePoints,
+    required this.raCasualPoints,
     required this.hardcoreMode,
     required this.dateAwarded,
   });
@@ -188,7 +188,7 @@ class Unlock {
     return Unlock(
       user: (json['User'] ?? '').toString(),
       raPoints: (json['RAPoints'] ?? '0').toString(),
-      raSoftcorePoints: (json['RASoftcorePoints'] ?? '0').toString(),
+      raCasualPoints: (json['RASoftcorePoints'] ?? '0').toString(),
       hardcoreMode: int.tryParse((json['HardcoreMode'] ?? '0').toString()) ?? 0,
       dateAwarded: (json['DateAwarded'] ?? '').toString(),
     );

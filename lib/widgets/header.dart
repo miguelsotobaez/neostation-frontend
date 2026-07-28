@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/responsive.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:neostation/themes/app_palettes.dart';
+import 'package:neostation/themes/app_themes.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/screens/search_screen/search_screen.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+
+import '../themes/corner_radii.dart';
 
 class Header extends StatefulWidget {
   final int selectedTabIndex;
@@ -34,6 +36,8 @@ class Header extends StatefulWidget {
 class HeaderState extends State<Header> {
   final Battery _battery = Battery();
   int _batteryLevel = 100;
+  BatteryState? _batteryState;
+  StreamSubscription<BatteryState>? _batteryStateSubscription;
   bool _isTelevision = false;
   DateTime _now = DateTime.now();
   Timer? _timeUpdateTimer;
@@ -44,6 +48,7 @@ class HeaderState extends State<Header> {
     super.initState();
     _tabFocusNodes = List.generate(5, (_) => FocusNode(skipTraversal: true));
     _getBatteryLevel();
+    _listenToBatteryState();
     _updateTime();
     _startTimeUpdateTimer();
     if (Platform.isAndroid) {
@@ -56,10 +61,26 @@ class HeaderState extends State<Header> {
   @override
   void dispose() {
     _timeUpdateTimer?.cancel();
+    _batteryStateSubscription?.cancel();
     for (final node in _tabFocusNodes) {
       node.dispose();
     }
     super.dispose();
+  }
+
+  /// Subscribes to real-time battery state changes (charging/discharging/full).
+  void _listenToBatteryState() {
+    try {
+      _batteryStateSubscription = _battery.onBatteryStateChanged.listen((
+        state,
+      ) {
+        if (mounted) {
+          setState(() => _batteryState = state);
+        }
+      });
+    } catch (_) {
+      // Some platforms don't expose battery state; ignore silently.
+    }
   }
 
   void _updateTime() {
@@ -116,19 +137,24 @@ class HeaderState extends State<Header> {
     }
   }
 
-  String _getBatteryIconPath() {
-    if (_batteryLevel == -1) {
-      return "assets/images/icons/battery-charging-bulk.png";
+  /// Resolves the appropriate Material Symbols battery icon based on charge
+  /// level and charging state.
+  IconData _getBatteryIconData() {
+    final isCharging =
+        _batteryState == BatteryState.charging ||
+        _batteryState == BatteryState.full;
+
+    if (_batteryLevel == -1 || isCharging) {
+      return Symbols.battery_android_frame_bolt;
     }
-    if (_batteryLevel > 70) {
-      return "assets/images/icons/battery-full-bulk.png";
-    } else if (_batteryLevel > 20) {
-      return "assets/images/icons/battery-half-bulk.png";
-    } else if (_batteryLevel > 5) {
-      return "assets/images/icons/battery-low-bulk.png";
-    } else {
-      return "assets/images/icons/battery-empty-bulk.png";
-    }
+
+    if (_batteryLevel >= 90) return Symbols.battery_full;
+    if (_batteryLevel >= 75) return Symbols.battery_android_frame_6;
+    if (_batteryLevel >= 60) return Symbols.battery_android_frame_5;
+    if (_batteryLevel >= 45) return Symbols.battery_android_frame_4;
+    if (_batteryLevel >= 30) return Symbols.battery_android_frame_3;
+    if (_batteryLevel >= 15) return Symbols.battery_android_frame_2;
+    return Symbols.battery_android_frame_1;
   }
 
   Color _getBatteryColor(dynamic customColors) {
@@ -146,11 +172,11 @@ class HeaderState extends State<Header> {
 
   @override
   Widget build(BuildContext context) {
-    final customColors = AppPalettes.getCustomColors(context);
+    final customColors = AppThemes.getCustomColors(context);
     // Soft horizontal gradient derived from headerColors.background (left->right)
 
-    return Consumer2<PaletteProvider, SqliteConfigProvider>(
-      builder: (context, paletteProvider, configProvider, child) {
+    return Consumer2<ThemeProvider, SqliteConfigProvider>(
+      builder: (context, themeProvider, configProvider, child) {
         return Container(
           decoration: BoxDecoration(
             color: Colors.transparent,
@@ -181,14 +207,22 @@ class HeaderState extends State<Header> {
                   padding: EdgeInsets.symmetric(horizontal: 2.r),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(8.r),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline,
+                      width: 1.r,
+                    ),
+                    borderRadius:
+                        Theme.of(
+                          context,
+                        ).extension<CornerRadii>()?.radiusExternal ??
+                        BorderRadius.circular(8.r),
                     // normal black shadow
                     boxShadow: [
                       BoxShadow(
                         color: Theme.of(
                           context,
-                        ).colorScheme.shadow.withValues(alpha: 0.25),
-                        blurRadius: 2.r,
+                        ).colorScheme.shadow.withValues(alpha: 0.1),
+                        blurRadius: 4.r,
                         offset: Offset(2.0.r, 2.0.r),
                       ),
                     ],
@@ -211,8 +245,12 @@ class HeaderState extends State<Header> {
                             curve: Curves.easeInOut,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.secondary,
-                                borderRadius: BorderRadius.circular(4.r),
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius:
+                                    Theme.of(context)
+                                        .extension<CornerRadii>()
+                                        ?.radiusInternal ??
+                                    BorderRadius.circular(4.r),
                               ),
                             ),
                           ),
@@ -292,17 +330,32 @@ class HeaderState extends State<Header> {
                   ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(24.r),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline,
+                      width: 1.r,
+                    ),
+                    borderRadius:
+                        Theme.of(
+                          context,
+                        ).extension<CornerRadii>()?.radiusExternal ??
+                        BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.shadow.withValues(alpha: 0.1),
+                        blurRadius: 4.r,
+                        offset: Offset(2.0.r, 2.0.r),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Image.asset(
-                        "assets/images/icons/clock-bulk.png",
+                      Icon(
+                        Symbols.schedule,
                         color: Theme.of(context).colorScheme.onSurface,
-                        height: 14.r,
-                        width: 14.r,
-                        colorBlendMode: BlendMode.srcIn,
+                        size: 14.r,
                       ),
                       SizedBox(width: 4.r),
                       Text(
@@ -321,12 +374,10 @@ class HeaderState extends State<Header> {
                           !_isTelevision &&
                           !Responsive.isHandheldXS(context)) ...[
                         SizedBox(width: 12.r),
-                        Image.asset(
-                          _getBatteryIconPath(),
+                        Icon(
+                          _getBatteryIconData(),
                           color: _getBatteryColor(customColors),
-                          height: 16.r,
-                          width: 16.r,
-                          colorBlendMode: BlendMode.srcIn,
+                          size: 16.r,
                         ),
                         SizedBox(width: 4.r),
                         Text(
@@ -377,7 +428,7 @@ class HeaderState extends State<Header> {
           child: Image.asset(
             icon,
             color: isSelected
-                ? Theme.of(context).colorScheme.surface
+                ? Theme.of(context).colorScheme.onPrimary
                 : Theme.of(context).colorScheme.onSurface,
           ),
         ),

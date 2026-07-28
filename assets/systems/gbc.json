@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gbc",
+    "multidisc": false,
     "name": "Game Boy Color",
     "short_name": "GBC",
     "details": {
@@ -115,6 +116,7 @@
     },
     {
       "name": "RetroArch64 Gambatte",
+      "default_core": true,
       "unique_id": "gbc.ra64.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -203,6 +205,7 @@
     },
     {
       "name": "RetroArch32 Gambatte",
+      "default_core": true,
       "unique_id": "gbc.ra32.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -291,7 +294,7 @@
     },
     {
       "name": "RetroArch Gambatte",
-      "default": true,
+      "default_core": true,
       "unique_id": "gbc.ra.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "palm",
+    "multidisc": false,
     "name": "Palm OS",
     "short_name": "Palm",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "palm",
-      "Palm OS"
+      "Palm OS",
+      "palm-os"
     ],
     "colors": [
       "#BDBDBD",
@@ -31,6 +33,7 @@
   "emulators": [
     {
       "name": "RetroArch64 MU",
+      "default_core": true,
       "unique_id": "palm.ra64.mu",
       "description": "Supported extensions: img, pdb, pqa, prc.",
       "is_retroachievements_compatible": false,
@@ -42,6 +45,7 @@
     },
     {
       "name": "RetroArch32 MU",
+      "default_core": true,
       "unique_id": "palm.ra32.mu",
       "description": "Supported extensions: img, pdb, pqa, prc.",
       "is_retroachievements_compatible": false,
@@ -53,6 +57,7 @@
     },
     {
       "name": "RetroArch MU",
+      "default_core": true,
       "unique_id": "palm.ra.mu",
       "description": "Supported extensions: img, pdb, pqa, prc.",
       "is_retroachievements_compatible": false,

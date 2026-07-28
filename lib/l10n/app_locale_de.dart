@@ -18,6 +18,12 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.download: 'Herunterladen',
   AppLocale.stop: 'Stoppen',
   AppLocale.reset: 'Zurücksetzen',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation konnte den Ordner mit deinen Daten nicht erreichen. Prüfe, ob die SD-Karte oder das Laufwerk angeschlossen ist.',
+  AppLocale.startupStorageRetry: 'Erneut versuchen',
+  AppLocale.startupStorageUseDefault: 'Ohne fortfahren',
+  AppLocale.startupLoading:
+      'NeoStation wird vorbereitet. Warte auf Speicher und Dienste…',
 
   AppLocale.play: 'Spielen',
   AppLocale.playButton: 'SPIELEN',
@@ -33,19 +39,20 @@ const Map<String, dynamic> appLocaleDe = {
 
   AppLocale.settings: 'Einstellungen',
   AppLocale.general: 'Allgemein',
+  AppLocale.secondaryDisplay: 'Zweitbildschirm',
   AppLocale.directories: 'Verzeichnisse',
-  AppLocale.palettes: 'Paletten',
-  AppLocale.neoThemes: 'Themes',
-  AppLocale.neoThemesSubtitle:
-      'Passe Hintergründe und Logos der Systemkarten an',
-  AppLocale.neoThemesNone: 'Keins',
-  AppLocale.neoThemesNoneSubtitle: 'Standarddarstellung',
-  AppLocale.neoThemesLoading: 'Themes laden...',
-  AppLocale.neoThemesError: 'Themes konnten nicht geladen werden',
-  AppLocale.neoThemesApplyTitle: 'Theme anwenden?',
-  AppLocale.neoThemesApplyBody:
-      'Die Theme-Ressourcen werden für alle Systeme heruntergeladen. Dies kann einen Moment dauern.',
-  AppLocale.neoThemesDownloading: 'Theme-Ressourcen werden heruntergeladen...',
+  AppLocale.themes: 'Themes',
+  AppLocale.systemArt: 'System Art',
+  AppLocale.systemArtSubtitle:
+      'Passe Hintergründe und Logos der Systemkarten mit System-Art-Paketen an',
+  AppLocale.systemArtNone: 'Keins',
+  AppLocale.systemArtNoneSubtitle: 'Standarddarstellung',
+  AppLocale.systemArtLoading: 'System Art wird geladen...',
+  AppLocale.systemArtError: 'System Art konnte nicht geladen werden',
+  AppLocale.systemArtApplyTitle: 'System Art anwenden?',
+  AppLocale.systemArtApplyBody:
+      'Das System-Art-Paket wird für alle Systeme heruntergeladen. Dies kann einen Moment dauern.',
+  AppLocale.systemArtDownloading: 'System-Art-Paket wird heruntergeladen...',
   AppLocale.about: 'Über',
   AppLocale.exit: 'Beenden',
   AppLocale.launcher: 'Launcher',
@@ -57,8 +64,15 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.hideRecentCard: 'Zuletzt gespielt',
   AppLocale.hideRecentCardSubtitle:
       'Karte der zuletzt gespielten Spiele im Raster anzeigen',
-  AppLocale.palettesSubtitle: 'Personalisiere das Design von NeoStation',
+  AppLocale.themesSubtitle: 'Personalisiere das Design von NeoStation',
   AppLocale.systemTheme: 'Systemdesign',
+  AppLocale.importTheme: 'Theme importieren',
+  AppLocale.importThemeSuccess: 'Theme „%s“ importiert',
+  AppLocale.importThemeExists: 'Theme „%s“ ist bereits importiert',
+  AppLocale.importThemeError:
+      'Theme konnte nicht importiert werden – ungültige Datei',
+  AppLocale.deleteThemeTitle: 'Theme löschen?',
+  AppLocale.deleteThemeConfirm: 'Importiertes Theme „%s“ entfernen?',
 
   AppLocale.generalSettings: 'Allgemeine Einstellungen',
   AppLocale.alwaysShowRomName: 'ROM-Namen immer anzeigen',
@@ -101,6 +115,28 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.errorConfiguringRetroArchPath:
       'Fehler beim Konfigurieren des RetroArch-Pfads: {error}',
   AppLocale.scanOnStartup: 'Ordner beim Start scannen',
+  AppLocale.nowPlayingDimAfter: 'Now Playing abdunkeln nach',
+  AppLocale.nowPlayingDimAfterSubtitle:
+      'Inaktivität bevor das In-Game-Panel auf dem Zweitbildschirm abgedunkelt wird',
+  AppLocale.nowPlayingDimDarkness: 'Abdunkelungsstärke',
+  AppLocale.nowPlayingDimDarknessSubtitle:
+      'Wie dunkel das Panel beim Abdunkeln wird',
+  AppLocale.nowPlayingDimNever: 'Nie',
+  AppLocale.nowPlayingDockEnabled: 'App-Dock',
+  AppLocale.nowPlayingDockEnabledSubtitle:
+      'App-Dock auf dem Zweitbildschirm anzeigen',
+  AppLocale.nowPlayingDockSlots: 'Dock-Plätze',
+  AppLocale.nowPlayingDockSlotsSubtitle:
+      'Wie viele App-Plätze das Dock anzeigt (1-5)',
+  AppLocale.nowPlayingFanartDim: 'Fanart abdunkeln',
+  AppLocale.nowPlayingFanartDimSubtitle:
+      'Hintergrundbild hinter dem Logo abdunkeln, damit ein unruhiges Fanart nicht stört',
+  AppLocale.nowPlayingDimOff: 'Aus',
+  AppLocale.secondarySectionNowPlaying: 'Now Playing-Bereich',
+  AppLocale.secondarySectionDock: 'App-Dock',
+  AppLocale.screenshotAccess: 'Screen return & screenshots',
+  AppLocale.screenshotAccessSubtitle:
+      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle:
       'Scant ROM-Ordner automatisch beim Öffnen der App',
   AppLocale.ignoreHiddenFiles: 'Versteckte Elemente ignorieren',
@@ -153,6 +189,23 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rescanAllFolders: 'Alle ROM-Ordner erneut scannen',
   AppLocale.rescanAllFoldersSubtitle:
       'Manuell nach neuen Systemen und ROMs suchen',
+  AppLocale.organizeMultiDiscGames: 'Mehrdisc-Spiele organisieren',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Erstellt automatisch .m3u-Dateien für Mehrdisc-Spiele und organisiert sie in Ordnern',
+  AppLocale.organizeMultiDiscScanning:
+      'ROM-Ordner werden nach Mehrdisc-Spielen durchsucht ...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Keine ROM-Ordner konfiguriert.',
+  AppLocale.organizeMultiDiscSkippedSuffix:
+      ' ({count} Ordnerpfad(e) übersprungen)',
+  AppLocale.organizeMultiDiscDone:
+      'Fertig: {groups} Set(s) organisiert, {files} Datei(en) verschoben, {playlists} Playlist(s) erstellt{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Keine Multi-Disc-Sets zum Organisieren gefunden{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Multi-Disc-Spiele konnten nicht organisiert werden: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Dadurch werden passende ROM-Dateien in neue Spielordner verschoben und .m3u-Wiedergabelisten auf dem Speicher erstellt. Dies kann nicht automatisch rückgängig gemacht werden.',
   AppLocale.romsFolderSubtitle:
       'Füge die Ordner hinzu, die deine ROM-Dateien enthalten',
   AppLocale.pressToRemoveFolder:
@@ -423,6 +476,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.hintRefresh: 'Aktualisieren',
   AppLocale.hintViewMode: 'Ansicht',
   AppLocale.hintScrape: 'Scrapen',
+  AppLocale.hintMoreActions: 'Mehr',
 
   AppLocale.error: 'Fehler',
   AppLocale.loading: 'Wird geladen...',
@@ -476,6 +530,21 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.scrape: 'Scraping',
   AppLocale.noAchievements: 'Keine Erfolge',
   AppLocale.gameInfo: 'Spiel-Info',
+  AppLocale.manage: 'Verwalten',
+  AppLocale.forceRescrape: 'Rescrape erzwingen',
+  AppLocale.scrapingData: 'Scraping-Daten',
+  AppLocale.scrapingMedia: 'Scraping-Medien',
+  AppLocale.gameTitle: 'Titel',
+  AppLocale.publisher: 'Herausgeber',
+  AppLocale.genre: 'Genre',
+  AppLocale.description: 'Beschreibung',
+  AppLocale.screenshot: 'Screenshot',
+  AppLocale.fanart: 'Fanart',
+  AppLocale.wheel: 'Wheel',
+  AppLocale.boxart: 'Boxart',
+  AppLocale.change: 'Ändern',
+  AppLocale.metadataSaved: 'Metadaten gespeichert',
+  AppLocale.imageUpdated: 'Bild aktualisiert',
   AppLocale.unlocked: 'Freigeschaltet!',
   AppLocale.points: 'Punkte',
   AppLocale.scanningRomsRA: 'Suche ROMs für RetroAchievements',
@@ -544,6 +613,10 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.storagePermission: 'Speicherberechtigung',
   AppLocale.storagePermissionDesc:
       'NeoStation benötigt "Zugriff auf alle Dateien", um deine RetroArch-Konfigurationen zu verwalten und deine Spielstände korrekt zu synchronisieren.\n\nBitte erteile diese Berechtigung im nächsten Bildschirm.',
+  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccessDesc:
+      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'ROM-Ordner auswählen',
   AppLocale.romFolderSelected: 'ROM-Ordner ausgewählt!',
   AppLocale.chooseRomFolderDesc:
@@ -768,9 +841,19 @@ const Map<String, dynamic> appLocaleDe = {
 
   AppLocale.userDataLocation: 'Datenspeicherort',
   AppLocale.userDataLocationSubtitle:
-      'Wähle, wo Medien, Themes und App-Daten gespeichert werden',
+      'Wähle, wo Medien, System-Art-Pakete und App-Daten gespeichert werden',
   AppLocale.userDataLocationDefault: 'Standardspeicherort',
   AppLocale.selectUserDataFolder: 'Datenordner auswählen',
+  AppLocale.folderNotEmptyTitle: 'Ordner nicht leer',
+  AppLocale.folderNotEmptyBody:
+      'Dieser Ordner enthält bereits {count} Element(e). NeoStation speichert seine eigenen Daten hier, zusammen mit den vorhandenen Inhalten.',
+  AppLocale.folderNotEmptyUseAnyway: 'Trotzdem verwenden',
+  AppLocale.moveUserDataTitle: 'Benutzerdaten verschieben?',
+  AppLocale.moveUserDataBody:
+      'NeoStation verschiebt seine eigenen Daten – Datenbank, gescrapte Medien und Einstellungen – vom aktuellen Ordner in den neuen. Dateien, die nicht von NeoStation erstellt wurden, bleiben unberührt.',
+  AppLocale.moveUserDataDestNotEmpty:
+      'Der neue Ordner enthält bereits {count} Element(e). Die Daten von NeoStation werden daneben abgelegt.',
+  AppLocale.moveUserDataConfirm: 'Daten verschieben',
   AppLocale.migratingUserData: 'Daten werden verschoben',
   AppLocale.migratingUserDataComplete: 'Migration abgeschlossen',
   AppLocale.migratingUserDataError: 'Migration fehlgeschlagen',
@@ -781,6 +864,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.userDataLocationUpdated: 'Datenspeicherort aktualisiert',
   AppLocale.resetToDefault: 'Standard wiederherstellen',
   AppLocale.romDirectories: 'ROM-Verzeichnisse',
+  AppLocale.tools: 'Werkzeuge',
+  AppLocale.toolsSubtitle: 'Werkzeuge zur Organisation deiner ROMs',
   AppLocale.addRomFolder: 'ROM-Ordner hinzufügen',
   AppLocale.removeRomFolder: 'Entfernen',
   AppLocale.searchTitle: 'Suche',
@@ -798,4 +883,105 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.filterRating: 'Bewertung',
   AppLocale.filterYear: 'Jahr',
   AppLocale.filterAny: 'Alle',
+  AppLocale.resetPlayTimeConfirm: 'Spielzeit zurücksetzen',
+  AppLocale.resetPlayTimeConfirmBody:
+      'Dadurch wird die erfasste Spielzeit dieses Spiels dauerhaft auf null zurückgesetzt. Dies kann nicht rückgängig gemacht werden.',
+  AppLocale.removeRomFolderConfirmBody:
+      'Dadurch wird dieser ROM-Ordner aus deinen Bibliotheksquellen entfernt. Deine Dateien auf dem Datenträger werden nicht gelöscht.',
+  AppLocale.disconnectRaConfirm: 'RetroAchievements trennen',
+  AppLocale.disconnectRaConfirmBody:
+      'Dadurch wirst du abgemeldet und deine gespeicherten RetroAchievements-Anmeldedaten werden von diesem Gerät entfernt.',
+  AppLocale.neoSyncLogoutConfirmBody:
+      'Dadurch wirst du auf diesem Gerät von deinem NeoSync-Konto abgemeldet.',
+
+  AppLocale.deleteGame: 'Spiel löschen',
+  AppLocale.deleteGameConfirm: 'Endgültig löschen',
+  AppLocale.deleteGameConfirmBody:
+      'Die ROM-Datei, gescrapte Daten und Mediendateien werden dauerhaft gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.',
+  AppLocale.deleteGameSubtitle:
+      'Entfernt die ROM-Datei dauerhaft von der Festplatte',
+
+  AppLocale.raCompletionsLabel: 'Abschlüsse',
+  AppLocale.raMasteriesLabel: 'Meisterungen',
+  AppLocale.raEarned: 'Verdient',
+  AppLocale.raOwned: 'Im Besitz',
+  AppLocale.raPointsAbbrev: 'Pkt.',
+  AppLocale.raAlreadyEarned: 'Du hast diesen Erfolg bereits verdient',
+  AppLocale.raTapToOpenLocalGame: 'Tippe, um lokale Spieldetails zu öffnen',
+  AppLocale.raRecentUnlocks: 'Neueste Freischaltungen',
+  AppLocale.raRecentCompletions: 'Neueste Abschlüsse',
+  AppLocale.raRecentMasteries: 'Neueste Meisterungen',
+  AppLocale.raNoCompletionsYet: 'Noch keine Abschlüsse',
+  AppLocale.raNoMasteriesYet: 'Noch keine Meisterungen',
+  AppLocale.raTrackedGames: 'verfolgte Spiele',
+  AppLocale.raCompletionLabel: 'Abschluss',
+  AppLocale.raMasteryLabel: 'Meisterung',
+  AppLocale.raCouldNotResolveLocalSystem:
+      'Das lokale System für dieses Spiel konnte nicht ermittelt werden',
+  AppLocale.raMissable: 'VERPASSBAR',
+  AppLocale.raComments: 'KOMMENTARE',
+  AppLocale.raCommentsCouldNotLoad: 'Kommentare konnten nicht geladen werden.',
+  AppLocale.raNoCommentsYet: 'Noch keine Kommentare.',
+  AppLocale.raOlderCommentsAvailable: 'Ältere Kommentare sind verfügbar.',
+  AppLocale.raLoadMore: 'MEHR LADEN',
+  AppLocale.raRateLimited:
+      'RetroAchievements ist gerade ausgelastet. Bitte warte einen Moment und versuche es erneut.',
+  AppLocale.raApiKey: 'API-Schlüssel',
+  AppLocale.raEnterApiKey: 'Gib deinen API-Schlüssel ein',
+  AppLocale.raNoRecentUnlocks:
+      'Keine kürzlichen Freischaltungen in den letzten 30 Tagen',
+  AppLocale.raRecentlyPlayedTitle: 'Kürzlich Gespielt',
+  AppLocale.raNoRecentlyPlayed: 'Keine kürzlich gespielten Spiele',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Zugeordnete Systeme',
+  AppLocale.esdeSummaryUnmatched: 'nicht zugeordnet',
+  AppLocale.esdeSummarySkipped: 'übersprungen (nicht lesbar)',
+  AppLocale.esdeSummaryGamesImported: 'Importierte Spiele',
+  AppLocale.esdeSummaryNoRomMatch: 'keine ROM-Übereinstimmung',
+  AppLocale.esdeSummaryStatsUpdated: 'Favoriten / Statistiken aktualisiert',
+  AppLocale.esdeSummaryGames: 'Spiele',
+  AppLocale.esdeSummarySystems: 'Systeme',
+  AppLocale.wizardScanComplete: 'Scan abgeschlossen',
+  AppLocale.wizardTapNextToContinue: 'Zum Fortfahren auf „Weiter" tippen',
+  AppLocale.wizardEsdeStepTitle: 'Aus ES-DE importieren',
+  AppLocale.wizardEsdeStepDesc:
+      'Nutzt du bereits ES-DE? Importiere deine Spiel-Metadaten und Artworks. '
+      'Wähle den ES-DE-Hauptordner, der deine Ordner "gamelists" und '
+      '"downloaded_media" enthält. Optional; du kannst es später in den '
+      'Einstellungen ausführen.',
+  AppLocale.wizardArtPackTitle: 'Hol dir das NeoStation-Artwork-Paket',
+  AppLocale.wizardArtPackDesc:
+      'Wir empfehlen dringend, das NeoStation-System-Artwork-Paket '
+      'herunterzuladen, um in deiner gesamten Bibliothek schöne '
+      'Konsolen-Hintergründe zu erhalten. Es kann später in den Einstellungen '
+      'geändert werden.',
+  AppLocale.wizardDownloadArtPack: 'Artwork-Paket herunterladen',
+  AppLocale.wizardArtPackInstalled:
+      'Artwork-Paket installiert! Weitere Designs findest du später in den '
+      'Einstellungen.',
+  AppLocale.wizardArtPackUnavailable:
+      'Das Artwork-Paket ist derzeit nicht erreichbar. Du kannst es später in '
+      'den Einstellungen installieren, sobald du online bist.',
 };

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ngcd",
+    "multidisc": false,
     "name": "Neo Geo CD",
     "short_name": "NGCD",
     "details": {
@@ -17,7 +18,8 @@
       "ngcd",
       "neogeocd",
       "Neo Geo CD",
-      "neogeocdjp"
+      "neogeocdjp",
+      "neo-geo-cd"
     ],
     "colors": [
       "#E0E0E0",
@@ -31,6 +33,7 @@
   "emulators": [
     {
       "name": "RetroArch64 NeoCD",
+      "default_core": true,
       "unique_id": "ngcd.ra64.neocd",
       "description": "Supported extensions: chd, cue.",
       "is_retroachievements_compatible": true,
@@ -42,6 +45,7 @@
     },
     {
       "name": "RetroArch32 NeoCD",
+      "default_core": true,
       "unique_id": "ngcd.ra32.neocd",
       "description": "Supported extensions: chd, cue.",
       "is_retroachievements_compatible": true,
@@ -53,7 +57,7 @@
     },
     {
       "name": "RetroArch NeoCD",
-      "default": true,
+      "default_core": true,
       "unique_id": "ngcd.ra.neocd",
       "description": "Supported extensions: chd, cue.",
       "is_retroachievements_compatible": true,

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "dos",
+    "multidisc": true,
     "name": "MS-DOS",
     "short_name": "DOS",
     "details": {
@@ -44,6 +45,7 @@
   "emulators": [
     {
       "name": "RetroArch64 dosbox_pure",
+      "default_core": true,
       "unique_id": "dos.ra64.dosbox_pure",
       "description": "Supported extensions: bat, com, cue, dosz, exe, ima, img, ins, iso, m3u, m3u8, vhd, zip.",
       "is_retroachievements_compatible": false,
@@ -77,6 +79,7 @@
     },
     {
       "name": "RetroArch32 dosbox_pure",
+      "default_core": true,
       "unique_id": "dos.ra32.dosbox_pure",
       "description": "Supported extensions: bat, com, cue, dosz, exe, ima, img, ins, iso, m3u, m3u8, vhd, zip.",
       "is_retroachievements_compatible": false,
@@ -110,7 +113,7 @@
     },
     {
       "name": "RetroArch dosbox_pure",
-      "default": true,
+      "default_core": true,
       "unique_id": "dos.ra.dosbox_pure",
       "description": "Supported extensions: bat, com, cue, dosz, exe, ima, img, ins, iso, m3u, m3u8, vhd, zip.",
       "is_retroachievements_compatible": false,

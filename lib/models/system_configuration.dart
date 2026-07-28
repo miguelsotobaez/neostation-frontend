@@ -17,8 +17,11 @@ class EmulatorDefinition {
   /// Map containing platform-specific execution details (e.g., 'android', 'windows').
   final Map<String, dynamic> platforms;
 
-  /// Whether this emulator is considered the recommended default for the system.
-  final bool isDefault;
+  /// Whether this RetroArch core is the recommended default core for the system.
+  final bool isDefaultCore;
+
+  /// Whether this standalone emulator is the recommended default for the system.
+  final bool isDefaultStandalone;
 
   /// Whether the emulator supports RetroAchievements synchronization.
   final bool? isretroAchievementsCompatible;
@@ -28,7 +31,8 @@ class EmulatorDefinition {
     required this.uniqueId,
     required this.description,
     required this.platforms,
-    this.isDefault = false,
+    this.isDefaultCore = false,
+    this.isDefaultStandalone = false,
     this.isretroAchievementsCompatible,
   });
 
@@ -41,12 +45,11 @@ class EmulatorDefinition {
       platforms: json['platforms'] is Map
           ? Map<String, dynamic>.from(json['platforms'])
           : {},
-      isDefault:
-          (json['default'] ?? json['isDefault'] ?? false)
-                  .toString()
-                  .toLowerCase() ==
-              'true' ||
-          (json['default'] ?? json['isDefault'] ?? 0).toString() == '1',
+      isDefaultCore:
+          (json['default_core'] ?? false).toString().toLowerCase() == 'true',
+      isDefaultStandalone:
+          (json['default_standalone'] ?? false).toString().toLowerCase() ==
+          'true',
       isretroAchievementsCompatible:
           (json['is_retroachievements_compatible'] ??
                       json['is_ra_compatible'] ??

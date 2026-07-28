@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
@@ -113,12 +114,19 @@ object EmulatorLauncher {
                 }
             }
 
-            if (uriData != null && type != null) {
-                intent.setDataAndType(uriData, type)
+            // Infer a MIME type when the intent carries data but the JSON did not
+            // supply one. Some emulators (e.g. Azahar) declare intent filters that
+            // require a MIME type together with the content scheme; without it the
+            // resolver reports ActivityNotFoundException even though the package
+            // is installed.
+            val resolvedType = type ?: inferMimeType(context, uriData)
+
+            if (uriData != null && resolvedType != null) {
+                intent.setDataAndType(uriData, resolvedType)
             } else if (uriData != null) {
                 intent.data = uriData
-            } else if (type != null) {
-                intent.type = type
+            } else if (resolvedType != null) {
+                intent.type = resolvedType
             }
 
             // FLAG_ACTIVITY_NEW_TASK is always required when launching from a non-Activity context.
@@ -354,6 +362,22 @@ object EmulatorLauncher {
             result = uri.lastPathSegment
         }
         return result
+    }
+
+    private fun inferMimeType(context: Context, uri: Uri?): String? {
+        if (uri == null) return null
+
+        // Prefer the content provider's own type when available.
+        if (uri.scheme == "content") {
+            context.contentResolver.getType(uri)?.let { return it }
+        }
+
+        val fileName = getFileNameFromUri(context, uri) ?: uri.lastPathSegment ?: return null
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        if (extension.isEmpty()) return null
+
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: "application/octet-stream"
     }
 
     private fun cleanupOldCacheFiles(dir: File) {

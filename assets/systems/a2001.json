@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "a2001",
+    "multidisc": false,
     "name": "Emerson Arcadia 2001",
     "short_name": "A2001",
     "details": {
@@ -17,7 +18,8 @@
       "a2001",
       "arcadia",
       "Emerson Arcadia 2001",
-      "Arcadia 2001"
+      "Arcadia 2001",
+      "arcadia-2001"
     ],
     "colors": [
       "#BDBDBD",
@@ -32,7 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch MAME/MESS",
-      "default": true,
+      "default_core": true,
       "unique_id": "a2001.ra.mess",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: bin, zip.",
@@ -56,6 +58,7 @@
     },
     {
       "name": "RetroArch64 MAME/MESS",
+      "default_core": true,
       "unique_id": "a2001.ra64.mess",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: bin, zip.",
@@ -67,6 +70,7 @@
     },
     {
       "name": "RetroArch32 MAME/MESS",
+      "default_core": true,
       "unique_id": "a2001.ra32.mess",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: bin, zip.",

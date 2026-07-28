@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ngp",
+    "multidisc": false,
     "name": "NeoGeo Pocket",
     "short_name": "NGP",
     "details": {
@@ -18,7 +19,8 @@
       "Neo Geo Pocket",
       "NeoGeo Pocket",
       "Neo-Geo Pocket",
-      "SNK Neo Geo Pocket"
+      "SNK Neo Geo Pocket",
+      "neo-geo-pocket"
     ],
     "colors": [
       "#90A4AE",
@@ -45,6 +47,7 @@
     },
     {
       "name": "RetroArch64 Beetle NeoPop",
+      "default_core": true,
       "unique_id": "ngp.ra64.mednafen_ngp",
       "description": "Supported extensions: zip, ngp, ngc, 7z.",
       "is_retroachievements_compatible": true,
@@ -67,6 +70,7 @@
     },
     {
       "name": "RetroArch32 Beetle NeoPop",
+      "default_core": true,
       "unique_id": "ngp.ra32.mednafen_ngp",
       "description": "Supported extensions: zip, ngp, ngc, 7z.",
       "is_retroachievements_compatible": true,
@@ -89,7 +93,7 @@
     },
     {
       "name": "RetroArch Beetle NeoPop",
-      "default": true,
+      "default_core": true,
       "unique_id": "ngp.ra.mednafen_ngp",
       "description": "Supported extensions: zip, ngp, ngc, 7z.",
       "is_retroachievements_compatible": true,

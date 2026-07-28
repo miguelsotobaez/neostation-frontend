@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "cpc",
+    "multidisc": false,
     "name": "Amstrad CPC",
     "short_name": "CPC",
     "details": {
@@ -17,7 +18,9 @@
       "cpc",
       "amstradcpc",
       "Amstrad CPC",
-      "gx4000"
+      "gx4000",
+      "acpc",
+      "amstrad-gx4000"
     ],
     "colors": [
       "#42A5F5",
@@ -50,6 +53,7 @@
     },
     {
       "name": "RetroArch64 Caprice32",
+      "default_core": true,
       "unique_id": "cpc.ra64.cap32",
       "description": "Supported extensions: cdt, cpr, dsk, m3u, sna, tap, voc, zip.",
       "is_retroachievements_compatible": true,
@@ -72,6 +76,7 @@
     },
     {
       "name": "RetroArch32 Caprice32",
+      "default_core": true,
       "unique_id": "cpc.ra32.cap32",
       "description": "Supported extensions: cdt, cpr, dsk, m3u, sna, tap, voc, zip.",
       "is_retroachievements_compatible": true,
@@ -106,7 +111,7 @@
     },
     {
       "name": "RetroArch Caprice32",
-      "default": true,
+      "default_core": true,
       "unique_id": "cpc.ra.cap32",
       "description": "Supported extensions: cdt, cpr, dsk, m3u, sna, tap, voc, zip.",
       "is_retroachievements_compatible": true,

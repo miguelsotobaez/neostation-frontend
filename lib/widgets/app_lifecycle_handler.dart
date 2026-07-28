@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../services/notification_service.dart';
@@ -25,6 +26,7 @@ class AppLifecycleHandler extends StatefulWidget {
 class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     with WidgetsBindingObserver {
   String? _lastKnownPlan;
+  AppLifecycleListener? _exitListener;
 
   static final _log = LoggerService.instance;
 
@@ -55,6 +57,37 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Register exit listener to clean up native resources (SoLoud audio threads)
+    // so the process exits cleanly when the window is closed.
+    _exitListener = AppLifecycleListener(
+      onExitRequested: () async {
+        try {
+          MusicPlayerService().dispose();
+        } catch (_) {}
+        return AppExitResponse.exit;
+      },
+    );
+
+    // A HOME launcher is not paused on screen-off, so lifecycle `paused` never
+    // fires on lock. Bridge the native screen on/off signal to the websocket:
+    // suspend it while locked, reconnect on wake (music/audio is handled in
+    // GameService's channel handler). Screen-on only fires here when NeoStation
+    // is foreground (gated on !isGameLaunched at the call site).
+    GameService.onScreenStateChanged = (screenOn) {
+      if (!mounted) return;
+      final notificationService = Provider.of<NotificationService>(
+        context,
+        listen: false,
+      );
+      if (screenOn) {
+        notificationService.connect().catchError((error) {
+          _log.e('Failed to reconnect notifications on screen-on: $error');
+        });
+      } else {
+        notificationService.suspend();
+      }
+    };
     // Initialize with current plan after a delay to ensure auth is loaded
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Wait a bit more to ensure auth service is fully loaded
@@ -69,6 +102,8 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   @override
   void dispose() {
+    _exitListener?.dispose();
+    GameService.onScreenStateChanged = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -84,10 +119,17 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
       // Re-apply secondary display preference after display reconnection.
       if (Platform.isAndroid) {
-        Provider.of<SqliteConfigProvider>(
+        final configProvider = Provider.of<SqliteConfigProvider>(
           context,
           listen: false,
-        ).reapplySecondaryDisplay();
+        );
+        configProvider.reapplySecondaryDisplay();
+        // Re-push accessibility (Screen Return) state to the secondary display:
+        // the user may have just enabled it in system Settings (e.g. via the
+        // in-game launcher's nudge), which controls the screenshot button and
+        // the launcher's warning badge.
+        // ignore: unawaited_futures
+        configProvider.refreshSecondaryScreenshotAccess();
       }
 
       final notificationService = Provider.of<NotificationService>(

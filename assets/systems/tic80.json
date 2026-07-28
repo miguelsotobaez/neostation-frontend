@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "tic80",
+    "multidisc": false,
     "name": "TIC-80",
     "short_name": "TIC-80",
     "details": {
@@ -29,6 +30,7 @@
   "emulators": [
     {
       "name": "RetroArch64 TIC80",
+      "default_core": true,
       "unique_id": "tic80.ra64.tic80",
       "description": "Supported extensions: tic.",
       "is_retroachievements_compatible": false,
@@ -40,6 +42,7 @@
     },
     {
       "name": "RetroArch32 TIC80",
+      "default_core": true,
       "unique_id": "tic80.ra32.tic80",
       "description": "Supported extensions: tic.",
       "is_retroachievements_compatible": false,
@@ -51,6 +54,7 @@
     },
     {
       "name": "RetroArch TIC80",
+      "default_core": true,
       "unique_id": "tic80.ra.tic80",
       "description": "Supported extensions: tic.",
       "is_retroachievements_compatible": false,

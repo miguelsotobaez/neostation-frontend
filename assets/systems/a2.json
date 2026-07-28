@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "a2",
+    "multidisc": false,
     "name": "Apple II",
     "short_name": "A2",
     "details": {
@@ -45,7 +46,7 @@
   "emulators": [
     {
       "name": "RetroArch AppleWin",
-      "default": true,
+      "default_core": true,
       "unique_id": "a2.ra.applewin",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: cmd.",
@@ -91,6 +92,30 @@
       }
     },
     {
+      "name": "RetroArch64 AppleWin",
+      "default_core": true,
+      "unique_id": "a2.ra64.applewin",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"applewin\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L applewin_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "args": "-L applewin_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L applewin_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
       "name": "RetroArch64 MAME/MESS",
       "unique_id": "a2.ra64.mess",
       "is_retroachievements_compatible": false,
@@ -98,6 +123,30 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 AppleWin",
+      "default_core": true,
+      "unique_id": "a2.ra32.applewin",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"applewin\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L applewin_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "args": "-L applewin_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L applewin_libretro.dylib \"{file.path}\""
         }
       }
     },

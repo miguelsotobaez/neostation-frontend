@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import 'my_systems_section/my_systems_grid.dart';
 import 'my_systems_section/initial_setup_widget.dart';
@@ -22,8 +22,8 @@ class SystemContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SqliteConfigProvider, PaletteProvider>(
-      builder: (context, configProvider, paletteProvider, child) {
+    return Consumer2<SqliteConfigProvider, ThemeProvider>(
+      builder: (context, configProvider, themeProvider, child) {
         // Determine the current operational state of the library.
         final isLoading = configProvider.isLoading || configProvider.isScanning;
 

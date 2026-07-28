@@ -32,8 +32,8 @@ class RetroAchievementsUser {
   /// Total points accumulated (Hardcore mode).
   final int totalPoints;
 
-  /// Total points accumulated in casual (Softcore) mode.
-  final int totalSoftcorePoints;
+  /// Total points accumulated in casual mode.
+  final int totalCasualPoints;
 
   /// Total weighted "True" points based on achievement rarity.
   final int totalTruePoints;
@@ -63,7 +63,7 @@ class RetroAchievementsUser {
     required this.contribCount,
     required this.contribYield,
     required this.totalPoints,
-    required this.totalSoftcorePoints,
+    required this.totalCasualPoints,
     required this.totalTruePoints,
     required this.permissions,
     required this.untracked,
@@ -84,7 +84,7 @@ class RetroAchievementsUser {
       contribCount: RAParsingUtils.toInt(json['ContribCount']),
       contribYield: RAParsingUtils.toInt(json['ContribYield']),
       totalPoints: RAParsingUtils.toInt(json['TotalPoints']),
-      totalSoftcorePoints: RAParsingUtils.toInt(json['TotalSoftcorePoints']),
+      totalCasualPoints: RAParsingUtils.toInt(json['TotalSoftcorePoints']),
       totalTruePoints: RAParsingUtils.toInt(json['TotalTruePoints']),
       permissions: RAParsingUtils.toInt(json['Permissions']),
       untracked: RAParsingUtils.toInt(json['Untracked']),
@@ -94,9 +94,9 @@ class RetroAchievementsUser {
     );
   }
 
-  /// Whether the user primarily or exclusively plays in softcore (casual) mode.
-  bool get isSoftcore => totalSoftcorePoints > 0;
+  /// Whether the user primarily or exclusively plays in casual mode.
+  bool get isCasual => totalCasualPoints > totalPoints;
 
   /// Returns a display string representing the user's primary gameplay mode.
-  String get userType => isSoftcore ? 'Softcore User' : 'Hardcore User';
+  String get userType => isCasual ? 'Casual User' : 'Hardcore User';
 }

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "zx81",
+    "multidisc": false,
     "name": "ZX 81",
     "short_name": "ZX81",
     "details": {
@@ -32,6 +33,7 @@
   "emulators": [
     {
       "name": "RetroArch64 ZX81",
+      "default_core": true,
       "unique_id": "zx81.ra64.81",
       "description": "Supported extensions: p, t81, tzx.",
       "is_retroachievements_compatible": false,
@@ -43,6 +45,7 @@
     },
     {
       "name": "RetroArch32 ZX81",
+      "default_core": true,
       "unique_id": "zx81.ra32.81",
       "description": "Supported extensions: p, t81, tzx.",
       "is_retroachievements_compatible": false,
@@ -54,6 +57,7 @@
     },
     {
       "name": "RetroArch ZX81",
+      "default_core": true,
       "unique_id": "zx81.ra.81",
       "description": "Supported extensions: p, t81, tzx.",
       "is_retroachievements_compatible": false,

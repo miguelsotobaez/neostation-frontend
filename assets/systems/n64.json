@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "n64",
+    "multidisc": false,
     "name": "Nintendo 64",
     "short_name": "N64",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "n64",
       "Nintendo 64",
-      "n64dd"
+      "n64dd",
+      "64dd"
     ],
     "colors": [
       "#546e7a",
@@ -80,6 +82,7 @@
     },
     {
       "name": "RetroArch64 Mupen64Plus-Next GLES3",
+      "default_core": true,
       "unique_id": "n64.ra64.mupen64plus_next_gles3",
       "description": "Supported extensions: bin, n64, u1, v64, z64, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -113,6 +116,7 @@
     },
     {
       "name": "RetroArch32 Mupen64Plus-Next GLES3",
+      "default_core": true,
       "unique_id": "n64.ra32.mupen64plus_next_gles3",
       "description": "Supported extensions: bin, n64, u1, v64, z64, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -166,7 +170,7 @@
     },
     {
       "name": "RetroArch Mupen64Plus-Next GLES3",
-      "default": true,
+      "default_core": true,
       "unique_id": "n64.ra.mupen64plus_next_gles3",
       "description": "Supported extensions: bin, n64, u1, v64, z64, zip, 7z.",
       "is_retroachievements_compatible": true,

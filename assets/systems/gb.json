@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gb",
+    "multidisc": false,
     "name": "Game Boy",
     "short_name": "GB",
     "details": {
@@ -106,6 +107,7 @@
     },
     {
       "name": "RetroArch64 Gambatte",
+      "default_core": true,
       "unique_id": "gb.ra64.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -194,6 +196,7 @@
     },
     {
       "name": "RetroArch32 Gambatte",
+      "default_core": true,
       "unique_id": "gb.ra32.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -282,7 +285,7 @@
     },
     {
       "name": "RetroArch Gambatte",
-      "default": true,
+      "default_core": true,
       "unique_id": "gb.ra.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,

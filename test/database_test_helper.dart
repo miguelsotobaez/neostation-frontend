@@ -42,6 +42,7 @@ class DatabaseTestHelper {
         type TEXT,
         color1 TEXT,
         color2 TEXT,
+        multidisc INTEGER NOT NULL DEFAULT 0,
         neosync_json TEXT
       )
     ''');
@@ -93,7 +94,6 @@ class DatabaseTestHelper {
         last_scan TEXT,
         system_view_mode TEXT,
         theme_name TEXT,
-        palette_name TEXT,
         video_sound INTEGER,
         ra_user TEXT,
         show_game_info INTEGER,
@@ -117,7 +117,8 @@ class DatabaseTestHelper {
         auto_update_app INTEGER,
         auto_update_systems INTEGER,
         system_grid_columns TEXT DEFAULT 'M',
-        use_12_hour_clock INTEGER DEFAULT 0
+        use_12_hour_clock INTEGER DEFAULT 0,
+        esde_folder_path TEXT
       )
     ''');
 
@@ -138,7 +139,9 @@ class DatabaseTestHelper {
         is_standalone INTEGER,
         core_filename TEXT,
         android_package_name TEXT,
+        android_activity_name TEXT,
         is_default INTEGER,
+        is_default_core INTEGER,
         is_ra_compatible INTEGER
       )
     ''');
@@ -147,7 +150,9 @@ class DatabaseTestHelper {
       CREATE TABLE user_emulator_config (
         emulator_unique_id TEXT PRIMARY KEY,
         emulator_path TEXT,
-        is_user_default INTEGER
+        is_user_default INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -177,6 +182,7 @@ class DatabaseTestHelper {
         prefer_file_name INTEGER DEFAULT 0,
         custom_background_path TEXT,
         custom_logo_path TEXT,
+        esde_media_dir TEXT,
         updated_at TEXT
       )
     ''');
@@ -253,6 +259,8 @@ class DatabaseTestHelper {
         genre TEXT,
         players TEXT,
         is_fully_scraped INTEGER DEFAULT 0,
+        esde_media_subdir TEXT,
+        esde_imported INTEGER DEFAULT 0,
         updated_at TEXT,
         UNIQUE(app_system_id, filename)
       )

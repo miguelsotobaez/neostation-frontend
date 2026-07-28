@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "all",
+    "multidisc": false,
     "name": "All Systems",
     "short_name": "All",
     "details": {

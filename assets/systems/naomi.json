@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "naomi",
+    "multidisc": false,
     "name": "Sega Naomi",
     "short_name": "Naomi",
     "details": {
@@ -44,6 +45,7 @@
     },
     {
       "name": "RetroArch64 Flycast",
+      "default_core": true,
       "unique_id": "naomi.ra64.flycast",
       "description": "Supported extensions: 7z, chd, dat, lst, zip.",
       "is_retroachievements_compatible": true,
@@ -55,6 +57,7 @@
     },
     {
       "name": "RetroArch32 Flycast",
+      "default_core": true,
       "unique_id": "naomi.ra32.flycast",
       "description": "Supported extensions: 7z, chd, dat, lst, zip.",
       "is_retroachievements_compatible": true,
@@ -66,7 +69,7 @@
     },
     {
       "name": "RetroArch Flycast",
-      "default": true,
+      "default_core": true,
       "unique_id": "naomi.ra.flycast",
       "description": "Supported extensions: cdi, gdi, chd, cue, bin, elf, zip, 7z, lst, dat, m3u, zip.",
       "is_retroachievements_compatible": true,

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wii",
+    "multidisc": true,
     "name": "Nintendo Wii",
     "short_name": "Wii",
     "details": {
@@ -118,6 +119,7 @@
     },
     {
       "name": "RetroArch64 Dolphin",
+      "default_core": true,
       "unique_id": "wii.ra64.dolphin",
       "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, m3u, rvz, tgc, wad, wbfs, wia",
       "is_retroachievements_compatible": false,
@@ -129,7 +131,7 @@
     },
     {
       "name": "RetroArch Dolphin",
-      "default": true,
+      "default_core": true,
       "unique_id": "wii.ra.dolphin",
       "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, m3u, rvz, tgc, wad, wbfs, wia",
       "is_retroachievements_compatible": false,

@@ -54,10 +54,11 @@ void main() {
         game(developer: null),
       ];
       // Sort is case-insensitive: atari, capcom, konami.
-      expect(
-        distinctOptions(games, (g) => g.developer),
-        ['Atari', 'capcom', 'Konami'],
-      );
+      expect(distinctOptions(games, (g) => g.developer), [
+        'Atari',
+        'capcom',
+        'Konami',
+      ]);
     });
   });
 
@@ -75,9 +76,24 @@ void main() {
 
   group('filterAndSortGames', () {
     final library = [
-      game(realName: 'Zelda', systemRealName: 'NES', genre: 'Adventure', rating: 4.8),
-      game(realName: 'Mario', systemRealName: 'NES', genre: 'Platformer', rating: 4.5),
-      game(realName: 'Sonic', systemRealName: 'Genesis', genre: 'Platformer', rating: 3.0),
+      game(
+        realName: 'Zelda',
+        systemRealName: 'NES',
+        genre: 'Adventure',
+        rating: 4.8,
+      ),
+      game(
+        realName: 'Mario',
+        systemRealName: 'NES',
+        genre: 'Platformer',
+        rating: 4.5,
+      ),
+      game(
+        realName: 'Sonic',
+        systemRealName: 'Genesis',
+        genre: 'Platformer',
+        rating: 3.0,
+      ),
     ];
 
     test('empty criteria returns everything sorted by display name', () {
@@ -100,8 +116,10 @@ void main() {
     });
 
     test('platform filter matches systemRealName exactly', () {
-      final r =
-          filterAndSortGames(library, const SearchCriteria(platform: 'Genesis'));
+      final r = filterAndSortGames(
+        library,
+        const SearchCriteria(platform: 'Genesis'),
+      );
       expect(r.map((g) => g.realName), ['Sonic']);
     });
 
@@ -115,8 +133,7 @@ void main() {
 
     test('minRating excludes lower-rated and unrated games', () {
       final games = [...library, game(realName: 'NoRating', rating: null)];
-      final r =
-          filterAndSortGames(games, const SearchCriteria(minRating: 4.0));
+      final r = filterAndSortGames(games, const SearchCriteria(minRating: 4.0));
       expect(r.map((g) => g.realName), ['Mario', 'Zelda']);
     });
 

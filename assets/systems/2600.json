@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "2600",
+    "multidisc": false,
     "name": "Atari 2600",
     "short_name": "A2600",
     "details": {
@@ -34,7 +35,7 @@
   "emulators": [
     {
       "name": "RetroArch Stella",
-      "default": true,
+      "default_core": true,
       "unique_id": "2600.ra.stella",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: a26, bin, zip",
@@ -80,6 +81,7 @@
     },
     {
       "name": "RetroArch64 Stella",
+      "default_core": true,
       "unique_id": "2600.ra64.stella",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: a26, bin, zip",
@@ -113,6 +115,7 @@
     },
     {
       "name": "RetroArch32 Stella",
+      "default_core": true,
       "unique_id": "2600.ra32.stella",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: a26, bin, zip",

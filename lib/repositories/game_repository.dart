@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'package:neostation/services/logger_service.dart';
 import '../models/database_game_model.dart';
 import '../data/datasources/sqlite_database_service.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../providers/file_provider.dart';
+import '../services/saf_directory_service.dart';
 
 /// Repository for game data access operations.
 class GameRepository {
@@ -42,6 +46,96 @@ class GameRepository {
   /// Removes all ROM entries associated with a specific folder path.
   static Future<int> deleteRomsByFolderPath(String folderPath) =>
       SqliteService.deleteRomsByFolderPath(folderPath);
+
+  /// Permanently deletes a game, its database metadata, and all associated
+  /// scraped media files (screenshots, fanart, wheel, boxart, video) from disk.
+  static Future<void> deleteGame({
+    String? appSystemId,
+    required String filename,
+    required String systemFolderName,
+    required String romBaseName,
+    String? romPath,
+    FileProvider? fileProvider,
+  }) async {
+    final log = LoggerService.instance;
+
+    if (appSystemId == null) {
+      log.e('deleteGame: appSystemId is null, cannot delete from DB');
+      return;
+    }
+    await SqliteService.deleteGame(appSystemId, filename);
+
+    if (romPath != null) {
+      try {
+        if (romPath.startsWith('content://') &&
+            await SafDirectoryService.deleteFile(romPath)) {
+          log.i('deleteGame: Deleted ROM file via SAF: $romPath');
+        } else {
+          final romFile = File(romPath);
+          if (await romFile.exists()) {
+            await romFile.delete();
+            log.i('deleteGame: Deleted ROM file: $romPath');
+          } else {
+            log.w('deleteGame: ROM file not found: $romPath');
+          }
+        }
+      } catch (e) {
+        log.e('deleteGame: Failed to delete ROM file $romPath: $e');
+      }
+    } else {
+      log.w('deleteGame: romPath is null, skipping ROM file deletion');
+    }
+
+    final mediaDir = fileProvider?.getMediaDirectoryPath();
+    if (mediaDir == null) {
+      log.w('deleteGame: mediaDir is null, skipping scraped media deletion');
+      return;
+    }
+
+    // Media files are stored using the ROM name WITHOUT extension
+    final strippedBase = _stripExtension(romBaseName);
+    final strippedFilename = _stripExtension(filename);
+
+    const mediaTypes = ['screenshots', 'fanarts', 'wheels', 'box2d', 'videos'];
+    const extensions = ['png', 'jpg', 'jpeg', 'webp', 'mp4'];
+    int deletedMedia = 0;
+
+    for (final type in mediaTypes) {
+      final folder = Directory('$mediaDir/$systemFolderName/$type');
+      try {
+        if (!await folder.exists()) continue;
+        final files = await folder.list().toList();
+        for (final entity in files) {
+          if (entity is File) {
+            final name = entity.uri.pathSegments.last;
+            final base = name.contains('.')
+                ? name.substring(0, name.lastIndexOf('.'))
+                : name;
+            if (base == strippedBase ||
+                base == strippedFilename ||
+                base == romBaseName ||
+                base == filename) {
+              final ext = name.contains('.')
+                  ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
+                  : '';
+              if (extensions.contains(ext)) {
+                await entity.delete();
+                deletedMedia++;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        log.e('deleteGame: Error deleting $type media for $filename: $e');
+      }
+    }
+
+    if (deletedMedia > 0) {
+      log.i(
+        'deleteGame: Deleted $deletedMedia scraped media files for $filename',
+      );
+    }
+  }
 
   // ── Single ROM operations ─────────────────────────────────────────────────
 
@@ -225,4 +319,10 @@ class GameRepository {
     String filename,
     String ratio,
   ) => SqliteService.updateBox2dAspectRatio(systemId, filename, ratio);
+
+  /// Strips the last file extension from a filename.
+  static String _stripExtension(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot == -1 ? name : name.substring(0, dot);
+  }
 }

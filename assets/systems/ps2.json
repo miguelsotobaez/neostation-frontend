@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ps2",
+    "multidisc": true,
     "name": "Sony PlayStation 2",
     "short_name": "PS2",
     "details": {
@@ -38,6 +39,7 @@
   "emulators": [
     {
       "name": "RetroArch Play!",
+      "default_core": true,
       "unique_id": "ps2.ra.play",
       "description": "Play! core for RetroArch.",
       "is_retroachievements_compatible": false,
@@ -49,6 +51,7 @@
     },
     {
       "name": "RetroArch64 Play!",
+      "default_core": true,
       "unique_id": "ps2.ra64.play",
       "description": "Play! core for RetroArch 64.",
       "is_retroachievements_compatible": false,
@@ -60,6 +63,7 @@
     },
     {
       "name": "RetroArch32 Play!",
+      "default_core": true,
       "unique_id": "ps2.ra32.play",
       "description": "Play! core for RetroArch 32.",
       "is_retroachievements_compatible": false,
@@ -191,7 +195,7 @@
     },
     {
       "name": "Standalone NetherSX2/AetherSX2",
-      "default": true,
+      "default_standalone": true,
       "unique_id": "ps2.xyz.aethersx2.android",
       "description": "Supported extensions: iso, chd, gz, mdf.",
       "is_retroachievements_compatible": true,
@@ -202,7 +206,7 @@
       }
     },
     {
-      "name": "Standalone Aethersx2 Turnip",
+      "name": "Standalone NetherSX2/AetherSX2 Turnip",
       "unique_id": "ps2.xyz.aethersx2.custom",
       "description": "Supported extensions: iso, chd, gz.",
       "is_retroachievements_compatible": false,
@@ -213,7 +217,7 @@
       }
     },
     {
-      "name": "Standalone NetherSX2 Turnip",
+      "name": "Standalone NetherSX2/AetherSX2 Turnip",
       "unique_id": "ps2.xyz.aethersx2.tturnip",
       "description": "Supported extensions: iso, chd, gz.",
       "is_retroachievements_compatible": false,
@@ -224,7 +228,7 @@
       }
     },
     {
-      "name": "Standalone NetherSX2 Classic Turnip",
+      "name": "Standalone NetherSX2/AetherSX2 Classic Turnip",
       "unique_id": "ps2.xyz.aethersx2.cturnip",
       "description": "Supported extensions: iso, chd, gz.",
       "is_retroachievements_compatible": false,
@@ -242,6 +246,17 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n come.nanodata.armsx2/kr.co.iefriends.pcsx2.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone ARMSX2 Refresh",
+      "unique_id": "ps2.com.armsx2",
+      "description": "Supported extensions: iso, chd, gz, mdf, bin, ciso, img.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.armsx2/.Main -a android.intent.action.VIEW -d \"{file.uri}\""
         }
       }
     },

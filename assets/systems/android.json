@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "android",
+    "multidisc": false,
     "name": "Android",
     "short_name": "Android",
     "details": {

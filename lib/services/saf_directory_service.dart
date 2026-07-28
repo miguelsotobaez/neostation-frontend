@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'logger_service.dart';
@@ -52,6 +53,9 @@ class SafDirectoryService {
     } on PlatformException catch (e) {
       _log.e('Error checking SAF permission: ${e.message}');
       return false;
+    } on MissingPluginException catch (e) {
+      _log.e('SAF permission check is unavailable: $e');
+      return false;
     }
   }
 
@@ -84,6 +88,19 @@ class SafDirectoryService {
     } on PlatformException catch (e) {
       _log.e('Error converting SAF URI to path: ${e.message}');
       return null;
+    }
+  }
+
+  /// Deletes a file identified by a SAF content:// URI.
+  /// Returns true if the file was successfully deleted.
+  static Future<bool> deleteFile(String uri) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await platform.invokeMethod('deleteSafFile', {'uri': uri});
+      return result == true;
+    } on PlatformException catch (e) {
+      _log.e('Error deleting SAF file: ${e.message}');
+      return false;
     }
   }
 
@@ -122,6 +139,60 @@ class SafDirectoryService {
     } on PlatformException catch (e) {
       _log.e('Error listing SAF files: ${e.message}');
       return [];
+    }
+  }
+
+  /// Creates a directory below a SAF directory and returns its URI.
+  static Future<String?> createDirectory(String parentUri, String name) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await platform.invokeMethod<String>('createSafDirectory', {
+        'uri': parentUri,
+        'name': name,
+      });
+    } on PlatformException catch (e) {
+      _log.e('Error creating SAF directory: ${e.message}');
+      return null;
+    }
+  }
+
+  /// Copies a SAF file into a directory and removes the original.
+  static Future<bool> moveFile(
+    String sourceUri,
+    String targetDirectoryUri,
+    String name,
+  ) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await platform.invokeMethod('moveSafFile', {
+        'sourceUri': sourceUri,
+        'targetUri': targetDirectoryUri,
+        'name': name,
+      });
+      return result == true;
+    } on PlatformException catch (e) {
+      _log.e('Error moving SAF file: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Writes UTF-8 text to a new file below a SAF directory.
+  static Future<bool> writeTextFile(
+    String parentUri,
+    String name,
+    String contents,
+  ) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await platform.invokeMethod('writeSafFile', {
+        'uri': parentUri,
+        'name': name,
+        'contents': utf8.encode(contents),
+      });
+      return result == true;
+    } on PlatformException catch (e) {
+      _log.e('Error writing SAF file: ${e.message}');
+      return false;
     }
   }
 

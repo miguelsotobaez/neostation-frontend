@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "intv",
+    "multidisc": false,
     "name": "Intellivision",
     "short_name": "INTV",
     "details": {
@@ -33,6 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch64 FreeIntv",
+      "default_core": true,
       "unique_id": "intellivision.ra64.freeintv",
       "description": "Supported extensions: bin, int, rom, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -44,6 +46,7 @@
     },
     {
       "name": "RetroArch32 FreeIntv",
+      "default_core": true,
       "unique_id": "intellivision.ra32.freeintv",
       "description": "Supported extensions: bin, int, rom, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -55,7 +58,7 @@
     },
     {
       "name": "RetroArch FreeIntv",
-      "default": true,
+      "default_core": true,
       "unique_id": "intellivision.ra.freeintv",
       "description": "Supported extensions: bin, int, rom, zip, 7z.",
       "is_retroachievements_compatible": true,

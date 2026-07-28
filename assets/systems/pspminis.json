@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pspminis",
+    "multidisc": false,
     "name": "PlayStation Portable Minis",
     "short_name": "PSPM",
     "details": {
@@ -66,6 +67,7 @@
     },
     {
       "name": "RetroArch64 PPSSPP",
+      "default_core": true,
       "unique_id": "pspminis.ra64.ppsspp",
       "description": "Supported extensions: cso, elf, iso, pbp, prx.",
       "is_retroachievements_compatible": false,
@@ -77,6 +79,7 @@
     },
     {
       "name": "RetroArch32 PPSSPP",
+      "default_core": true,
       "unique_id": "pspminis.ra32.ppsspp",
       "description": "Supported extensions: cso, elf, iso, pbp, prx.",
       "is_retroachievements_compatible": false,
@@ -88,6 +91,7 @@
     },
     {
       "name": "RetroArch PPSSPP",
+      "default_core": true,
       "unique_id": "pspminis.ra.ppsspp",
       "description": "Supported extensions: cso, elf, iso, pbp, prx.",
       "is_retroachievements_compatible": false,

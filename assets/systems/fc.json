@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "fc",
+    "multidisc": false,
     "name": "Family Computer",
     "short_name": "FC",
     "details": {
@@ -17,7 +18,8 @@
       "fc",
       "Famicom",
       "Family Computer",
-      "Nintendo Family Computer"
+      "Nintendo Family Computer",
+      "famicom"
     ],
     "colors": [
       "#D32F2F",
@@ -68,6 +70,7 @@
     },
     {
       "name": "RetroArch64 FCEUmm",
+      "default_core": true,
       "unique_id": "fc.ra64.fceumm",
       "description": "Supported extensions: fds, nes, unf, unif.",
       "is_retroachievements_compatible": true,
@@ -123,6 +126,7 @@
     },
     {
       "name": "RetroArch32 FCEUmm",
+      "default_core": true,
       "unique_id": "fc.ra32.fceumm",
       "description": "Supported extensions: fds, nes, unf, unif.",
       "is_retroachievements_compatible": true,
@@ -190,7 +194,7 @@
     },
     {
       "name": "RetroArch FCEUmm",
-      "default": true,
+      "default_core": true,
       "unique_id": "fc.ra.fceumm",
       "description": "Supported extensions: fds, nes, unf, unif.",
       "is_retroachievements_compatible": true,

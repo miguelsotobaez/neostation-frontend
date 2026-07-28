@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pc88",
+    "multidisc": false,
     "name": "NEC PC-8801",
     "short_name": "PC88",
     "details": {
@@ -19,7 +20,8 @@
       "pc8000",
       "pc8800",
       "NEC PC-8000/8800",
-      "NEC PC-8801"
+      "NEC PC-8801",
+      "pc-8800-series"
     ],
     "colors": [
       "#F5F5DC",
@@ -34,7 +36,7 @@
   "emulators": [
     {
       "name": "RetroArch QUASI88",
-      "default": true,
+      "default_core": true,
       "unique_id": "8088.ra.quasi88",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: d88, m3u, u88.",
@@ -58,6 +60,7 @@
     },
     {
       "name": "RetroArch64 QUASI88",
+      "default_core": true,
       "unique_id": "8088.ra64.quasi88",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: d88, m3u, u88.",
@@ -69,6 +72,7 @@
     },
     {
       "name": "RetroArch32 QUASI88",
+      "default_core": true,
       "unique_id": "8088.ra32.quasi88",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: d88, m3u, u88.",

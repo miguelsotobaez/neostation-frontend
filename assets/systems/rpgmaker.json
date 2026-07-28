@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "rpgmaker",
+    "multidisc": false,
     "name": "RPG Maker",
     "short_name": "RPGM",
     "details": {
@@ -30,6 +31,7 @@
   "emulators": [
     {
       "name": "RetroArch64 easyRPG",
+      "default_core": true,
       "unique_id": "rpgmaker.ra64.easyrpg",
       "description": "Supported extensions: easyrpg, ldb, zip.",
       "is_retroachievements_compatible": false,
@@ -41,6 +43,7 @@
     },
     {
       "name": "RetroArch32 easyRPG",
+      "default_core": true,
       "unique_id": "rpgmaker.ra32.easyrpg",
       "description": "Supported extensions: easyrpg, ldb, zip.",
       "is_retroachievements_compatible": false,
@@ -52,6 +55,7 @@
     },
     {
       "name": "RetroArch easyRPG",
+      "default_core": true,
       "unique_id": "rpgmaker.ra.easyrpg",
       "description": "Supported extensions: easyrpg, ldb, zip.",
       "is_retroachievements_compatible": false,

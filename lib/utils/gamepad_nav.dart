@@ -8,6 +8,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import '../responsive.dart';
 import 'gamepad_translator.dart';
+import 'select_tap.dart';
 import '../main.dart' show FullscreenNotifier;
 
 /// Metadata for a connected gamepad device.
@@ -43,6 +44,12 @@ class GamepadInfo {
   }
 }
 
+/// Axis whose held-direction repeats escalate into alphabetical letter jumps.
+///
+/// This is the axis the *items* run along in a given view: vertical for the
+/// list and grid, horizontal for the carousel.
+enum LetterJumpAxis { vertical, horizontal }
+
 /// Core service for managing gamepad and keyboard navigation within the application.
 ///
 /// Handles input translation, debouncing, auto-repeat logic, and callback dispatching.
@@ -64,6 +71,37 @@ class GamepadNavigation {
   final VoidCallback? onLeftBumper;
   final VoidCallback? onRightBumper;
 
+  /// Select (View) chord combos. The Select button is a pure modifier — on its
+  /// own it does nothing. While it is held (or within a short window of a pulse),
+  /// a face-button press fires the matching modifier callback instead of its
+  /// normal action, and suppresses that normal action.
+  final VoidCallback? onSelectModifierA;
+  final VoidCallback? onSelectModifierB;
+  final VoidCallback? onSelectModifierX;
+  final VoidCallback? onSelectModifierY;
+
+  /// ES-DE style alphabetical jumping. Once a direction on [letterJumpAxis] has
+  /// been held for longer than `_letterJumpAfter`, each repeat calls this with
+  /// `true` for forward (down / right) instead of moving one item, and then
+  /// dwells on the new letter so the user can release in time. Return `false`
+  /// to decline the jump (e.g. no further letter), which falls back to the
+  /// normal accelerated step repeat for that tick.
+  final bool Function(bool forward)? onLetterJump;
+
+  /// Axis [onLetterJump] applies to. Ignored when [onLetterJump] is null.
+  final LetterJumpAxis letterJumpAxis;
+
+  /// Whether held directions speed up the longer they are held (see
+  /// `_rampedRepeatInterval`). Off by default: in artwork-heavy views the
+  /// accelerated cadence outruns image loading, so the cards lag behind the
+  /// cursor — a fixed cadence there stays in step with the cache.
+  final bool accelerateRepeats;
+
+  /// Optional override that reports whether a text field is currently focused
+  /// in the active UI layer. When provided, it takes precedence over the global
+  /// focus search, preventing off-stage text fields from blocking navigation.
+  final bool Function()? isTextFieldFocused;
+
   static final _log = LoggerService.instance;
 
   /// When true, all raw input events are logged for diagnostic purposes.
@@ -83,14 +121,72 @@ class GamepadNavigation {
   /// Throttle duration for directional inputs to prevent "drifting" or excessive navigation.
   static const int _directionalThrottleMs = 128;
 
+  // ---------------------------------------------------------------------
+  // Shoulder (L1/R1) tab-switch pacing.
+  //
+  // These are STATIC on purpose: switching a tab swaps the active navigation
+  // layer, so consecutive presses are seen by *different* GamepadNavigation
+  // instances. Per-instance timers would reset on every switch and let a held
+  // bumper run away through the tabs.
+  //
+  // Android delivers a held bumper as a stream of auto-repeat ACTION_DOWNs.
+  // A press that arrives without an intervening release is that stream (the
+  // button is HELD) and is paced at [_shoulderRepeatIntervalMs]; a press after
+  // a release is a fresh, deliberate TAP and only has to clear
+  // [_shoulderTapDebounceMs].
+  // ---------------------------------------------------------------------
+
+  /// Last shoulder press actually turned into a tab switch.
+  static DateTime? _lastShoulderDispatchTime;
+
+  /// True once a shoulder release has been seen, i.e. the next press starts a
+  /// new tap rather than continuing a hold.
+  static bool _shoulderReleasedSinceDispatch = true;
+
+  /// Cadence at which a HELD bumper walks the tabs (~3 tabs/second).
+  static const int _shoulderRepeatIntervalMs = 300;
+
+  /// Debounce between two separate bumper TAPS. Short, so deliberate rapid
+  /// taps to skip several tabs all register.
+  static const int _shoulderTapDebounceMs = 50;
+
+  /// Safety net for a dropped release: a gap this long means the button can't
+  /// still be held, so the next press counts as a fresh tap regardless.
+  static const int _shoulderHoldLapsedMs = 500;
+
   /// Debounce duration for action buttons to prevent double-presses.
   static const int _actionDebounceMs = 128;
+
+  /// True for the raw Android keycodes of the L1/R1 bumpers.
+  static bool _isAndroidShoulderKeycode(String key) {
+    final k = key.toLowerCase();
+    return k == 'keycode_button_l1' || k == 'keycode_button_r1';
+  }
 
   /// Delay before the first repeat event occurs when a button is held.
   static const Duration _initialRepeatDelay = Duration(milliseconds: 300);
 
-  /// Interval between subsequent repeat events when a button is held.
+  /// Interval between the first few repeat events when a button is held.
   static const Duration _repeatInterval = Duration(milliseconds: 80);
+
+  /// Fastest repeat interval reached while a direction stays held. The interval
+  /// ramps from [_repeatInterval] down to this over [_rampRepeats] repeats, so
+  /// a long hold accelerates instead of crawling at a fixed speed.
+  static const Duration _minRepeatInterval = Duration(milliseconds: 35);
+
+  /// Repeats taken to ramp from [_repeatInterval] to [_minRepeatInterval].
+  static const int _rampRepeats = 14;
+
+  /// How long a direction must be held before repeats escalate from stepping
+  /// item-by-item to ES-DE style alphabetical jumping (see [onLetterJump]).
+  /// Long enough that the accelerated step scroll (~30 items by this point) is
+  /// the normal way to browse, and letter jumping only takes over on a
+  /// deliberate hold.
+  static const Duration _letterJumpAfter = Duration(milliseconds: 1600);
+
+  /// Dwell time on each letter while letter jumping — long enough to read the
+  /// letter and release on it, short enough to cross the alphabet quickly.
+  static const Duration _letterJumpInterval = Duration(milliseconds: 360);
 
   final Map<dynamic, Timer?> _repeatTimers = {};
 
@@ -98,10 +194,63 @@ class GamepadNavigation {
   static const int _throttleDelayMs = 128;
   bool _isActive = false;
 
+  /// Broadcasts whether Select is currently held, so UI (e.g. the gamepad
+  /// legend) can reveal the Select+face-button chord shortcuts while it is down.
+  /// Only the active navigation layer drives this.
+  static final ValueNotifier<bool> selectHeldNotifier = ValueNotifier(false);
+
+  /// Tap-vs-chord decisions for Select. See [SelectTap] for the rules.
+  final SelectTap _selectTap = SelectTap();
+
+  /// Mirrors [SelectTap.held] onto the shared notifier for the legend UI.
+  void _publishSelectHeld() {
+    final held = _selectTap.held;
+    if (selectHeldNotifier.value != held) selectHeldNotifier.value = held;
+  }
+
+  /// Face buttons whose PRESS fired a combo and whose matching RELEASE must be
+  /// swallowed so the normal action never fires (Desktop dispatches on release).
+  final Set<GamepadInputType> _comboConsumed = {};
+
+  /// Pending tap dispatch, cancelled if a chord fires inside the chord window.
+  Timer? _selectTapTimer;
+
+  /// Handles the Select press edge shared by the raw-Android and translated
+  /// paths.
+  void _onSelectDown(DateTime now) {
+    _selectTap.press(now);
+    _selectTapTimer?.cancel();
+    _selectTapTimer = null;
+    _publishSelectHeld();
+  }
+
+  /// Handles the Select release edge, dispatching [onSelectButton] when the
+  /// hold was a plain tap so Select keeps its own action (e.g. mute the playing
+  /// video) while still working as the chord modifier.
+  ///
+  /// The dispatch is deferred by [SelectTap.chordWindow] because the
+  /// pulse-emitting controllers release Select while it is still physically
+  /// held — firing immediately would mute the video at the start of every
+  /// chord. Any chord landing inside that window invalidates the pending tap.
+  void _onSelectUp(DateTime now) {
+    final schedulesTap = _selectTap.releaseSchedulesTap(now);
+    _publishSelectHeld();
+    if (!schedulesTap) return;
+    _selectTapTimer?.cancel();
+    _selectTapTimer = Timer(SelectTap.chordWindow, () {
+      _selectTapTimer = null;
+      if (!_selectTap.tapStillValid) return;
+      onSelectButton?.call();
+    });
+  }
+
   DateTime? _activationTime;
 
-  /// Grace period after activation during which inputs are ignored (prevents accidental inputs from previous screens).
-  static const int _reactivationGraceMs = 256;
+  /// Grace period after activation during which inputs are ignored (prevents
+  /// accidental inputs from previous screens). Kept just long enough to cover
+  /// the in-flight events of the press that caused the layer change; the
+  /// shoulder buttons bypass it entirely (see [_handleGamepadEvent]).
+  static const int _reactivationGraceMs = 150;
 
   String? _currentGamepadId;
   String? _currentGamepadName;
@@ -133,6 +282,14 @@ class GamepadNavigation {
     this.onSelectButton,
     this.onLeftBumper,
     this.onRightBumper,
+    this.onSelectModifierA,
+    this.onSelectModifierB,
+    this.onSelectModifierX,
+    this.onSelectModifierY,
+    this.onLetterJump,
+    this.letterJumpAxis = LetterJumpAxis.vertical,
+    this.accelerateRepeats = false,
+    this.isTextFieldFocused,
   });
 
   /// Starts listening for gamepad and keyboard events.
@@ -157,7 +314,7 @@ class GamepadNavigation {
       cancelOnError: false,
     );
 
-    if (isDesktop && !_keyboardInitialized) {
+    if (!_keyboardInitialized) {
       ServicesBinding.instance.keyboard.addHandler(_handleKeyEvent);
       _keyboardInitialized = true;
     }
@@ -249,22 +406,63 @@ class GamepadNavigation {
     if (wasInactive) {
       _activationTime = DateTime.now();
       // Clear any stale repeat timers that may have survived a prior deactivation.
-      _cancelAllRepeatTimers();
+      cancelAllRepeatTimers();
+      // Drop remembered button states: a button held while this layer was
+      // deactivated never delivered its release here, so the translator would
+      // still think it is down and would ignore the next press of it.
+      _translator.clearButtonStates();
     }
     _lastEventTime = null;
     _lastDirectionalEventTime = null;
     _lastActionEventTime = null;
+    // Shoulder pacing is deliberately NOT reset here — it is shared across
+    // layers so a held bumper keeps its cadence while tabs (and therefore
+    // layers) change underneath it.
   }
 
   /// Disables input processing and cancels any active auto-repeat timers.
   void deactivate() {
     _isActive = false;
     _activationTime = null;
-    _cancelAllRepeatTimers();
+    _resetSelectModifier();
+    cancelAllRepeatTimers();
   }
 
-  /// Internal cleanup for auto-repeat logic.
-  void _cancelAllRepeatTimers() {
+  /// Clears Select chord-modifier state so it can't leak across layer changes
+  /// (e.g. opening a dialog while Select is down).
+  void _resetSelectModifier() {
+    _selectTap.reset();
+    _publishSelectHeld();
+    _selectTapTimer?.cancel();
+    _selectTapTimer = null;
+    _comboConsumed.clear();
+  }
+
+  /// Whether a Select+face-button chord should register right now: Select is
+  /// still reported down, or it pulsed within the chord window.
+  bool _isSelectChordActive() => _selectTap.isChordActive(DateTime.now());
+
+  /// Maps a face button to its Select-modifier combo callback, if any.
+  VoidCallback? _selectModifierFor(GamepadInputType inputType) {
+    switch (inputType) {
+      case GamepadInputType.buttonA:
+        return onSelectModifierA;
+      case GamepadInputType.buttonB:
+        return onSelectModifierB;
+      case GamepadInputType.buttonX:
+        return onSelectModifierX;
+      case GamepadInputType.buttonY:
+        return onSelectModifierY;
+      default:
+        return null;
+    }
+  }
+
+  /// Cancels all active auto-repeat timers.
+  ///
+  /// Called when navigation lands on a text field so held directional inputs
+  /// do not loop indefinitely.
+  void cancelAllRepeatTimers() {
     for (final timer in _repeatTimers.values) {
       timer?.cancel();
     }
@@ -341,7 +539,8 @@ class GamepadNavigation {
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
-    _cancelAllRepeatTimers();
+    _resetSelectModifier();
+    cancelAllRepeatTimers();
 
     if (_keyboardInitialized && isDesktop) {
       ServicesBinding.instance.keyboard.removeHandler(_handleKeyEvent);
@@ -368,12 +567,10 @@ class GamepadNavigation {
   void _handleGamepadEvent(GamepadEvent event) async {
     if (!_isActive) return;
 
-    // Discard events occurring within the reactivation grace period.
-    if (_activationTime != null &&
-        DateTime.now().difference(_activationTime!).inMilliseconds <
-            _reactivationGraceMs) {
-      return;
-    }
+    // NOTE: the reactivation grace period is applied AFTER translation (see
+    // below) so the translator still observes every edge while the grace is
+    // running. Discarding raw events here left its press/release state stuck
+    // and swallowed the next genuine press.
 
     try {
       // Auto-detect and switch to the device emitting the event.
@@ -393,9 +590,64 @@ class GamepadNavigation {
       }
 
       final now = DateTime.now();
+
+      // Select (View) chord modifier on Android: read the RAW key directly.
+      // This controller auto-repeats ACTION_DOWN (value 0.0) while the button is
+      // held and doesn't reliably emit a matching ACTION_UP, so edge-detection
+      // gets stuck. The raw value can't: 0.0 = down (incl. key-repeat) → held;
+      // 1.0 = up → released. A hold that fires a chord dispatches nothing of its
+      // own; a short tap that fires none dispatches [onSelectButton] on release.
+      if (isAndroid && event.key.toLowerCase() == 'keycode_button_select') {
+        if (event.value < 0.5) {
+          _onSelectDown(now);
+        } else {
+          _onSelectUp(now);
+        }
+        return;
+      }
+
+      // Shoulder RELEASE is read from the RAW key, before translation, for the
+      // same reason Select is (above). A tab switch activates a new navigation
+      // layer, which clears its translator's button states; the release that
+      // follows then looks like "no edge" to that layer and is dropped, so
+      // [_shoulderReleasedSinceDispatch] stayed false and the next deliberate
+      // TAP was misclassified as a held auto-repeat and paced at
+      // [_shoulderRepeatIntervalMs] — a quick second tab switch was swallowed.
+      // The raw event reaches every layer regardless of translator state.
+      // A genuine hold emits no ACTION_UP, so held pacing is unaffected.
+      // Values are inverted on this platform: 0.0 = down, 1.0 = up.
+      if (isAndroid &&
+          _isAndroidShoulderKeycode(event.key) &&
+          event.value > 0.5) {
+        _shoulderReleasedSinceDispatch = true;
+      }
+
       final translatedEvent = _translator.translateEvent(event);
 
       if (translatedEvent == null) return;
+
+      final isShoulderInput =
+          translatedEvent.inputType == GamepadInputType.buttonLB ||
+          translatedEvent.inputType == GamepadInputType.buttonRB;
+
+      // Reactivation grace: swallow inputs that leak in from the screen we just
+      // came from. The shoulder buttons are exempt — every tab switch rebuilds
+      // a navigation layer, so each switch restarted the grace and ate the next
+      // L1/R1 press, which is why tabs often needed a second press. A stray
+      // bumper only moves one tab and is trivially undone, unlike a stray A/B.
+      if (!isShoulderInput &&
+          _activationTime != null &&
+          now.difference(_activationTime!).inMilliseconds <
+              _reactivationGraceMs) {
+        return;
+      }
+
+      // A shoulder release ends the hold, so the next press is a fresh tap.
+      // Tracked statically because the release often lands on a different
+      // navigation layer than the press that switched the tab.
+      if (isShoulderInput && translatedEvent.isReleased) {
+        _shoulderReleasedSinceDispatch = true;
+      }
 
       if (translatedEvent.isPressed) {
         final isDirectional = [
@@ -407,6 +659,8 @@ class GamepadNavigation {
           GamepadInputType.leftStickY,
         ].contains(translatedEvent.inputType);
 
+        final isShoulder = isShoulderInput;
+
         if (isDirectional) {
           if (!isWindows) {
             if (_lastDirectionalEventTime != null &&
@@ -416,13 +670,41 @@ class GamepadNavigation {
             }
           }
           _lastDirectionalEventTime = now;
-        } else {
-          if (_lastActionEventTime != null &&
-              now.difference(_lastActionEventTime!).inMilliseconds <
-                  _actionDebounceMs) {
+        } else if (isShoulder) {
+          // No release since the last switch means the bumper is still held:
+          // pace the repeats. A press after a release is a tap — let it
+          // through immediately.
+          final holdLapsed =
+              _lastShoulderDispatchTime != null &&
+              now.difference(_lastShoulderDispatchTime!).inMilliseconds >
+                  _shoulderHoldLapsedMs;
+          final isHeldRepeat = !_shoulderReleasedSinceDispatch && !holdLapsed;
+
+          final minIntervalMs = isHeldRepeat
+              ? _shoulderRepeatIntervalMs
+              : _shoulderTapDebounceMs;
+          if (_lastShoulderDispatchTime != null &&
+              now.difference(_lastShoulderDispatchTime!).inMilliseconds <
+                  minIntervalMs) {
             return;
           }
-          _lastActionEventTime = now;
+          _lastShoulderDispatchTime = now;
+          _shoulderReleasedSinceDispatch = false;
+        } else {
+          // Select and any face button that lands during a Select chord bypass
+          // the action debounce so a quick chord isn't swallowed.
+          final isChordRelated =
+              translatedEvent.inputType == GamepadInputType.buttonSelect ||
+              (_isSelectChordActive() &&
+                  _selectModifierFor(translatedEvent.inputType) != null);
+          if (!isChordRelated) {
+            if (_lastActionEventTime != null &&
+                now.difference(_lastActionEventTime!).inMilliseconds <
+                    _actionDebounceMs) {
+              return;
+            }
+            _lastActionEventTime = now;
+          }
         }
 
         _lastEventTime = now;
@@ -448,6 +730,40 @@ class GamepadNavigation {
       };
       if (!allowedWhileTyping.contains(event.inputType)) return;
     }
+
+    // Select (View) is a PURE chord modifier: on its own it does nothing. Track
+    // its state — before the press/release gate below — so a face button pressed
+    // alongside it fires a combo. Some controllers only reliably report one edge
+    // of this button, so the timestamp is stamped on BOTH press and release.
+    if (event.inputType == GamepadInputType.buttonSelect) {
+      final now = DateTime.now();
+      if (event.isPressed) {
+        _onSelectDown(now);
+      } else if (event.isReleased) {
+        _onSelectUp(now);
+      }
+      return; // Select alone only ever fires its tap action, on release.
+    }
+
+    // A face-button PRESS fires its modifier combo when Select is still held or
+    // was seen within the chord window.
+    if (event.isPressed && _isSelectChordActive()) {
+      final modifier = _selectModifierFor(event.inputType);
+      if (modifier != null) {
+        // This hold unlocked a chord, so its release must not also fire the
+        // plain Select tap action.
+        _selectTap.chordFired();
+        _selectTapTimer?.cancel();
+        _selectTapTimer = null;
+        _comboConsumed.add(event.inputType);
+        SfxService().playNavSound();
+        modifier();
+        return;
+      }
+    }
+    // Swallow the matching release so the normal action never fires for a button
+    // already consumed by a combo (order-independent of when Select is released).
+    if (event.isReleased && _comboConsumed.remove(event.inputType)) return;
 
     bool shouldProcess;
 
@@ -503,15 +819,14 @@ class GamepadNavigation {
 
       case GamepadInputType.leftStickX:
         if (isWindows) {
-          final distFrom32767 = (event.value - 32767).abs();
+          // GameInput reports the stick axis normalized to [-1, 1], +X = right.
+          final normalizedValue = event.value;
 
-          if (distFrom32767 < 8000) {
+          if (normalizedValue.abs() < 0.5) {
             _stopRepeatTimer(GamepadInputType.dpadLeft);
             _stopRepeatTimer(GamepadInputType.dpadRight);
             return;
           }
-
-          final normalizedValue = (event.value - 32767) / 32767;
 
           if (normalizedValue > 0.65) {
             _handleDirectionalAction(
@@ -538,16 +853,14 @@ class GamepadNavigation {
 
       case GamepadInputType.leftStickY:
         if (isWindows) {
-          final distFrom32767 = (event.value - 32767).abs();
+          // GameInput reports the stick axis normalized to [-1, 1], +Y = up.
+          final normalizedValue = event.value;
 
-          if (distFrom32767 < 8000) {
+          if (normalizedValue.abs() < 0.5) {
             _stopRepeatTimer(GamepadInputType.dpadUp);
             _stopRepeatTimer(GamepadInputType.dpadDown);
             return;
           }
-
-          // Standard Windows Y-axis inversion.
-          final normalizedValue = -(event.value - 32767) / 32767;
 
           if (normalizedValue > 0.65) {
             _handleDirectionalAction(GamepadInputType.dpadUp, onNavigateUp);
@@ -591,9 +904,8 @@ class GamepadNavigation {
         onSettings?.call();
         break;
 
-      case GamepadInputType.buttonSelect:
-        onSelectButton?.call();
-        break;
+      // buttonSelect is handled earlier as a held modifier (see _handleTranslatedEvent
+      // top): a plain tap fires onSelectButton on release, combos fire on press.
 
       case GamepadInputType.buttonLB:
         SfxService().playNavSound();
@@ -631,6 +943,10 @@ class GamepadNavigation {
 
   /// Internal helper to detect if any TextField currently holds focus.
   bool _isTextFieldFocused() {
+    if (isTextFieldFocused != null) {
+      return isTextFieldFocused!();
+    }
+
     final primaryFocus = FocusManager.instance.primaryFocus;
     if (primaryFocus == null || primaryFocus.context == null) return false;
 
@@ -645,15 +961,20 @@ class GamepadNavigation {
 
   /// Orchestrates the processing of a raw [KeyEvent] from the keyboard.
   bool _handleKeyEvent(KeyEvent event) {
-    if (!_isActive ||
-        !isDesktop ||
-        (event is! KeyDownEvent && event is! KeyUpEvent)) {
+    if (!_isActive || (event is! KeyDownEvent && event is! KeyUpEvent)) {
       return false;
     }
 
     final isKeyDown = event is KeyDownEvent;
 
-    if (_activationTime != null &&
+    // Q/E (tab switching) bypass the reactivation grace for the same reason the
+    // shoulder buttons do: switching tabs rebuilds a navigation layer, so the
+    // grace would eat the next tab key press.
+    final isTabKey =
+        event.logicalKey == LogicalKeyboardKey.keyQ ||
+        event.logicalKey == LogicalKeyboardKey.keyE;
+    if (!isTabKey &&
+        _activationTime != null &&
         DateTime.now().difference(_activationTime!).inMilliseconds <
             _reactivationGraceMs) {
       return false;
@@ -668,6 +989,7 @@ class GamepadNavigation {
     }
 
     if (_isTextFieldFocused()) {
+      cancelAllRepeatTimers();
       return false;
     }
 
@@ -798,54 +1120,169 @@ class GamepadNavigation {
     }
 
     // Mutually exclusive directions: stop the opposite direction if active.
-    if (key == GamepadInputType.dpadUp) {
+    final bool isUp =
+        key == GamepadInputType.dpadUp ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.keyW;
+    final bool isDown =
+        key == GamepadInputType.dpadDown ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.keyS;
+    final bool isLeft =
+        key == GamepadInputType.dpadLeft ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.keyA;
+    final bool isRight =
+        key == GamepadInputType.dpadRight ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyD;
+
+    if (isUp) {
       _stopRepeatTimer(GamepadInputType.dpadDown);
+      _stopRepeatTimer(LogicalKeyboardKey.arrowDown);
+      _stopRepeatTimer(LogicalKeyboardKey.keyS);
     }
-    if (key == GamepadInputType.dpadDown) {
+    if (isDown) {
       _stopRepeatTimer(GamepadInputType.dpadUp);
+      _stopRepeatTimer(LogicalKeyboardKey.arrowUp);
+      _stopRepeatTimer(LogicalKeyboardKey.keyW);
     }
-    if (key == GamepadInputType.dpadLeft) {
+    if (isLeft) {
       _stopRepeatTimer(GamepadInputType.dpadRight);
+      _stopRepeatTimer(LogicalKeyboardKey.arrowRight);
+      _stopRepeatTimer(LogicalKeyboardKey.keyD);
     }
-    if (key == GamepadInputType.dpadRight) {
+    if (isRight) {
       _stopRepeatTimer(GamepadInputType.dpadLeft);
+      _stopRepeatTimer(LogicalKeyboardKey.arrowLeft);
+      _stopRepeatTimer(LogicalKeyboardKey.keyA);
     }
 
-    SfxService().playNavSound();
-    if (action is Function(bool)) {
-      action(false); // First press
-    } else if (action is VoidCallback) {
-      action();
+    final moved = _runNavAction(action, false);
+    if (moved) {
+      SfxService().playNavSound();
+    }
+
+    // Don't auto-repeat while a text field is focused. Repeating would keep
+    // moving focus away from the field and create an infinite navigation loop.
+    if (_isTextFieldFocused()) {
+      cancelAllRepeatTimers();
+      return;
+    }
+
+    // Stop repeating once we hit a boundary so the selection doesn't feel stuck.
+    if (!moved) {
+      cancelAllRepeatTimers();
+      return;
     }
 
     _startRepeatTimer(key, action);
   }
 
+  /// Invokes a navigation [action], passing whether this is a [repeat] press.
+  ///
+  /// Returns whether the navigation actually moved. Actions that report a
+  /// `bool` (e.g. list navigation that clamps at a boundary) drive whether the
+  /// nav sound plays; actions that return void are treated as always-moved to
+  /// preserve the legacy behavior.
+  bool _runNavAction(Function action, bool repeat) {
+    dynamic result;
+    if (action is Function(bool)) {
+      result = action(repeat);
+    } else if (action is Function()) {
+      result = (action as dynamic)();
+    }
+    return result is bool ? result : true;
+  }
+
   /// Internal auto-repeat logic for held buttons.
+  ///
+  /// Repeats are self-rescheduling rather than a fixed [Timer.periodic] so the
+  /// cadence can change while the button stays down: the interval ramps from
+  /// [_repeatInterval] to [_minRepeatInterval], and after [_letterJumpAfter] a
+  /// direction on [letterJumpAxis] switches to alphabetical jumps that dwell
+  /// for [_letterJumpInterval] each.
   void _startRepeatTimer(dynamic key, Function action) {
     _repeatTimers[key]?.cancel();
 
-    _repeatTimers[key] = Timer(_initialRepeatDelay, () {
-      // Guard: if the key was removed (by _stopRepeatTimer or _cancelAllRepeatTimers)
-      // before this callback ran, do not create a periodic timer.
-      if (!_repeatTimers.containsKey(key)) return;
+    final heldSince = DateTime.now();
+    final bool canLetterJump =
+        onLetterJump != null && _isLetterJumpKey(key) != null;
+    final bool forward = _isLetterJumpKey(key) ?? false;
+    var repeats = 0;
 
-      _repeatTimers[key] = Timer.periodic(_repeatInterval, (timer) {
+    void schedule(Duration delay) {
+      _repeatTimers[key] = Timer(delay, () {
+        // Guard: if the key was removed (by _stopRepeatTimer or
+        // cancelAllRepeatTimers) before this callback ran, stop here.
+        if (!_repeatTimers.containsKey(key)) return;
         if (!_isActive) {
-          timer.cancel();
           _repeatTimers.remove(key);
           return;
         }
 
-        SfxService().playNavSound();
-
-        if (action is Function(bool)) {
-          action(true); // Repeat events
-        } else if (action is VoidCallback) {
-          action();
+        final held = DateTime.now().difference(heldSince);
+        if (canLetterJump &&
+            held >= _letterJumpAfter &&
+            onLetterJump!(forward)) {
+          SfxService().playNavSound();
+          schedule(_letterJumpInterval);
+          return;
         }
+
+        if (_runNavAction(action, true)) {
+          SfxService().playNavSound();
+        }
+        repeats++;
+        schedule(
+          accelerateRepeats ? _rampedRepeatInterval(repeats) : _repeatInterval,
+        );
       });
-    });
+    }
+
+    schedule(_initialRepeatDelay);
+  }
+
+  /// Repeat interval after [repeats] repeats, easing linearly from
+  /// [_repeatInterval] down to [_minRepeatInterval].
+  static Duration _rampedRepeatInterval(int repeats) {
+    if (repeats >= _rampRepeats) return _minRepeatInterval;
+
+    final from = _repeatInterval.inMilliseconds;
+    final to = _minRepeatInterval.inMilliseconds;
+    return Duration(
+      milliseconds: from + ((to - from) * repeats / _rampRepeats).round(),
+    );
+  }
+
+  /// Whether [key] is a direction on [letterJumpAxis], and if so whether it
+  /// points forward (down / right). Returns null for any other key.
+  bool? _isLetterJumpKey(dynamic key) {
+    if (letterJumpAxis == LetterJumpAxis.vertical) {
+      if (key == GamepadInputType.dpadDown ||
+          key == LogicalKeyboardKey.arrowDown ||
+          key == LogicalKeyboardKey.keyS) {
+        return true;
+      }
+      if (key == GamepadInputType.dpadUp ||
+          key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.keyW) {
+        return false;
+      }
+      return null;
+    }
+
+    if (key == GamepadInputType.dpadRight ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyD) {
+      return true;
+    }
+    if (key == GamepadInputType.dpadLeft ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.keyA) {
+      return false;
+    }
+    return null;
   }
 
   /// Cancels an active repeat timer for a specific key.

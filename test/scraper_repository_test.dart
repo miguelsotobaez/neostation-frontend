@@ -171,6 +171,97 @@ void main() {
       expect(rows.first['is_fully_scraped'], 1);
     });
 
+    test('transfers scraped metadata from a disc ROM to its playlist', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('Final Fantasy VII (Disc 1).chd', '/roms/psx/Final Fantasy VII (Disc 1).chd', 'snes')",
+      );
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata (filename, app_system_id, real_name, is_fully_scraped) VALUES ('Final Fantasy VII (Disc 1).chd', 'snes', 'Final Fantasy VII', 1)",
+      );
+
+      final transferred = await ScraperRepository.transferMetadataToPlaylist(
+        sourceRomPaths: ['/roms/psx/Final Fantasy VII (Disc 1).chd'],
+        sourceFilenames: ['Final Fantasy VII (Disc 1).chd'],
+        playlistFilename: 'Final Fantasy VII.m3u',
+      );
+
+      expect(transferred, isNotNull);
+      expect(transferred!.metadataTransferred, isTrue);
+      final rows = await db.rawQuery(
+        "SELECT filename, real_name, is_fully_scraped FROM user_screenscraper_metadata WHERE app_system_id = 'snes'",
+      );
+      expect(rows, hasLength(1));
+      expect(rows.first['filename'], 'Final Fantasy VII.m3u');
+      expect(rows.first['real_name'], 'Final Fantasy VII');
+      expect(rows.first['is_fully_scraped'], 1);
+    });
+
+    test('does not overwrite existing playlist metadata', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('Game (Disc 1).chd', '/roms/snes/Game (Disc 1).chd', 'snes')",
+      );
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata (filename, app_system_id, real_name) VALUES ('Game (Disc 1).chd', 'snes', 'Disc metadata')",
+      );
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata (filename, app_system_id, real_name) VALUES ('Game.m3u', 'snes', 'Playlist metadata')",
+      );
+
+      final transferred = await ScraperRepository.transferMetadataToPlaylist(
+        sourceRomPaths: ['/roms/snes/Game (Disc 1).chd'],
+        sourceFilenames: ['Game (Disc 1).chd'],
+        playlistFilename: 'Game.m3u',
+      );
+
+      expect(transferred, isNotNull);
+      expect(transferred!.metadataTransferred, isFalse);
+      final playlistRows = await db.rawQuery(
+        "SELECT real_name FROM user_screenscraper_metadata WHERE app_system_id = 'snes' AND filename = 'Game.m3u'",
+      );
+      expect(playlistRows.single['real_name'], 'Playlist metadata');
+    });
+
+    test('falls back to a unique source filename when its path differs', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('Evil Dead - Hail to the King (USA) (Disc 1).chd', 'content://original-uri', 'psx')",
+      );
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata (filename, app_system_id, real_name) VALUES ('Evil Dead - Hail to the King (USA) (Disc 1).chd', 'psx', 'Evil Dead: Hail to the King')",
+      );
+
+      final transferred = await ScraperRepository.transferMetadataToPlaylist(
+        sourceRomPaths: ['content://different-uri'],
+        sourceFilenames: ['Evil Dead - Hail to the King (USA) (Disc 1).chd'],
+        playlistFilename: 'Evil Dead - Hail to the King (USA).m3u',
+      );
+
+      expect(transferred, isNotNull);
+      expect(transferred!.metadataTransferred, isTrue);
+      final rows = await db.rawQuery(
+        "SELECT filename FROM user_screenscraper_metadata WHERE app_system_id = 'psx'",
+      );
+      expect(rows.single['filename'], 'Evil Dead - Hail to the King (USA).m3u');
+    });
+
+    test('does not use an ambiguous source filename fallback', () async {
+      for (final system in ['snes', 'nes']) {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('Shared (Disc 1).chd', '/roms/$system/Shared (Disc 1).chd', '$system')",
+        );
+        await db.execute(
+          "INSERT INTO user_screenscraper_metadata (filename, app_system_id) VALUES ('Shared (Disc 1).chd', '$system')",
+        );
+      }
+
+      final transferred = await ScraperRepository.transferMetadataToPlaylist(
+        sourceRomPaths: ['content://different-uri'],
+        sourceFilenames: ['Shared (Disc 1).chd'],
+        playlistFilename: 'Shared.m3u',
+      );
+
+      expect(transferred, isNull);
+    });
+
     test('getRomCountForScraping respects new_only mode', () async {
       await db.execute(
         "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('old.smc', '/roms/snes/old.smc', 'snes')",

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "7800",
+    "multidisc": false,
     "name": "Atari 7800",
     "short_name": "A7800",
     "details": {
@@ -34,7 +35,7 @@
   "emulators": [
     {
       "name": "RetroArch ProSystem",
-      "default": true,
+      "default_core": true,
       "unique_id": "7800.ra.prosystem",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: a78, bin, zip, 7z.",
@@ -58,6 +59,7 @@
     },
     {
       "name": "RetroArch64 ProSystem",
+      "default_core": true,
       "unique_id": "7800.ra64.prosystem",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: a78, bin, zip, 7z.",
@@ -69,6 +71,7 @@
     },
     {
       "name": "RetroArch32 ProSystem",
+      "default_core": true,
       "unique_id": "7800.ra32.prosystem",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: a78, bin, zip, 7z.",

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "xbox",
+    "multidisc": true,
     "name": "Xbox",
     "neosync": {
       "sync": false,
@@ -34,7 +35,7 @@
     {
       "name": "Standalone X1 Box",
       "unique_id": "xbox.com.izzy2lost.x1box",
-      "default": true,
+      "default_standalone": true,
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: xiso, iso.",
       "platforms": {

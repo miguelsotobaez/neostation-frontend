@@ -9,10 +9,29 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <iomanip>
 #include <memory>
 #include <sstream>
 
 namespace gamepads_windows {
+
+namespace {
+// Custom message posted from reader threads to drain the event queue on the
+// platform thread.
+constexpr UINT kDrainGamepadEventsMessage = WM_USER + 0x47;
+constexpr wchar_t kMessageWindowClassName[] = L"GamepadsWindowsMessageWindow";
+}  // namespace
+
+// Formats a 16-bit vendor/product id as a 4-digit uppercase hex string
+// (e.g. 0x045E -> "045E"). The Dart side (GamepadDeviceInfo) types vendorId /
+// productId as String?, so we emit strings here rather than raw ints.
+static std::string to_hex_id(int id) {
+  std::ostringstream oss;
+  oss << std::uppercase << std::hex << std::setw(4) << std::setfill('0')
+      << (id & 0xFFFF);
+  return oss.str();
+}
+
 void GamepadsWindowsPlugin::RegisterWithRegistrar(
     flutter::PluginRegistrarWindows* registrar) {
   channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -32,26 +51,86 @@ void GamepadsWindowsPlugin::RegisterWithRegistrar(
 GamepadsWindowsPlugin::GamepadsWindowsPlugin(
     flutter::PluginRegistrarWindows* registrar)
     : registrar(registrar) {
-  gamepads.event_emitter = [&](Gamepad* gamepad, const Event& event) {
+  create_message_window();
+  gamepads.event_emitter = [&](GamepadData* gamepad, const Event& event) {
     this->emit_gamepad_event(gamepad, event);
   };
-  gamepads.update_gamepads();
-  window_proc_id = registrar->RegisterTopLevelWindowProcDelegate(
-      [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
-        DEV_BROADCAST_DEVICEINTERFACE filter = {};
-        filter.dbcc_size = sizeof(filter);
-        filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
-        filter.dbcc_classguid = GUID_DEVINTERFACE_HID;
-        this->hDevNotify = RegisterDeviceNotification(
-            hwnd, &filter, DEVICE_NOTIFY_WINDOW_HANDLE);
-
-        return GamepadListenerProc(hwnd, message, wparam, lparam);
-      });
+  gamepads.init();
 }
 
 GamepadsWindowsPlugin::~GamepadsWindowsPlugin() {
-  UnregisterDeviceNotification(hDevNotify);
-  registrar->UnregisterTopLevelWindowProcDelegate(window_proc_id);
+  gamepads.stop();
+  if (message_window_ != nullptr) {
+    DestroyWindow(message_window_);
+    message_window_ = nullptr;
+  }
+  UnregisterClassW(kMessageWindowClassName, GetModuleHandle(nullptr));
+}
+
+LRESULT CALLBACK GamepadsWindowsPlugin::MessageWindowProc(HWND hwnd,
+                                                          UINT message,
+                                                          WPARAM wparam,
+                                                          LPARAM lparam) {
+  if (message == kDrainGamepadEventsMessage) {
+    auto* self = reinterpret_cast<GamepadsWindowsPlugin*>(
+        GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    if (self != nullptr) {
+      self->drain_event_queue();
+    }
+    return 0;
+  }
+  return DefWindowProc(hwnd, message, wparam, lparam);
+}
+
+void GamepadsWindowsPlugin::create_message_window() {
+  WNDCLASSEXW wc = {};
+  wc.cbSize = sizeof(wc);
+  wc.lpfnWndProc = GamepadsWindowsPlugin::MessageWindowProc;
+  wc.hInstance = GetModuleHandle(nullptr);
+  wc.lpszClassName = kMessageWindowClassName;
+  // Ignore a "class already exists" failure from a previous instance (e.g.
+  // after a hot restart); CreateWindowExW below will still succeed.
+  RegisterClassExW(&wc);
+
+  message_window_ = CreateWindowExW(0, kMessageWindowClassName, L"", 0, 0, 0, 0,
+                                    0, HWND_MESSAGE, nullptr,
+                                    GetModuleHandle(nullptr), nullptr);
+  if (message_window_ != nullptr) {
+    SetWindowLongPtr(message_window_, GWLP_USERDATA,
+                     reinterpret_cast<LONG_PTR>(this));
+  }
+}
+
+void GamepadsWindowsPlugin::drain_event_queue() {
+  std::deque<QueuedGamepadEvent> pending;
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    pending.swap(event_queue_);
+  }
+
+  auto _channel = this->channel.get();
+  if (!_channel) return;
+
+  for (const auto& queued : pending) {
+    flutter::EncodableMap map;
+    map[flutter::EncodableValue("gamepadId")] =
+        flutter::EncodableValue(queued.gamepad_id);
+    map[flutter::EncodableValue("time")] =
+        flutter::EncodableValue(queued.event.time);
+    map[flutter::EncodableValue("type")] =
+        flutter::EncodableValue(queued.event.type);
+    map[flutter::EncodableValue("key")] =
+        flutter::EncodableValue(queued.event.key);
+    map[flutter::EncodableValue("value")] =
+        flutter::EncodableValue(queued.event.value);
+    map[flutter::EncodableValue("vendorId")] =
+        flutter::EncodableValue(queued.vendor_id);
+    map[flutter::EncodableValue("productId")] =
+        flutter::EncodableValue(queued.product_id);
+    _channel->InvokeMethod("onGamepadEvent",
+                           std::make_unique<flutter::EncodableValue>(
+                               flutter::EncodableValue(map)));
+  }
 }
 
 void GamepadsWindowsPlugin::HandleMethodCall(
@@ -59,36 +138,34 @@ void GamepadsWindowsPlugin::HandleMethodCall(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   if (method_call.method_name().compare("listGamepads") == 0) {
     flutter::EncodableList list;
-    for (auto& [device_id, gamepad_ptr] : gamepads.gamepads) {
-      // Skip if gamepad pointer is null
-      if (!gamepad_ptr) continue;
-      
+    for (auto gamepad : gamepads.get_gamepads()) {
+      if (!gamepad) continue;
+
       flutter::EncodableMap map;
-      map[flutter::EncodableValue("id")] =
-          flutter::EncodableValue(std::to_string(device_id));
+      map[flutter::EncodableValue("id")] = flutter::EncodableValue(gamepad->id);
       map[flutter::EncodableValue("name")] =
-          flutter::EncodableValue(gamepad_ptr->name);
-      
-      // Agregar información extendida del sistema
+          flutter::EncodableValue(gamepad->name);
+
+      // Extended device metadata consumed by the Dart GamepadDeviceInfo /
+      // gamepad_translator. GameInput exposes VID/PID and a button count but
+      // no bus/connection type, so connectionType is left unknown; the Windows
+      // input path maps GameInput's standardized named keys directly and does
+      // not rely on connection type.
       flutter::EncodableMap system_info;
       system_info[flutter::EncodableValue("connectionType")] =
-          flutter::EncodableValue(gamepad_ptr->connection_type);
+          flutter::EncodableValue("unknown");
       system_info[flutter::EncodableValue("driver")] =
-          flutter::EncodableValue(gamepad_ptr->driver_type);
+          flutter::EncodableValue("gameinput");
       system_info[flutter::EncodableValue("vendorId")] =
-          flutter::EncodableValue(gamepad_ptr->vendor_id);
+          flutter::EncodableValue(to_hex_id(gamepad->vendor_id));
       system_info[flutter::EncodableValue("productId")] =
-          flutter::EncodableValue(gamepad_ptr->product_id);
-      system_info[flutter::EncodableValue("hardwareId")] =
-          flutter::EncodableValue(gamepad_ptr->hardware_id);
+          flutter::EncodableValue(to_hex_id(gamepad->product_id));
       system_info[flutter::EncodableValue("buttonCount")] =
-          flutter::EncodableValue(gamepad_ptr->num_buttons);
-      system_info[flutter::EncodableValue("axisCount")] =
-          flutter::EncodableValue(gamepad_ptr->num_axes);
-      
+          flutter::EncodableValue(gamepad->num_buttons);
+
       map[flutter::EncodableValue("systemInfo")] =
           flutter::EncodableValue(system_info);
-      
+
       list.push_back(flutter::EncodableValue(map));
     }
     result->Success(flutter::EncodableValue(list));
@@ -97,21 +174,18 @@ void GamepadsWindowsPlugin::HandleMethodCall(
   }
 }
 
-void GamepadsWindowsPlugin::emit_gamepad_event(Gamepad* gamepad,
+void GamepadsWindowsPlugin::emit_gamepad_event(GamepadData* gamepad,
                                                const Event& event) {
-  auto _channel = this->channel.get();
-  if (_channel) {
-    flutter::EncodableMap map;
-    map[flutter::EncodableValue("gamepadId")] =
-        flutter::EncodableValue(std::to_string(gamepad->joy_id));
-    map[flutter::EncodableValue("time")] = flutter::EncodableValue(event.time);
-    map[flutter::EncodableValue("type")] = flutter::EncodableValue(event.type);
-    map[flutter::EncodableValue("key")] = flutter::EncodableValue(event.key);
-    map[flutter::EncodableValue("value")] =
-        flutter::EncodableValue(static_cast<double>(event.value));
-    _channel->InvokeMethod("onGamepadEvent",
-                           std::make_unique<flutter::EncodableValue>(
-                               flutter::EncodableValue(map)));
+  // This runs on a background reader thread. Platform-channel calls must happen
+  // on the platform thread, so buffer the event and signal the message window
+  // (owned by the platform thread) to drain the queue.
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    event_queue_.push_back(
+        {gamepad->id, gamepad->vendor_id, gamepad->product_id, event});
+  }
+  if (message_window_ != nullptr) {
+    PostMessage(message_window_, kDrainGamepadEventsMessage, 0, 0);
   }
 }
 }  // namespace gamepads_windows

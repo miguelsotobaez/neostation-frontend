@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:provider/provider.dart';
 import '../../providers/retro_achievements_provider.dart';
 import '../../widgets/custom_notification.dart';
 import '../../responsive.dart';
-import '../../repositories/retro_achievements_repository.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
@@ -16,17 +14,29 @@ import '../../services/game_service.dart' show GamepadNavigationManager;
 import '../app_screen.dart' show AppNavigation;
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'ra_dashboard.dart';
 
 class RAContent extends StatefulWidget {
   const RAContent({super.key});
+
+  /// Returns whether the selection/scroll actually moved, so the gamepad
+  /// handler can suppress the nav sound when repeating against a boundary.
+  static bool navigateUp() => _RAContentState.navigateUp();
+
+  static bool navigateDown() => _RAContentState.navigateDown();
 
   @override
   State<RAContent> createState() => _RAContentState();
 }
 
 class _RAContentState extends State<RAContent> {
+  static _RAContentState? _currentInstance;
+
   final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _apiKeyController = TextEditingController();
   final FocusNode _usernameFocus = FocusNode();
+  final FocusNode _apiKeyFocus = FocusNode();
+  final ScrollController _dashboardScrollController = ScrollController();
 
   bool _isTelevision = false;
   int _tvFieldIndex = 0;
@@ -35,6 +45,7 @@ class _RAContentState extends State<RAContent> {
   @override
   void initState() {
     super.initState();
+    _currentInstance = this;
     _initTvMode();
   }
 
@@ -45,8 +56,8 @@ class _RAContentState extends State<RAContent> {
     setState(() => _isTelevision = isTV);
     if (!isTV) return;
     _tvNav = GamepadNavigation(
-      onNavigateUp: () => _tvMove(-1),
-      onNavigateDown: () => _tvMove(1),
+      onNavigateUp: _handleNavigateUp,
+      onNavigateDown: _handleNavigateDown,
       onSelectItem: _tvSelect,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
@@ -61,17 +72,22 @@ class _RAContentState extends State<RAContent> {
     );
   }
 
-  void _tvMove(int delta) {
-    if (!_isTelevision || _usernameFocus.hasFocus) return;
+  bool _tvMove(int delta) {
+    if (!_isTelevision || _usernameFocus.hasFocus) return false;
+    final next = (_tvFieldIndex + delta).clamp(0, 2);
+    if (next == _tvFieldIndex) return false;
     setState(() {
-      _tvFieldIndex = (_tvFieldIndex + delta).clamp(0, 1);
+      _tvFieldIndex = next;
     });
+    return true;
   }
 
   void _tvSelect() {
     if (!_isTelevision) return;
     if (_tvFieldIndex == 0) {
       _usernameFocus.requestFocus();
+    } else if (_tvFieldIndex == 1) {
+      _apiKeyFocus.requestFocus();
     } else {
       _connectToRA();
     }
@@ -82,11 +98,11 @@ class _RAContentState extends State<RAContent> {
   Future<void> _connectToRA() async {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (raProvider.isLoading) return;
-    final username = _usernameController.text.trim();
-    if (username.isNotEmpty) {
-      await RetroAchievementsRepository.saveRAUser(username);
-    }
-    final success = await raProvider.connect(_usernameController.text);
+    final apiKey = _apiKeyController.text.trim();
+    final success = await raProvider.connect(
+      _usernameController.text,
+      apiKey: apiKey,
+    );
     if (!mounted) return;
     if (success) {
       AppNotification.showNotification(
@@ -105,24 +121,59 @@ class _RAContentState extends State<RAContent> {
 
   @override
   void dispose() {
+    if (identical(_currentInstance, this)) {
+      _currentInstance = null;
+    }
     GamepadNavigationManager.popLayer('ra_content');
     _tvNav?.dispose();
     _usernameController.dispose();
+    _apiKeyController.dispose();
     _usernameFocus.dispose();
+    _apiKeyFocus.dispose();
+    _dashboardScrollController.dispose();
     super.dispose();
+  }
+
+  static bool navigateUp() => _currentInstance?._handleNavigateUp() ?? true;
+
+  static bool navigateDown() => _currentInstance?._handleNavigateDown() ?? true;
+
+  bool _handleNavigateUp() {
+    final raProvider = context.read<RetroAchievementsProvider>();
+    if (!raProvider.isConnected) {
+      return _tvMove(-1);
+    }
+    return _scrollDashboard(-160.r);
+  }
+
+  bool _handleNavigateDown() {
+    final raProvider = context.read<RetroAchievementsProvider>();
+    if (!raProvider.isConnected) {
+      return _tvMove(1);
+    }
+    return _scrollDashboard(160.r);
+  }
+
+  bool _scrollDashboard(double delta) {
+    if (!_dashboardScrollController.hasClients) return false;
+    final position = _dashboardScrollController.position;
+    final target = (position.pixels + delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if ((target - position.pixels).abs() < 1) return false;
+    _dashboardScrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<RetroAchievementsProvider>(
       builder: (context, raProvider, child) {
-        // Trigger fetch achievement of the week if not loaded
-        if (!raProvider.gotwLoaded && !raProvider.isLoading) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            raProvider.fetchGOTW();
-          });
-        }
-
         return Responsive(
           handheldXS: _buildLandscapeLayout(context, raProvider),
           handheldSmall: _buildLandscapeLayout(context, raProvider),
@@ -171,28 +222,13 @@ class _RAContentState extends State<RAContent> {
               ),
             ),
           ] else ...[
-            // First Row: Profile + AOTW
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: _buildSteamDashboard(context, raProvider)),
-                SizedBox(width: 12.r),
-                Expanded(child: _buildGameOfTheWeek(context, raProvider)),
-              ],
-            ),
-
-            // Second Row: Recently Played + User Awards
-            if (raProvider.summaryLoaded) ...[
-              SizedBox(height: 12.0.r),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildMostRecentGame(context, raProvider)),
-                  SizedBox(width: 12.r),
-                  Expanded(child: _buildUserAwards(context, raProvider)),
-                ],
+            Expanded(
+              child: RepaintBoundary(
+                child: RADashboardHub(
+                  scrollController: _dashboardScrollController,
+                ),
               ),
-            ],
+            ),
           ],
         ],
       ),
@@ -309,6 +345,70 @@ class _RAContentState extends State<RAContent> {
                     ),
                   ),
                   style: TextStyle(fontSize: 11.r),
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) => _apiKeyFocus.requestFocus(),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: 6.r),
+
+          // API key field
+          Container(
+            constraints: BoxConstraints(maxWidth: 220.r),
+            child: _buildTvFieldHighlight(
+              slot: 1,
+              theme: theme,
+              child: SizedBox(
+                height: 32.r,
+                child: TextFormField(
+                  controller: _apiKeyController,
+                  focusNode: _apiKeyFocus,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: AppLocale.raApiKey.getString(context),
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontSize: 10.r,
+                    ),
+                    floatingLabelStyle: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 10.r,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    hintText: AppLocale.raEnterApiKey.getString(context),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                      fontSize: 10.r,
+                    ),
+                    filled: true,
+                    fillColor: theme.colorScheme.onSurface.withValues(
+                      alpha: 0.05,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                      borderSide: BorderSide(
+                        color: _isTvSelected(1)
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.primary.withValues(alpha: 0.1),
+                        width: _isTvSelected(1) ? 2.r : 1.r,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.r,
+                      ),
+                    ),
+                  ),
+                  style: TextStyle(fontSize: 11.r),
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _connectToRA(),
                 ),
@@ -320,7 +420,7 @@ class _RAContentState extends State<RAContent> {
           // Connect button
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
-            decoration: _isTvSelected(1)
+            decoration: _isTvSelected(2)
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(8.r),
                     boxShadow: [
@@ -493,756 +593,5 @@ class _RAContentState extends State<RAContent> {
         ],
       ),
     );
-  }
-
-  Widget _buildSteamDashboard(
-    BuildContext context,
-    RetroAchievementsProvider raProvider,
-  ) {
-    final user = raProvider.user!;
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: EdgeInsets.all(12.0.r),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12.0.r),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: USER PROFILE + Logout
-          Row(
-            children: [
-              Icon(
-                Symbols.person_rounded,
-                color: theme.colorScheme.primary,
-                size: 20.r,
-              ),
-              SizedBox(width: 8.r),
-              Text(
-                AppLocale.userProfile.getString(context),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                  fontSize: 10.r,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const Spacer(),
-              // Logout Button in header - Compact
-              GestureDetector(
-                onTap: () {
-                  SfxService().playBackSound();
-                  raProvider.disconnect(clearSavedUser: true);
-                  _usernameController.clear();
-                  AppNotification.showNotification(
-                    context,
-                    AppLocale.disconnectedRA.getString(context),
-                    type: NotificationType.info,
-                  );
-                },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Icon(
-                    Symbols.logout_rounded,
-                    color: theme.colorScheme.error.withValues(alpha: 0.8),
-                    size: 16.r,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10.r),
-
-          // Body: Avatar + Info + Stats
-          Row(
-            children: [
-              // Avatar
-              Container(
-                width: 48.r,
-                height: 48.r,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                    width: 2.r,
-                  ),
-                ),
-                child: ClipOval(
-                  child: user.userPic.isNotEmpty
-                      ? Image.network(
-                          'https://retroachievements.org${user.userPic}',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                            Symbols.account_circle_rounded,
-                            size: 32.r,
-                            color: theme.colorScheme.primary,
-                          ),
-                        )
-                      : Icon(
-                          Symbols.account_circle_rounded,
-                          size: 32.r,
-                          color: theme.colorScheme.primary,
-                        ),
-                ),
-              ),
-              SizedBox(width: 12.r),
-
-              // User details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            user.user,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12.r,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(width: 6.r),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6.r,
-                            vertical: 1.r,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.1,
-                            ),
-                            borderRadius: BorderRadius.circular(8.r),
-                            border: Border.all(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.2,
-                              ),
-                            ),
-                          ),
-                          child: Text(
-                            user.userType.toUpperCase(),
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontSize: 7.r,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      AppLocale.raPlayer.getString(context),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                        fontSize: 9.r,
-                      ),
-                    ),
-                    SizedBox(height: 4.r),
-                    Text(
-                      user.motto.isNotEmpty
-                          ? user.motto
-                          : AppLocale.noMottoSet.getString(context),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 9.r,
-                        fontStyle: FontStyle.italic,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-
-              // Summary Stats on the right
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 8.r,
-                      vertical: 4.r,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8.r),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Symbols.stars_rounded,
-                          size: 10.r,
-                          color: theme.colorScheme.primary,
-                        ),
-                        SizedBox(width: 4.r),
-                        Text(
-                          '${user.totalPoints}',
-                          style: TextStyle(
-                            color: theme.colorScheme.primary,
-                            fontSize: 10.r,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 4.r),
-                  Text(
-                    '${user.contribCount} ${AppLocale.contributions.getString(context)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 8.r,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGameOfTheWeek(
-    BuildContext context,
-    RetroAchievementsProvider raProvider,
-  ) {
-    final theme = Theme.of(context);
-    final gotw = raProvider.gotw;
-
-    return Container(
-      padding: EdgeInsets.all(12.0.r),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12.0.r),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Symbols.emoji_events_rounded,
-                color: theme.colorScheme.primary,
-                size: 20.r,
-              ),
-              SizedBox(width: 8.r),
-              Text(
-                AppLocale.aotw.getString(context),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                  fontSize: 10.r,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const Spacer(),
-              if (gotw != null)
-                Text(
-                  '${gotw.totalPlayers} ${AppLocale.players.getString(context)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontSize: 9.r,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: 10.r),
-          if (raProvider.isLoading && !raProvider.gotwLoaded)
-            Center(
-              child: Padding(
-                padding: EdgeInsets.all(20.r),
-                child: SizedBox(
-                  width: 20.r,
-                  height: 20.r,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      theme.colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-            )
-          else if (gotw != null)
-            Row(
-              children: [
-                // Badge del logro
-                Container(
-                  width: 48.r,
-                  height: 48.r,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8.r),
-                    color: theme.colorScheme.surface,
-                    border: Border.all(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.05,
-                      ),
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8.r),
-                    child: Image.network(
-                      'https://media.retroachievements.org${gotw.achievement.badgeUrl}',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Icon(
-                        Symbols.emoji_events_rounded,
-                        color: theme.colorScheme.primary,
-                        size: 24.r,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 12.r),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        gotw.game.title,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12.r,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        gotw.console.title,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                          fontSize: 9.r,
-                        ),
-                      ),
-                      SizedBox(height: 4.r),
-                      Text(
-                        AppLocale.achievementLabel
-                            .getString(context)
-                            .replaceFirst('{title}', gotw.achievement.title),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10.r,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8.r,
-                        vertical: 4.r,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Symbols.stars_rounded,
-                            size: 10.r,
-                            color: theme.colorScheme.primary,
-                          ),
-                          SizedBox(width: 4.r),
-                          Text(
-                            '${gotw.achievement.points}',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontSize: 10.r,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 4.r),
-                    Text(
-                      '${gotw.unlocksCount} ${AppLocale.unlocks.getString(context)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 8.r,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            )
-          else
-            Center(
-              child: Text(
-                AppLocale.couldNotLoadAOTW.getString(context),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: 10.r,
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMostRecentGame(
-    BuildContext context,
-    RetroAchievementsProvider raProvider,
-  ) {
-    final theme = Theme.of(context);
-    final summary = raProvider.userSummary;
-    if (summary == null) return const SizedBox.shrink();
-
-    final lastGame = summary.recentlyPlayed.isNotEmpty
-        ? summary.recentlyPlayed.first
-        : null;
-
-    return Container(
-      padding: EdgeInsets.all(12.0.r),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12.0.r),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Icon(
-                Symbols.history_rounded,
-                color: theme.colorScheme.primary,
-                size: 20.r,
-              ),
-              SizedBox(width: 8.r),
-              Text(
-                AppLocale.recentlyPlayed.getString(context),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                  fontSize: 10.r,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10.r),
-
-          if (lastGame != null)
-            Row(
-              children: [
-                // Game Icon
-                Container(
-                  width: 48.r,
-                  height: 48.r,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8.r),
-                    color: theme.colorScheme.surface,
-                    border: Border.all(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.05,
-                      ),
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8.r),
-                    child: lastGame.imageIcon.isNotEmpty
-                        ? Image.network(
-                            'https://media.retroachievements.org${lastGame.imageIcon}',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Icon(
-                              Symbols.videogame_asset_rounded,
-                              color: theme.colorScheme.primary,
-                              size: 24.r,
-                            ),
-                          )
-                        : Icon(
-                            Symbols.videogame_asset_rounded,
-                            color: theme.colorScheme.primary,
-                            size: 24.r,
-                          ),
-                  ),
-                ),
-                SizedBox(width: 12.r),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        lastGame.title,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12.r,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        lastGame.consoleName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                          fontSize: 9.r,
-                        ),
-                      ),
-                      if (summary.richPresenceMsg.isNotEmpty)
-                        Padding(
-                          padding: EdgeInsets.only(top: 4.r),
-                          child: Text(
-                            summary.richPresenceMsg,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontStyle: FontStyle.italic,
-                              fontSize: 9.r,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8.r,
-                        vertical: 4.r,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                      child: Text(
-                        '${lastGame.achievementsTotal} ${AppLocale.achivs.getString(context)}',
-                        style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontSize: 10.r,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 4.r),
-                    Text(
-                      AppLocale.lastPlayed.getString(context),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 8.r,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            )
-          else
-            Center(
-              child: Padding(
-                padding: EdgeInsets.all(20.r),
-                child: Text(
-                  AppLocale.noRecentGames.getString(context),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUserAwards(
-    BuildContext context,
-    RetroAchievementsProvider raProvider,
-  ) {
-    final theme = Theme.of(context);
-    final awards = raProvider.userAwards;
-    if (awards == null || awards.visibleUserAwards.isEmpty) {
-      return Container(
-        height: 110.r,
-        padding: EdgeInsets.all(12.0.r),
-        decoration: BoxDecoration(
-          color: theme.cardColor.withValues(alpha: 0.25),
-          borderRadius: BorderRadius.circular(12.0.r),
-          border: Border.all(
-            color: theme.colorScheme.primary.withValues(alpha: 0.15),
-            width: 1.r,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            AppLocale.noAwardsYet.getString(context),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-          ),
-        ),
-      );
-    }
-
-    final latestAward = awards.visibleUserAwards.first;
-
-    return Container(
-      padding: EdgeInsets.all(12.0.r),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12.0.r),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Icon(
-                Symbols.emoji_events_rounded,
-                color: theme.colorScheme.primary,
-                size: 20.r,
-              ),
-              SizedBox(width: 8.r),
-              Text(
-                AppLocale.latestAward.getString(context),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                  fontSize: 10.r,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${awards.totalAwardsCount} ${AppLocale.totalRA.getString(context)}',
-                style: TextStyle(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                  fontSize: 8.r,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10.r),
-
-          Row(
-            children: [
-              // Award Icon
-              Container(
-                width: 48.r,
-                height: 48.r,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8.r),
-                  color: theme.colorScheme.surface,
-                  border: Border.all(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8.r),
-                  child: latestAward.imageIcon.isNotEmpty
-                      ? Image.network(
-                          'https://media.retroachievements.org${latestAward.imageIcon}',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                            Symbols.emoji_events_rounded,
-                            color: theme.colorScheme.primary,
-                            size: 24.r,
-                          ),
-                        )
-                      : Icon(
-                          Symbols.emoji_events_rounded,
-                          color: theme.colorScheme.primary,
-                          size: 24.r,
-                        ),
-                ),
-              ),
-              SizedBox(width: 12.r),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      latestAward.title,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12.r,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${latestAward.consoleName} • ${latestAward.awardType}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                        fontSize: 9.r,
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.only(top: 4.r),
-                      child: Text(
-                        '${AppLocale.awardedOn.getString(context)} ${_formatAwardDate(latestAward.awardedAt)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontStyle: FontStyle.italic,
-                          fontSize: 8.r,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatAwardDate(String dateStr) {
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    } catch (e) {
-      return dateStr;
-    }
   }
 }

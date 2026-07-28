@@ -64,6 +64,9 @@ class GameSessionPersistence {
   }
 
   /// Purges all persisted game session metadata from shared preferences.
+  ///
+  /// Also clears the startup-scan skip flag so that a recovered session does
+  /// not permanently suppress the next startup scan.
   static Future<void> clearGameSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -71,19 +74,9 @@ class GameSessionPersistence {
       await prefs.remove(_keySystemFolderName);
       await prefs.remove(_keyFilename);
       await prefs.remove(_keyStartTimestamp);
+      await prefs.remove(_keySkipStartupScan);
     } catch (e) {
       _log.e('Error clearing game session: $e');
-    }
-  }
-
-  /// Sets a flag indicating the next startup should skip ROM scanning.
-  /// Called alongside [saveGameSession] when a game is launched.
-  static Future<void> setSkipStartupScan() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keySkipStartupScan, true);
-    } catch (e) {
-      _log.e('Error setting skip startup scan flag: $e');
     }
   }
 

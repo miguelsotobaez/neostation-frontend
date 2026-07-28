@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pccd",
+    "multidisc": true,
     "name": "PC Engine-CD",
     "short_name": "PCCD",
     "details": {
@@ -49,6 +50,18 @@
       }
     },
     {
+      "name": "RetroArch64 Beetle SuperGrafx",
+      "default_core": true,
+      "unique_id": "pccd.ra64.mednafen_supergrafx",
+      "description": "Supported extensions: pce, sgx, cue, ccd, chd, pce.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_supergrafx\""
+        }
+      }
+    },
+    {
       "name": "RetroArch64 Beetle PCE Fast",
       "unique_id": "pccd.ra64.mednafen_pce_fast",
       "description": "Supported extensions: ccd, chd, cue, m3u, pce, toc.",
@@ -71,6 +84,18 @@
       }
     },
     {
+      "name": "RetroArch32 Beetle SuperGrafx",
+      "default_core": true,
+      "unique_id": "pccd.ra32.mednafen_supergrafx",
+      "description": "Supported extensions: pce, sgx, cue, ccd, chd, pce.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_supergrafx\""
+        }
+      }
+    },
+    {
       "name": "RetroArch32 Beetle PCE Fast",
       "unique_id": "pccd.ra32.mednafen_pce_fast",
       "description": "Supported extensions: ccd, chd, cue, m3u, pce, toc.",
@@ -89,6 +114,30 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_pce\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle SuperGrafx",
+      "default_core": true,
+      "unique_id": "pccd.ra.mednafen_supergrafx",
+      "description": "Supported extensions: pce, sgx, cue, ccd, chd, pce.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_supergrafx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_supergrafx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "args": "-L mednafen_supergrafx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_supergrafx_libretro.dylib \"{file.path}\""
         }
       }
     },
@@ -117,7 +166,6 @@
     },
     {
       "name": "RetroArch Beetle PCE",
-      "default": true,
       "unique_id": "pccd.ra.mednafen_pce",
       "description": "Supported extensions: ccd, chd, cue, m3u, pce, sgx, toc, zip, 7z.",
       "is_retroachievements_compatible": false,

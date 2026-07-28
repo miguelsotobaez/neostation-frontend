@@ -276,6 +276,51 @@ class SqliteMigrations {
       case 90:
         await _migrateToVersion90(db);
         break;
+      case 91:
+        await _migrateToVersion91(db);
+        break;
+      case 92:
+        await _migrateToVersion92(db);
+        break;
+      case 93:
+        await _migrateToVersion93(db);
+        break;
+      case 94:
+        await _migrateToVersion94(db);
+        break;
+      case 95:
+        await _migrateToVersion95(db);
+        break;
+      case 96:
+        await _migrateToVersion96(db);
+        break;
+      case 97:
+        await _migrateToVersion97(db);
+        break;
+      case 98:
+        await _migrateToVersion98(db);
+        break;
+      case 99:
+        await _migrateToVersion99(db);
+        break;
+      case 100:
+        await _migrateToVersion100(db);
+        break;
+      case 101:
+        await _migrateToVersion101(db);
+        break;
+      case 102:
+        await _migrateToVersion102(db);
+        break;
+      case 103:
+        await _migrateToVersion103(db);
+        break;
+      case 104:
+        await _migrateToVersion104(db);
+        break;
+      case 105:
+        await _migrateToVersion105(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -3550,19 +3595,16 @@ class SqliteMigrations {
       }
 
       if (hasLegacyPath) {
-        _log.i('Resetting setup for legacy paths...');
+        _log.i('Marking setup incomplete for legacy paths...');
         db.execute('BEGIN TRANSACTION');
         try {
-          // Clear ROM folders
-          db.execute('DELETE FROM user_rom_folders');
-
-          // Reset setup_completed in user_config
+          // Preserve the paths and their existing library. Deleting them makes
+          // the next automatic scan run with zero roots and can prune every
+          // stored game before the user has a chance to select SAF again.
           db.execute('UPDATE user_config SET setup_completed = 0');
 
           db.execute('COMMIT');
-          _log.i(
-            'Setup reset successfully. User will see SetupWizard on next launch.',
-          );
+          _log.i('Setup marked incomplete; legacy ROM folders were preserved.');
         } catch (e) {
           db.execute('ROLLBACK');
           _log.e('Error resetting setup: $e');
@@ -4255,23 +4297,23 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v81: Rename theme_name column to palette_name in user_config.
+  /// Migration v81: Rename theme_name column to theme_name in user_config.
   static Future<void> _migrateToVersion81(Database db) async {
-    _log.i('Migration v81: Rename theme_name to palette_name in user_config');
+    _log.i('Migration v81: Rename palette_name to theme_name in user_config');
     try {
       final tableInfo = db.select('PRAGMA table_info(user_config)');
       final columns = tableInfo.map((c) => c['name'].toString()).toList();
 
-      if (columns.contains('theme_name') && !columns.contains('palette_name')) {
+      if (columns.contains('palette_name') && !columns.contains('theme_name')) {
         db.execute(
-          'ALTER TABLE user_config RENAME COLUMN theme_name TO palette_name',
+          'ALTER TABLE user_config RENAME COLUMN palette_name TO theme_name',
         );
-        _log.i('Column theme_name renamed to palette_name in user_config');
-      } else if (!columns.contains('palette_name')) {
+        _log.i('Column palette_name renamed to theme_name in user_config');
+      } else if (!columns.contains('theme_name')) {
         db.execute(
-          "ALTER TABLE user_config ADD COLUMN palette_name TEXT DEFAULT 'system'",
+          "ALTER TABLE user_config ADD COLUMN theme_name TEXT DEFAULT 'system'",
         );
-        _log.i('Column palette_name added to user_config');
+        _log.i('Column theme_name added to user_config');
       }
 
       _log.i('Migration v81 completed');
@@ -4541,6 +4583,475 @@ class SqliteMigrations {
       }
     } catch (e, stackTrace) {
       _log.e('Error in migration v90: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v91: Adds the secondary-display app-dock columns to user_config
+  /// (dock apps payload, enable flag, and slot count).
+  static Future<void> _migrateToVersion91(Database db) async {
+    _log.i('Migration v91: Adding dock columns to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('dock_apps')) {
+        db.execute('ALTER TABLE user_config ADD COLUMN dock_apps TEXT');
+        _log.i('Column dock_apps added via v91');
+      }
+      if (!columns.contains('dock_enabled')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN dock_enabled INTEGER DEFAULT 1',
+        );
+        _log.i('Column dock_enabled added via v91');
+      }
+      if (!columns.contains('dock_slot_count')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN dock_slot_count INTEGER DEFAULT 3',
+        );
+        _log.i('Column dock_slot_count added via v91');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v91: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v92: Adds the secondary Now Playing dim columns to user_config
+  /// (dim delay, dim darkness, and fanart dim level).
+  static Future<void> _migrateToVersion92(Database db) async {
+    _log.i('Migration v92: Adding dim columns to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('now_playing_dim_delay')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN now_playing_dim_delay INTEGER DEFAULT 3',
+        );
+        _log.i('Column now_playing_dim_delay added via v92');
+      }
+      if (!columns.contains('now_playing_dim_level')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN now_playing_dim_level INTEGER DEFAULT 100',
+        );
+        _log.i('Column now_playing_dim_level added via v92');
+      }
+      if (!columns.contains('fanart_dim_level')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN fanart_dim_level INTEGER DEFAULT 25',
+        );
+        _log.i('Column fanart_dim_level added via v92');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v92: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v93: Adds `is_default_core` column to `app_emulators` to mark
+  /// which RetroArch core is the recommended default per variant (RA, RA32, RA64).
+  static Future<void> _migrateToVersion93(Database db) async {
+    _log.i('Migration v93: Adding is_default_core to app_emulators');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_emulators)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('is_default_core')) {
+        db.execute(
+          'ALTER TABLE app_emulators ADD COLUMN is_default_core INTEGER NOT NULL DEFAULT 0',
+        );
+        _log.i('Column is_default_core added via v93');
+      } else {
+        _log.i('Column is_default_core already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v93: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion94(Database db) async {
+    // The RetroAchievements overhaul requires each user to supply their own
+    // username AND personal web API key. Older builds let users connect with a
+    // username alone (riding on the bundled build-time key), so any existing
+    // session must be invalidated on upgrade to force a fresh login. Clearing
+    // ra_user is sufficient: auto-login is skipped when no username is stored.
+    _log.i(
+      'Migration v94: Clearing saved RetroAchievements user to force '
+      're-login with a personal API key',
+    );
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (columns.contains('ra_user')) {
+        db.execute('UPDATE user_config SET ra_user = NULL');
+        _log.i('Cleared ra_user via v94');
+      } else {
+        _log.i('user_config has no ra_user column; nothing to clear in v94');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v94: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion95(Database db) async {
+    _log.i('Migration v95: Adding game_carousel_card_style to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('game_carousel_card_style')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN game_carousel_card_style TEXT DEFAULT 'fanart'",
+        );
+        _log.i('Column game_carousel_card_style added via v95');
+      } else {
+        _log.i('Column game_carousel_card_style already exists');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v95: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v96: Rename palette_name column to theme_name in user_config.
+  static Future<void> _migrateToVersion96(Database db) async {
+    _log.i('Migration v96: Rename palette_name to theme_name in user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (columns.contains('palette_name') && !columns.contains('theme_name')) {
+        db.execute(
+          'ALTER TABLE user_config RENAME COLUMN palette_name TO theme_name',
+        );
+        _log.i('Column palette_name renamed to theme_name in user_config');
+      } else if (!columns.contains('theme_name')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN theme_name TEXT DEFAULT 'system'",
+        );
+        _log.i('Column theme_name added to user_config');
+      }
+
+      _log.i('Migration v96 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v96: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v97: Ensure game_carousel_card_style column exists.
+  ///
+  /// v95 originally added this column on main, but the design branch reused v95
+  /// for the palette->theme rename. Devices that ran that rename (now v96) may
+  /// be missing the column, so this migration is idempotent and adds it if
+  /// absent.
+  static Future<void> _migrateToVersion97(Database db) async {
+    _log.i('Migration v97: Ensuring game_carousel_card_style column exists');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('game_carousel_card_style')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN game_carousel_card_style TEXT DEFAULT 'fanart'",
+        );
+        _log.i('Column game_carousel_card_style added via v97');
+      } else {
+        _log.i('Column game_carousel_card_style already exists');
+      }
+      _log.i('Migration v97 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v97: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v98: ES-DE import support.
+  ///
+  /// Adds `esde_folder_path` to `user_config` (the ES-DE application folder the
+  /// user selected) and `esde_media_dir` to `user_system_settings` (the ES-DE
+  /// `downloaded_media` subfolder name captured for that system at import time,
+  /// used to resolve read-time fallback artwork). Idempotent.
+  static Future<void> _migrateToVersion98(Database db) async {
+    _log.i('Migration v98: Adding ES-DE import columns');
+    try {
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!configColumns.contains('esde_folder_path')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN esde_folder_path TEXT DEFAULT ''",
+        );
+        _log.i('Column esde_folder_path added to user_config via v98');
+      }
+
+      final settingsColumns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!settingsColumns.contains('esde_media_dir')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN esde_media_dir TEXT',
+        );
+        _log.i('Column esde_media_dir added to user_system_settings via v98');
+      }
+
+      _log.i('Migration v98 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v98: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> _migrateToVersion99(Database db) async {
+    _log.i('Migration v99: Adding ES-DE media subfolder column');
+    try {
+      final metaColumns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!metaColumns.contains('esde_media_subdir')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN esde_media_subdir TEXT',
+        );
+        _log.i(
+          'Column esde_media_subdir added to user_screenscraper_metadata via v99',
+        );
+      }
+
+      _log.i('Migration v99 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v99: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v100: Adds `esde_imported` to `user_screenscraper_metadata`, a
+  /// provenance flag marking rows the ES-DE import created from scratch. Lets
+  /// the ES-DE reset target only those rows instead of every `is_fully_scraped`
+  /// = 0 row (which also includes NeoStation's own partially-scraped rows).
+  /// Idempotent.
+  static Future<void> _migrateToVersion100(Database db) async {
+    _log.i('Migration v100: Adding esde_imported column');
+    try {
+      final metaColumns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!metaColumns.contains('esde_imported')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN esde_imported INTEGER DEFAULT 0',
+        );
+        _log.i(
+          'Column esde_imported added to user_screenscraper_metadata via v100',
+        );
+      }
+
+      _log.i('Migration v100 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v100: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v101: Store whether a platform supports multi-disc games.
+  static Future<void> _migrateToVersion101(Database db) async {
+    _log.i('Migration v101: Adding multidisc to app_systems');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_systems)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('multidisc')) {
+        db.execute(
+          'ALTER TABLE app_systems ADD COLUMN multidisc INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+
+      _log.i('Migration v101 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v101: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v102: Reclaim inherited emulator stamps on [user_roms].
+  ///
+  /// The live ROM-scan path froze the *system default* emulator into
+  /// `user_roms.app_emulator_unique_id` at insert time, making an inherited
+  /// default indistinguishable from a deliberate per-game override. The per-game
+  /// column now means "explicit override, or NULL = inherit the system default"
+  /// (resolved live at launch). This backfill NULLs the rows that merely carry
+  /// the auto-stamped default so they re-inherit, leaving genuine per-game
+  /// overrides (a *different* emulator) untouched.
+  ///
+  /// We reclaim ONLY rows whose emulator equals the system's app-provided
+  /// default core (`app_emulators.is_default = 1`). That is the exact — and
+  /// only — value the batch scan-insert ever auto-stamped (it selected the
+  /// `is_default` core at `os_id = 1`). We deliberately do NOT reclaim rows
+  /// matching the user's `is_user_default` standalone: nothing auto-stamps a
+  /// standalone into user_roms, so such a row can only be a deliberate pin —
+  /// nulling it would destroy a genuine choice.
+  ///
+  /// Residual (irreducible) edge: a user who deliberately pinned a game to the
+  /// emulator that *is* the system default core is indistinguishable from an
+  /// inherited stamp and will be reclaimed to "inherit". This is benign and
+  /// recoverable (it re-inherits the same emulator, and can be re-pinned in the
+  /// per-game emulator tab in two taps).
+  static Future<void> _migrateToVersion102(Database db) async {
+    _log.i('Migration v102: Reclaiming inherited emulator stamps on user_roms');
+    try {
+      db.execute('''
+        UPDATE user_roms
+        SET app_emulator_unique_id = NULL, app_emulator_os_id = NULL
+        WHERE app_emulator_unique_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM app_emulators e
+            WHERE e.system_id = user_roms.app_system_id
+              AND e.unique_identifier = user_roms.app_emulator_unique_id
+              AND e.os_id = user_roms.app_emulator_os_id
+              AND e.is_default = 1
+          )
+      ''');
+
+      _log.i('Migration v102 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v102: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v103: Persist the game action-button legend visibility so the
+  /// Select + B toggle survives restarts and upgrades.
+  static Future<void> _migrateToVersion103(Database db) async {
+    _log.i('Migration v103: Adding legend_hidden to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('legend_hidden')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN legend_hidden INTEGER DEFAULT 0',
+        );
+        _log.i('Column legend_hidden added via v103');
+      } else {
+        _log.i('Column legend_hidden already exists');
+      }
+      _log.i('Migration v103 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v103: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v104: Defensively recreate the [app_os] lookup table if it is
+  /// missing and re-seed the base operating system rows.
+  ///
+  /// Devices that experienced a failed downgrade/recreate cycle could end up
+  /// with `PRAGMA user_version` advanced but without the [app_os] table. This
+  /// migration restores the table so every other query that joins against it
+  /// can succeed. It is idempotent and safe to run on a healthy database.
+  static Future<void> _migrateToVersion104(Database db) async {
+    _log.i('Migration v104: Ensuring app_os table exists');
+    try {
+      final tableExists = db.select('''
+        SELECT name FROM sqlite_master
+        WHERE type = 'table' AND name = 'app_os'
+        LIMIT 1
+      ''');
+
+      if (tableExists.isEmpty) {
+        _log.w('app_os table is missing; recreating it');
+        db.execute('''
+          CREATE TABLE app_os (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+          )
+        ''');
+      } else {
+        _log.i('app_os table already exists');
+      }
+
+      db.execute('''
+        INSERT OR IGNORE INTO app_os (id, name) VALUES
+        (1, 'windows'),
+        (2, 'android'),
+        (3, 'linux'),
+        (4, 'macos'),
+        (5, 'ios')
+      ''');
+
+      _log.i('Migration v104 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v104: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v105: Collapse duplicate system-default emulators.
+  ///
+  /// `user_emulator_config.is_user_default` is the user's explicit "this is the
+  /// emulator for this system" pick, and [getUserDefaultEmulatorForSystem] reads
+  /// it with a `LIMIT 1`. `setDefaultCore` *set* that flag but never cleared it
+  /// for a previously-chosen core, so switching emulators left two winners on the
+  /// same system and the unordered read returned the *oldest* one — pick a core,
+  /// then a standalone, and the core still launches (and vice versa for
+  /// core → core). The setters now clear every competing marker first, but that
+  /// only helps the next selection: installs already carrying two flagged rows
+  /// stay broken until the persisted state is repaired. That is this migration.
+  ///
+  /// For each system we keep the most recently updated flagged emulator and
+  /// clear the rest. `updated_at` is stamped on every user selection, so the
+  /// keeper is the user's latest choice — exactly what they expect to launch.
+  /// Config rows with no matching `app_emulators` entry are left alone: they
+  /// belong to no system, so they can't be part of a per-system conflict.
+  static Future<void> _migrateToVersion105(Database db) async {
+    _log.i('Migration v105: Collapsing duplicate system-default emulators');
+    try {
+      db.execute('DROP TABLE IF EXISTS temp._emu_default_keepers');
+
+      // Bare-column-with-MAX(): SQLite guarantees the non-aggregate columns come
+      // from the row holding the max, so `uid` is the latest pick per system.
+      db.execute('''
+        CREATE TEMP TABLE _emu_default_keepers AS
+        SELECT e.system_id AS sid,
+               uc.emulator_unique_id AS uid,
+               MAX(uc.updated_at) AS upd
+        FROM user_emulator_config uc
+        JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id
+        WHERE uc.is_user_default = 1
+        GROUP BY e.system_id
+      ''');
+
+      db.execute('''
+        UPDATE user_emulator_config
+        SET is_user_default = 0
+        WHERE is_user_default = 1
+          AND emulator_unique_id IN (SELECT unique_identifier FROM app_emulators)
+          AND emulator_unique_id NOT IN (SELECT uid FROM _emu_default_keepers)
+      ''');
+
+      final cleared = db.updatedRows;
+      db.execute('DROP TABLE IF EXISTS temp._emu_default_keepers');
+
+      _log.i('Migration v105 completed (cleared $cleared stale default(s))');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v105: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

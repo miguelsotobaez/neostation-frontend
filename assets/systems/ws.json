@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ws",
+    "multidisc": false,
     "name": "WonderSwan",
     "short_name": "WS",
     "details": {
@@ -17,7 +18,8 @@
       "ws",
       "Bandai WonderSwan",
       "WonderSwan",
-      "wswan"
+      "wswan",
+      "wonderswan"
     ],
     "colors": [
       "#B0BEC5",
@@ -45,6 +47,7 @@
     },
     {
       "name": "RetroArch64 Beetle Cygne",
+      "default_core": true,
       "unique_id": "ws.ra64.mednafen_wswan",
       "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
       "is_retroachievements_compatible": true,
@@ -56,6 +59,7 @@
     },
     {
       "name": "RetroArch32 Beetle Cygne",
+      "default_core": true,
       "unique_id": "ws.ra32.mednafen_wswan",
       "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
       "is_retroachievements_compatible": true,
@@ -67,7 +71,7 @@
     },
     {
       "name": "RetroArch Beetle Cygne",
-      "default": true,
+      "default_core": true,
       "unique_id": "ws.ra.mednafen_wswan",
       "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
       "is_retroachievements_compatible": true,

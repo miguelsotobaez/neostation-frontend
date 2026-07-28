@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:logger/logger.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/utils/log_redaction.dart';
 
 /// Supported log severity levels.
 enum LogLevel { info, warning, error, debug }
@@ -19,7 +20,7 @@ class LoggerService {
 
   LoggerService._internal()
     : _logger = Logger(
-        printer: SimplePrinter(colors: true),
+        printer: RedactingPrinter(SimplePrinter(colors: true)),
         filter: ProductionFilter(),
         output: MultiOutput([ConsoleOutput()]),
       );
@@ -52,7 +53,7 @@ class LoggerService {
 
       _logger = Logger(
         level: Level.info,
-        printer: SimplePrinter(colors: true),
+        printer: RedactingPrinter(SimplePrinter(colors: true)),
         filter: CustomProductionFilter(),
         output: MultiOutput([
           ConsoleOutput(),
@@ -103,6 +104,24 @@ class LoggerService {
   /// Logs an error-level message with optional error object and stack trace.
   void e(String message, {Object? error, StackTrace? stackTrace}) =>
       log(message, level: LogLevel.error, error: error, stackTrace: stackTrace);
+}
+
+/// Strips credentials from every formatted log line before it reaches an
+/// output.
+///
+/// This wraps the printer rather than the log call sites on purpose: the worst
+/// leaks come from error objects we never format ourselves — an HTTP client
+/// exception carries the full request URI, query string included — so
+/// redaction has to happen after the event is rendered and before it is
+/// written to the console or the log file.
+class RedactingPrinter extends LogPrinter {
+  RedactingPrinter(this._inner);
+
+  final LogPrinter _inner;
+
+  @override
+  List<String> log(LogEvent event) =>
+      _inner.log(event).map(redactSecrets).toList();
 }
 
 /// Custom log filter that permits INFO level logs even in production/release environments.

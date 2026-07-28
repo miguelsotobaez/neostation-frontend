@@ -46,7 +46,7 @@ class GameDetailsGeneralTab extends StatelessWidget {
           Positioned.fill(
             child: Center(
               child: Transform.translate(
-                offset: Offset(4.r, 4.r),
+                offset: Offset(6.r, 6.r),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 320),
                   switchInCurve: Curves.easeOutQuint,
@@ -62,8 +62,11 @@ class GameDetailsGeneralTab extends StatelessWidget {
                           ),
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.low,
-                          cacheWidth: 32,
-                          color: Colors.black.withValues(alpha: 0.7),
+                          cacheWidth: 256,
+                          isAntiAlias: false,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.shadow.withValues(alpha: 0.5),
                           height: 140.r,
                           width: 280.r,
                         )
@@ -79,8 +82,10 @@ class GameDetailsGeneralTab extends StatelessWidget {
                                 snapshot.data!,
                                 fit: BoxFit.contain,
                                 filterQuality: FilterQuality.low,
-                                color: Colors.black.withValues(alpha: 0.7),
-                                cacheWidth: 40,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.shadow.withValues(alpha: 0.7),
+                                cacheWidth: 32,
                                 height: 60.r,
                                 width: 60.r,
                                 alignment: Alignment.center,
@@ -125,7 +130,7 @@ class GameDetailsGeneralTab extends StatelessWidget {
                             return Image.memory(
                               snapshot.data!,
                               fit: BoxFit.contain,
-                              cacheWidth: 60,
+                              cacheWidth: 32,
                               height: 60.r,
                               width: 60.r,
                               alignment: Alignment.center,

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "mcd",
+    "multidisc": false,
     "name": "Sega Mega-CD",
     "short_name": "MCD",
     "details": {
@@ -59,6 +60,7 @@
     },
     {
       "name": "RetroArch64 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "mcd.ra64.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -92,6 +94,7 @@
     },
     {
       "name": "RetroArch32 Genesis Plus GX",
+      "default_core": true,
       "unique_id": "mcd.ra32.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -125,7 +128,7 @@
     },
     {
       "name": "RetroArch Genesis Plus GX",
-      "default": true,
+      "default_core": true,
       "unique_id": "mcd.ra.genesis_plus_gx",
       "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
       "is_retroachievements_compatible": true,

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "3ds",
+    "multidisc": false,
     "name": "Nintendo 3DS",
     "short_name": "3DS",
     "details": {
@@ -37,7 +38,7 @@
   "emulators": [
     {
       "name": "RetroArch Citra",
-      "default": true,
+      "default_core": true,
       "unique_id": "3ds.ra.citra",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf.",
@@ -107,6 +108,7 @@
     },
     {
       "name": "RetroArch64 Citra",
+      "default_core": true,
       "unique_id": "3ds.ra64.citra",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf.",
@@ -140,6 +142,7 @@
     },
     {
       "name": "RetroArch32 Citra",
+      "default_core": true,
       "unique_id": "3ds.ra32.citra",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf.",

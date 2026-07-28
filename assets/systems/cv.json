@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "cv",
+    "multidisc": false,
     "name": "ColecoVision",
     "short_name": "CV",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "cv",
       "coleco",
-      "ColecoVision"
+      "ColecoVision",
+      "colecovision"
     ],
     "colors": [
       "#424242",
@@ -42,6 +44,7 @@
   "emulators": [
     {
       "name": "RetroArch64 BlueMSX",
+      "default_core": true,
       "unique_id": "cv.ra64.bluemsx",
       "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -64,6 +67,7 @@
     },
     {
       "name": "RetroArch32 BlueMSX",
+      "default_core": true,
       "unique_id": "cv.ra32.bluemsx",
       "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -86,7 +90,7 @@
     },
     {
       "name": "RetroArch BlueMSX",
-      "default": true,
+      "default_core": true,
       "unique_id": "cv.ra.bluemsx",
       "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg, zip, 7z.",
       "is_retroachievements_compatible": true,

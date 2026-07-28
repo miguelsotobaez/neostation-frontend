@@ -66,6 +66,9 @@ class SystemModel {
   /// Whether to scan subdirectories within the ROM folders.
   final bool recursiveScan;
 
+  /// Whether this platform supports games spread across multiple discs.
+  final bool multiDisc;
+
   /// UI: Whether to hide the file extension in game lists.
   final bool hideExtension;
 
@@ -120,6 +123,7 @@ class SystemModel {
     this.isVirtual = false,
     this.baseSystemId,
     this.recursiveScan = true,
+    this.multiDisc = false,
     this.hideExtension = true,
     this.hideParentheses = true,
     this.hideBrackets = true,
@@ -261,6 +265,10 @@ class SystemModel {
               1 ||
           (json['recursive_scan'] ?? json['recursiveScan']).toString() ==
               'true',
+      multiDisc:
+          (json['multidisc'] ?? json['multiDisc'] ?? false).toString() ==
+              'true' ||
+          (json['multidisc'] ?? json['multiDisc'] ?? 0).toString() == '1',
       hideExtension:
           (int.tryParse(
                     (json['hide_extension'] ?? json['hideExtension'] ?? '1')
@@ -335,6 +343,7 @@ class SystemModel {
       'isVirtual': isVirtual,
       'baseSystemId': baseSystemId,
       'recursiveScan': recursiveScan ? 1 : 0,
+      'multidisc': multiDisc ? 1 : 0,
       'hideExtension': hideExtension ? 1 : 0,
       'hideParentheses': hideParentheses ? 1 : 0,
       'hideBrackets': hideBrackets ? 1 : 0,
@@ -370,6 +379,7 @@ class SystemModel {
     bool? isVirtual,
     String? baseSystemId,
     bool? recursiveScan,
+    bool? multiDisc,
     bool? hideExtension,
     bool? hideParentheses,
     bool? hideBrackets,
@@ -403,6 +413,7 @@ class SystemModel {
       isVirtual: isVirtual ?? this.isVirtual,
       baseSystemId: baseSystemId ?? this.baseSystemId,
       recursiveScan: recursiveScan ?? this.recursiveScan,
+      multiDisc: multiDisc ?? this.multiDisc,
       hideExtension: hideExtension ?? this.hideExtension,
       hideParentheses: hideParentheses ?? this.hideParentheses,
       hideBrackets: hideBrackets ?? this.hideBrackets,

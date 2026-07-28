@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ds",
+    "multidisc": false,
     "name": "Nintendo DS",
     "short_name": "DS",
     "details": {
@@ -33,7 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch MelonDS",
-      "default": true,
+      "default_core": true,
       "unique_id": "ds.ra.melonds",
       "is_retroachievements_compatible": true,
       "description": "MelonDS core for RetroArch.",
@@ -103,6 +104,7 @@
     },
     {
       "name": "RetroArch64 MelonDS",
+      "default_core": true,
       "unique_id": "ds.ra64.melonds",
       "is_retroachievements_compatible": true,
       "description": "MelonDS core for RetroArch 64.",
@@ -125,6 +127,7 @@
     },
     {
       "name": "RetroArch32 MelonDS",
+      "default_core": true,
       "unique_id": "ds.ra32.melonds",
       "is_retroachievements_compatible": true,
       "description": "MelonDS core for RetroArch 32.",

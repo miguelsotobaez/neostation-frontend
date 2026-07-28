@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "snes-hacks",
+    "multidisc": false,
     "name": "Super Nintendo Entertainment System Hacks",
     "short_name": "SNESH",
     "details": {
@@ -58,6 +59,7 @@
     },
     {
       "name": "RetroArch64 Snes9x",
+      "default_core": true,
       "unique_id": "snes-hacks.ra64.snes9x",
       "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -267,6 +269,7 @@
     },
     {
       "name": "RetroArch32 Snes9x",
+      "default_core": true,
       "unique_id": "snes-hacks.ra32.snes9x",
       "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -476,7 +479,7 @@
     },
     {
       "name": "RetroArch Snes9x",
-      "default": true,
+      "default_core": true,
       "unique_id": "snes-hacks.ra.snes9x",
       "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
       "is_retroachievements_compatible": true,

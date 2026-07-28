@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gw",
+    "multidisc": false,
     "name": "Game & Watch",
     "short_name": "G&W",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "gw",
       "gameandwatch",
-      "Game & Watch"
+      "Game & Watch",
+      "g-and-w"
     ],
     "colors": [
       "#BDBDBD",
@@ -31,6 +33,7 @@
   "emulators": [
     {
       "name": "RetroArch64 GW",
+      "default_core": true,
       "unique_id": "gw.ra64.gw",
       "description": "Supported extensions: mgw.",
       "is_retroachievements_compatible": false,
@@ -53,6 +56,7 @@
     },
     {
       "name": "RetroArch32 GW",
+      "default_core": true,
       "unique_id": "gw.ra32.gw",
       "description": "Supported extensions: mgw.",
       "is_retroachievements_compatible": false,
@@ -64,7 +68,7 @@
     },
     {
       "name": "RetroArch GW",
-      "default": true,
+      "default_core": true,
       "unique_id": "gw.ra.gw",
       "description": "Supported extensions: mgw.",
       "is_retroachievements_compatible": false,

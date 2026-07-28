@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "jagcd",
+    "multidisc": true,
     "name": "Atari Jaguar CD",
     "short_name": "JCD",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "jagcd",
       "atarijaguarcd",
-      "Atari Jaguar CD"
+      "Atari Jaguar CD",
+      "atari-jaguar-cd"
     ],
     "colors": [
       "#424242",
@@ -30,7 +32,7 @@
   "emulators": [
     {
       "name": "Standalone BigPEmu",
-      "default": true,
+      "default_standalone": true,
       "unique_id": "jagcd.jaguarcd.bigpe.bigpemu",
       "description": "Supported extensions: cue, cdi.",
       "is_retroachievements_compatible": false,

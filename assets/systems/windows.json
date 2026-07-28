@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "windows",
+    "multidisc": false,
     "name": "Windows",
     "neosync": {
       "sync": false,
@@ -67,6 +68,17 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.winlator/.XServerDisplayActivity -e shortcut_path \"{file.path}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Winlator Ludashi",
+      "unique_id": "windows.winlator.ludashi",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: desktop.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.winlator.vanilla/com.winlator.cmod.XServerDisplayActivity -e shortcut_path \"{file.path}\" --activity-clear-task --activity-clear-top --activity-no-history"
         }
       }
     },

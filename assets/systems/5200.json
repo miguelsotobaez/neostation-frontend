@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "5200",
+    "multidisc": false,
     "name": "Atari 5200",
     "short_name": "A5200",
     "details": {
@@ -54,6 +55,7 @@
     },
     {
       "name": "RetroArch64 a5200",
+      "default_core": true,
       "unique_id": "5200.atari5200.ra64.a5200",
       "description": "Supported extensions: a52, bin.",
       "is_retroachievements_compatible": false,
@@ -76,6 +78,7 @@
     },
     {
       "name": "RetroArch32 a5200",
+      "default_core": true,
       "unique_id": "5200.atari5200.ra32.a5200",
       "description": "Supported extensions: a52, bin.",
       "is_retroachievements_compatible": false,
@@ -87,7 +90,6 @@
     },
     {
       "name": "RetroArch atari800",
-      "default": true,
       "unique_id": "5200.atari5200.ra.atari800",
       "description": "Supported extensions: a52, atr, atx, bin, car, cas, cdm, com, rom, xex, xfd, zip.",
       "is_retroachievements_compatible": false,
@@ -111,6 +113,7 @@
     },
     {
       "name": "RetroArch a5200",
+      "default_core": true,
       "unique_id": "5200.atari5200.ra.a5200",
       "description": "Supported extensions: a52, bin.",
       "is_retroachievements_compatible": false,

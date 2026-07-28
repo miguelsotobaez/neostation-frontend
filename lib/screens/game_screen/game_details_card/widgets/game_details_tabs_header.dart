@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/services/sfx_service.dart';
 
+import '../../../../themes/corner_radii.dart';
+
 /// Defines the navigable sections within the game details card.
-enum DetailTab { general, gameInfo, achievements, settings }
+enum DetailTab { general, gameInfo, achievements }
 
 /// A navigation header component that manages tab switching and global card actions.
 ///
@@ -13,7 +16,6 @@ enum DetailTab { general, gameInfo, achievements, settings }
 class GameDetailsTabsHeader extends StatelessWidget {
   final bool isGameInfoHidden;
   final bool hasRetroAchievements;
-  final bool showSettings;
   final DetailTab currentTab;
   final ValueChanged<DetailTab> onTabChanged;
 
@@ -21,7 +23,6 @@ class GameDetailsTabsHeader extends StatelessWidget {
     super.key,
     required this.isGameInfoHidden,
     required this.hasRetroAchievements,
-    required this.showSettings,
     required this.currentTab,
     required this.onTabChanged,
   });
@@ -32,9 +33,8 @@ class GameDetailsTabsHeader extends StatelessWidget {
     int numTabs = 1; // General is always present.
     if (!isGameInfoHidden) numTabs++;
     if (hasRetroAchievements) numTabs++;
-    if (showSettings) numTabs++;
 
-    final double tabWidth = 42.r;
+    final double tabWidth = 36.r;
     final double totalTabsWidth = numTabs * tabWidth;
 
     // Resolve the visual index for the cursor animation, accounting for hidden tabs.
@@ -43,8 +43,6 @@ class GameDetailsTabsHeader extends StatelessWidget {
       visualIndex = 1;
     } else if (currentTab == DetailTab.achievements) {
       visualIndex = isGameInfoHidden ? 1 : 2;
-    } else if (currentTab == DetailTab.settings) {
-      visualIndex = numTabs - 1;
     }
 
     final theme = Theme.of(context);
@@ -52,22 +50,32 @@ class GameDetailsTabsHeader extends StatelessWidget {
     return ClipRRect(
       child: Container(
         height: 46.r,
-        padding: EdgeInsets.symmetric(horizontal: 12.r),
+        padding: EdgeInsets.only(top: 4.r, right: 8.r),
         child: Row(
           children: [
             const Spacer(),
 
             // Tab Navigation Group: Hardware-mapped navigation controls.
             Container(
-              height: 32.r,
+              height: 36.r,
               padding: EdgeInsets.symmetric(horizontal: 8.r),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(8.r),
+                color: theme.colorScheme.surface.withValues(alpha: 0.9),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(12.r),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 1.r,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 2.r,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.1),
+                    blurRadius: 4.r,
                     offset: Offset(2.0.r, 2.0.r),
                   ),
                 ],
@@ -98,16 +106,19 @@ class GameDetailsTabsHeader extends StatelessWidget {
                             width: tabWidth,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.secondary,
-                                borderRadius: BorderRadius.circular(4.r),
+                                color: theme.colorScheme.primary,
+                                borderRadius:
+                                    Theme.of(context)
+                                        .extension<CornerRadii>()
+                                        ?.radiusInternal ??
+                                    BorderRadius.circular(14.r),
                               ),
                             ),
                           ),
                           Row(
                             children: [
                               _TabItem(
-                                iconPath:
-                                    'assets/images/icons/gamepad-bulk.png',
+                                icon: Symbols.gamepad_rounded,
                                 tab: DetailTab.general,
                                 width: tabWidth,
                                 isSelected: currentTab == DetailTab.general,
@@ -115,8 +126,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
                               ),
                               if (!isGameInfoHidden)
                                 _TabItem(
-                                  iconPath:
-                                      'assets/images/icons/image-bulk.png',
+                                  icon: Symbols.image_rounded,
                                   tab: DetailTab.gameInfo,
                                   width: tabWidth,
                                   isSelected: currentTab == DetailTab.gameInfo,
@@ -124,20 +134,11 @@ class GameDetailsTabsHeader extends StatelessWidget {
                                 ),
                               if (hasRetroAchievements)
                                 _TabItem(
-                                  iconPath:
-                                      'assets/images/icons/trophy-bulk.png',
+                                  icon: Symbols.emoji_events_rounded,
                                   tab: DetailTab.achievements,
                                   width: tabWidth,
                                   isSelected:
                                       currentTab == DetailTab.achievements,
-                                  onTap: onTabChanged,
-                                ),
-                              if (showSettings)
-                                _TabItem(
-                                  iconPath: 'assets/images/icons/gear-bulk.png',
-                                  tab: DetailTab.settings,
-                                  width: tabWidth,
-                                  isSelected: currentTab == DetailTab.settings,
                                   onTap: onTabChanged,
                                 ),
                             ],
@@ -165,14 +166,14 @@ class GameDetailsTabsHeader extends StatelessWidget {
 
 /// An individual tab selector icon with click/tap handling.
 class _TabItem extends StatelessWidget {
-  final String iconPath;
+  final IconData icon;
   final DetailTab tab;
   final double width;
   final bool isSelected;
   final ValueChanged<DetailTab> onTap;
 
   const _TabItem({
-    required this.iconPath,
+    required this.icon,
     required this.tab,
     required this.width,
     required this.isSelected,
@@ -198,10 +199,9 @@ class _TabItem extends StatelessWidget {
           width: width,
           height: 36.r,
           alignment: Alignment.center,
-          child: Image.asset(
-            iconPath,
-            width: 18.r,
-            height: 18.r,
+          child: Icon(
+            icon,
+            size: 18.r,
             color: isSelected
                 ? theme.colorScheme.onPrimary
                 : theme.colorScheme.onSurface,

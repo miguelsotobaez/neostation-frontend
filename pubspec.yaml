@@ -5,7 +5,6 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 workspace:
   - packages/flutter_7zip
-  - packages/flutter_soloud
   - packages/gamepads
   - packages/gamepads_android
   - packages/gamepads_darwin
@@ -13,7 +12,7 @@ workspace:
   - packages/gamepads_platform_interface
   - packages/gamepads_windows
 
-version: 0.9.3+114
+version: 0.9.8+123
 
 environment:
   sdk: '>=3.9.2'
@@ -24,19 +23,23 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  google_fonts: ^8.1.0
-  material_symbols_icons: ^4.2928.1
-  provider: ^6.1.5+1
-  battery_plus: ^7.0.0
   gamepads:
     path: packages/gamepads
   flutter_7zip:
     path: packages/flutter_7zip
-  file_picker: ^12.0.0-beta.5
+    
+  file_picker: ^12.0.0-beta.7
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.0
+  google_fonts: ^8.1.0
+  material_symbols_icons: ^4.2951.0
+  provider: ^6.1.5+1
+  battery_plus: ^7.1.0
   path: ^1.9.1
-  path_provider: ^2.1.5
+  path_provider: ^2.1.6
+  xml: ^6.6.1
   video_player: ^2.11.1
-  fvp: ^0.37.2
+  fvp: ^0.37.3
   flutter_secure_storage: ^10.3.1
   shared_preferences: ^2.5.5
   http: ^1.6.0
@@ -46,22 +49,20 @@ dependencies:
   url_launcher: ^6.3.2
   widget_mask: ^1.0.0
   flutter_screenutil: 5.9.3
-  window_manager: ^0.5.1
+  window_manager: ^0.5.2
   permission_handler: ^12.0.3
-  device_info_plus: ^13.1.0
-  package_info_plus: ^10.1.0
   pointycastle: ^4.0.0
-  sqlite3: ^3.3.2
+  sqlite3: ^3.3.4
   fullscreen_window: ^1.2.1
   animated_toggle_switch: ^0.8.7
   marquee: ^2.3.0
   logger: ^2.7.0
   sub_screen: ^0.1.9
-  flutter_soloud:
-    path: packages/flutter_soloud
+  flutter_soloud: ^4.0.12
   audio_metadata_reader: ^1.6.0
   wakelock_plus: ^1.6.1
-  flutter_localization: ^0.4.0
+  flutter_localization: ^0.4.1
+  flutter_tilt: ^4.0.4
 
 dev_dependencies:
   flutter_test:
@@ -94,6 +95,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/logos/
     - assets/images/emulators/
     - assets/images/gamepad/
     - assets/images/icons/

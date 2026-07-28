@@ -133,4 +133,33 @@ void main() {
       expect(names, isNot(contains('fav-android.apk')));
     });
   });
+
+  // isGameLaunchInProgress widens the launch window used to suppress the
+  // resume-triggered secondary-display reset. It must be true from the moment a
+  // launch is initiated (beginLaunchPending) — before _registerGameLaunch flips
+  // isGameLaunched ~2s later — otherwise a transient resume clears Now Playing.
+  group('GameService launch-pending window', () {
+    tearDown(GameService.clearLaunchPending);
+
+    test('is not in progress before a launch begins', () {
+      GameService.clearLaunchPending();
+      expect(GameService.isGameLaunchInProgress, isFalse);
+    });
+
+    test(
+      'beginLaunchPending opens the window before the game is registered',
+      () {
+        expect(GameService.isGameLaunched, isFalse);
+        GameService.beginLaunchPending();
+        // Guard is true even though the game process is not yet registered.
+        expect(GameService.isGameLaunchInProgress, isTrue);
+      },
+    );
+
+    test('clearLaunchPending closes the window (failed/aborted launch)', () {
+      GameService.beginLaunchPending();
+      GameService.clearLaunchPending();
+      expect(GameService.isGameLaunchInProgress, isFalse);
+    });
+  });
 }

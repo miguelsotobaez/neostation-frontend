@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "plus4",
+    "multidisc": false,
     "name": "Commodore - PLUS/4",
     "short_name": "Plus/4",
     "details": {
@@ -18,7 +19,8 @@
       "Commodore Plus/4",
       "CommodorePlus4",
       "Commodore - PLUS/4",
-      "cplus4"
+      "cplus4",
+      "c-plus-4"
     ],
     "colors": [
       "#424242",
@@ -53,6 +55,7 @@
   "emulators": [
     {
       "name": "RetroArch64 Vice XPlus4",
+      "default_core": true,
       "unique_id": "plus4.ra64.vice_xplus4",
       "description": "Supported extensions: bin, crt, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, lnx, p00, prg, t64, tap, x64, x6z, zip.",
       "is_retroachievements_compatible": false,
@@ -64,6 +67,7 @@
     },
     {
       "name": "RetroArch32 Vice XPlus4",
+      "default_core": true,
       "unique_id": "plus4.ra32.vice_xplus4",
       "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
       "is_retroachievements_compatible": false,
@@ -75,6 +79,7 @@
     },
     {
       "name": "RetroArch Vice XPlus4",
+      "default_core": true,
       "unique_id": "plus4.ra.vice_xplus4",
       "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
       "is_retroachievements_compatible": false,

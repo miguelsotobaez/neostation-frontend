@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "3do",
+    "multidisc": true,
     "name": "Panasonic 3DO",
     "short_name": "3DO",
     "details": {
@@ -34,7 +35,7 @@
   "emulators": [
     {
       "name": "RetroArch Opera",
-      "default": true,
+      "default_core": true,
       "unique_id": "3do.ra.opera",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: bin, chd, cue, iso, zip.",
@@ -58,6 +59,7 @@
     },
     {
       "name": "RetroArch64 Opera",
+      "default_core": true,
       "unique_id": "3do.ra64.opera",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: bin, chd, cue, iso, zip.",
@@ -69,6 +71,7 @@
     },
     {
       "name": "RetroArch32 Opera",
+      "default_core": true,
       "unique_id": "3do.ra32.opera",
       "is_retroachievements_compatible": true,
       "description": "Supported extensions: bin, chd, cue, iso, zip.",

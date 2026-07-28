@@ -12,6 +12,7 @@ import '../../../../providers/file_provider.dart';
 import '../../../../providers/sqlite_config_provider.dart';
 import '../../../../services/screenscraper_service.dart';
 import '../../../../services/sfx_service.dart';
+import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../widgets/scrolling_description_text.dart';
 
@@ -81,13 +82,26 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
       ImageInfo info,
       bool synchronousCall,
     ) {
-      if (mounted) {
-        final double aspectRatio = info.image.width / info.image.height;
-        if (aspectRatio > 0 && (_imageAspectRatios[path] != aspectRatio)) {
-          setState(() {
-            _imageAspectRatios[path] = aspectRatio;
-          });
-        }
+      if (!mounted) return;
+      final double aspectRatio = info.image.width / info.image.height;
+      if (aspectRatio <= 0 || (_imageAspectRatios[path] == aspectRatio)) {
+        return;
+      }
+
+      void update() {
+        setState(() {
+          _imageAspectRatios[path] = aspectRatio;
+        });
+      }
+
+      // If the image is already cached, the listener fires synchronously during
+      // build. Defer setState to the next frame to avoid the framework exception.
+      if (synchronousCall) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) update();
+        });
+      } else {
+        update();
       }
     });
 
@@ -125,14 +139,22 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
       left: 12.r,
       right: 12.r,
       top: 55.r,
-      bottom: 98.r,
+      bottom: 110.r,
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8.r),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+              BorderRadius.circular(14.r),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline,
+            width: 1.r,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.25),
               blurRadius: 2.r,
               offset: Offset(2.0.r, 2.0.r),
             ),
@@ -143,7 +165,7 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
           children: [
             // Header Section: Title and metadata summary pills.
             Padding(
-              padding: EdgeInsets.fromLTRB(8.r, 8.r, 8.r, 0),
+              padding: EdgeInsets.fromLTRB(8.r, 8.r, 8.r, 0.r),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -409,10 +431,18 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
     return Center(
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6.r),
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+              BorderRadius.circular(14.r),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline,
+            width: 1.r,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.25),
               blurRadius: 2.r,
               offset: Offset(2.0.r, 2.0.r),
             ),
@@ -420,7 +450,9 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
           color: Colors.transparent,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(6.r),
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+              BorderRadius.circular(14.r),
           clipBehavior: Clip.antiAlias,
           child: AspectRatio(
             aspectRatio: mediaAspectRatio,
@@ -467,7 +499,11 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                     child: ExcludeFocus(
                       child: Material(
                         color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6.r),
+                        borderRadius:
+                            Theme.of(
+                              context,
+                            ).extension<CornerRadii>()?.radiusExternal ??
+                            BorderRadius.circular(14.r),
                         child: InkWell(
                           onTap: () {
                             SfxService().playNavSound();
@@ -478,7 +514,11 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                           hoverColor: Colors.transparent,
                           highlightColor: Colors.transparent,
                           splashColor: Colors.transparent,
-                          borderRadius: BorderRadius.circular(12.r),
+                          borderRadius:
+                              Theme.of(
+                                context,
+                              ).extension<CornerRadii>()?.radiusInternal ??
+                              BorderRadius.circular(14.r),
                           child: Padding(
                             padding: EdgeInsets.symmetric(
                               horizontal: 8.r,
@@ -492,7 +532,7 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Image.asset(
-                                      'assets/images/gamepad/Xbox_Menu_button.png',
+                                      'assets/images/gamepad/Xbox_View_button.png',
                                       width: 14.r,
                                       height: 14.r,
                                       color: Colors.white,

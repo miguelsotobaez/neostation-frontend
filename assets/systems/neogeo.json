@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "neogeo",
+    "multidisc": false,
     "name": "Neo Geo",
     "short_name": "Neo Geo",
     "details": {
@@ -15,7 +16,9 @@
     },
     "folders": [
       "neogeo",
-      "Neo Geo"
+      "Neo Geo",
+      "neogeoaes",
+      "neogeomvs"
     ],
     "colors": [
       "#263238",
@@ -42,6 +45,7 @@
     },
     {
       "name": "RetroArch64 FBNeo",
+      "default_core": true,
       "unique_id": "neogeo.ra64.fbneo",
       "description": "Supported extensions: zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -86,6 +90,7 @@
     },
     {
       "name": "RetroArch32 FBNeo",
+      "default_core": true,
       "unique_id": "neogeo.ra32.fbneo",
       "description": "Supported extensions: zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -130,7 +135,7 @@
     },
     {
       "name": "RetroArch FBNeo",
-      "default": true,
+      "default_core": true,
       "unique_id": "neogeo.ra.fbneo",
       "description": "Supported extensions: zip, 7z.",
       "is_retroachievements_compatible": true,

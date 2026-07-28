@@ -135,6 +135,27 @@ class SfxService {
     }
   }
 
+  /// Resets SFX state after the shared [SoLoud] engine has been torn down
+  /// elsewhere (e.g. [MusicPlayerService] releasing it while the app is
+  /// backgrounded for battery reasons).
+  ///
+  /// The engine tear-down already disposed every source, so we just drop our
+  /// stale handles and mark uninitialized; assets reload on the next
+  /// [init]/playback call.
+  void handleEngineTornDown() {
+    _sources.clear();
+    _isInitialized = false;
+    _isInitializing = false;
+    _initCompleter = null;
+    _log.i('[SfxService] Engine released; SFX will reload on resume.');
+  }
+
+  /// Reopens the engine (if needed) and reloads SFX assets after a tear-down.
+  Future<void> reinitializeAfterEngineRestart() async {
+    if (_isInitialized) return;
+    await init();
+  }
+
   /// Unloads all cached audio sources.
   ///
   /// Note: This does NOT shut down the shared [SoLoud] engine.
@@ -222,7 +243,7 @@ class SfxService {
       return;
     }
     try {
-      await SoLoud.instance.play(source, volume: _volume);
+      SoLoud.instance.play(source, volume: _volume);
     } catch (e) {
       _log.w('[SfxService] Playback error for $path: $e');
     }

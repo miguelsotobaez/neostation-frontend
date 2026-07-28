@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "vb",
+    "multidisc": false,
     "name": "Virtual Boy",
     "short_name": "VB",
     "details": {
@@ -45,6 +46,7 @@
     },
     {
       "name": "RetroArch64 Beetle VB",
+      "default_core": true,
       "unique_id": "vb.ra64.mednafen_vb",
       "description": "Supported extensions: bin, vb, vboy.",
       "is_retroachievements_compatible": true,
@@ -56,6 +58,7 @@
     },
     {
       "name": "RetroArch32 Beetle VB",
+      "default_core": true,
       "unique_id": "vb.ra32.mednafen_vb",
       "description": "Supported extensions: bin, vb, vboy.",
       "is_retroachievements_compatible": true,
@@ -67,7 +70,7 @@
     },
     {
       "name": "RetroArch Beetle VB",
-      "default": true,
+      "default_core": true,
       "unique_id": "vb.ra.mednafen_vb",
       "description": "Supported extensions: bin, vb, vboy.",
       "is_retroachievements_compatible": true,

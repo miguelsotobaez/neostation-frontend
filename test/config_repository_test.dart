@@ -35,16 +35,16 @@ void main() {
     });
 
     test(
-      'getPaletteName returns default "system" when no config exists',
+      'getThemeName returns default "system" when no config exists',
       () async {
-        final theme = await ConfigRepository.getPaletteName();
+        final theme = await ConfigRepository.getThemeName();
         expect(theme, 'system');
       },
     );
 
-    test('updatePaletteName persists the palette', () async {
-      await ConfigRepository.updatePaletteName('dark');
-      final theme = await ConfigRepository.getPaletteName();
+    test('updateThemeName persists the theme', () async {
+      await ConfigRepository.updateThemeName('dark');
+      final theme = await ConfigRepository.getThemeName();
       expect(theme, 'dark');
     });
 

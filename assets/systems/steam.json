@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "steam",
+    "multidisc": false,
     "name": "Steam",
     "neosync": {
       "sync": false,
@@ -32,7 +33,7 @@
     {
       "name": "Standalone GameNative (Steam)",
       "unique_id": "steam.app.gamenative.steam",
-      "default": true,
+      "default_standalone": true,
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: steamappid.",
       "platforms": {

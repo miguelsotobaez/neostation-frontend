@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "mo2",
+    "multidisc": false,
     "name": "Magnavox Odyssey 2",
     "short_name": "MO2",
     "details": {
@@ -17,7 +18,8 @@
       "mo2",
       "odyssey2",
       "videopac",
-      "Magnavox Odyssey 2"
+      "Magnavox Odyssey 2",
+      "odyssey-2"
     ],
     "colors": [
       "#212121",
@@ -32,6 +34,7 @@
   "emulators": [
     {
       "name": "RetroArch64 O2EM",
+      "default_core": true,
       "unique_id": "mo2.ra64.o2em",
       "description": "Supported extensions: bin.",
       "is_retroachievements_compatible": true,
@@ -43,6 +46,7 @@
     },
     {
       "name": "RetroArch32 O2EM",
+      "default_core": true,
       "unique_id": "mo2.ra32.o2em",
       "description": "Supported extensions: bin.",
       "is_retroachievements_compatible": true,
@@ -54,7 +58,7 @@
     },
     {
       "name": "RetroArch O2EM",
-      "default": true,
+      "default_core": true,
       "unique_id": "mo2.ra.o2em",
       "description": "Supported extensions: bin.",
       "is_retroachievements_compatible": true,

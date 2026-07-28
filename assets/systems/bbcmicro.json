@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "bbcmicro",
+    "multidisc": false,
     "name": "BBC Micro",
     "short_name": "BBCM",
     "details": {
@@ -30,6 +31,7 @@
   "emulators": [
     {
       "name": "RetroArch64 b2",
+      "default_core": true,
       "unique_id": "bbcmicro.ra64.b2",
       "description": "Supported extensions: ssd, dsd.",
       "is_retroachievements_compatible": false,
@@ -41,6 +43,7 @@
     },
     {
       "name": "RetroArch32 b2",
+      "default_core": true,
       "unique_id": "bbcmicro.ra32.b2",
       "description": "Supported extensions: ssd, dsd.",
       "is_retroachievements_compatible": false,
@@ -52,7 +55,7 @@
     },
     {
       "name": "RetroArch b2",
-      "default": true,
+      "default_core": true,
       "unique_id": "bbcmicro.ra.b2",
       "description": "Supported extensions: ssd, dsd.",
       "is_retroachievements_compatible": false,

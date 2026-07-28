@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "jag",
+    "multidisc": false,
     "name": "Atari Jaguar",
     "short_name": "Jaguar",
     "details": {
@@ -65,6 +66,7 @@
     },
     {
       "name": "RetroArch64 Virtual Jaguar",
+      "default_core": true,
       "unique_id": "jag.ra64.virtualjaguar",
       "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -76,6 +78,7 @@
     },
     {
       "name": "RetroArch32 Virtual Jaguar",
+      "default_core": true,
       "unique_id": "jag.ra32.virtualjaguar",
       "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -87,7 +90,7 @@
     },
     {
       "name": "RetroArch Virtual Jaguar",
-      "default": true,
+      "default_core": true,
       "unique_id": "jag.ra.virtualjaguar",
       "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
       "is_retroachievements_compatible": true,

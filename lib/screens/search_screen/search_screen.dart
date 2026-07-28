@@ -588,7 +588,7 @@ class _SearchScreenState extends State<SearchScreen> {
         builder: (_) => SystemGamesList(
           system: system,
           fileProvider: fileProvider,
-          initialGameRomname: game.romname,
+          initialRomPath: game.romPath,
         ),
       ),
     );

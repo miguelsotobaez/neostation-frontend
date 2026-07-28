@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:neostation/utils/color.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:neostation/l10n/app_locale.dart';
+
+import '../themes/corner_radii.dart';
 
 /// Base footer class that eliminates duplicated code between games_footer and systems_footer.
 abstract class CoreFooter extends StatefulWidget {
@@ -136,7 +139,7 @@ class GamepadControl extends StatelessWidget {
     // Default to a subtle semi-transparent style when no background color is provided.
     final Color buttonBg =
         backgroundColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.1);
-    final Color contentColor = theme.colorScheme.onPrimary;
+    final Color contentColor = textColor ?? theme.colorScheme.onPrimary;
 
     return Material(
       color: Colors.transparent,
@@ -145,17 +148,23 @@ class GamepadControl extends StatelessWidget {
         canRequestFocus: false,
         splashColor: contentColor.withValues(alpha: 0.2),
         highlightColor: Colors.transparent,
-        borderRadius: BorderRadius.circular(6.r),
+        borderRadius:
+            Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+            BorderRadius.circular(6.r),
+
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 4.r),
           decoration: BoxDecoration(
             color: gradient == null ? buttonBg : null,
             gradient: gradient,
-            borderRadius: BorderRadius.circular(6.r),
+            borderRadius:
+                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+                BorderRadius.circular(6.r),
+            border: Border.all(color: lightenColor(buttonBg, 0.05), width: 1.r),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 2.r,
+                color: theme.colorScheme.shadow.withValues(alpha: 0.1),
+                blurRadius: 4.r,
                 offset: Offset(2.0.r, 2.0.r),
               ),
             ],

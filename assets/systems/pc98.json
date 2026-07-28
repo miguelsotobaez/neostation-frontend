@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pc98",
+    "multidisc": false,
     "name": "NEC PC-9801",
     "short_name": "PC98",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "pc98",
       "NEC PC-98",
-      "PC-98"
+      "PC-98",
+      "pc-9800-series"
     ],
     "colors": [
       "#E0E0E0",
@@ -48,6 +50,7 @@
   "emulators": [
     {
       "name": "Retroarch64 NP2kai",
+      "default_core": true,
       "unique_id": "pc98.ra64.np2kai",
       "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, hdn, nhd, tfd, thd, xdf, zip.",
       "is_retroachievements_compatible": false,
@@ -70,6 +73,7 @@
     },
     {
       "name": "Retroarch32 NP2kai",
+      "default_core": true,
       "unique_id": "pc98.ra32.np2kai",
       "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, hdn, nhd, tfd, thd, xdf, zip.",
       "is_retroachievements_compatible": false,
@@ -92,6 +96,7 @@
     },
     {
       "name": "Retroarch NP2kai",
+      "default_core": true,
       "unique_id": "pc98.ra.np2kai",
       "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, hdn, nhd, tfd, thd, xdf, zip.",
       "is_retroachievements_compatible": false,

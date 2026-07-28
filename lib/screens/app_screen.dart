@@ -16,8 +16,7 @@ import 'neo_sync_screen/login_screen/neo_sync_content.dart';
 import 'neo_sync_screen/neo_sync_tab.dart';
 import '../widgets/scraper_content.dart';
 import 'package:neostation/services/game_service.dart';
-import 'package:neostation/services/android_service.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
 import 'dart:async';
 import 'dart:io';
@@ -59,7 +58,7 @@ class AppNavigation {
   }
 }
 
-class AppScreenState extends State<AppScreen> {
+class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   static final _log = LoggerService.instance;
 
   /// Currently active top-level navigation tab index.
@@ -77,18 +76,29 @@ class AppScreenState extends State<AppScreen> {
   /// Static reference to the currently active instance for global access.
   static AppScreenState? _currentInstance;
 
-  PaletteProvider? _themeProvider;
+  ThemeProvider? _themeProvider;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _themeProvider = Provider.of<PaletteProvider>(context, listen: false);
+    // Attach the secondary-display theme sync here (not in initState): the
+    // provider isn't resolvable until didChangeDependencies runs, so an
+    // initState addListener would silently no-op on a null _themeProvider and
+    // the secondary display would never pick up theme changes until an
+    // unrelated re-push. Re-bind if the provider instance ever changes.
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (!identical(themeProvider, _themeProvider)) {
+      _themeProvider?.removeListener(_onThemeChanged);
+      _themeProvider = themeProvider;
+      _themeProvider!.addListener(_onThemeChanged);
+    }
   }
 
   @override
   void initState() {
     super.initState();
     _currentInstance = this;
+    WidgetsBinding.instance.addObserver(this);
 
     _tabContents = [
       SystemContent(), // Tab 0: Game Systems
@@ -109,6 +119,7 @@ class AppScreenState extends State<AppScreen> {
       onSelectItem: _selectCurrentItem,
       onSettings: _handleSettings,
       onBack: _handleBackNavigation,
+      onXButton: _handleXButton,
     );
 
     // Asynchronous initialization of navigation and update checking.
@@ -126,8 +137,8 @@ class AppScreenState extends State<AppScreen> {
       _runUpdateSequence();
     });
 
-    // Synchronize theme changes with secondary displays (e.g., dual-screen hardware).
-    _themeProvider?.addListener(_onThemeChanged);
+    // Secondary-display theme sync is attached in didChangeDependencies, where
+    // the ThemeProvider is first resolvable (see note there).
   }
 
   /// Runs the sequenced update flow: updates first, then one ROM scan.
@@ -150,62 +161,73 @@ class AppScreenState extends State<AppScreen> {
   Future<void> _performUpdateSequence(
     SqliteConfigProvider configProvider,
   ) async {
-    bool systemsUpdated = false;
+    // Fire the deferred startup scan IMMEDIATELY — it must never be gated behind
+    // the network update checks below. On a freshly rebooted device the network
+    // is often not up yet, so awaiting those checks (each guarded by ~10s
+    // timeouts) left the Systems tab completely blank until they timed out. The
+    // scan flips isScanning/isLoading, so the user sees a spinner then content.
+    final startupScanPending = configProvider.consumeStartupScan();
+    _log.i(
+      'AppScreen: startupScanPending=$startupScanPending, mounted=$mounted',
+    );
+    Future<void>? initialScan;
+    if (startupScanPending && mounted) {
+      // A default launcher may be started before removable storage has mounted.
+      // Let the startup scan wait for it rather than interpreting an empty SD
+      // card as a library whose ROMs were deleted.
+      initialScan = configProvider.scanSystems(waitForAndroidStorage: true);
+      _log.i('AppScreen: initial startup scan started');
+    }
 
+    unawaited(_fixRetroarchAndroidDefault());
+
+    // App update check (network) — runs alongside the scan, no longer blocking it.
     if (configProvider.config.autoUpdateApp) {
       final appUpdateResult = await _checkAndShowAppUpdate();
       if (appUpdateResult == true) {
-        // User chose Update Now — consume scan flag but don't scan now.
-        // User will restart after updating.
-        configProvider.consumeStartupScan();
+        // User chose Update Now and will restart; nothing more to do here.
         return;
       }
     }
 
+    // Systems/emulator config update check (network).
     if (configProvider.config.autoUpdateSystems) {
-      systemsUpdated = await _checkAndShowSystemsUpdate(configProvider);
+      final systemsUpdated = await _checkAndShowSystemsUpdate(configProvider);
+      if (systemsUpdated && mounted) {
+        // New definitions were applied — re-scan to reflect them. Wait for the
+        // initial scan to settle first, since scanSystems ignores concurrent calls.
+        await initialScan;
+        if (mounted) configProvider.scanSystems();
+      }
     }
-
-    final startupScanPending = configProvider.consumeStartupScan();
-    if ((systemsUpdated || startupScanPending) &&
-        configProvider.hasRomFolder &&
-        mounted) {
-      configProvider.scanSystems();
-    }
-
-    unawaited(_fixRetroarchAndroidDefault());
   }
 
   /// Detects which RetroArch variant the user has installed on Android and sets
   /// it as the default package for all systems. Priority order:
   ///   com.retroarch.aarch64 > com.retroarch > com.retroarch.ra32
+  ///
+  /// If no RetroArch is installed, clears RetroArch defaults so standalone
+  /// defaults (marked with [default_standalone] in JSON) take effect.
   Future<void> _fixRetroarchAndroidDefault() async {
     if (!Platform.isAndroid) return;
 
     try {
-      final packages = await EmulatorRepository.getAndroidRetroArchPackages();
-      if (packages.isEmpty) return;
+      // Already filtered to installed variants and ordered best-first, so the
+      // first entry is the one to promote. Only promote a variant that is
+      // actually installed: falling back to an uninstalled package would
+      // silently replace working standalone defaults with a broken core one.
+      final installed =
+          await EmulatorRepository.getInstalledAndroidRetroArchPackages();
 
-      const priorityOrder = [
-        'com.retroarch.aarch64',
-        'com.retroarch',
-        'com.retroarch.ra32',
-      ];
-
-      String? chosenPackage;
-      for (final pkg in priorityOrder) {
-        if (packages.contains(pkg) &&
-            await AndroidService.isPackageInstalled(pkg)) {
-          chosenPackage = pkg;
-          break;
-        }
+      if (installed.isEmpty) {
+        await EmulatorRepository.clearRetroArchDefaultsForAndroid();
+        _log.i(
+          'Android: No RetroArch variant installed; cleared RA defaults so standalone defaults remain active',
+        );
+        return;
       }
 
-      chosenPackage ??= priorityOrder.firstWhere(
-        (p) => packages.contains(p),
-        orElse: () => 'com.retroarch.aarch64',
-      );
-
+      final chosenPackage = installed.first;
       await EmulatorRepository.fixRetroArchDefaultForAndroid(chosenPackage);
       _log.i('Android: Set RetroArch default package to $chosenPackage');
     } catch (e) {
@@ -259,10 +281,30 @@ class AppScreenState extends State<AppScreen> {
   @override
   void dispose() {
     _currentInstance = null;
+    WidgetsBinding.instance.removeObserver(this);
     _themeProvider?.removeListener(_onThemeChanged);
     GamepadNavigationManager.popLayer('app_screen');
     _gamepadNav.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // When NeoStation's own UI regains focus and no game is actually running,
+    // clear any stale Now Playing state left over from quitting mid-game. Use
+    // isGameLaunchInProgress (not isGameLaunched) so a transient resume during
+    // the launch dialog/handoff window — before _registerGameLaunch flips
+    // isGameLaunched ~2s in — can't clobber the Now Playing state we just
+    // pushed. This was the PSX/GameCube "no Now Playing" race.
+    if (state == AppLifecycleState.resumed &&
+        Platform.isAndroid &&
+        !GameService.isGameLaunchInProgress) {
+      Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      ).resetSecondaryInGameState();
+    }
   }
 
   /// Synchronizes visual state with secondary display hardware (Android OEM targets).
@@ -278,9 +320,9 @@ class AppScreenState extends State<AppScreen> {
 
     secondaryState.updateState(
       isOled: themeProvider.isOled,
-      backgroundColor: themeProvider.currentPalette.scaffoldBackgroundColor
+      backgroundColor: themeProvider.currentTheme.scaffoldBackgroundColor
           .toARGB32(),
-      themeName: themeProvider.currentPaletteName,
+      themeName: themeProvider.currentThemeName,
     );
 
     _log.i(
@@ -338,28 +380,36 @@ class AppScreenState extends State<AppScreen> {
     }
   }
 
-  void _navigateContentDown() {
-    if (_selectedTabIndex == 0) return;
+  /// Returns whether the selection moved, so the gamepad handler can suppress
+  /// the nav sound when repeating against the start/end of a list.
+  bool _navigateContentDown() {
+    if (_selectedTabIndex == 0) return true;
+    if (_selectedTabIndex == 2) {
+      return RAContent.navigateDown();
+    }
     if (_selectedTabIndex == 3) {
       NewScraperOptionsScreen.navigateDown();
-      return;
+      return true;
     }
     if (_selectedTabIndex == 4) {
-      NewSettingsScreen.navigateDown();
-      return;
+      return NewSettingsScreen.navigateDown();
     }
+    return true;
   }
 
-  void _navigateContentUp() {
-    if (_selectedTabIndex == 0) return;
+  bool _navigateContentUp() {
+    if (_selectedTabIndex == 0) return true;
+    if (_selectedTabIndex == 2) {
+      return RAContent.navigateUp();
+    }
     if (_selectedTabIndex == 3) {
       NewScraperOptionsScreen.navigateUp();
-      return;
+      return true;
     }
     if (_selectedTabIndex == 4) {
-      NewSettingsScreen.navigateUp();
-      return;
+      return NewSettingsScreen.navigateUp();
     }
+    return true;
   }
 
   void _handleSettings() {
@@ -381,6 +431,14 @@ class AppScreenState extends State<AppScreen> {
       NewScraperOptionsScreen.selectCurrent();
     } else if (_selectedTabIndex == 4) {
       NewSettingsScreen.selectCurrent();
+    }
+  }
+
+  /// X button: on the Settings tab this deletes the focused item (used to remove
+  /// imported themes). No-op elsewhere.
+  void _handleXButton() {
+    if (_selectedTabIndex == 4) {
+      NewSettingsScreen.deleteCurrent();
     }
   }
 
@@ -419,11 +477,8 @@ class AppScreenState extends State<AppScreen> {
       ).secondaryDisplayState;
       if (secondaryState == null) return;
 
-      final paletteProvider = Provider.of<PaletteProvider>(
-        context,
-        listen: false,
-      );
-      final isOled = paletteProvider.isOled;
+      final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+      final isOled = themeProvider.isOled;
 
       if (index == 0) {
         return; // System tab manages its own secondary display state.
@@ -449,9 +504,9 @@ class AppScreenState extends State<AppScreen> {
         systemName: tabName,
         useFluidShader: true,
         isOled: isOled,
-        backgroundColor: paletteProvider.currentPalette.scaffoldBackgroundColor
+        backgroundColor: themeProvider.currentTheme.scaffoldBackgroundColor
             .toARGB32(),
-        themeName: paletteProvider.currentPaletteName,
+        themeName: themeProvider.currentThemeName,
         isGameSelected: false,
         clearSystemLogo: true,
         clearSystemBackground: true,
@@ -477,8 +532,8 @@ class AppScreenState extends State<AppScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SqliteConfigProvider, PaletteProvider>(
-      builder: (context, configProvider, paletteProvider, child) {
+    return Consumer2<SqliteConfigProvider, ThemeProvider>(
+      builder: (context, configProvider, themeProvider, child) {
         return PopScope(
           canPop: false, // Intercept hardware back button to maintain app flow.
           child: Scaffold(

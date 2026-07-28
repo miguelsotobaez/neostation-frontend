@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wasm4",
+    "multidisc": false,
     "name": "WASM-4",
     "short_name": "WASM-4",
     "details": {
@@ -28,6 +29,7 @@
   "emulators": [
     {
       "name": "RetroArch64 WASM-4",
+      "default_core": true,
       "unique_id": "wasm4.ra64.wasm4",
       "description": "Supported extensions: wasm.",
       "is_retroachievements_compatible": true,
@@ -39,6 +41,7 @@
     },
     {
       "name": "RetroArch32 WASM-4",
+      "default_core": true,
       "unique_id": "wasm4.ra32.wasm4",
       "description": "Supported extensions: wasm.",
       "is_retroachievements_compatible": true,
@@ -50,7 +53,7 @@
     },
     {
       "name": "RetroArch WASM-4",
-      "default": true,
+      "default_core": true,
       "unique_id": "wasm4.ra.wasm4",
       "description": "Supported extensions: wasm.",
       "is_retroachievements_compatible": true,

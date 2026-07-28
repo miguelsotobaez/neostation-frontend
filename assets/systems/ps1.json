@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ps1",
+    "multidisc": true,
     "name": "Sony PlayStation",
     "short_name": "PS1",
     "details": {
@@ -113,6 +114,7 @@
     },
     {
       "name": "RetroArch64 Beetle PSX HW",
+      "default_core": true,
       "unique_id": "ps1.ra64.mednafen_psx_hw",
       "description": "Supported extensions: cue, toc, m3u, ccd, exe, pbp, chd.",
       "is_retroachievements_compatible": true,
@@ -168,6 +170,7 @@
     },
     {
       "name": "RetroArch32 Beetle PSX HW",
+      "default_core": true,
       "unique_id": "ps1.ra32.mednafen_psx_hw",
       "description": "Supported extensions: cue, toc, m3u, ccd, exe, pbp, chd.",
       "is_retroachievements_compatible": true,
@@ -223,7 +226,7 @@
     },
     {
       "name": "RetroArch Beetle PSX HW",
-      "default": true,
+      "default_core": true,
       "unique_id": "ps1.ra.mednafen_psx_hw",
       "description": "Supported extensions: cue, toc, m3u, ccd, exe, pbp, chd.",
       "is_retroachievements_compatible": true,

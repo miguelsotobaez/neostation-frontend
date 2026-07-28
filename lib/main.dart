@@ -2,7 +2,7 @@ import 'package:neostation/providers/menu_app_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/providers/file_provider.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
@@ -14,6 +14,7 @@ import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/sync/providers/neo_sync_adapter.dart';
 import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
@@ -23,6 +24,7 @@ import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +33,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:fvp/fvp.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
@@ -38,7 +41,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:neostation/screens/secondary_screen/secondary_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
-// Política personalizada para deshabilitar navegación por teclado
+// Politica personalizada para deshabilitar navegacion por teclado
 class NoFocusTraversalPolicy extends FocusTraversalPolicy {
   @override
   FocusNode? findFirstFocus(
@@ -109,7 +112,7 @@ class ToggleFullscreenAction extends Action<ToggleFullscreenIntent> {
     } else if (Platform.isMacOS) {
       final isFullscreen = await windowManager.isFullScreen();
       LoggerService.instance.i(
-        '🖥️ Toggle fullscreen (macOS): current=$isFullscreen, setting=${!isFullscreen}',
+        'Toggle fullscreen (macOS): current=$isFullscreen, setting=${!isFullscreen}',
       );
       await windowManager.setFullScreen(!isFullscreen);
 
@@ -176,15 +179,41 @@ Future<void> _configureImageCache() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Render immediately. Cold boots can wait for removable storage before the
+  // database opens, and without this lightweight root Android shows only a
+  // blank launch surface for that entire interval.
+  runApp(const StartupLoadingApp());
+  await WidgetsBinding.instance.endOfFrame;
+
   await _configureImageCache();
 
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
 
-  // Inicializar window_manager para desktop (solo Windows y macOS)
+  // Resolve the user-data location before anything reads it, so the cold-boot
+  // wait happens once (behind the loading screen) rather than once per caller.
+  if (Platform.isAndroid) {
+    await _awaitUserDataStorage();
+  }
+
+  // Inicializar window_manager para desktop con tamano minimo 640x480
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-    // Cargar configuración de fullscreen
+    await windowManager.ensureInitialized();
+
+    WindowOptions windowOptions = WindowOptions(
+      size: const Size(1280, 720),
+      alwaysOnTop: false,
+      skipTaskbar: false,
+      minimumSize: const Size(640, 480),
+    );
+
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+
+    // Cargar configuracion de fullscreen
     bool isFullscreen = true;
     try {
       final config = await ConfigRepository.getUserConfig();
@@ -199,41 +228,14 @@ void main() async {
       if (Platform.isWindows || Platform.isLinux) {
         FullScreenWindow.setFullScreen(true);
       } else if (Platform.isMacOS) {
-        LoggerService.instance.i('Initializing window manager...');
-        await windowManager.ensureInitialized();
-        WindowOptions windowOptions = WindowOptions(
-          size: const Size(1280, 720),
-          alwaysOnTop: false,
-          skipTaskbar: false,
-          minimumSize: const Size(640, 480),
-          fullScreen: isFullscreen,
-        );
-
-        windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.show();
-          await windowManager.focus();
-          await windowManager.setFullScreen(true);
-        });
+        await windowManager.setFullScreen(true);
       }
       FullscreenNotifier().notifyFullscreenChanged(true);
     } else {
       if (Platform.isWindows || Platform.isLinux) {
         FullScreenWindow.setFullScreen(false);
       } else if (Platform.isMacOS) {
-        await windowManager.ensureInitialized();
-        WindowOptions windowOptions = WindowOptions(
-          size: const Size(1280, 720),
-          alwaysOnTop: false,
-          skipTaskbar: false,
-          minimumSize: const Size(640, 480),
-          fullScreen: isFullscreen,
-        );
-
-        windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.show();
-          await windowManager.focus();
-          await windowManager.setFullScreen(false);
-        });
+        await windowManager.setFullScreen(false);
       }
       FullscreenNotifier().notifyFullscreenChanged(false);
     }
@@ -244,7 +246,7 @@ void main() async {
   // Inicializar fvp para soporte extendido de video (Windows, Linux, etc.)
   registerWith();
 
-  // Configurar manejo global de errores para evitar crashesß
+  // Configurar manejo global de errores para evitar crashes
   FlutterError.onError = (FlutterErrorDetails details) {
     // Para otros errores, usar el handler por defecto en debug
     if (details.stack != null) {
@@ -274,7 +276,7 @@ void main() async {
     log.e('Error initializing FileProvider: $e');
   }
 
-  // Inicializar localización con idioma persistido
+  // Inicializar localizacion con idioma persistido
   String initLang = 'en';
   try {
     final rawConfig = await ConfigRepository.getUserConfig();
@@ -298,6 +300,7 @@ void main() async {
       MapLocale('it', AppLocale.it),
       MapLocale('id', AppLocale.id),
       MapLocale('ja', AppLocale.ja),
+      MapLocale('ko', AppLocale.ko),
     ],
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
@@ -306,7 +309,7 @@ void main() async {
   final authService = AuthService();
   await authService.initialize();
 
-  // Inicializar providers críticos
+  // Inicializar providers criticos
   final sqliteConfigProvider = SqliteConfigProvider();
   final sqliteDatabaseProvider = SqliteDatabaseProvider();
 
@@ -314,7 +317,14 @@ void main() async {
     // 1. Inicializar ConfigProvider primero (sincroniza sistemas)
     await sqliteConfigProvider.initialize();
 
-    // 2. Inicializar DatabaseProvider (carga juegos basándose en sistemas sincronizados)
+    // Seed the game legend visibility from persisted config and wire its
+    // persistence sink so the Select + B toggle survives restarts/upgrades.
+    GameLegendVisibility.bind(
+      initialHidden: sqliteConfigProvider.config.legendHidden,
+      persist: sqliteConfigProvider.updateLegendHidden,
+    );
+
+    // 2. Inicializar DatabaseProvider (carga juegos basandose en sistemas sincronizados)
     await sqliteDatabaseProvider.initialize(
       romFolders: sqliteConfigProvider.config.romFolders,
       availableSystems: sqliteConfigProvider.availableSystems,
@@ -330,7 +340,7 @@ void main() async {
   if (Platform.isAndroid) {
     try {
       GameService.initializeAndroidGameListener();
-      // Verificar si hay una sesión de juego pendiente (app fue matada)
+      // Verificar si hay una sesion de juego pendiente (app fue matada)
       await GameService.checkPendingGameSession();
     } catch (e) {
       log.e('Error initializing GameService: $e');
@@ -371,10 +381,280 @@ void main() async {
   });
 }
 
+/// Startup strings for the current device locale.
+///
+/// The startup screens run before [FlutterLocalization] is initialized (the
+/// saved app language lives in the database, which may still be on a mounting
+/// SD card), so they read the raw locale maps directly. Unsupported device
+/// locales fall back to English — the same default the app itself uses — and
+/// missing keys degrade to an empty string rather than crashing the very
+/// first frame.
+Map<String, dynamic> _startupStrings() {
+  final locale = WidgetsBinding.instance.platformDispatcher.locale;
+  final languageTag = locale.toLanguageTag().replaceAll('-', '_');
+  const translations = <String, Map<String, dynamic>>{
+    'en': appLocaleEn,
+    'es': appLocaleEs,
+    'pt': appLocalePt,
+    'ru': appLocaleRu,
+    'zh': appLocaleZh,
+    'zh_Hant': appLocaleZhHant,
+    'fr': appLocaleFr,
+    'de': appLocaleDe,
+    'it': appLocaleIt,
+    'id': appLocaleId,
+    'ja': appLocaleJa,
+    'ko': appLocaleKo,
+  };
+  return translations[languageTag] ??
+      translations[locale.languageCode] ??
+      appLocaleEn;
+}
+
+String _startupString(String key) {
+  final value = _startupStrings()[key];
+  return value is String ? value : '';
+}
+
+/// Shared chrome for the pre-initialization screens: logo, wordmark and a
+/// caller-supplied status area.
+class _StartupScaffold extends StatelessWidget {
+  const _StartupScaffold({required this.children, this.onKeyEvent});
+
+  final List<Widget> children;
+
+  /// Raw key handler used by the error screen. The gamepad navigation manager
+  /// is not running this early, so gamepad buttons are read straight from the
+  /// key events instead.
+  final KeyEventResult Function(KeyEvent)? onKeyEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF090B10),
+        body: Focus(
+          autofocus: onKeyEvent != null,
+          onKeyEvent: onKeyEvent == null
+              ? null
+              : (_, event) => onKeyEvent!(event),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/logo_transparent.png',
+                    width: 112,
+                    height: 112,
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'NeoStation',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ...children,
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lightweight root displayed while the app waits for its persisted data.
+class StartupLoadingApp extends StatelessWidget {
+  const StartupLoadingApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return _StartupScaffold(
+      children: [
+        const SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            color: Color(0xFF70C8FF),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Text(
+            _startupString(AppLocale.startupLoading),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFFC4CBD6), fontSize: 16),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown when the configured user-data volume never appeared. Without this the
+/// failure was swallowed by the catch-alls in `main()` and the app booted onto
+/// an empty database, looking freshly installed.
+class StartupStorageErrorApp extends StatelessWidget {
+  const StartupStorageErrorApp({
+    super.key,
+    required this.storagePath,
+    required this.onRetry,
+    required this.onUseDefault,
+  });
+
+  final String? storagePath;
+  final VoidCallback onRetry;
+  final VoidCallback onUseDefault;
+
+  KeyEventResult _handleKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.gameButtonA ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      onRetry();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.gameButtonB ||
+        key == LogicalKeyboardKey.escape) {
+      onUseDefault();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _StartupScaffold(
+      onKeyEvent: _handleKey,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _startupString(AppLocale.startupStorageUnavailable),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFC4CBD6), fontSize: 16),
+              ),
+              if (storagePath != null && storagePath!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  storagePath!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF8A93A3),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    onPressed: onRetry,
+                    child: Text(_startupString(AppLocale.startupStorageRetry)),
+                  ),
+                  const SizedBox(width: 16),
+                  TextButton(
+                    onPressed: onUseDefault,
+                    child: Text(
+                      _startupString(AppLocale.startupStorageUseDefault),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Resolves the user-data location once, up front, while the loading screen is
+/// on screen.
+///
+/// [ConfigService.getUserDataPath] has a dozen call sites; before this, each
+/// one could serially block for the full cold-boot timeout. Doing it here means
+/// the wait happens exactly once and its failure is visible to the user
+/// instead of being degraded into an empty library by downstream catch-alls.
+Future<void> _awaitUserDataStorage() async {
+  while (!await ConfigService.ensureUserDataStorageReady()) {
+    final decision = Completer<void>();
+    var useDefault = false;
+    runApp(
+      StartupStorageErrorApp(
+        storagePath: ConfigService.unavailableStoragePath,
+        onRetry: () {
+          ConfigService.resetStorageAvailability();
+          if (!decision.isCompleted) decision.complete();
+        },
+        onUseDefault: () {
+          useDefault = true;
+          if (!decision.isCompleted) decision.complete();
+        },
+      ),
+    );
+    await decision.future;
+    runApp(const StartupLoadingApp());
+    if (useDefault) {
+      ConfigService.continueWithDefaultUserDataPath();
+      return;
+    }
+  }
+}
+
 @pragma('vm:entry-point')
-void subDisplay() {
+Future<void> subDisplay() async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint('--- [SECONDARY ENGINE] subDisplay signal received ---');
+
+  // The secondary display runs in its own engine/isolate, so it must set up
+  // localization independently — otherwise AppLocale.getString() falls back to
+  // raw keys here. Mirror the persisted-language init done in main().
+  String initLang = 'en';
+  try {
+    final rawConfig = await ConfigRepository.getUserConfig();
+    if (rawConfig != null && rawConfig['app_language'] != null) {
+      initLang = rawConfig['app_language'].toString();
+    }
+  } catch (e) {
+    debugPrint('Secondary display could not load saved language: $e');
+  }
+  await FlutterLocalization.instance.ensureInitialized();
+  FlutterLocalization.instance.init(
+    mapLocales: [
+      MapLocale('en', AppLocale.en),
+      MapLocale('es', AppLocale.es),
+      MapLocale('pt', AppLocale.pt),
+      MapLocale('ru', AppLocale.ru),
+      MapLocale('zh', AppLocale.zh),
+      MapLocale('zh_Hant', AppLocale.zhHant),
+      MapLocale('fr', AppLocale.fr),
+      MapLocale('de', AppLocale.de),
+      MapLocale('it', AppLocale.it),
+      MapLocale('id', AppLocale.id),
+      MapLocale('ja', AppLocale.ja),
+      MapLocale('ko', AppLocale.ko),
+    ],
+    initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
+  );
+
   runApp(const SecondaryScreen());
 }
 
@@ -431,6 +711,12 @@ class _MyAppState extends State<MyApp> {
     FlutterLocalization.instance.onTranslatedLanguage = (Locale? locale) {
       if (mounted) setState(() => _locale = locale);
     };
+    // Once the main UI has painted its first frame, tell the secondary display
+    // the app is ready so it can slide the app dock into place (rather than
+    // showing it fully-formed while the app is still cold-starting).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.sqliteConfigProvider.markAppReady();
+    });
   }
 
   @override
@@ -447,18 +733,31 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider.value(value: SyncManager.instance),
         ChangeNotifierProvider(create: (context) => BillingService()),
         ChangeNotifierProvider(create: (context) => NotificationService()),
-        ChangeNotifierProvider(create: (context) => PaletteProvider()),
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
         ChangeNotifierProvider(create: (context) => ScrapingProvider()),
         ChangeNotifierProvider(
+          // Eager (not lazy): auto-login must run at startup so RA is connected
+          // regardless of which screen is shown first. Otherwise launching a
+          // game straight from the systems/recent screen (which never reads the
+          // provider) would find RA disconnected and skip the secondary panel.
+          lazy: false,
           create: (context) => RetroAchievementsProvider()..initialize(),
         ),
         ChangeNotifierProvider(create: (context) => SystemBackgroundProvider()),
         ChangeNotifierProvider(
+          // Eager: the theme manifest is a network fetch, and during first-run
+          // setup the wizard's art-pack step is the ONLY consumer of this
+          // provider. A lazy create would not start loadThemes() until that
+          // final step renders, leaving `themes` empty if the user advances
+          // before the fetch resolves — the art pack then silently fails to
+          // apply. Starting at launch gives the fetch the whole wizard to
+          // complete.
+          lazy: false,
           create: (context) => NeoAssetsProvider()..init(),
         ),
       ],
-      child: Consumer<PaletteProvider>(
-        builder: (context, paletteProvider, child) {
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
           return ScreenUtilInit(
             designSize: const Size(640, 480),
             minTextAdapt: true,
@@ -501,9 +800,9 @@ class _MyAppState extends State<MyApp> {
                           child: child!,
                         );
                       },
-                      theme: paletteProvider.currentPalette.copyWith(
+                      theme: themeProvider.currentTheme.copyWith(
                         textTheme: GoogleFonts.antaTextTheme(
-                          paletteProvider.currentPalette.textTheme,
+                          themeProvider.currentTheme.textTheme,
                         ),
                         iconTheme: const IconThemeData(fill: 1.0),
                         visualDensity: VisualDensity.adaptivePlatformDensity,

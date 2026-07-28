@@ -17,12 +17,12 @@ class ConfigRepository {
   static Future<Map<String, dynamic>?> getUserConfig() =>
       SqliteService.getUserConfig();
 
-  // ── Palette settings ──────────────────────────────────────────────────────
+  // ── Theme settings ──────────────────────────────────────────────────────
 
-  static Future<String> getPaletteName() => SqliteService.getPaletteName();
+  static Future<String> getThemeName() => SqliteService.getThemeName();
 
-  static Future<void> updatePaletteName(String name) =>
-      SqliteService.updatePaletteName(name);
+  static Future<void> updateThemeName(String name) =>
+      SqliteService.updateThemeName(name);
 
   // ── Active asset theme ────────────────────────────────────────────────────
 

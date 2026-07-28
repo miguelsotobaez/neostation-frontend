@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "epic",
+    "multidisc": false,
     "name": "Epic Games",
     "neosync": {
       "sync": false,
@@ -32,7 +33,7 @@
     {
       "name": "Standalone GameNative (Epic Games)",
       "unique_id": "epic.app.gamenative.epic",
-      "default": true,
+      "default_standalone": true,
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: epicgame.",
       "platforms": {

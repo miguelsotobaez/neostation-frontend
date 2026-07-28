@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "lynx",
+    "multidisc": false,
     "name": "Atari Lynx",
     "short_name": "Lynx",
     "details": {
@@ -54,6 +55,7 @@
     },
     {
       "name": "RetroArch64 Handy",
+      "default_core": true,
       "unique_id": "lynx.ra64.handy",
       "description": "Supported extensions: lnx, o, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -87,6 +89,7 @@
     },
     {
       "name": "RetroArch32 Handy",
+      "default_core": true,
       "unique_id": "lynx.ra32.handy",
       "description": "Supported extensions: lnx, o, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -132,7 +135,7 @@
     },
     {
       "name": "RetroArch Handy",
-      "default": true,
+      "default_core": true,
       "unique_id": "lynx.ra.handy",
       "description": "Supported extensions: lnx, o, zip, 7z.",
       "is_retroachievements_compatible": true,

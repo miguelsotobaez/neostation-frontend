@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "chf",
+    "multidisc": false,
     "name": "Fairchild Channel F",
     "short_name": "CHF",
     "details": {
@@ -17,7 +18,8 @@
       "chf",
       "channelf",
       "FAIRCHILD",
-      "Fairchild Channel F"
+      "Fairchild Channel F",
+      "fairchild-channel-f"
     ],
     "colors": [
       "#F5F5F5",
@@ -33,6 +35,7 @@
   "emulators": [
     {
       "name": "RetroArch64 FreeChaF",
+      "default_core": true,
       "unique_id": "chf.ra64.freechaf",
       "description": "Supported extensions: chf, bin, zip.",
       "is_retroachievements_compatible": true,
@@ -44,6 +47,7 @@
     },
     {
       "name": "RetroArch32 FreeChaF",
+      "default_core": true,
       "unique_id": "chf.ra32.freechaf",
       "description": "Supported extensions: chf, bin, zip.",
       "is_retroachievements_compatible": true,
@@ -55,7 +59,7 @@
     },
     {
       "name": "RetroArch FreeChaF",
-      "default": true,
+      "default_core": true,
       "unique_id": "chf.ra.freechaf",
       "description": "Supported extensions: chf, bin, zip.",
       "is_retroachievements_compatible": true,

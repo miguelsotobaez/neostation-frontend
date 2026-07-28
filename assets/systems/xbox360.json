@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "xbox360",
+    "multidisc": true,
     "name": "Microsoft - XBox 360",
     "short_name": "XB360",
     "details": {
@@ -41,7 +42,7 @@
     },
     {
       "name": "AX360e (Free)",
-      "default": true,
+      "default_standalone": true,
       "unique_id": "xbox360.aenu.ax360e.free",
       "description": "Supported extensions: iso.",
       "is_retroachievements_compatible": false,

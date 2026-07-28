@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:sub_screen/shared_state_manager.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'secondary_achievement_item.dart';
 
 /// Data structure representing the current state of the secondary/bottom display.
 ///
@@ -39,6 +40,14 @@ class SecondaryDisplayStateData {
 
   /// Trigger value used to notify the secondary display of mute state changes.
   final int muteToggleTrigger;
+
+  /// Monotonic counter bumped by the secondary display to request a system
+  /// screenshot of the main screen. The main engine watches for increments.
+  final int screenshotTrigger;
+
+  /// Whether the screenshot accessibility service is granted. Pushed by the main
+  /// engine so the secondary display can hide the screenshot button when off.
+  final bool screenshotAccessEnabled;
 
   /// Solid background color for the secondary display.
   final int? backgroundColor;
@@ -97,6 +106,104 @@ class SecondaryDisplayStateData {
   /// Whether to optimize the secondary display for OLED panels (e.g., using pure blacks).
   final bool isOled;
 
+  /// Monotonic counter bumped whenever the current game's media is rewritten in
+  /// place (e.g. a re-scrape with forceOverwrite). The image paths stay the same
+  /// but their bytes change, so the secondary engine — which has its own image
+  /// cache and keys its widgets on the path — needs this to know it must evict
+  /// and re-decode rather than show the stale cached bitmap.
+  final int mediaRevision;
+
+  /// Whether the RetroAchievements panel should be rendered (in-game view).
+  final bool showAchievementPanel;
+
+  /// Condensed achievement list for the current game, or null when unavailable.
+  final List<SecondaryAchievementItem>? achievements;
+
+  /// Number of achievements the user has earned for the current game.
+  final int raEarned;
+
+  /// Total number of achievements available for the current game.
+  final int raTotal;
+
+  /// Points the user has earned for the current game.
+  final int raPoints;
+
+  /// Total points available for the current game.
+  final int raPointsTotal;
+
+  /// User completion percentage string for the current game (e.g. '50.00%').
+  final String? raCompletionPct;
+
+  /// Standardized RetroAchievements title for the current game.
+  final String? raGameTitle;
+
+  /// Ids of achievements earned during the most recent play session, used to
+  /// highlight/celebrate fresh unlocks when the user returns from the emulator.
+  final List<int>? newlyEarnedIds;
+
+  /// Whether an in-game session is active, gating the paged "Now Playing" /
+  /// achievements container on the secondary display. Independent of
+  /// [showAchievementPanel]: it is true for every launched game, even ones
+  /// without a RetroAchievements set.
+  final bool nowPlayingActive;
+
+  /// Whether the device's main screen is on. Bridged from a native
+  /// ACTION_SCREEN_ON/OFF receiver because the secondary FlutterEngine never
+  /// receives Android lifecycle callbacks. The Now Playing panel uses it to
+  /// freeze the live SESSION timer while the device sleeps. Defaults to true so
+  /// the timer runs until the first screen-off signal arrives.
+  final bool deviceScreenOn;
+
+  /// Display title of the launched game (real [GameModel.name]; the RA title
+  /// may differ or be null for non-RA games).
+  final String? gameTitle;
+
+  /// Absolute local path to the launched game's boxart, or null when missing.
+  final String? gameBoxart;
+
+  /// Total accumulated play time for the launched game, in seconds.
+  final int? playTimeSeconds;
+
+  /// When the launched game was last played, as milliseconds since epoch
+  /// ([DateTime] does not survive the JSON bridge), or null if never played.
+  final int? lastPlayedMillis;
+
+  /// Seconds of inactivity before the in-game Now Playing panel dims, or `0`
+  /// for "never dim". User setting, only meaningful while a secondary display
+  /// is active.
+  final int nowPlayingDimDelay;
+
+  /// How dark the Now Playing panel goes when dimmed, as a percentage 0–100
+  /// (0 = no dim, 100 = pure black). User setting.
+  final int nowPlayingDimLevel;
+
+  /// How much the game fanart/background art is dimmed behind the logo, as a
+  /// percentage 0–100 (0 = off). User setting, keeps the logo full brightness.
+  final int fanartDimLevel;
+
+  /// Package names occupying the Now Playing app dock, one per slot. Pushed by
+  /// the main engine; an empty string marks a free slot.
+  final List<String> dockApps;
+
+  /// Monotonic counter the secondary bumps when the user assigns or clears a
+  /// dock slot, signalling the main engine to persist [dockApps].
+  final int dockEditTrigger;
+
+  /// Whether the Now Playing app dock is shown. User setting, pushed by the
+  /// main engine.
+  final bool dockEnabled;
+
+  /// How many dock slots are visible (1–5). User setting, pushed by the main
+  /// engine; slots beyond it stay in [dockApps] but are hidden.
+  final int dockSlotCount;
+
+  /// Whether the main NeoStation UI has rendered its first frame and is ready
+  /// for use. Pushed by the main engine once, on cold start. The secondary
+  /// display holds the app dock off-screen until this flips true, then slides
+  /// it up — so the dock arrives as the main UI settles rather than popping in
+  /// while the app is still loading.
+  final bool appReady;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -108,6 +215,8 @@ class SecondaryDisplayStateData {
     this.isVideoMuted = false,
     this.hideBottomScreen = false,
     this.muteToggleTrigger = 0,
+    this.screenshotTrigger = 0,
+    this.screenshotAccessEnabled = false,
     this.backgroundColor,
     this.themeName,
     this.isSecondaryActive = false,
@@ -127,6 +236,37 @@ class SecondaryDisplayStateData {
     this.shaderColor2,
     this.useFluidShader = false,
     this.isOled = false,
+    this.mediaRevision = 0,
+    this.showAchievementPanel = false,
+    this.achievements,
+    this.raEarned = 0,
+    this.raTotal = 0,
+    this.raPoints = 0,
+    this.raPointsTotal = 0,
+    this.raCompletionPct,
+    this.raGameTitle,
+    this.newlyEarnedIds,
+    this.nowPlayingActive = false,
+    this.deviceScreenOn = true,
+    this.gameTitle,
+    this.gameBoxart,
+    this.playTimeSeconds,
+    this.lastPlayedMillis,
+    this.nowPlayingDimDelay = 5,
+    this.nowPlayingDimLevel = 100,
+    // Mirror the config default (fanart_dim_level DEFAULT 25). On first launch
+    // the native shared-state store is empty, so the initial WELCOME seed
+    // constructs a *fresh* data object and broadcasts it to the secondary
+    // engine before the real _config value is pushed. If this defaulted to 0,
+    // that first snapshot would render the system art undimmed until the later
+    // seed landed. Keeping it in sync with the config default (like
+    // nowPlayingDimLevel = 100 above) makes the 25% dim apply from frame one.
+    this.fanartDimLevel = 25,
+    this.dockApps = const ['', '', '', '', ''],
+    this.dockEditTrigger = 0,
+    this.dockEnabled = true,
+    this.dockSlotCount = 3,
+    this.appReady = false,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -146,6 +286,8 @@ class SecondaryDisplayStateData {
     bool? isVideoMuted,
     bool? hideBottomScreen,
     int? muteToggleTrigger,
+    int? screenshotTrigger,
+    bool? screenshotAccessEnabled,
     int? backgroundColor,
     String? themeName,
     bool? isSecondaryActive,
@@ -170,6 +312,38 @@ class SecondaryDisplayStateData {
     int? shaderColor2,
     bool? useFluidShader,
     bool? isOled,
+    int? mediaRevision,
+    bool? showAchievementPanel,
+    List<SecondaryAchievementItem>? achievements,
+    bool clearAchievements = false,
+    int? raEarned,
+    int? raTotal,
+    int? raPoints,
+    int? raPointsTotal,
+    String? raCompletionPct,
+    bool clearRaCompletionPct = false,
+    String? raGameTitle,
+    bool clearRaGameTitle = false,
+    List<int>? newlyEarnedIds,
+    bool clearNewlyEarnedIds = false,
+    bool? nowPlayingActive,
+    bool? deviceScreenOn,
+    String? gameTitle,
+    bool clearGameTitle = false,
+    String? gameBoxart,
+    bool clearGameBoxart = false,
+    int? playTimeSeconds,
+    bool clearPlayTimeSeconds = false,
+    int? lastPlayedMillis,
+    bool clearLastPlayed = false,
+    int? nowPlayingDimDelay,
+    int? nowPlayingDimLevel,
+    int? fanartDimLevel,
+    List<String>? dockApps,
+    int? dockEditTrigger,
+    bool? dockEnabled,
+    int? dockSlotCount,
+    bool? appReady,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -186,6 +360,9 @@ class SecondaryDisplayStateData {
       isVideoMuted: isVideoMuted ?? this.isVideoMuted,
       hideBottomScreen: hideBottomScreen ?? this.hideBottomScreen,
       muteToggleTrigger: muteToggleTrigger ?? this.muteToggleTrigger,
+      screenshotTrigger: screenshotTrigger ?? this.screenshotTrigger,
+      screenshotAccessEnabled:
+          screenshotAccessEnabled ?? this.screenshotAccessEnabled,
       backgroundColor: backgroundColor ?? this.backgroundColor,
       themeName: themeName ?? this.themeName,
       isSecondaryActive: isSecondaryActive ?? this.isSecondaryActive,
@@ -211,6 +388,40 @@ class SecondaryDisplayStateData {
       shaderColor2: shaderColor2 ?? this.shaderColor2,
       useFluidShader: useFluidShader ?? this.useFluidShader,
       isOled: isOled ?? this.isOled,
+      mediaRevision: mediaRevision ?? this.mediaRevision,
+      showAchievementPanel: showAchievementPanel ?? this.showAchievementPanel,
+      achievements: clearAchievements
+          ? null
+          : (achievements ?? this.achievements),
+      raEarned: raEarned ?? this.raEarned,
+      raTotal: raTotal ?? this.raTotal,
+      raPoints: raPoints ?? this.raPoints,
+      raPointsTotal: raPointsTotal ?? this.raPointsTotal,
+      raCompletionPct: clearRaCompletionPct
+          ? null
+          : (raCompletionPct ?? this.raCompletionPct),
+      raGameTitle: clearRaGameTitle ? null : (raGameTitle ?? this.raGameTitle),
+      newlyEarnedIds: clearNewlyEarnedIds
+          ? null
+          : (newlyEarnedIds ?? this.newlyEarnedIds),
+      nowPlayingActive: nowPlayingActive ?? this.nowPlayingActive,
+      deviceScreenOn: deviceScreenOn ?? this.deviceScreenOn,
+      gameTitle: clearGameTitle ? null : (gameTitle ?? this.gameTitle),
+      gameBoxart: clearGameBoxart ? null : (gameBoxart ?? this.gameBoxart),
+      playTimeSeconds: clearPlayTimeSeconds
+          ? null
+          : (playTimeSeconds ?? this.playTimeSeconds),
+      lastPlayedMillis: clearLastPlayed
+          ? null
+          : (lastPlayedMillis ?? this.lastPlayedMillis),
+      nowPlayingDimDelay: nowPlayingDimDelay ?? this.nowPlayingDimDelay,
+      nowPlayingDimLevel: nowPlayingDimLevel ?? this.nowPlayingDimLevel,
+      fanartDimLevel: fanartDimLevel ?? this.fanartDimLevel,
+      dockApps: dockApps ?? this.dockApps,
+      dockEditTrigger: dockEditTrigger ?? this.dockEditTrigger,
+      dockEnabled: dockEnabled ?? this.dockEnabled,
+      dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      appReady: appReady ?? this.appReady,
     );
   }
 
@@ -229,6 +440,9 @@ class SecondaryDisplayStateData {
       isVideoMuted: json['isVideoMuted'] as bool? ?? false,
       hideBottomScreen: json['hideBottomScreen'] as bool? ?? false,
       muteToggleTrigger: json['muteToggleTrigger'] as int? ?? 0,
+      screenshotTrigger: json['screenshotTrigger'] as int? ?? 0,
+      screenshotAccessEnabled:
+          json['screenshotAccessEnabled'] as bool? ?? false,
       backgroundColor: json['backgroundColor'] as int?,
       themeName: json['themeName'] as String?,
       isSecondaryActive: json['isSecondaryActive'] as bool? ?? false,
@@ -248,6 +462,46 @@ class SecondaryDisplayStateData {
       shaderColor2: json['shaderColor2'] as int?,
       useFluidShader: json['useFluidShader'] as bool? ?? false,
       isOled: json['isOled'] as bool? ?? false,
+      mediaRevision: json['mediaRevision'] as int? ?? 0,
+      showAchievementPanel: json['showAchievementPanel'] as bool? ?? false,
+      achievements: json['achievements'] != null
+          ? (json['achievements'] as List<dynamic>)
+                .map(
+                  (e) => SecondaryAchievementItem.fromJson(
+                    e as Map<String, dynamic>,
+                  ),
+                )
+                .toList()
+          : null,
+      raEarned: json['raEarned'] as int? ?? 0,
+      raTotal: json['raTotal'] as int? ?? 0,
+      raPoints: json['raPoints'] as int? ?? 0,
+      raPointsTotal: json['raPointsTotal'] as int? ?? 0,
+      raCompletionPct: json['raCompletionPct'] as String?,
+      raGameTitle: json['raGameTitle'] as String?,
+      newlyEarnedIds: json['newlyEarnedIds'] != null
+          ? (json['newlyEarnedIds'] as List<dynamic>)
+                .map((e) => (e as num).toInt())
+                .toList()
+          : null,
+      nowPlayingActive: json['nowPlayingActive'] as bool? ?? false,
+      deviceScreenOn: json['deviceScreenOn'] as bool? ?? true,
+      gameTitle: json['gameTitle'] as String?,
+      gameBoxart: json['gameBoxart'] as String?,
+      playTimeSeconds: (json['playTimeSeconds'] as num?)?.toInt(),
+      lastPlayedMillis: (json['lastPlayedMillis'] as num?)?.toInt(),
+      nowPlayingDimDelay: (json['nowPlayingDimDelay'] as num?)?.toInt() ?? 5,
+      nowPlayingDimLevel: (json['nowPlayingDimLevel'] as num?)?.toInt() ?? 100,
+      fanartDimLevel: (json['fanartDimLevel'] as num?)?.toInt() ?? 25,
+      dockApps: json['dockApps'] is List
+          ? (json['dockApps'] as List<dynamic>)
+                .map((e) => e?.toString() ?? '')
+                .toList()
+          : const ['', '', '', '', ''],
+      dockEditTrigger: (json['dockEditTrigger'] as num?)?.toInt() ?? 0,
+      dockEnabled: json['dockEnabled'] as bool? ?? true,
+      dockSlotCount: (json['dockSlotCount'] as num?)?.toInt() ?? 3,
+      appReady: json['appReady'] as bool? ?? false,
     );
   }
 
@@ -266,6 +520,8 @@ class SecondaryDisplayStateData {
       'isVideoMuted': isVideoMuted,
       'hideBottomScreen': hideBottomScreen,
       'muteToggleTrigger': muteToggleTrigger,
+      'screenshotTrigger': screenshotTrigger,
+      'screenshotAccessEnabled': screenshotAccessEnabled,
       'backgroundColor': backgroundColor,
       'themeName': themeName,
       'isSecondaryActive': isSecondaryActive,
@@ -285,6 +541,30 @@ class SecondaryDisplayStateData {
       'shaderColor2': shaderColor2,
       'useFluidShader': useFluidShader,
       'isOled': isOled,
+      'mediaRevision': mediaRevision,
+      'showAchievementPanel': showAchievementPanel,
+      'achievements': achievements?.map((e) => e.toJson()).toList(),
+      'raEarned': raEarned,
+      'raTotal': raTotal,
+      'raPoints': raPoints,
+      'raPointsTotal': raPointsTotal,
+      'raCompletionPct': raCompletionPct,
+      'raGameTitle': raGameTitle,
+      'newlyEarnedIds': newlyEarnedIds,
+      'nowPlayingActive': nowPlayingActive,
+      'deviceScreenOn': deviceScreenOn,
+      'gameTitle': gameTitle,
+      'gameBoxart': gameBoxart,
+      'playTimeSeconds': playTimeSeconds,
+      'lastPlayedMillis': lastPlayedMillis,
+      'nowPlayingDimDelay': nowPlayingDimDelay,
+      'nowPlayingDimLevel': nowPlayingDimLevel,
+      'fanartDimLevel': fanartDimLevel,
+      'dockApps': dockApps,
+      'dockEditTrigger': dockEditTrigger,
+      'dockEnabled': dockEnabled,
+      'dockSlotCount': dockSlotCount,
+      'appReady': appReady,
     };
   }
 }
@@ -294,6 +574,23 @@ class SecondaryDisplayStateData {
 /// Extends [SharedState] to leverage cross-process or cross-display communication
 /// provided by the `sub_screen` package.
 class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
+  SecondaryDisplayState._();
+
+  /// Per-isolate shared instance. All producers within an engine MUST use this
+  /// so every partial update copyWith's from one authoritative local state.
+  ///
+  /// The `sub_screen` [SharedState] base ships a full-state snapshot on every
+  /// setState and syncs sibling instances only asynchronously. With multiple
+  /// instances, a producer whose local copy hasn't synced yet ships a stale
+  /// snapshot that clobbers fields another instance just set (this caused the
+  /// intermittent "no Now Playing screen" on PSX/GameCube). A single instance
+  /// removes the cross-instance race. Each Flutter engine (main vs. secondary
+  /// display) is a separate isolate and gets its own instance — correct, since
+  /// they sync across the process boundary via the platform channel.
+  ///
+  /// Never dispose this — it lives for the isolate's lifetime.
+  static final SecondaryDisplayState instance = SecondaryDisplayState._();
+
   @override
   SecondaryDisplayStateData fromJson(Map<String, dynamic> json) {
     return SecondaryDisplayStateData.fromJson(json);
@@ -323,6 +620,8 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     bool? isVideoMuted,
     bool? hideBottomScreen,
     int? muteToggleTrigger,
+    int? screenshotTrigger,
+    bool? screenshotAccessEnabled,
     int? backgroundColor,
     String? themeName,
     bool? isSecondaryActive,
@@ -347,6 +646,38 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     int? shaderColor2,
     bool? useFluidShader,
     bool? isOled,
+    int? mediaRevision,
+    bool? showAchievementPanel,
+    List<SecondaryAchievementItem>? achievements,
+    bool clearAchievements = false,
+    int? raEarned,
+    int? raTotal,
+    int? raPoints,
+    int? raPointsTotal,
+    String? raCompletionPct,
+    bool clearRaCompletionPct = false,
+    String? raGameTitle,
+    bool clearRaGameTitle = false,
+    List<int>? newlyEarnedIds,
+    bool clearNewlyEarnedIds = false,
+    bool? nowPlayingActive,
+    bool? deviceScreenOn,
+    String? gameTitle,
+    bool clearGameTitle = false,
+    String? gameBoxart,
+    bool clearGameBoxart = false,
+    int? playTimeSeconds,
+    bool clearPlayTimeSeconds = false,
+    int? lastPlayedMillis,
+    bool clearLastPlayed = false,
+    int? nowPlayingDimDelay,
+    int? nowPlayingDimLevel,
+    int? fanartDimLevel,
+    List<String>? dockApps,
+    int? dockEditTrigger,
+    bool? dockEnabled,
+    int? dockSlotCount,
+    bool? appReady,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -371,6 +702,8 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           isVideoMuted: isVideoMuted,
           hideBottomScreen: hideBottomScreen,
           muteToggleTrigger: muteToggleTrigger,
+          screenshotTrigger: screenshotTrigger,
+          screenshotAccessEnabled: screenshotAccessEnabled,
           backgroundColor: backgroundColor,
           themeName: themeName,
           isSecondaryActive: isSecondaryActive,
@@ -395,6 +728,38 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           shaderColor2: shaderColor2,
           useFluidShader: useFluidShader,
           isOled: isOled,
+          mediaRevision: mediaRevision,
+          showAchievementPanel: showAchievementPanel,
+          achievements: achievements,
+          clearAchievements: clearAchievements,
+          raEarned: raEarned,
+          raTotal: raTotal,
+          raPoints: raPoints,
+          raPointsTotal: raPointsTotal,
+          raCompletionPct: raCompletionPct,
+          clearRaCompletionPct: clearRaCompletionPct,
+          raGameTitle: raGameTitle,
+          clearRaGameTitle: clearRaGameTitle,
+          newlyEarnedIds: newlyEarnedIds,
+          clearNewlyEarnedIds: clearNewlyEarnedIds,
+          nowPlayingActive: nowPlayingActive,
+          deviceScreenOn: deviceScreenOn,
+          gameTitle: gameTitle,
+          clearGameTitle: clearGameTitle,
+          gameBoxart: gameBoxart,
+          clearGameBoxart: clearGameBoxart,
+          playTimeSeconds: playTimeSeconds,
+          clearPlayTimeSeconds: clearPlayTimeSeconds,
+          lastPlayedMillis: lastPlayedMillis,
+          clearLastPlayed: clearLastPlayed,
+          nowPlayingDimDelay: nowPlayingDimDelay,
+          nowPlayingDimLevel: nowPlayingDimLevel,
+          fanartDimLevel: fanartDimLevel,
+          dockApps: dockApps,
+          dockEditTrigger: dockEditTrigger,
+          dockEnabled: dockEnabled,
+          dockSlotCount: dockSlotCount,
+          appReady: appReady,
         ),
       );
     } catch (e) {

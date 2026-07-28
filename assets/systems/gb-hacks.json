@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gb-hacks",
+    "multidisc": false,
     "name": "Game Boy Hacks",
     "short_name": "GBH",
     "details": {
@@ -105,6 +106,7 @@
     },
     {
       "name": "RetroArch64 Gambatte",
+      "default_core": true,
       "unique_id": "gb-hacks.ra64.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -193,6 +195,7 @@
     },
     {
       "name": "RetroArch32 Gambatte",
+      "default_core": true,
       "unique_id": "gb-hacks.ra32.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
@@ -281,7 +284,7 @@
     },
     {
       "name": "RetroArch Gambatte",
-      "default": true,
+      "default_core": true,
       "unique_id": "gb-hacks.ra.gambatte",
       "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
       "is_retroachievements_compatible": true,
