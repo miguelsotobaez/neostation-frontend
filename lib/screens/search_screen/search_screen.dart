@@ -25,9 +25,9 @@ import 'package:neostation/screens/app_screen.dart';
 /// Library-wide ROM search & filter overlay.
 ///
 /// Loads every game across all systems once, then filters in-memory by name
-/// plus platform / developer / genre / rating / year. Reachable from the
-/// Systems tab (header button or the gamepad Select button); selecting a
-/// result launches it through the standard [launchGameWithDialog] flow.
+/// plus platform / developer / genre / rating / year. Reachable as its own
+/// top-level tab; selecting a result offers Go-to-game or launching it through
+/// the standard [launchGameWithDialog] flow.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -101,7 +101,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<DatabaseGameModel> _results = [];
 
-  static const double _resultExtent = 76;
+  // Resolved box-art path per ROM (null == no art); see [_resolveBoxArt].
+  final Map<String, String?> _artCache = {};
+
+  // The chip row scrolls horizontally rather than wrapping, so the focused chip
+  // has to be scrolled into view; each chip carries a key to measure against.
+  final ScrollController _chipScroll = ScrollController();
+  final Map<int, GlobalKey> _chipKeys = {};
+
+  static const double _resultExtent = 68;
 
   @override
   void initState() {
@@ -142,6 +150,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _nameFocus.dispose();
     _resultScroll.dispose();
     _menuScroll.dispose();
+    _chipScroll.dispose();
     super.dispose();
   }
 
@@ -235,6 +244,7 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(
         () => _barIndex = (_barIndex - 1 + _barItems.length) % _barItems.length,
       );
+      _scrollChipIntoView();
       SfxService().playNavSound();
     }
   }
@@ -245,6 +255,7 @@ class _SearchScreenState extends State<SearchScreen> {
       SfxService().playNavSound();
     } else if (_region == _FocusRegion.filters) {
       setState(() => _barIndex = (_barIndex + 1) % _barItems.length);
+      _scrollChipIntoView();
       SfxService().playNavSound();
     }
   }
@@ -617,10 +628,10 @@ class _SearchScreenState extends State<SearchScreen> {
                     SizedBox(height: 64.r),
                     _buildSearchRow(theme),
                     if (_filtersExpanded) ...[
-                      SizedBox(height: 8.r),
+                      SizedBox(height: 6.r),
                       _buildFilterChips(theme),
                     ],
-                    SizedBox(height: 10.r),
+                    SizedBox(height: 8.r),
                     Expanded(child: _buildResults(theme)),
                   ],
                 ),
@@ -736,28 +747,70 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// The filter-chip row beneath the search box: one chip per visible filter,
-  /// then Clear. Wraps to a second line if the chips overflow.
+  /// then Clear.
+  ///
+  /// Scrolls horizontally on one line instead of wrapping — wrapping cost a
+  /// second full chip row of vertical space (and the results list with it) on
+  /// every handheld we target, for a row that is already Left/Right navigable.
   Widget _buildFilterChips(ThemeData theme) {
     final inFilters = _region == _FocusRegion.filters;
     final items = _barItems;
-    return Wrap(
-      spacing: 8.r,
-      runSpacing: 8.r,
-      children: [
-        for (var i = 0; i < items.length; i++)
-          items[i] == 'clear'
-              ? _buildClearChip(theme, inFilters && _barIndex == i)
-              : _buildFilterChip(theme, items[i], inFilters && _barIndex == i),
-      ],
+    return SingleChildScrollView(
+      controller: _chipScroll,
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++)
+            KeyedSubtree(
+              key: _chipKeys.putIfAbsent(i, () => GlobalKey()),
+              child: items[i] == 'clear'
+                  ? _buildClearChip(theme, inFilters && _barIndex == i)
+                  : _buildFilterChip(
+                      theme,
+                      items[i],
+                      inFilters && _barIndex == i,
+                    ),
+            ),
+        ],
+      ),
     );
   }
 
-  /// The top band: the search field plus the Filters (advanced) toggle.
+  /// Keeps the focused filter chip visible in the horizontally scrolling row.
+  void _scrollChipIntoView() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final chipContext = _chipKeys[_barIndex]?.currentContext;
+      if (chipContext == null) return;
+      Scrollable.ensureVisible(
+        chipContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  /// The top band: the search field, the result count, and the Filters
+  /// (advanced) toggle.
+  ///
+  /// The count rides in this row rather than owning a line above the list —
+  /// on a handheld that line was a whole result's worth of height.
   Widget _buildSearchRow(ThemeData theme) {
     final inSearch = _region == _FocusRegion.search;
     return Row(
       children: [
         Expanded(child: _buildNameField(theme, inSearch && _searchIndex == 0)),
+        SizedBox(width: 10.r),
+        Text(
+          AppLocale.searchResultsCount
+              .getString(context)
+              .replaceFirst('{count}', '${_results.length}'),
+          style: TextStyle(
+            fontSize: 12.r,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
         SizedBox(width: 10.r),
         _buildAdvancedToggle(theme, inSearch && _searchIndex == 1),
       ],
@@ -773,7 +826,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return GestureDetector(
       onTap: _toggleFilters,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 14.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 9.r),
         decoration: BoxDecoration(
           color: focused
               ? scheme.primary.withValues(alpha: 0.18)
@@ -858,6 +911,10 @@ class _SearchScreenState extends State<SearchScreen> {
           hintText: AppLocale.searchNameHint.getString(context),
           prefixIcon: const Icon(Symbols.search_rounded),
           isDense: true,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 12.r,
+            vertical: 10.r,
+          ),
           filled: true,
           fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
             alpha: 0.5,
@@ -888,7 +945,7 @@ class _SearchScreenState extends State<SearchScreen> {
       },
       child: Container(
         margin: EdgeInsets.only(right: 8.r),
-        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 11.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
         decoration: BoxDecoration(
           color: isFocused
               ? scheme.primary.withValues(alpha: 0.18)
@@ -948,7 +1005,7 @@ class _SearchScreenState extends State<SearchScreen> {
       onTap: _clearFilters,
       child: Container(
         margin: EdgeInsets.only(right: 8.r),
-        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 11.r),
+        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
         decoration: BoxDecoration(
           color: isFocused
               ? scheme.primary.withValues(alpha: 0.18)
@@ -1158,31 +1215,11 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(left: 4.r, bottom: 6.r),
-          child: Text(
-            AppLocale.searchResultsCount
-                .getString(context)
-                .replaceFirst('{count}', '${_results.length}'),
-            style: TextStyle(
-              fontSize: 12.r,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            controller: _resultScroll,
-            itemExtent: _resultExtent.r,
-            itemCount: _results.length,
-            itemBuilder: (context, index) => _buildResultTile(theme, index),
-          ),
-        ),
-      ],
+    return ListView.builder(
+      controller: _resultScroll,
+      itemExtent: _resultExtent.r,
+      itemCount: _results.length,
+      itemBuilder: (context, index) => _buildResultTile(theme, index),
     );
   }
 
@@ -1202,7 +1239,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 3.r),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
+        padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 6.r),
         decoration: BoxDecoration(
           color: isFocused
               ? scheme.primary.withValues(alpha: 0.18)
@@ -1264,28 +1301,40 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  /// Resolves a result's box art through the same path the game list uses.
+  ///
+  /// [GameModel.getImagePath] is the canonical resolver: it covers NeoStation's
+  /// own media folder, ROMs with complex extensions, and — critically — the
+  /// read-time ES-DE `downloaded_media` fallback. A raw [FileProvider.getMediaPath]
+  /// lookup sees none of those, so libraries scraped through ES-DE rendered as
+  /// placeholders here while showing art everywhere else.
+  ///
+  /// Results are memoized per ROM: the list is virtualized over the whole
+  /// library, so an unmemoized lookup re-stats several candidate paths every
+  /// time a tile scrolls back into view.
+  String? _resolveBoxArt(DatabaseGameModel g) {
+    final folder = g.systemFolderName;
+    if (folder == null || folder.isEmpty) return null;
+
+    final key = '$folder/${g.filename}';
+    if (_artCache.containsKey(key)) return _artCache[key];
+
+    final resolved = GameModel.fromDatabaseModel(
+      g,
+    ).getImagePath(folder, 'box2d', context.read<FileProvider>());
+    final exists = resolved.isNotEmpty && File(resolved).existsSync();
+    return _artCache[key] = exists ? resolved : null;
+  }
+
   /// Box art (box2d) thumbnail for a result, or a neutral placeholder when the
   /// game has no scraped cover.
   Widget _buildBoxArt(ThemeData theme, DatabaseGameModel g) {
     final scheme = theme.colorScheme;
-    final folder = g.systemFolderName;
-    File? art;
-    if (folder != null && folder.isNotEmpty) {
-      final fileProvider = context.read<FileProvider>();
-      for (final ext in const ['png', 'jpg']) {
-        final candidate = File(
-          fileProvider.getMediaPath(folder, 'box2d', g.romname, ext),
-        );
-        if (candidate.existsSync()) {
-          art = candidate;
-          break;
-        }
-      }
-    }
+    final artPath = _resolveBoxArt(g);
 
     return Container(
-      width: 48.r,
-      height: 60.r,
+      width: 36.r,
+      height: 46.r,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.4),
@@ -1296,15 +1345,15 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
       alignment: Alignment.center,
-      child: art != null
+      child: artPath != null
           ? Image.file(
-              art,
+              File(artPath),
               fit: BoxFit.contain,
               filterQuality: FilterQuality.medium,
             )
           : Icon(
               Symbols.videogame_asset_rounded,
-              size: 22.r,
+              size: 18.r,
               color: scheme.onSurface.withValues(alpha: 0.35),
             ),
     );
