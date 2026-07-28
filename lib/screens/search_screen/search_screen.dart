@@ -10,12 +10,15 @@ import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/database_game_model.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/secondary_display_state.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/screens/search_screen/search_filter.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
+import 'package:neostation/services/secondary_achievements_controller.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_launch_utils.dart';
@@ -110,6 +113,12 @@ class _SearchScreenState extends State<SearchScreen> {
   final ScrollController _chipScroll = ScrollController();
   final Map<int, GlobalKey> _chipKeys = {};
 
+  // Secondary-display "Now Playing" / in-game achievements panel for games
+  // launched straight from the results list. Android-only; null elsewhere.
+  SecondaryDisplayState? _secondaryDisplayState;
+  final SecondaryAchievementsController _achievementsController =
+      SecondaryAchievementsController();
+
   static const double _resultExtent = 68;
 
   @override
@@ -140,12 +149,17 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     });
 
+    if (Platform.isAndroid) {
+      _secondaryDisplayState = SecondaryDisplayState.instance;
+    }
+
     _loadGames();
   }
 
   @override
   void dispose() {
     GamepadNavigationManager.popLayer('search_screen');
+    _achievementsController.dispose();
     _gamepadNav.dispose();
     _nameController.dispose();
     _nameFocus.dispose();
@@ -609,14 +623,39 @@ class _SearchScreenState extends State<SearchScreen> {
     final game = GameModel.fromDatabaseModel(dbGame);
 
     _gamepadNav.deactivate();
+
+    // Drive the secondary display's "Now Playing" page (and the live RA panel)
+    // for this session, exactly as the games list and the Recent Games cards do
+    // — without this push the bottom screen never activates for a search-result
+    // launch. Fired without awaiting so it never blocks the emulator handoff;
+    // it lands during launchGameWithDialog's foreground window.
+    // ignore: unawaited_futures
+    _achievementsController.pushForLaunch(
+      state: _secondaryDisplayState,
+      provider: context.read<RetroAchievementsProvider>(),
+      game: game,
+      systemFolderName: system.primaryFolderName,
+      boxartPath: SecondaryAchievementsController.resolveBoxart(
+        game,
+        system.primaryFolderName,
+        fileProvider,
+      ),
+    );
+
     await launchGameWithDialog(
       context: context,
       game: game,
       system: system,
       fileProvider: fileProvider,
       syncProvider: syncProvider,
-      onGameClosed: () => GamepadNavigationManager.reactivate(),
+      onGameClosed: () {
+        // Stop the poll and hide the panel; search pushes no display state of
+        // its own, so the secondary fades back to whatever art is underneath.
+        _achievementsController.stop(hidePanel: true);
+        GamepadNavigationManager.reactivate();
+      },
       onLaunchFailed: (ctx, result) async {
+        _achievementsController.stop(hidePanel: true);
         if (mounted) {
           AppNotification.showNotification(
             context,
