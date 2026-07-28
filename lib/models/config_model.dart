@@ -103,6 +103,20 @@ class ConfigModel {
   /// (list, grid, carousel). Toggled by the Select + B chord.
   final bool legendHidden;
 
+  /// Whether the Sync navigation tab is hidden from the header strip and the
+  /// L1/R1 tab cycle.
+  ///
+  /// Stored as "hidden" rather than "shown" so the default (`false`) is
+  /// visible: a tab added in a future version appears for upgrading users
+  /// instead of silently staying hidden. See `NavTab` in utils/nav_tabs.dart.
+  final bool hideTabSync;
+
+  /// Whether the Achievements navigation tab is hidden. See [hideTabSync].
+  final bool hideTabAchievements;
+
+  /// Whether the Scraper navigation tab is hidden. See [hideTabSync].
+  final bool hideTabScraper;
+
   /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
   /// to never dim. Only meaningful when a secondary display is active.
   final int nowPlayingDimDelay;
@@ -173,6 +187,9 @@ class ConfigModel {
     this.appLanguage = 'es',
     this.hideRecentCard = false,
     this.legendHidden = false,
+    this.hideTabSync = false,
+    this.hideTabAchievements = false,
+    this.hideTabScraper = false,
     this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
@@ -278,6 +295,23 @@ class ConfigModel {
           (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
               '1' ||
           (json['legendHidden'] ?? false).toString().toLowerCase() == 'true',
+      // Absent key => false => tab visible. Keeps a config written by an older
+      // build (or restored from cloud sync) from hiding tabs it never knew about.
+      hideTabSync:
+          (json['hideTabSync'] ?? json['hide_tab_sync'] ?? 0).toString() ==
+              '1' ||
+          (json['hideTabSync'] ?? false).toString().toLowerCase() == 'true',
+      hideTabAchievements:
+          (json['hideTabAchievements'] ?? json['hide_tab_achievements'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideTabAchievements'] ?? false).toString().toLowerCase() ==
+              'true',
+      hideTabScraper:
+          (json['hideTabScraper'] ?? json['hide_tab_scraper'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideTabScraper'] ?? false).toString().toLowerCase() == 'true',
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
@@ -368,6 +402,9 @@ class ConfigModel {
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
       'legendHidden': legendHidden,
+      'hideTabSync': hideTabSync,
+      'hideTabAchievements': hideTabAchievements,
+      'hideTabScraper': hideTabScraper,
       'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
       'autoUpdateSystems': autoUpdateSystems,
@@ -408,6 +445,9 @@ class ConfigModel {
     String? appLanguage,
     bool? hideRecentCard,
     bool? legendHidden,
+    bool? hideTabSync,
+    bool? hideTabAchievements,
+    bool? hideTabScraper,
     String? activeSyncProvider,
     bool? autoUpdateApp,
     bool? autoUpdateSystems,
@@ -445,6 +485,9 @@ class ConfigModel {
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
       legendHidden: legendHidden ?? this.legendHidden,
+      hideTabSync: hideTabSync ?? this.hideTabSync,
+      hideTabAchievements: hideTabAchievements ?? this.hideTabAchievements,
+      hideTabScraper: hideTabScraper ?? this.hideTabScraper,
       activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
       autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,

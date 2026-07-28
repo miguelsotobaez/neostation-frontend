@@ -177,6 +177,13 @@ mixin AppLocale {
       'disable_secondary_screen_sub';
   static const String bartopShutdown = 'bartop_shutdown';
   static const String bartopShutdownSubtitle = 'bartop_shutdown_subtitle';
+  static const String showSyncTab = 'show_sync_tab';
+  static const String showSyncTabSubtitle = 'show_sync_tab_subtitle';
+  static const String showAchievementsTab = 'show_achievements_tab';
+  static const String showAchievementsTabSubtitle =
+      'show_achievements_tab_subtitle';
+  static const String showScraperTab = 'show_scraper_tab';
+  static const String showScraperTabSubtitle = 'show_scraper_tab_subtitle';
 
   // ---------------------------------------------------------------------------
   // Directories

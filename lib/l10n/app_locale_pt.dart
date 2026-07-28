@@ -171,6 +171,16 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.bartopShutdownSubtitle:
       'Desliga o computador ao fechar o aplicativo',
 
+  AppLocale.showSyncTab: 'Mostrar aba Sincronização',
+  AppLocale.showSyncTabSubtitle:
+      'Exibe a aba de sincronização na nuvem na barra de navegação',
+  AppLocale.showAchievementsTab: 'Mostrar aba Conquistas',
+  AppLocale.showAchievementsTabSubtitle:
+      'Exibe a aba do RetroAchievements na barra de navegação',
+  AppLocale.showScraperTab: 'Mostrar aba Scraper',
+  AppLocale.showScraperTabSubtitle:
+      'Exibe a aba de scraping na barra de navegação',
+
   AppLocale.configureDirectories: 'Configurar Diretórios',
   AppLocale.configureRomsFolder: 'Configurar Pasta de ROMs',
   AppLocale.cannotAccessFolder: 'Não foi possível acessar a pasta',

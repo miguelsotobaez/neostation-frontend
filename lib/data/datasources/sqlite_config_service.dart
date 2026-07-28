@@ -171,6 +171,21 @@ class SqliteConfigService {
             (int.tryParse(userConfig?['legend_hidden']?.toString() ?? '0') ??
                 0) ==
             1,
+        // Missing column/row => '0' => tab visible (see migration v106).
+        hideTabSync:
+            (int.tryParse(userConfig?['hide_tab_sync']?.toString() ?? '0') ??
+                0) ==
+            1,
+        hideTabAchievements:
+            (int.tryParse(
+                  userConfig?['hide_tab_achievements']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
+        hideTabScraper:
+            (int.tryParse(userConfig?['hide_tab_scraper']?.toString() ?? '0') ??
+                0) ==
+            1,
         activeSyncProvider:
             userConfig?['active_sync_provider']?.toString() ?? 'neosync',
         autoUpdateApp:
@@ -250,6 +265,9 @@ class SqliteConfigService {
         themeName: config.themeName,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
         legendHidden: config.legendHidden ? 1 : 0,
+        hideTabSync: config.hideTabSync ? 1 : 0,
+        hideTabAchievements: config.hideTabAchievements ? 1 : 0,
+        hideTabScraper: config.hideTabScraper ? 1 : 0,
         activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
         autoUpdateSystems: config.autoUpdateSystems ? 1 : 0,

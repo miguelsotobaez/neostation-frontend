@@ -91,6 +91,20 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Shows or hides [tab] in the header strip and the L1/R1 tab cycle.
+  ///
+  /// Routed through the tab's [NavTabSpec] so a future tab needs only a spec
+  /// entry, not another mutator. A tab with no `withHidden` (Systems, Settings)
+  /// can't be hidden and is ignored.
+  Future<void> updateNavTabHidden(NavTab tab, bool hidden) async {
+    final applyHidden = navTabSpec(tab).withHidden;
+    if (applyHidden == null) return;
+
+    _config = applyHidden(_config, hidden);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   Future<void> updateActiveSyncProvider(String providerId) async {
     _config = _config.copyWith(activeSyncProvider: providerId);
     await SqliteConfigService.saveConfig(_config);

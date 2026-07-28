@@ -321,6 +321,9 @@ class SqliteMigrations {
       case 105:
         await _migrateToVersion105(db);
         break;
+      case 106:
+        await _migrateToVersion106(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5052,6 +5055,44 @@ class SqliteMigrations {
       _log.i('Migration v105 completed (cleared $cleared stale default(s))');
     } catch (e, stackTrace) {
       _log.e('Error in migration v105: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v106: Persist per-tab visibility for the main navigation strip.
+  ///
+  /// Each column stores *hidden*, not *shown*, and defaults to `0`. SQLite
+  /// backfills existing rows with that default on ALTER, so upgrading users keep
+  /// every tab they already had — and a tab introduced in a future version, added
+  /// here as another `DEFAULT 0` column, shows up rather than silently staying
+  /// hidden.
+  static Future<void> _migrateToVersion106(Database db) async {
+    _log.i('Migration v106: Adding nav tab visibility flags to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      const newColumns = [
+        'hide_tab_sync',
+        'hide_tab_achievements',
+        'hide_tab_scraper',
+      ];
+
+      for (final column in newColumns) {
+        if (!columns.contains(column)) {
+          db.execute(
+            'ALTER TABLE user_config ADD COLUMN $column INTEGER DEFAULT 0',
+          );
+          _log.i('Column $column added via v106');
+        } else {
+          _log.i('Column $column already exists');
+        }
+      }
+
+      _log.i('Migration v106 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v106: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

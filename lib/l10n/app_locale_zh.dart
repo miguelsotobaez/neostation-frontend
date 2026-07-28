@@ -142,6 +142,13 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.bartopShutdown: '退出时关闭 BarTOP',
   AppLocale.bartopShutdownSubtitle: '退出应用时关闭计算机',
 
+  AppLocale.showSyncTab: '显示同步选项卡',
+  AppLocale.showSyncTabSubtitle: '在导航栏中显示云同步选项卡',
+  AppLocale.showAchievementsTab: '显示成就选项卡',
+  AppLocale.showAchievementsTabSubtitle: '在导航栏中显示 RetroAchievements 选项卡',
+  AppLocale.showScraperTab: '显示刮削选项卡',
+  AppLocale.showScraperTabSubtitle: '在导航栏中显示刮削选项卡',
+
   AppLocale.configureDirectories: '目录设置',
   AppLocale.configureRomsFolder: '配置 ROM 文件夹',
   AppLocale.cannotAccessFolder: '无法访问文件夹',
