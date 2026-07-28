@@ -154,6 +154,105 @@ void main() {
     });
   });
 
+  group('computeFacets', () {
+    final library = [
+      game(
+        realName: 'Sonic the Hedgehog',
+        systemRealName: 'Genesis',
+        developer: 'Sega',
+        genre: 'Platformer',
+        year: '1991',
+        rating: 4.6,
+      ),
+      game(
+        realName: 'Sonic CD',
+        systemRealName: 'Sega CD',
+        developer: 'Sega',
+        genre: 'Platformer',
+        year: '1993',
+        rating: 4.2,
+      ),
+      game(
+        realName: 'Super Mario Bros',
+        systemRealName: 'NES',
+        developer: 'Nintendo',
+        genre: 'Platformer',
+        year: '1985',
+        rating: 4.9,
+      ),
+      game(
+        realName: 'Contra',
+        systemRealName: 'NES',
+        developer: 'Konami',
+        genre: 'Shooter',
+        year: '1988',
+        rating: 3.5,
+      ),
+    ];
+
+    test('a name query drops platforms with no matching game', () {
+      final f = computeFacets(library, const SearchCriteria(query: 'sonic'));
+      expect(f.platforms, ['Genesis', 'Sega CD']);
+      expect(f.developers, ['Sega']);
+      expect(f.genres, ['Platformer']);
+      expect(f.years, ['1993', '1991']);
+    });
+
+    test('a filter does not narrow its own options', () {
+      // Platform is pinned, so the platform picker still offers every platform
+      // the query allows — otherwise the user could never switch away.
+      final f = computeFacets(
+        library,
+        const SearchCriteria(query: 'sonic', platform: 'Genesis'),
+      );
+      expect(f.platforms, ['Genesis', 'Sega CD']);
+      // Other dimensions do see the pinned platform.
+      expect(f.years, ['1991']);
+    });
+
+    test('other active filters narrow a dimension', () {
+      final f = computeFacets(library, const SearchCriteria(genre: 'Shooter'));
+      expect(f.platforms, ['NES']);
+      expect(f.developers, ['Konami']);
+    });
+
+    test('rating thresholds stop at the best rating on offer', () {
+      final f = computeFacets(library, const SearchCriteria(query: 'contra'));
+      expect(f.ratings, [3.0]);
+      final all = computeFacets(library, const SearchCriteria());
+      expect(all.ratings, [3.0, 4.0, 4.5]);
+    });
+
+    test('a stranded active value stays selectable', () {
+      // Nothing named Sonic is on the NES, but the chip has to keep showing
+      // (and offering) the value it is filtering by.
+      final f = computeFacets(
+        library,
+        const SearchCriteria(query: 'sonic', platform: 'NES'),
+      );
+      expect(f.platforms, contains('NES'));
+      expect(
+        filterAndSortGames(
+          library,
+          const SearchCriteria(query: 'sonic', platform: 'NES'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('empty results leave every facet empty', () {
+      final f = computeFacets(
+        library,
+        const SearchCriteria(query: 'doesnotexist'),
+      );
+      expect(f.platforms, isEmpty);
+      expect(f.developers, isEmpty);
+      expect(f.genres, isEmpty);
+      expect(f.years, isEmpty);
+      expect(f.ratings, isEmpty);
+    });
+  });
+
   group('cycleFilterValue', () {
     final options = ['A', 'B', 'C'];
 

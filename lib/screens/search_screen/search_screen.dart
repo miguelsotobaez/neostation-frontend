@@ -26,9 +26,12 @@ import 'package:neostation/screens/app_screen.dart';
 /// Library-wide ROM search & filter overlay.
 ///
 /// Loads every game across all systems once, then filters in-memory by name
-/// plus platform / developer / genre / rating / year. Reachable as its own
-/// top-level tab; selecting a result offers Go-to-game or launching it through
-/// the standard [launchGameWithDialog] flow.
+/// plus platform / developer / genre / rating / year. The filter options are
+/// faceted — each chip only offers values still present in the results the
+/// other criteria produce, so a filter never leads to an empty list.
+///
+/// Reachable as its own top-level tab; selecting a result offers Go-to-game or
+/// launching it through the standard [launchGameWithDialog] flow.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -48,9 +51,6 @@ enum _FocusRegion { search, filters, results, filterMenu, action }
 /// Ordered choices offered when a search result is selected.
 enum _ResultAction { goTo, play }
 
-/// Discrete rating thresholds offered in the rating filter (null == Any).
-const List<double?> _ratingThresholds = kRatingThresholds;
-
 class _SearchScreenState extends State<SearchScreen> {
   late GamepadNavigation _gamepadNav;
 
@@ -61,18 +61,17 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _loading = true;
   List<DatabaseGameModel> _all = [];
 
-  // Derived, sorted filter option sets (empty sets hide their control).
-  List<String> _platforms = [];
-  List<String> _developers = [];
-  List<String> _genres = [];
-  List<String> _years = [];
+  // Filter options for the current selection, recomputed on every change: each
+  // dimension only offers values still reachable from the live results (empty
+  // sets hide their chip). See [computeFacets].
+  SearchFacets _facets = SearchFacets.empty;
 
   // Active filter values (null == Any).
   String? _platform;
   String? _developer;
   String? _genre;
   String? _year;
-  int _ratingIdx = 0;
+  double? _minRating;
 
   _FocusRegion _region = _FocusRegion.search;
   int _barIndex = 0;
@@ -87,7 +86,7 @@ class _SearchScreenState extends State<SearchScreen> {
   // value is snapshotted on open so Back can cancel a live preview.
   String? _menuKey;
   String? _menuOrigValue;
-  int _menuOrigRatingIdx = 0;
+  double? _menuOrigRating;
   final ScrollController _menuScroll = ScrollController();
 
   static const double _menuExtent = 44;
@@ -159,14 +158,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final games = await GameRepository.getAllGames();
     if (!mounted) return;
 
-    // Distinct, sorted option sets. Metadata-derived filters stay empty (and
-    // therefore hidden) on an unscraped library.
     setState(() {
       _all = games;
-      _platforms = distinctOptions(games, (g) => g.systemRealName);
-      _developers = distinctOptions(games, (g) => g.developer);
-      _genres = distinctOptions(games, (g) => g.genre);
-      _years = distinctYears(games);
       _loading = false;
       _recompute();
     });
@@ -175,25 +168,35 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Extracts a 4-digit year from a raw year / ISO release-date string.
   String? _yearOf(DatabaseGameModel g) => searchYearOf(g);
 
+  /// Recomputes the results *and* the filter options they support.
+  ///
+  /// Options are re-derived rather than taken once from the whole library, so
+  /// a chip never offers a value that would return nothing. Chips can appear
+  /// and disappear as a result, so the focused chip is tracked by key across
+  /// the rebuild instead of by index.
   void _recompute() {
-    _results = filterAndSortGames(
-      _all,
-      SearchCriteria(
-        query: _nameController.text,
-        platform: _platform,
-        developer: _developer,
-        genre: _genre,
-        year: _year,
-        minRating: _ratingThresholdValue,
-      ),
+    final criteria = SearchCriteria(
+      query: _nameController.text,
+      platform: _platform,
+      developer: _developer,
+      genre: _genre,
+      year: _year,
+      minRating: _minRating,
     );
 
+    _results = filterAndSortGames(_all, criteria);
     if (_resultIndex >= _results.length) {
       _resultIndex = _results.isEmpty ? 0 : _results.length - 1;
     }
-  }
 
-  double? get _ratingThresholdValue => _ratingThresholds[_ratingIdx];
+    final focusedKey = _barIndex < _barItems.length
+        ? _barItems[_barIndex]
+        : null;
+    _facets = computeFacets(_all, criteria);
+    final items = _barItems;
+    final moved = focusedKey == null ? -1 : items.indexOf(focusedKey);
+    _barIndex = moved >= 0 ? moved : _barIndex.clamp(0, items.length - 1);
+  }
 
   // ── Band model ──────────────────────────────────────────────────────────
   // Three stacked bands: search field, the filter-chip row, then results.
@@ -201,13 +204,19 @@ class _SearchScreenState extends State<SearchScreen> {
   // chips. Hidden (empty-option) filters are skipped entirely.
 
   /// Ordered keys of the currently visible filter chips.
+  ///
+  /// A chip is shown when the current results still offer a choice for it, or
+  /// when it is the filter doing the narrowing — an active chip has to stay
+  /// reachable so it can be cleared again.
   List<String> get _visibleFilters {
+    bool shown(String key) =>
+        _menuOptions(key).isNotEmpty || _isFilterActive(key);
     return [
-      if (_platforms.isNotEmpty) 'platform',
-      'rating', // always available; thresholds are static
-      if (_developers.isNotEmpty) 'developer',
-      if (_genres.isNotEmpty) 'genre',
-      if (_years.isNotEmpty) 'year',
+      if (shown('platform')) 'platform',
+      if (_facets.ratings.isNotEmpty || _minRating != null) 'rating',
+      if (shown('developer')) 'developer',
+      if (shown('genre')) 'genre',
+      if (shown('year')) 'year',
     ];
   }
 
@@ -218,7 +227,7 @@ class _SearchScreenState extends State<SearchScreen> {
   /// so applied filters stay visible even while the chip row is collapsed).
   int get _activeFilterCount =>
       [_platform, _developer, _genre, _year].where((v) => v != null).length +
-      (_ratingIdx != 0 ? 1 : 0);
+      (_minRating != null ? 1 : 0);
 
   /// Shows/hides the filter chip row, moving focus to follow.
   void _toggleFilters() {
@@ -408,7 +417,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _menuKey = key;
       _menuOrigValue = _currentFilterValue(key);
-      _menuOrigRatingIdx = _ratingIdx;
+      _menuOrigRating = _minRating;
       _region = _FocusRegion.filterMenu;
     });
     _scrollMenuIntoView();
@@ -420,7 +429,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final key = _menuKey;
     setState(() {
       if (key == 'rating') {
-        _ratingIdx = _menuOrigRatingIdx;
+        _minRating = _menuOrigRating;
       } else if (key != null) {
         _setFilterValue(key, _menuOrigValue);
       }
@@ -436,9 +445,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (key == null) return;
     setState(() {
       if (key == 'rating') {
-        _ratingIdx =
-            (_ratingIdx + delta + _ratingThresholds.length) %
-            _ratingThresholds.length;
+        _minRating = cycleFilterValue(_facets.ratings, _minRating, delta);
       } else {
         _setFilterValue(
           key,
@@ -454,7 +461,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _applyMenuIndex(String key, int index) {
     setState(() {
       if (key == 'rating') {
-        _ratingIdx = index;
+        _minRating = index == 0 ? null : _facets.ratings[index - 1];
       } else {
         _setFilterValue(key, index == 0 ? null : _menuOptions(key)[index - 1]);
       }
@@ -464,13 +471,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  List<String> _menuOptions(String key) => switch (key) {
-    'platform' => _platforms,
-    'developer' => _developers,
-    'genre' => _genres,
-    'year' => _years,
-    _ => const [],
-  };
+  List<String> _menuOptions(String key) => _facets.optionsFor(key);
 
   String? _currentFilterValue(String key) => switch (key) {
     'platform' => _platform,
@@ -496,21 +497,27 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Index of the selected entry within the open menu's option list
   /// (0 == the leading "Any" slot).
   int _menuSelectedIndex(String key) {
-    if (key == 'rating') return _ratingIdx;
+    if (key == 'rating') {
+      final cur = _minRating;
+      if (cur == null) return 0;
+      final i = _facets.ratings.indexOf(cur);
+      return i < 0 ? 0 : i + 1;
+    }
     final cur = _currentFilterValue(key);
     if (cur == null) return 0;
     final i = _menuOptions(key).indexOf(cur);
     return i < 0 ? 0 : i + 1;
   }
 
+  /// Resets every filter chip. The name query is deliberately left alone — it
+  /// is the search itself, not one of the filters this button owns.
   void _clearFilters() {
     setState(() {
       _platform = null;
       _developer = null;
       _genre = null;
       _year = null;
-      _ratingIdx = 0;
-      _nameController.clear();
+      _minRating = null;
       _recompute();
     });
     SfxService().playNavSound();
@@ -1184,10 +1191,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<String> _menuLabels(String key) {
     final any = AppLocale.filterAny.getString(context);
     if (key == 'rating') {
-      return [
-        for (var i = 0; i < _ratingThresholds.length; i++)
-          i == 0 ? any : _ratingDisplay(_ratingThresholds[i]!),
-      ];
+      return [any, ..._facets.ratings.map(_ratingDisplay)];
     }
     return [any, ..._menuOptions(key)];
   }
@@ -1200,7 +1204,7 @@ class _SearchScreenState extends State<SearchScreen> {
     'developer' => _developer != null,
     'genre' => _genre != null,
     'year' => _year != null,
-    'rating' => _ratingIdx != 0,
+    'rating' => _minRating != null,
     _ => false,
   };
 
@@ -1216,7 +1220,7 @@ class _SearchScreenState extends State<SearchScreen> {
       case 'year':
         return _year ?? any;
       case 'rating':
-        final t = _ratingThresholdValue;
+        final t = _minRating;
         return t == null ? any : _ratingDisplay(t);
       default:
         return any;
