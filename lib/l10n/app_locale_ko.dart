@@ -868,7 +868,7 @@ const Map<String, dynamic> appLocaleKo = {
 
   // Library search & filtering.
   AppLocale.searchTitle: '검색',
-  AppLocale.searchNameHint: '게임 이름...',
+  AppLocale.searchNameHint: '검색...',
   AppLocale.searchNoResults: '게임을 찾을 수 없습니다',
   AppLocale.searchResultsCount: '결과 {count}개',
   AppLocale.searchClearFilters: '필터 지우기',

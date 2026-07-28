@@ -6,9 +6,19 @@ import 'package:neostation/models/database_game_model.dart';
 /// the screen owns presentation and gamepad focus, these functions own the
 /// in-memory matching, sorting and option-derivation rules.
 
-/// Discrete rating thresholds the rating filter can offer, ascending. The
-/// "Any" slot is added by the facet, so it is not part of this list.
-const List<double> kRatingThresholds = [3.0, 4.0, 4.5];
+/// A stored rating as the 0..10 score the UI shows. Ratings are held on
+/// ScreenScraper's 0..20 scale and displayed out of 10 across the app.
+double searchRatingScore(double rating) => rating / 2;
+
+/// The whole 1..10 score a game is filed under, or null when it is unrated.
+///
+/// The rating filter offers plain scores rather than "4+" thresholds, so each
+/// game belongs to exactly one of them — the same one-value-per-game shape the
+/// platform and genre filters have.
+int? searchRatingBucket(double? rating) {
+  if (rating == null || rating <= 0) return null;
+  return searchRatingScore(rating).round().clamp(1, 10);
+}
 
 /// Keys identifying a filter dimension, shared by the criteria, the facet sets
 /// and the screen's chip row.
@@ -26,7 +36,7 @@ class SearchCriteria {
     this.developer,
     this.genre,
     this.year,
-    this.minRating,
+    this.rating,
   });
 
   final String query;
@@ -34,7 +44,9 @@ class SearchCriteria {
   final String? developer;
   final String? genre;
   final String? year;
-  final double? minRating;
+
+  /// Whole 1..10 score to match exactly (null == Any); see [searchRatingBucket].
+  final int? rating;
 
   /// This selection with [dimension] reset to "Any".
   ///
@@ -46,7 +58,7 @@ class SearchCriteria {
     developer: dimension == kFilterDeveloper ? null : developer,
     genre: dimension == kFilterGenre ? null : genre,
     year: dimension == kFilterYear ? null : year,
-    minRating: dimension == kFilterRating ? null : minRating,
+    rating: dimension == kFilterRating ? null : rating,
   );
 
   /// The active value for a string-valued [dimension] (null == Any).
@@ -109,8 +121,10 @@ bool matchesCriteria(DatabaseGameModel g, SearchCriteria criteria) {
     return false;
   }
   if (criteria.year != null && searchYearOf(g) != criteria.year) return false;
-  final minRating = criteria.minRating;
-  if (minRating != null && (g.rating ?? -1) < minRating) return false;
+  if (criteria.rating != null &&
+      searchRatingBucket(g.rating) != criteria.rating) {
+    return false;
+  }
   return true;
 }
 
@@ -147,8 +161,8 @@ class SearchFacets {
   final List<String> genres;
   final List<String> years;
 
-  /// Rating thresholds that at least one candidate game reaches.
-  final List<double> ratings;
+  /// Whole 1..10 scores at least one candidate game is filed under, ascending.
+  final List<int> ratings;
 
   static const SearchFacets empty = SearchFacets();
 
@@ -226,25 +240,17 @@ List<String> _yearFacet(
   return years;
 }
 
-/// Thresholds reachable by the candidate set. Thresholds are monotonic, so the
-/// best rating on offer decides how many of them are worth showing.
-List<double> _ratingFacet(
-  List<DatabaseGameModel> games,
-  SearchCriteria criteria,
-) {
-  var best = -1.0;
+/// Scores actually present in the candidate set — a library of 7s and 8s
+/// offers 7 and 8, not the whole 1..10 range.
+List<int> _ratingFacet(List<DatabaseGameModel> games, SearchCriteria criteria) {
+  final scores = <int>{};
   for (final g in _candidates(games, criteria, kFilterRating)) {
-    final r = g.rating;
-    if (r != null && r > best) best = r;
+    final bucket = searchRatingBucket(g.rating);
+    if (bucket != null) scores.add(bucket);
   }
-  final thresholds = kRatingThresholds.where((t) => t <= best).toList();
-  final active = criteria.minRating;
-  if (active != null && !thresholds.contains(active)) {
-    thresholds
-      ..add(active)
-      ..sort();
-  }
-  return thresholds;
+  final active = criteria.rating;
+  if (active != null) scores.add(active);
+  return scores.toList()..sort();
 }
 
 /// Cycles through [options] with an "Any" (null) slot at the head, moving by

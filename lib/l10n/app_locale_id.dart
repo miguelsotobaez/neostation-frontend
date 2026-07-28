@@ -843,7 +843,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.addRomFolder: 'Tambah Folder ROM',
   AppLocale.removeRomFolder: 'Hapus',
   AppLocale.searchTitle: 'Cari',
-  AppLocale.searchNameHint: 'Nama gim...',
+  AppLocale.searchNameHint: 'Cari...',
   AppLocale.searchNoResults: 'Tidak ada gim ditemukan',
   AppLocale.searchResultsCount: '{count} hasil',
   AppLocale.searchClearFilters: 'Hapus filter',

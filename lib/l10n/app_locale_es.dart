@@ -867,7 +867,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.addRomFolder: 'Añadir carpeta de ROMs',
   AppLocale.removeRomFolder: 'Eliminar',
   AppLocale.searchTitle: 'Buscar',
-  AppLocale.searchNameHint: 'Nombre del juego...',
+  AppLocale.searchNameHint: 'Buscar...',
   AppLocale.searchNoResults: 'No se encontraron juegos',
   AppLocale.searchResultsCount: '{count} resultados',
   AppLocale.searchClearFilters: 'Borrar filtros',

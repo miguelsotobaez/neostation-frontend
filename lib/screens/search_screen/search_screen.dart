@@ -71,14 +71,15 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _developer;
   String? _genre;
   String? _year;
-  double? _minRating;
+  int? _rating;
 
   _FocusRegion _region = _FocusRegion.search;
   int _barIndex = 0;
   int _resultIndex = 0;
 
-  // The search band holds two items: the text field (0) and the Filters toggle
-  // (1). Filters stay collapsed by default — most users only want text search.
+  // Index into [_searchItems]: the text field, the clear-query X once there is
+  // a query, then the Filters toggle. Filters stay collapsed by default — most
+  // users only want text search.
   int _searchIndex = 0;
   bool _filtersExpanded = false;
 
@@ -86,7 +87,7 @@ class _SearchScreenState extends State<SearchScreen> {
   // value is snapshotted on open so Back can cancel a live preview.
   String? _menuKey;
   String? _menuOrigValue;
-  double? _menuOrigRating;
+  int? _menuOrigRatingValue;
   final ScrollController _menuScroll = ScrollController();
 
   static const double _menuExtent = 44;
@@ -181,7 +182,7 @@ class _SearchScreenState extends State<SearchScreen> {
       developer: _developer,
       genre: _genre,
       year: _year,
-      minRating: _minRating,
+      rating: _rating,
     );
 
     _results = filterAndSortGames(_all, criteria);
@@ -196,6 +197,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final items = _barItems;
     final moved = focusedKey == null ? -1 : items.indexOf(focusedKey);
     _barIndex = moved >= 0 ? moved : _barIndex.clamp(0, items.length - 1);
+
+    // Emptying the query drops the clear button out of the search band.
+    _searchIndex = _searchIndex.clamp(0, _lastSearchIndex);
   }
 
   // ── Band model ──────────────────────────────────────────────────────────
@@ -213,7 +217,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _menuOptions(key).isNotEmpty || _isFilterActive(key);
     return [
       if (shown('platform')) 'platform',
-      if (_facets.ratings.isNotEmpty || _minRating != null) 'rating',
+      if (_facets.ratings.isNotEmpty || _rating != null) 'rating',
       if (shown('developer')) 'developer',
       if (shown('genre')) 'genre',
       if (shown('year')) 'year',
@@ -227,7 +231,25 @@ class _SearchScreenState extends State<SearchScreen> {
   /// so applied filters stay visible even while the chip row is collapsed).
   int get _activeFilterCount =>
       [_platform, _developer, _genre, _year].where((v) => v != null).length +
-      (_minRating != null ? 1 : 0);
+      (_rating != null ? 1 : 0);
+
+  /// Focusable items in the search band, left-to-right. The clear button only
+  /// exists while there is a query to clear.
+  List<String> get _searchItems => [
+    'field',
+    if (_nameController.text.isNotEmpty) 'clearQuery',
+    'filters',
+  ];
+
+  int get _lastSearchIndex => _searchItems.length - 1;
+
+  /// Key of the search-band item holding focus.
+  String get _focusedSearchItem =>
+      _searchItems[_searchIndex.clamp(0, _lastSearchIndex)];
+
+  /// Whether the search band owns focus and it sits on [key].
+  bool _searchFocused(String key) =>
+      _region == _FocusRegion.search && _focusedSearchItem == key;
 
   /// Shows/hides the filter chip row, moving focus to follow.
   void _toggleFilters() {
@@ -238,8 +260,19 @@ class _SearchScreenState extends State<SearchScreen> {
         _barIndex = 0;
       } else {
         _region = _FocusRegion.search;
-        _searchIndex = 1;
+        _searchIndex = _searchItems.indexOf('filters');
       }
+    });
+    SfxService().playNavSound();
+  }
+
+  /// Empties the name query, leaving the filter chips as they are, and hands
+  /// focus back to the field the user was typing in.
+  void _clearQuery() {
+    setState(() {
+      _nameController.clear();
+      _searchIndex = 0;
+      _recompute();
     });
     SfxService().playNavSound();
   }
@@ -248,7 +281,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _navigateLeft() {
     if (_region == _FocusRegion.search) {
-      setState(() => _searchIndex = 0);
+      setState(
+        () => _searchIndex = (_searchIndex - 1).clamp(0, _lastSearchIndex),
+      );
       SfxService().playNavSound();
     } else if (_region == _FocusRegion.filters) {
       setState(
@@ -261,7 +296,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _navigateRight() {
     if (_region == _FocusRegion.search) {
-      setState(() => _searchIndex = 1);
+      setState(
+        () => _searchIndex = (_searchIndex + 1).clamp(0, _lastSearchIndex),
+      );
       SfxService().playNavSound();
     } else if (_region == _FocusRegion.filters) {
       setState(() => _barIndex = (_barIndex + 1) % _barItems.length);
@@ -351,11 +388,14 @@ class _SearchScreenState extends State<SearchScreen> {
           _region = _FocusRegion.filters;
         });
       case _FocusRegion.search:
-        if (_searchIndex == 0) {
-          // Hand focus to the text field so the keyboard opens.
-          _nameFocus.requestFocus();
-        } else {
-          _toggleFilters();
+        switch (_focusedSearchItem) {
+          case 'clearQuery':
+            _clearQuery();
+          case 'filters':
+            _toggleFilters();
+          default:
+            // Hand focus to the text field so the keyboard opens.
+            _nameFocus.requestFocus();
         }
       case _FocusRegion.results:
         // Open the per-result chooser instead of launching outright, so the
@@ -417,7 +457,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _menuKey = key;
       _menuOrigValue = _currentFilterValue(key);
-      _menuOrigRating = _minRating;
+      _menuOrigRatingValue = _rating;
       _region = _FocusRegion.filterMenu;
     });
     _scrollMenuIntoView();
@@ -429,7 +469,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final key = _menuKey;
     setState(() {
       if (key == 'rating') {
-        _minRating = _menuOrigRating;
+        _rating = _menuOrigRatingValue;
       } else if (key != null) {
         _setFilterValue(key, _menuOrigValue);
       }
@@ -445,7 +485,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (key == null) return;
     setState(() {
       if (key == 'rating') {
-        _minRating = cycleFilterValue(_facets.ratings, _minRating, delta);
+        _rating = cycleFilterValue(_facets.ratings, _rating, delta);
       } else {
         _setFilterValue(
           key,
@@ -461,7 +501,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _applyMenuIndex(String key, int index) {
     setState(() {
       if (key == 'rating') {
-        _minRating = index == 0 ? null : _facets.ratings[index - 1];
+        _rating = index == 0 ? null : _facets.ratings[index - 1];
       } else {
         _setFilterValue(key, index == 0 ? null : _menuOptions(key)[index - 1]);
       }
@@ -498,7 +538,7 @@ class _SearchScreenState extends State<SearchScreen> {
   /// (0 == the leading "Any" slot).
   int _menuSelectedIndex(String key) {
     if (key == 'rating') {
-      final cur = _minRating;
+      final cur = _rating;
       if (cur == null) return 0;
       final i = _facets.ratings.indexOf(cur);
       return i < 0 ? 0 : i + 1;
@@ -517,7 +557,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _developer = null;
       _genre = null;
       _year = null;
-      _minRating = null;
+      _rating = null;
       _recompute();
     });
     SfxService().playNavSound();
@@ -804,10 +844,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// The count rides in this row rather than owning a line above the list —
   /// on a handheld that line was a whole result's worth of height.
   Widget _buildSearchRow(ThemeData theme) {
-    final inSearch = _region == _FocusRegion.search;
     return Row(
       children: [
-        Expanded(child: _buildNameField(theme, inSearch && _searchIndex == 0)),
+        Expanded(child: _buildNameField(theme, _searchFocused('field'))),
         SizedBox(width: 10.r),
         Text(
           AppLocale.searchResultsCount
@@ -820,7 +859,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         SizedBox(width: 10.r),
-        _buildAdvancedToggle(theme, inSearch && _searchIndex == 1),
+        _buildAdvancedToggle(theme, _searchFocused('filters')),
       ],
     );
   }
@@ -918,6 +957,9 @@ class _SearchScreenState extends State<SearchScreen> {
         decoration: InputDecoration(
           hintText: AppLocale.searchNameHint.getString(context),
           prefixIcon: const Icon(Symbols.search_rounded),
+          suffixIcon: _nameController.text.isEmpty
+              ? null
+              : _buildClearQueryButton(theme, _searchFocused('clearQuery')),
           isDense: true,
           contentPadding: EdgeInsets.symmetric(
             horizontal: 12.r,
@@ -931,6 +973,39 @@ class _SearchScreenState extends State<SearchScreen> {
             borderRadius: BorderRadius.circular(12.r),
             borderSide: BorderSide.none,
           ),
+        ),
+      ),
+    );
+  }
+
+  /// The X inside the search field that empties the query.
+  ///
+  /// It is a focus stop of its own in the search band rather than a tap-only
+  /// affordance, so it is reachable with the D-pad like everything else — and
+  /// it only exists while there is a query, so Left/Right skip it otherwise.
+  Widget _buildClearQueryButton(ThemeData theme, bool focused) {
+    final scheme = theme.colorScheme;
+    return GestureDetector(
+      onTap: _clearQuery,
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 6.r, vertical: 4.r),
+        padding: EdgeInsets.all(4.r),
+        decoration: BoxDecoration(
+          color: focused
+              ? scheme.primary.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10.r),
+          border: Border.all(
+            color: focused ? scheme.primary : Colors.transparent,
+            width: 2.r,
+          ),
+        ),
+        child: Icon(
+          Symbols.close_rounded,
+          size: 18.r,
+          color: focused
+              ? scheme.primary
+              : scheme.onSurface.withValues(alpha: 0.6),
         ),
       ),
     );
@@ -1196,15 +1271,16 @@ class _SearchScreenState extends State<SearchScreen> {
     return [any, ..._menuOptions(key)];
   }
 
-  String _ratingDisplay(double t) =>
-      '★ ${t.toStringAsFixed(t == 4.5 ? 1 : 0)}+';
+  /// A rating option: the plain 1..10 score games are filed under, not a
+  /// "4+" threshold — each option matches one score, like every other filter.
+  String _ratingDisplay(int score) => '★ $score';
 
   bool _isFilterActive(String key) => switch (key) {
     'platform' => _platform != null,
     'developer' => _developer != null,
     'genre' => _genre != null,
     'year' => _year != null,
-    'rating' => _minRating != null,
+    'rating' => _rating != null,
     _ => false,
   };
 
@@ -1220,7 +1296,7 @@ class _SearchScreenState extends State<SearchScreen> {
       case 'year':
         return _year ?? any;
       case 'rating':
-        final t = _minRating;
+        final t = _rating;
         return t == null ? any : _ratingDisplay(t);
       default:
         return any;
@@ -1312,7 +1388,8 @@ class _SearchScreenState extends State<SearchScreen> {
               Icon(Symbols.star_rounded, size: 14.r, color: scheme.primary),
               SizedBox(width: 2.r),
               Text(
-                g.rating!.toStringAsFixed(1),
+                // Stored 0..20, shown out of 10 as everywhere else in the app.
+                searchRatingScore(g.rating!).toStringAsFixed(1),
                 style: TextStyle(
                   fontSize: 12.r,
                   fontWeight: FontWeight.w600,

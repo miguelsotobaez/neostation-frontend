@@ -852,7 +852,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.addRomFolder: 'Adicionar pasta de ROM',
   AppLocale.removeRomFolder: 'Remover',
   AppLocale.searchTitle: 'Pesquisar',
-  AppLocale.searchNameHint: 'Nome do jogo...',
+  AppLocale.searchNameHint: 'Pesquisar...',
   AppLocale.searchNoResults: 'Nenhum jogo encontrado',
   AppLocale.searchResultsCount: '{count} resultados',
   AppLocale.searchClearFilters: 'Limpar filtros',

@@ -840,7 +840,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.addRomFolder: 'Добавить папку ROM',
   AppLocale.removeRomFolder: 'Удалить',
   AppLocale.searchTitle: 'Поиск',
-  AppLocale.searchNameHint: 'Название игры...',
+  AppLocale.searchNameHint: 'Поиск...',
   AppLocale.searchNoResults: 'Игры не найдены',
   AppLocale.searchResultsCount: 'Результатов: {count}',
   AppLocale.searchClearFilters: 'Сбросить фильтры',

@@ -131,10 +131,15 @@ void main() {
       expect(r.map((g) => g.realName), ['Mario', 'Sonic']);
     });
 
-    test('minRating excludes lower-rated and unrated games', () {
-      final games = [...library, game(realName: 'NoRating', rating: null)];
-      final r = filterAndSortGames(games, const SearchCriteria(minRating: 4.0));
-      expect(r.map((g) => g.realName), ['Mario', 'Zelda']);
+    test('rating matches the whole score a game is filed under', () {
+      final games = [
+        game(realName: 'Great', rating: 17.4), // 8.7 → 9
+        game(realName: 'Good', rating: 17.0), // 8.5 → 9
+        game(realName: 'Okay', rating: 15.0), // 7.5 → 8
+        game(realName: 'NoRating', rating: null),
+      ];
+      final r = filterAndSortGames(games, const SearchCriteria(rating: 9));
+      expect(r.map((g) => g.realName), ['Good', 'Great']);
     });
 
     test('combines multiple criteria with AND semantics', () {
@@ -155,6 +160,7 @@ void main() {
   });
 
   group('computeFacets', () {
+    // Ratings are on the stored 0..20 scale (displayed as half that).
     final library = [
       game(
         realName: 'Sonic the Hedgehog',
@@ -162,7 +168,7 @@ void main() {
         developer: 'Sega',
         genre: 'Platformer',
         year: '1991',
-        rating: 4.6,
+        rating: 16.4, // 8.2 / 10
       ),
       game(
         realName: 'Sonic CD',
@@ -170,7 +176,7 @@ void main() {
         developer: 'Sega',
         genre: 'Platformer',
         year: '1993',
-        rating: 4.2,
+        rating: 15.0, // 7.5 / 10
       ),
       game(
         realName: 'Super Mario Bros',
@@ -178,7 +184,7 @@ void main() {
         developer: 'Nintendo',
         genre: 'Platformer',
         year: '1985',
-        rating: 4.9,
+        rating: 19.2, // 9.6 / 10
       ),
       game(
         realName: 'Contra',
@@ -186,7 +192,7 @@ void main() {
         developer: 'Konami',
         genre: 'Shooter',
         year: '1988',
-        rating: 3.5,
+        rating: 7.0, // 3.5 / 10
       ),
     ];
 
@@ -216,11 +222,22 @@ void main() {
       expect(f.developers, ['Konami']);
     });
 
-    test('rating thresholds stop at the best rating on offer', () {
+    test('ratings offer only the scores present in the results', () {
+      // Contra alone sits at 3.5/10, which is filed under 4.
       final f = computeFacets(library, const SearchCriteria(query: 'contra'));
-      expect(f.ratings, [3.0]);
+      expect(f.ratings, [4]);
+      // The library as a whole: 3.5, 7.5, 8.2, 9.6 → 4, 8, 8, 10.
       final all = computeFacets(library, const SearchCriteria());
-      expect(all.ratings, [3.0, 4.0, 4.5]);
+      expect(all.ratings, [4, 8, 10]);
+    });
+
+    test('an unreachable score survives while it is the active one', () {
+      final f = computeFacets(
+        library,
+        // 10 pinned, then narrowed to a game filed under 4.
+        const SearchCriteria(query: 'contra', rating: 10),
+      );
+      expect(f.ratings, [4, 10]);
     });
 
     test('a stranded active value stays selectable', () {
@@ -250,6 +267,21 @@ void main() {
       expect(f.genres, isEmpty);
       expect(f.years, isEmpty);
       expect(f.ratings, isEmpty);
+    });
+  });
+
+  group('searchRatingBucket', () {
+    test('files a stored 0..20 rating under its whole 1..10 score', () {
+      expect(searchRatingBucket(16.4), 8); // 8.2
+      expect(searchRatingBucket(15.0), 8); // 7.5 rounds up
+      expect(searchRatingBucket(19.2), 10); // 9.6
+      expect(searchRatingBucket(20.0), 10);
+      expect(searchRatingBucket(1.0), 1); // 0.5 rounds up into range
+    });
+
+    test('unrated games belong to no score', () {
+      expect(searchRatingBucket(null), isNull);
+      expect(searchRatingBucket(0), isNull);
     });
   });
 

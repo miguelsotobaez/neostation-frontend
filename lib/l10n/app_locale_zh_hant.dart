@@ -758,7 +758,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.addRomFolder: '新增 ROM 資料夾',
   AppLocale.removeRomFolder: '移除',
   AppLocale.searchTitle: '搜尋',
-  AppLocale.searchNameHint: '遊戲名稱...',
+  AppLocale.searchNameHint: '搜尋...',
   AppLocale.searchNoResults: '找不到遊戲',
   AppLocale.searchResultsCount: '{count} 個結果',
   AppLocale.searchClearFilters: '清除篩選',
