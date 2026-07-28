@@ -52,9 +52,9 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// the animation has finished.
   static const Duration _dockRevealDuration = Duration(milliseconds: 550);
 
-  /// The last `dockEnabled` this engine observed, so [_onStateChanged] can spot
-  /// the user toggling the dock off. Null until the first state push.
-  bool? _dockEnabledSeen;
+  /// The last [_dockShown] this engine observed, so [_onStateChanged] can spot
+  /// the dock going away. Null until the first state push.
+  bool? _dockShownSeen;
 
   /// Keeps the dock overlay mounted while it slides out after being disabled.
   /// The setting flips instantly, so without this the subtree would be dropped
@@ -211,8 +211,10 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
     // Warm the app list + dock icons exactly once, only after the dock has
     // revealed. Gating on `appReady` keeps this heavy work off the cold-boot
-    // reveal path so it can't perturb the cross-engine dock-reveal race.
-    if (state.appReady && !_dockPrefetchStarted) {
+    // reveal path so it can't perturb the cross-engine dock-reveal race — and
+    // on the wizard flag so it doesn't compete with first-run setup for a
+    // dock nobody can see yet.
+    if (state.appReady && !state.setupWizardActive && !_dockPrefetchStarted) {
       _dockPrefetchStarted = true;
       unawaited(_prefetchDockData());
     }
@@ -266,18 +268,27 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     }
   }
 
+  /// Whether the app dock (and its all-apps launcher) belongs on screen: the
+  /// user has it enabled *and* the main display isn't running the first-run
+  /// setup wizard. The wizard owns the whole first-run experience, so the
+  /// bottom screen shouldn't be offering app shortcuts underneath it.
+  bool _dockShown(SecondaryDisplayStateData state) =>
+      state.dockEnabled && !state.setupWizardActive;
+
   /// Keeps the dock overlay mounted long enough to animate out when the user
   /// turns the dock off in settings. Enabling is symmetrical and needs no
   /// bookkeeping: the overlay mounts on the next build and the reveal tween
-  /// eases it up from its parked position, exactly as it does at boot.
+  /// eases it up from its parked position, exactly as it does at boot — which
+  /// is also how the dock arrives when the wizard finishes.
   void _syncDockMount(SecondaryDisplayStateData state) {
-    final was = _dockEnabledSeen;
-    _dockEnabledSeen = state.dockEnabled;
-    if (was == null || was == state.dockEnabled) return;
+    final was = _dockShownSeen;
+    final shown = _dockShown(state);
+    _dockShownSeen = shown;
+    if (was == null || was == shown) return;
 
     _dockSlideOutTimer?.cancel();
     _dockSlideOutTimer = null;
-    if (state.dockEnabled) {
+    if (shown) {
       // Re-enabled, possibly mid-slide-out — the tween picks up from wherever
       // the dock currently sits and carries it back into place.
       if (_dockSlidingOut) setState(() => _dockSlidingOut = false);
@@ -947,7 +958,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                             // Stays mounted for one animation after being
                             // disabled so it can slide back out (see
                             // [_syncDockMount]).
-                            if (value.dockEnabled || _dockSlidingOut)
+                            if (_dockShown(value) || _dockSlidingOut)
                               _buildDockOverlay(value),
 
                             // Scraping Overlay
@@ -1158,7 +1169,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
           child: TweenAnimationBuilder<double>(
             tween: Tween(
               begin: 1.0,
-              end: _dockRevealed && value.dockEnabled ? 0.0 : 1.0,
+              end: _dockRevealed && _dockShown(value) ? 0.0 : 1.0,
             ),
             duration: _dockRevealDuration,
             curve: Curves.easeOutCubic,

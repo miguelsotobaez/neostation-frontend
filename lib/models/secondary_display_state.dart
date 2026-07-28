@@ -204,6 +204,15 @@ class SecondaryDisplayStateData {
   /// while the app is still loading.
   final bool appReady;
 
+  /// Whether the first-run setup wizard is on screen on the main display.
+  /// Pushed by the main engine while the wizard runs and cleared once setup
+  /// completes. The secondary display keeps the app dock and its all-apps
+  /// launcher parked off-screen while this is true — [appReady] latches at the
+  /// main engine's first frame, which happens *behind* the wizard, so without
+  /// this the dock slides up and offers app shortcuts before the user has even
+  /// picked a ROM folder.
+  final bool setupWizardActive;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -267,6 +276,7 @@ class SecondaryDisplayStateData {
     this.dockEnabled = true,
     this.dockSlotCount = 3,
     this.appReady = false,
+    this.setupWizardActive = false,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -344,6 +354,7 @@ class SecondaryDisplayStateData {
     bool? dockEnabled,
     int? dockSlotCount,
     bool? appReady,
+    bool? setupWizardActive,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -422,6 +433,7 @@ class SecondaryDisplayStateData {
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
       appReady: appReady ?? this.appReady,
+      setupWizardActive: setupWizardActive ?? this.setupWizardActive,
     );
   }
 
@@ -502,6 +514,7 @@ class SecondaryDisplayStateData {
       dockEnabled: json['dockEnabled'] as bool? ?? true,
       dockSlotCount: (json['dockSlotCount'] as num?)?.toInt() ?? 3,
       appReady: json['appReady'] as bool? ?? false,
+      setupWizardActive: json['setupWizardActive'] as bool? ?? false,
     );
   }
 
@@ -565,6 +578,7 @@ class SecondaryDisplayStateData {
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
       'appReady': appReady,
+      'setupWizardActive': setupWizardActive,
     };
   }
 }
@@ -678,6 +692,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     bool? dockEnabled,
     int? dockSlotCount,
     bool? appReady,
+    bool? setupWizardActive,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -760,6 +775,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           dockEnabled: dockEnabled,
           dockSlotCount: dockSlotCount,
           appReady: appReady,
+          setupWizardActive: setupWizardActive,
         ),
       );
     } catch (e) {
