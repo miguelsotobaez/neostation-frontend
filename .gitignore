@@ -294,3 +294,6 @@ ROMs/
 /media
 # Local scratch / handoff notes (ignored)
 *.local.md
+
+# Native build scratch from the vendored packages (never committed)
+.cxx/

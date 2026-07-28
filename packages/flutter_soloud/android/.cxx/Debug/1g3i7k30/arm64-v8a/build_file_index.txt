@@ -1,3 +1,0 @@
-/home/neil/dev/neostation-search/packages/flutter_soloud/android/CMakeLists.txt
-/home/neil/dev/neostation-search/packages/flutter_soloud/android/Configure.cmake
-/home/neil/dev/neostation-search/packages/flutter_soloud/android/src.cmake

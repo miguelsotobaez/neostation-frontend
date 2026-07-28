@@ -1,3 +1,0 @@
-/home/neil/dev/neostation-search/packages/flutter_soloud/android/.cxx/Debug/1g3i7k30/arm64-v8a/CMakeFiles/flutter_soloud_plugin.dir
-/home/neil/dev/neostation-search/packages/flutter_soloud/android/.cxx/Debug/1g3i7k30/arm64-v8a/CMakeFiles/edit_cache.dir
-/home/neil/dev/neostation-search/packages/flutter_soloud/android/.cxx/Debug/1g3i7k30/arm64-v8a/CMakeFiles/rebuild_cache.dir
