@@ -173,6 +173,16 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.bartopShutdownSubtitle:
       'Apagar el equipo al salir de la aplicación',
 
+  AppLocale.showSyncTab: 'Mostrar pestaña Sincronización',
+  AppLocale.showSyncTabSubtitle:
+      'Muestra la pestaña de sincronización en la nube en la barra de navegación',
+  AppLocale.showAchievementsTab: 'Mostrar pestaña Logros',
+  AppLocale.showAchievementsTabSubtitle:
+      'Muestra la pestaña de RetroAchievements en la barra de navegación',
+  AppLocale.showScraperTab: 'Mostrar pestaña Scraper',
+  AppLocale.showScraperTabSubtitle:
+      'Muestra la pestaña de scraping en la barra de navegación',
+
   AppLocale.configureDirectories: 'Directorios',
   AppLocale.configureRomsFolder: 'Configurar carpeta de ROMs',
   AppLocale.cannotAccessFolder: 'No se puede acceder a la carpeta',
@@ -442,6 +452,8 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.stoppingScraping: 'Deteniendo el proceso de scraping...',
   AppLocale.syncError: 'Error al sincronizar IDs de sistemas',
   AppLocale.metadataError: 'Error durante el scraping de metadatos',
+  AppLocale.scrapeQuotaExceeded:
+      'Has superado la cuota diaria de scraping de ScreenScraper',
   AppLocale.start: 'Iniciar',
   AppLocale.systemsSub: 'Selecciona qué sistemas escanear',
   AppLocale.disableAll: 'Desactivar Todos',

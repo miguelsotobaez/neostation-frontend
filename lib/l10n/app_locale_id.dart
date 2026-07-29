@@ -167,6 +167,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.bartopShutdown: 'Matikan BarTOP saat keluar',
   AppLocale.bartopShutdownSubtitle: 'Mematikan komputer saat menutup aplikasi',
 
+  AppLocale.showSyncTab: 'Tampilkan tab Sinkronisasi',
+  AppLocale.showSyncTabSubtitle:
+      'Menampilkan tab sinkronisasi cloud di bilah navigasi',
+  AppLocale.showAchievementsTab: 'Tampilkan tab Pencapaian',
+  AppLocale.showAchievementsTabSubtitle:
+      'Menampilkan tab RetroAchievements di bilah navigasi',
+  AppLocale.showScraperTab: 'Tampilkan tab Scraper',
+  AppLocale.showScraperTabSubtitle:
+      'Menampilkan tab scraping di bilah navigasi',
+
   AppLocale.configureDirectories: 'Konfigurasi Direktori',
   AppLocale.configureRomsFolder: 'Konfigurasi Folder ROM',
   AppLocale.cannotAccessFolder: 'Tidak dapat mengakses folder',
@@ -427,6 +437,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.stoppingScraping: 'Menghentikan proses scraping...',
   AppLocale.syncError: 'Kesalahan saat menyinkronkan ID sistem',
   AppLocale.metadataError: 'Kesalahan selama proses scraping',
+  AppLocale.scrapeQuotaExceeded:
+      'Kuota harian scraping ScreenScraper terlampaui',
   AppLocale.start: 'Mulai',
   AppLocale.systemsSub: 'Pilih sistem yang akan di-scrape',
   AppLocale.disableAll: 'Nonaktifkan Semua',

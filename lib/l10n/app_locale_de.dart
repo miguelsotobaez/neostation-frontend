@@ -171,6 +171,16 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.bartopShutdownSubtitle:
       'Schaltet den Computer beim Schließen der App aus',
 
+  AppLocale.showSyncTab: 'Sync-Tab anzeigen',
+  AppLocale.showSyncTabSubtitle:
+      'Zeigt den Cloud-Sync-Tab in der Navigationsleiste an',
+  AppLocale.showAchievementsTab: 'Erfolge-Tab anzeigen',
+  AppLocale.showAchievementsTabSubtitle:
+      'Zeigt den RetroAchievements-Tab in der Navigationsleiste an',
+  AppLocale.showScraperTab: 'Scraper-Tab anzeigen',
+  AppLocale.showScraperTabSubtitle:
+      'Zeigt den Scraping-Tab in der Navigationsleiste an',
+
   AppLocale.configureDirectories: 'Verzeichnisse konfigurieren',
   AppLocale.configureRomsFolder: 'ROM-Ordner konfigurieren',
   AppLocale.cannotAccessFolder: 'Zugriff auf den Ordner nicht möglich',
@@ -445,6 +455,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.stoppingScraping: 'Scraping-Prozess wird gestoppt...',
   AppLocale.syncError: 'Fehler beim Synchronisieren der System-IDs',
   AppLocale.metadataError: 'Fehler während des Scraping-Prozesses',
+  AppLocale.scrapeQuotaExceeded:
+      'ScreenScraper Tages-Scraping-Kontingent überschritten',
   AppLocale.start: 'Start',
   AppLocale.systemsSub: 'Wähle die Systeme zum Scrapen',
   AppLocale.disableAll: 'Alle deaktivieren',

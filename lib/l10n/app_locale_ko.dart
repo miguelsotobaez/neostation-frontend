@@ -143,6 +143,13 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.bartopShutdown: '종료할 때 BarTOP 전원 끄기',
   AppLocale.bartopShutdownSubtitle: '앱을 종료할 때 컴퓨터도 함께 종료합니다',
 
+  AppLocale.showSyncTab: '동기화 탭 표시',
+  AppLocale.showSyncTabSubtitle: '내비게이션 바에 클라우드 동기화 탭을 표시합니다',
+  AppLocale.showAchievementsTab: '업적 탭 표시',
+  AppLocale.showAchievementsTabSubtitle: '내비게이션 바에 RetroAchievements 탭을 표시합니다',
+  AppLocale.showScraperTab: '스크레이퍼 탭 표시',
+  AppLocale.showScraperTabSubtitle: '내비게이션 바에 스크래핑 탭을 표시합니다',
+
   AppLocale.configureDirectories: '폴더',
   AppLocale.configureRomsFolder: 'ROM 폴더 설정',
   AppLocale.cannotAccessFolder: '폴더에 접근할 수 없습니다',
@@ -387,6 +394,8 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.stoppingScraping: '게임 정보 가져오기를 중지하는 중...',
   AppLocale.syncError: '시스템 ID를 동기화하는 중 오류가 발생했습니다',
   AppLocale.metadataError: '게임 정보 가져오기 오류',
+  AppLocale.scrapeQuotaExceeded:
+      'ScreenScraper 일일 스크래핑 할당량 초과',
   AppLocale.start: '시작',
   AppLocale.systemsSub: '게임 정보를 가져올 시스템을 선택합니다',
   AppLocale.disableAll: '모두 비활성화',

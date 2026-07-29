@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 105;
+  static const int _databaseVersion = 106;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1676,6 +1676,9 @@ class SqliteService {
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
         legend_hidden INTEGER DEFAULT 0,
+        hide_tab_sync INTEGER DEFAULT 0,
+        hide_tab_achievements INTEGER DEFAULT 0,
+        hide_tab_scraper INTEGER DEFAULT 0,
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         neostation_app_version TEXT DEFAULT '',
@@ -2443,6 +2446,9 @@ class SqliteService {
     String? activeTheme,
     int? hideRecentCard,
     int? legendHidden,
+    int? hideTabSync,
+    int? hideTabAchievements,
+    int? hideTabScraper,
     String? activeSyncProvider,
     String? systemsVersion,
     String? neostationAppVersion,
@@ -2520,6 +2526,15 @@ class SqliteService {
     }
     if (legendHidden != null) {
       newConfig['legend_hidden'] = legendHidden;
+    }
+    if (hideTabSync != null) {
+      newConfig['hide_tab_sync'] = hideTabSync;
+    }
+    if (hideTabAchievements != null) {
+      newConfig['hide_tab_achievements'] = hideTabAchievements;
+    }
+    if (hideTabScraper != null) {
+      newConfig['hide_tab_scraper'] = hideTabScraper;
     }
     if (activeSyncProvider != null) {
       newConfig['active_sync_provider'] = activeSyncProvider;

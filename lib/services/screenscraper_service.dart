@@ -10,6 +10,7 @@ import 'screenscraper/rom_hasher.dart';
 import 'screenscraper/media_resolver.dart';
 import 'screenscraper/screenscraper_client.dart';
 import 'screenscraper/media_downloader.dart';
+import 'screenscraper/screenscraper_exceptions.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
 import '../widgets/scraping_summary_dialog.dart';
@@ -386,6 +387,8 @@ class ScreenScraperService {
         _log.e('HTTP Error ${response.statusCode}: ${response.body}');
         return null;
       }
+    } on ScreenscraperQuotaExceededException {
+      rethrow;
     } catch (e) {
       _log.e('Error getting game information: $e');
       return null;
@@ -661,6 +664,8 @@ class ScreenScraperService {
             ? AppLocale.scrapeSuccessful
             : AppLocale.scrapeMediaDownloadsFailed,
       };
+    } on ScreenscraperQuotaExceededException {
+      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
     } catch (e) {
       _log.e('Error scraping single game: $e');
       return {'success': false, 'message': AppLocale.scrapeUnexpectedError};
@@ -827,6 +832,10 @@ class ScreenScraperService {
 
       scrapingProvider.stopScraping();
       return true;
+    } on ScreenscraperQuotaExceededException {
+      _log.e('Daily scraping quota exceeded; stopping scraping session.');
+      scrapingProvider.stopScraping();
+      rethrow;
     } catch (e) {
       _log.e('Error during scraping process: $e');
       scrapingProvider.stopScraping();
@@ -951,6 +960,7 @@ class ScreenScraperService {
             shouldCancel: shouldCancel,
             allowedMediaTypes: allowedTypes,
             maxDailyRequests: maxDailyRequests,
+            forceOverwrite: scraperConfig['scrape_mode'].toString() == 'all',
           );
           if (res['cancelled'] == true) {
             return {
@@ -976,6 +986,8 @@ class ScreenScraperService {
         return {'success': true, 'cancelled': false, 'requests': requestsMade};
       }
       return {'success': false, 'cancelled': false, 'requests': requestsMade};
+    } on ScreenscraperQuotaExceededException {
+      rethrow;
     } catch (e) {
       return {'success': false, 'cancelled': false, 'requests': 0};
     }

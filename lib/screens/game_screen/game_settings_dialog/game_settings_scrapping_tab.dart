@@ -315,11 +315,12 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       GamesCarousel.evictArtworkCaches(_artworkPaths());
 
       if (mounted) {
+        final message = result['success'] == true
+            ? 'Scraping completed'
+            : 'Scraping failed: ${result['message'].toString().getString(context)}';
         AppNotification.showNotification(
           context,
-          result['success'] == true
-              ? 'Scraping completed'
-              : 'Scraping failed: ${result['message']}',
+          message,
           type: result['success'] == true
               ? NotificationType.success
               : NotificationType.error,

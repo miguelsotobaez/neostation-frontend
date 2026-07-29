@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
+import 'package:neostation/utils/nav_tabs.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
@@ -60,8 +61,9 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     _loadFullscreenState();
     _checkDefaultLauncher();
 
-    // Pre-allocate keys for maximum theoretical setting items.
-    for (int i = 0; i < 14; i++) {
+    // Pre-allocate keys for maximum theoretical setting items (the fixed rows
+    // plus one per navigation tab that can be toggled).
+    for (int i = 0; i < 14 + NavTab.values.length; i++) {
       _itemKeys.add(GlobalKey());
     }
   }
@@ -174,6 +176,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // Auto-update Systems
     count++; // SFX Sounds
     count++; // 12-Hour Clock
+    count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -243,6 +246,18 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
       return;
     }
     currentItemIndex++;
+
+    // Protocol: Navigation Tab Visibility (one entry per hidable tab, in the
+    // same order the rows are built below).
+    for (final tab in hidableNavTabs()) {
+      if (index == currentItemIndex) {
+        final hidden =
+            navTabSpec(tab).hidden?.call(configProvider.config) ?? false;
+        configProvider.updateNavTabHidden(tab, !hidden);
+        return;
+      }
+      currentItemIndex++;
+    }
 
     // Protocol: Localization Selection.
     if (index == currentItemIndex) {
@@ -475,6 +490,37 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     ),
                   );
                 }(),
+
+                // Setting: Navigation Tab Visibility — one row per hidable tab,
+                // so a future tab gets its toggle from its NavTabSpec alone.
+                for (final tab in hidableNavTabs()) ...[
+                  SizedBox(height: 12.r),
+                  () {
+                    final index = currentItemIdx++;
+                    final spec = navTabSpec(tab);
+                    final titleKey = spec.settingsTitleKey;
+                    final hidden = spec.hidden?.call(config) ?? false;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: (titleKey ?? spec.labelKey).getString(context),
+                      subtitle:
+                          spec.settingsSubtitleKey?.getString(context) ?? '',
+                      // The switch reads as "shown"; the config stores "hidden".
+                      trailing: CustomToggleSwitch(
+                        value: !hidden,
+                        onChanged: (value) {
+                          context
+                              .read<SqliteConfigProvider>()
+                              .updateNavTabHidden(tab, !value);
+                        },
+                        activeColor: theme.colorScheme.primary,
+                      ),
+                    );
+                  }(),
+                ],
 
                 // Setting: Localization & Language.
                 SizedBox(height: 12.r),

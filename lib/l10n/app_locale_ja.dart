@@ -144,6 +144,13 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.bartopShutdown: '終了時にBarTOPをシャットダウン',
   AppLocale.bartopShutdownSubtitle: 'アプリ終了時にコンピュータをシャットダウン',
 
+  AppLocale.showSyncTab: '同期タブを表示',
+  AppLocale.showSyncTabSubtitle: 'ナビゲーションバーにクラウド同期タブを表示します',
+  AppLocale.showAchievementsTab: '実績タブを表示',
+  AppLocale.showAchievementsTabSubtitle: 'ナビゲーションバーにRetroAchievementsタブを表示します',
+  AppLocale.showScraperTab: 'スクレイパータブを表示',
+  AppLocale.showScraperTabSubtitle: 'ナビゲーションバーにスクレイピングタブを表示します',
+
   AppLocale.configureDirectories: 'ディレクトリの設定',
   AppLocale.configureRomsFolder: 'ROMフォルダの設定',
   AppLocale.cannotAccessFolder: 'フォルダにアクセスできません',
@@ -380,6 +387,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.stoppingScraping: 'スクレイピングプロセスを停止中...',
   AppLocale.syncError: 'システムIDの同期中にエラーが発生しました',
   AppLocale.metadataError: 'スクレイピングプロセス中にエラーが発生しました',
+  AppLocale.scrapeQuotaExceeded:
+      'ScreenScraperの1日のスクレイピングクォータを超えました',
   AppLocale.start: '開始',
   AppLocale.systemsSub: 'スクレイピングするシステムを選択',
   AppLocale.disableAll: 'すべて無効',

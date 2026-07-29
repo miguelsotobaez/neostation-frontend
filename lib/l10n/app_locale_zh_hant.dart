@@ -142,6 +142,13 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.bartopShutdown: '離開時關閉 BarTOP',
   AppLocale.bartopShutdownSubtitle: '離開應用程式時關閉電腦',
 
+  AppLocale.showSyncTab: '顯示同步分頁',
+  AppLocale.showSyncTabSubtitle: '在導覽列中顯示雲端同步分頁',
+  AppLocale.showAchievementsTab: '顯示成就分頁',
+  AppLocale.showAchievementsTabSubtitle: '在導覽列中顯示 RetroAchievements 分頁',
+  AppLocale.showScraperTab: '顯示刮削分頁',
+  AppLocale.showScraperTabSubtitle: '在導覽列中顯示刮削分頁',
+
   AppLocale.configureDirectories: '目錄設定',
   AppLocale.configureRomsFolder: '設定 ROM 資料夾',
   AppLocale.cannotAccessFolder: '無法存取資料夾',
@@ -377,6 +384,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.stoppingScraping: '正在停止抓取程序...',
   AppLocale.syncError: '同步系統 ID 時發生錯誤',
   AppLocale.metadataError: '中繼資料抓取過程中發生錯誤',
+  AppLocale.scrapeQuotaExceeded:
+      'ScreenScraper 每日刮削配額已超出',
   AppLocale.start: '開始',
   AppLocale.systemsSub: '選擇要抓取的系統',
   AppLocale.disableAll: '全部停用',

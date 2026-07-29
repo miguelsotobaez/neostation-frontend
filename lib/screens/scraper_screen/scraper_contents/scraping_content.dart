@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/services/screenscraper_service.dart';
+import 'package:neostation/services/screenscraper/screenscraper_exceptions.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../../settings_screen/new_settings_options/settings_title.dart';
@@ -105,6 +106,14 @@ class ScrapingContentState extends State<ScrapingContent> {
             type: NotificationType.error,
           );
         }
+      }
+    } on ScreenscraperQuotaExceededException {
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.scrapeQuotaExceeded.getString(context),
+          type: NotificationType.error,
+        );
       }
     } catch (e) {
       if (mounted) {

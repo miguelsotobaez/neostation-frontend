@@ -14,6 +14,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/utils/nav_tabs.dart';
 import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 
@@ -48,6 +49,10 @@ class HeaderState extends State<Header> {
     super.initState();
     _tabFocusNodes = List.generate(
       AppTabs.count,
+    // One per canonical tab (indexed by NavTab.index), not per *visible* tab, so
+    // hiding a tab can't shift a node onto a different button.
+    _tabFocusNodes = List.generate(
+      NavTab.values.length,
       (_) => FocusNode(skipTraversal: true),
     );
     _getBatteryLevel();
@@ -227,36 +232,23 @@ class HeaderState extends State<Header> {
                       ),
                     ],
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // LB button (left)
-                      _buildShoulderButton('LB', true),
-                      // Tabs Section
-                      Stack(
+                  child: Builder(
+                    builder: (context) {
+                      final visibleTabs = visibleNavTabs(configProvider.config);
+                      // The indicator tracks the tab's slot in the *rendered*
+                      // strip, not its canonical index — otherwise hiding a tab
+                      // parks it past the end of a shortened strip.
+                      final selectedSlot = visibleTabs.indexOf(
+                        NavTab.values[widget.selectedTabIndex],
+                      );
+
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Moving indicator
-                          AnimatedPositioned(
-                            left: widget.selectedTabIndex * 32.r,
-                            top: 4.r,
-                            bottom: 4.r,
-                            width: 32.r,
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeInOut,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                borderRadius:
-                                    Theme.of(context)
-                                        .extension<CornerRadii>()
-                                        ?.radiusInternal ??
-                                    BorderRadius.circular(4.r),
-                              ),
-                            ),
-                          ),
-                          // Tab buttons
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
+                          // LB button (left)
+                          _buildShoulderButton('LB', true),
+                          // Tabs Section
+                          Stack(
                             children: [
                               SizedBox(
                                 width: 32.r,
@@ -318,14 +310,55 @@ class HeaderState extends State<Header> {
                                   "assets/images/icons/setting.webp",
                                   AppLocale.settings.getString(context),
                                 ),
+                              // Moving indicator
+                              AnimatedPositioned(
+                                left:
+                                    (selectedSlot < 0 ? 0 : selectedSlot) *
+                                    32.r,
+                                top: 4.r,
+                                bottom: 4.r,
+                                width: 32.r,
+                                duration: const Duration(milliseconds: 160),
+                                curve: Curves.easeInOut,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    borderRadius:
+                                        Theme.of(context)
+                                            .extension<CornerRadii>()
+                                            ?.radiusInternal ??
+                                        BorderRadius.circular(4.r),
+                                  ),
+                                ),
+                              ),
+                              // Tab buttons
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (final tab in visibleTabs)
+                                    SizedBox(
+                                      width: 32.r,
+                                      height: 32.r,
+                                      child: _buildTabButton(
+                                        context,
+                                        tab.index,
+                                        navTabSpec(tab).icon,
+                                        navTabSpec(
+                                          tab,
+                                        ).labelKey.getString(context),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ),
+                          // RB button (right)
+                          _buildShoulderButton('RB', false),
                         ],
-                      ),
-                      // RB button (right)
-                      _buildShoulderButton('RB', false),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),

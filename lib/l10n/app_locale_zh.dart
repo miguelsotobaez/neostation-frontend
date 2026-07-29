@@ -142,6 +142,13 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.bartopShutdown: '退出时关闭 BarTOP',
   AppLocale.bartopShutdownSubtitle: '退出应用时关闭计算机',
 
+  AppLocale.showSyncTab: '显示同步选项卡',
+  AppLocale.showSyncTabSubtitle: '在导航栏中显示云同步选项卡',
+  AppLocale.showAchievementsTab: '显示成就选项卡',
+  AppLocale.showAchievementsTabSubtitle: '在导航栏中显示 RetroAchievements 选项卡',
+  AppLocale.showScraperTab: '显示刮削选项卡',
+  AppLocale.showScraperTabSubtitle: '在导航栏中显示刮削选项卡',
+
   AppLocale.configureDirectories: '目录设置',
   AppLocale.configureRomsFolder: '配置 ROM 文件夹',
   AppLocale.cannotAccessFolder: '无法访问文件夹',
@@ -377,6 +384,8 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.stoppingScraping: '正在停止抓取过程...',
   AppLocale.syncError: '同步系统 ID 时出错',
   AppLocale.metadataError: '元数据抓取过程中出错',
+  AppLocale.scrapeQuotaExceeded:
+      'ScreenScraper 每日刮削配额已超出',
   AppLocale.start: '开始',
   AppLocale.systemsSub: '选择要抓取的系统',
   AppLocale.disableAll: '全部禁用',

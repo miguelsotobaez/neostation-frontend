@@ -145,6 +145,28 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
     }());
   }
 
+  /// Tells the secondary display whether the first-run setup wizard is on
+  /// screen, so it can keep the app dock and all-apps launcher parked while the
+  /// user is still setting up. [markAppReady] latches at the main engine's
+  /// first frame, which happens behind the wizard, so the dock would otherwise
+  /// slide up before there's an app to dock into.
+  ///
+  /// Pushes through [SecondaryDisplayState.instance] with the same
+  /// cached-construction guard as [markAppReady] — the wizard runs before the
+  /// provider has finished its async init, so `_secondaryDisplayState` may
+  /// still be null here.
+  void setSetupWizardActive(bool active) {
+    if (!Platform.isAndroid) return;
+    final state = _secondaryDisplayState ?? SecondaryDisplayState.instance;
+    unawaited(() async {
+      // See markAppReady: a bare await on an unassigned late final throws.
+      if (state.value == null) {
+        await state.initialSync;
+      }
+      await state.updateState(setupWizardActive: active);
+    }());
+  }
+
   void _onSecondaryStateChanged() {
     final state = _secondaryDisplayState?.value;
     if (state != null) {

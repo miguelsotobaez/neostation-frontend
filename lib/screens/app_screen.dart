@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/nav_tabs.dart';
+import 'package:neostation/models/config_model.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/update_service.dart';
 import 'package:neostation/services/systems_update_service.dart';
@@ -13,7 +15,6 @@ import 'search_screen/search_screen.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
-import 'neo_sync_screen/login_screen/neo_sync_content.dart';
 import 'neo_sync_screen/neo_sync_tab.dart';
 import '../widgets/scraper_content.dart';
 import 'package:neostation/services/game_service.dart';
@@ -93,9 +94,6 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   /// Input orchestration layer for gamepad and keyboard support.
   late GamepadNavigation _gamepadNav;
-
-  /// Cached list of primary content widgets for each navigation tab.
-  late final List<Widget> _tabContents;
 
   /// Static reference to the currently active instance for global access.
   static AppScreenState? _currentInstance;
@@ -551,21 +549,51 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _navigateToNextTab() {
-    final nextIndex = (_selectedTabIndex + 1) % _tabContents.length;
-    _onTabSelected(nextIndex);
+  /// Tabs the user hasn't hidden, in canonical order. Never empty — Systems and
+  /// Settings can't be hidden.
+  List<NavTab> get _visibleTabs => visibleNavTabs(
+    Provider.of<SqliteConfigProvider>(context, listen: false).config,
+  );
+
+  /// Steps [step] places through the visible tabs, wrapping at both ends, so a
+  /// hidden tab is skipped rather than selected and immediately bounced.
+  void _cycleTab(int step) {
+    final visible = _visibleTabs;
+    if (visible.isEmpty) return;
+
+    final current = NavTab.values[_selectedTabIndex];
+    final position = visible.indexOf(current);
+    // Currently on a hidden tab (config changed underneath us): step from the
+    // start of the strip rather than off the end of the list.
+    final from = position == -1 ? 0 : position;
+    final next = (from + step + visible.length) % visible.length;
+    _onTabSelected(visible[next].index);
   }
 
-  void _navigateToPreviousTab() {
-    final previousIndex =
-        (_selectedTabIndex - 1 + _tabContents.length) % _tabContents.length;
-    _onTabSelected(previousIndex);
+  void _navigateToNextTab() => _cycleTab(1);
+
+  void _navigateToPreviousTab() => _cycleTab(-1);
+
+  /// Falls back to Systems if the selected tab is no longer visible.
+  ///
+  /// Unreachable in normal use (the toggles live on Settings, which can't be
+  /// hidden), but it keeps an imported or cloud-restored config from stranding
+  /// the user on a tab that has no entry in the strip.
+  void _ensureSelectedTabVisible(ConfigModel config) {
+    if (visibleNavTabs(config).contains(NavTab.values[_selectedTabIndex])) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onTabSelected(NavTab.systems.index);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer2<SqliteConfigProvider, ThemeProvider>(
       builder: (context, configProvider, themeProvider, child) {
+        _ensureSelectedTabVisible(configProvider.config);
+
         return PopScope(
           canPop: false, // Intercept hardware back button to maintain app flow.
           child: Scaffold(

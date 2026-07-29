@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'screenscraper_exceptions.dart';
 import '../../utils/semaphore.dart';
 
 /// HTTP transport, rate limiting, and request identity for ScreenScraper.
@@ -117,6 +118,10 @@ class ScreenscraperClient {
         if (response.statusCode == 200 || response.statusCode == 403) {
           _dailyRequestsCount++;
           return response;
+        } else if (response.statusCode == 430) {
+          throw ScreenscraperQuotaExceededException(
+            'Daily scraping quota exceeded (HTTP 430)',
+          );
         } else if (response.statusCode >= 500) {
           if (attempt < maxRetries - 1) {
             final delay = Duration(milliseconds: 500 * (attempt + 1));
