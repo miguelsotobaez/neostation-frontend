@@ -185,6 +185,9 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.showScraperTab: 'Afficher l’onglet Scraper',
   AppLocale.showScraperTabSubtitle:
       'Affiche l’onglet de scraping dans la barre de navigation',
+  AppLocale.showSearchTab: 'Afficher l’onglet Rechercher',
+  AppLocale.showSearchTabSubtitle:
+      'Affiche l’onglet de recherche dans la barre de navigation',
 
   AppLocale.configureDirectories: 'Configurer les Répertoires',
   AppLocale.configureRomsFolder: 'Configurer le Dossier des ROMs',

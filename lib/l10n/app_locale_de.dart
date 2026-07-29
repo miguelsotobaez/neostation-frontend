@@ -180,6 +180,9 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.showScraperTab: 'Scraper-Tab anzeigen',
   AppLocale.showScraperTabSubtitle:
       'Zeigt den Scraping-Tab in der Navigationsleiste an',
+  AppLocale.showSearchTab: 'Suche-Tab anzeigen',
+  AppLocale.showSearchTabSubtitle:
+      'Zeigt den Suche-Tab in der Navigationsleiste an',
 
   AppLocale.configureDirectories: 'Verzeichnisse konfigurieren',
   AppLocale.configureRomsFolder: 'ROM-Ordner konfigurieren',

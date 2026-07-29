@@ -148,6 +148,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.showAchievementsTabSubtitle: '在導覽列中顯示 RetroAchievements 分頁',
   AppLocale.showScraperTab: '顯示刮削分頁',
   AppLocale.showScraperTabSubtitle: '在導覽列中顯示刮削分頁',
+  AppLocale.showSearchTab: '顯示搜尋分頁',
+  AppLocale.showSearchTabSubtitle: '在導覽列中顯示搜尋分頁',
 
   AppLocale.configureDirectories: '目錄設定',
   AppLocale.configureRomsFolder: '設定 ROM 資料夾',

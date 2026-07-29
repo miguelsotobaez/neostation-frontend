@@ -180,6 +180,9 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.showScraperTab: 'Mostrar aba Scraper',
   AppLocale.showScraperTabSubtitle:
       'Exibe a aba de scraping na barra de navegação',
+  AppLocale.showSearchTab: 'Mostrar aba Pesquisar',
+  AppLocale.showSearchTabSubtitle:
+      'Exibe a aba de pesquisa na barra de navegação',
 
   AppLocale.configureDirectories: 'Configurar Diretórios',
   AppLocale.configureRomsFolder: 'Configurar Pasta de ROMs',

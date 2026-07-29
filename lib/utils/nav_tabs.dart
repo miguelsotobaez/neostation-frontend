@@ -70,6 +70,10 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
     icon: '',
     labelKey: AppLocale.searchTitle,
     iconData: Symbols.search_rounded,
+    hidden: _hideTabSearch,
+    withHidden: _withHideTabSearch,
+    settingsTitleKey: AppLocale.showSearchTab,
+    settingsSubtitleKey: AppLocale.showSearchTabSubtitle,
   ),
   NavTab.sync: NavTabSpec(
     icon: 'assets/images/icons/cloud-add.webp',
@@ -105,6 +109,7 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
 bool _hideTabSync(ConfigModel c) => c.hideTabSync;
 bool _hideTabAchievements(ConfigModel c) => c.hideTabAchievements;
 bool _hideTabScraper(ConfigModel c) => c.hideTabScraper;
+bool _hideTabSearch(ConfigModel c) => c.hideTabSearch;
 
 ConfigModel _withHideTabSync(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabSync: hidden);
@@ -112,6 +117,8 @@ ConfigModel _withHideTabAchievements(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabAchievements: hidden);
 ConfigModel _withHideTabScraper(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabScraper: hidden);
+ConfigModel _withHideTabSearch(ConfigModel c, bool hidden) =>
+    c.copyWith(hideTabSearch: hidden);
 
 /// Description of [tab], never null — see [_fallbackSpec].
 NavTabSpec navTabSpec(NavTab tab) => navTabSpecs[tab] ?? _fallbackSpec;

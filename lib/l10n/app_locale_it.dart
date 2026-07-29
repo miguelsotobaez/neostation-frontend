@@ -179,6 +179,9 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.showScraperTab: 'Mostra scheda Scraper',
   AppLocale.showScraperTabSubtitle:
       'Mostra la scheda di scraping nella barra di navigazione',
+  AppLocale.showSearchTab: 'Mostra scheda Cerca',
+  AppLocale.showSearchTabSubtitle:
+      'Mostra la scheda di ricerca nella barra di navigazione',
 
   AppLocale.configureDirectories: 'Configura Directory',
   AppLocale.configureRomsFolder: 'Configura Cartella ROM',

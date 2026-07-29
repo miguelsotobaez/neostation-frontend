@@ -324,6 +324,9 @@ class SqliteMigrations {
       case 106:
         await _migrateToVersion106(db);
         break;
+      case 107:
+        await _migrateToVersion107(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5093,6 +5096,34 @@ class SqliteMigrations {
       _log.i('Migration v106 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v106: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v107: Adds the Search tab's visibility flag.
+  ///
+  /// Search shipped after the v106 flags, so it gets its own column on the same
+  /// hidden-defaults-to-`0` terms — upgrading users keep the tab they already
+  /// have and can hide it from General settings.
+  static Future<void> _migrateToVersion107(Database db) async {
+    _log.i('Migration v107: Adding hide_tab_search to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('hide_tab_search')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN hide_tab_search INTEGER DEFAULT 0',
+        );
+        _log.i('Column hide_tab_search added via v107');
+      } else {
+        _log.i('Column hide_tab_search already exists');
+      }
+
+      _log.i('Migration v107 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v107: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
