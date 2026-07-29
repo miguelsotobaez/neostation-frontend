@@ -315,6 +315,8 @@ class _SearchScreenState extends State<SearchScreen> {
       );
       _scrollChipIntoView();
       SfxService().playNavSound();
+    } else if (_region == _FocusRegion.results) {
+      _jumpToSearchItem('field');
     }
   }
 
@@ -328,7 +330,25 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() => _barIndex = (_barIndex + 1) % _barItems.length);
       _scrollChipIntoView();
       SfxService().playNavSound();
+    } else if (_region == _FocusRegion.results) {
+      _jumpToSearchItem('filters');
     }
+  }
+
+  /// Jumps focus out of the results list straight onto a search-band item.
+  ///
+  /// The list has no horizontal axis of its own, so Left/Right are free to act
+  /// as shortcuts back to the top band: Up only steps one result at a time, and
+  /// climbing out of a few hundred matches one row at a time is not navigation.
+  /// Left lands on the query field, Right on the Filters toggle.
+  void _jumpToSearchItem(String item) {
+    final index = _searchItems.indexOf(item);
+    if (index < 0) return;
+    setState(() {
+      _region = _FocusRegion.search;
+      _searchIndex = index;
+    });
+    SfxService().playNavSound();
   }
 
   void _navigateUp() {
@@ -1176,8 +1196,10 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Sized against the real viewport rather than a fixed `.r` height: 360.r is
   /// most of a 1080p handheld's screen, which pushed a long list (platforms,
   /// years) to full height and slid its title under the global tab strip. The
-  /// overlay covers the whole tab area — which starts behind the header — so it
-  /// carries the same 64.r header clearance the tab content does.
+  /// overlay covers the whole tab area — which starts behind the header — so the
+  /// menu keeps the same 64.r header clearance the tab content does, applied as
+  /// a *height cap* rather than as top padding: padding centred the menu in the
+  /// space left below the header, which read as sitting too low on screen.
   Widget _buildFilterMenu(ThemeData theme, String key) {
     final scheme = theme.colorScheme;
     final labels = _menuLabels(key);
@@ -1190,62 +1212,63 @@ class _SearchScreenState extends State<SearchScreen> {
           color: Colors.black.withValues(alpha: 0.6),
           child: LayoutBuilder(
             builder: (context, viewport) {
+              // Budgeting twice the header clearance leaves a centred menu
+              // unable to reach it at any height, so the tallest lists stop
+              // clear of the tab strip while short ones stay optically centred.
               final topInset = 64.r + 12.r;
-              final available = viewport.maxHeight - topInset - 12.r;
-              return Padding(
-                padding: EdgeInsets.only(top: topInset, bottom: 12.r),
-                child: Center(
-                  child: GestureDetector(
-                    onTap: () {},
-                    child: Container(
-                      width: 320.r,
-                      constraints: BoxConstraints(
-                        maxHeight: math.max(
-                          0,
-                          math.min(available, viewport.maxHeight * 0.6),
-                        ),
+              final maxHeight = math.max(
+                0.0,
+                math.min(
+                  viewport.maxHeight * 0.6,
+                  viewport.maxHeight - topInset * 2,
+                ),
+              );
+              return Center(
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Container(
+                    width: 320.r,
+                    constraints: BoxConstraints(maxHeight: maxHeight),
+                    padding: EdgeInsets.all(12.r),
+                    decoration: BoxDecoration(
+                      color: scheme.surface,
+                      borderRadius: BorderRadius.circular(16.r),
+                      border: Border.all(
+                        color: scheme.primary.withValues(alpha: 0.4),
+                        width: 1.r,
                       ),
-                      padding: EdgeInsets.all(12.r),
-                      decoration: BoxDecoration(
-                        color: scheme.surface,
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(
-                          color: scheme.primary.withValues(alpha: 0.4),
-                          width: 1.r,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
-                            child: Text(
-                              _filterLabel(key),
-                              style: TextStyle(
-                                fontSize: 15.r,
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onSurface,
-                              ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
+                          child: Text(
+                            _filterLabel(key),
+                            style: TextStyle(
+                              fontSize: 15.r,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface,
                             ),
                           ),
-                          Flexible(
-                            child: ListView.builder(
-                              controller: _menuScroll,
-                              shrinkWrap: true,
-                              itemExtent: _menuExtent.r,
-                              itemCount: labels.length,
-                              itemBuilder: (context, i) => _buildMenuOption(
-                                theme,
-                                key,
-                                labels[i],
-                                i,
-                                selected,
-                              ),
+                        ),
+                        Flexible(
+                          child: ListView.builder(
+                            controller: _menuScroll,
+                            shrinkWrap: true,
+                            itemExtent: _menuExtent.r,
+                            itemCount: labels.length,
+                            itemBuilder: (context, i) => _buildMenuOption(
+                              theme,
+                              key,
+                              labels[i],
+                              i,
+                              selected,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
