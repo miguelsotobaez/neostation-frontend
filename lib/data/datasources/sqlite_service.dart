@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 107;
+  static const int _databaseVersion = 108;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -626,6 +626,16 @@ class SqliteService {
     return syncedSystems;
   }
 
+  /// Runs one emulator sync pass against [txn] — the seed data applied to the
+  /// database, including which row ends up carrying `is_default`.
+  @visibleForTesting
+  static Future<void> syncEmulatorsForTesting(
+    TransactionAdapter txn,
+    String systemId,
+    List<EmulatorDefinition> emulators,
+    Map<String, int> osMap,
+  ) => _syncEmulators(txn, systemId, emulators, osMap, systemId);
+
   static Future<void> _syncEmulators(
     TransactionAdapter txn,
     String systemId,
@@ -633,32 +643,41 @@ class SqliteService {
     Map<String, int> osMap,
     String systemFolderName,
   ) async {
-    // Check if any default exists for this system (Core in app_emulators)
-    final result = await txn.rawQuery(
-      'SELECT COUNT(*) as count FROM app_emulators WHERE system_id = ? AND is_default = 1',
-      [systemId],
-    );
-    final count = result.isNotEmpty
-        ? (int.tryParse(result.first['count']?.toString() ?? '') ?? 0)
-        : 0;
+    // The invariant is "at most one default per (system_id, os_id)", so every
+    // default bookkeeping below is scoped per OS. Scoping it per system would
+    // both starve secondary platforms of a default (the first OS in the JSON
+    // wins and every other OS silently gets none) and let a stale default on
+    // one OS suppress the JSON default on another.
 
-    // Also check if user has set a default standalone emulator
-    final userResult = await txn.rawQuery(
+    // Existing user-chosen defaults for this system, per OS. A user choice
+    // outranks the seed data, so these operating systems are left entirely
+    // alone below — [_fixEmulatorDefaults] already keeps `is_default` from
+    // contradicting them.
+    final userDefaultRows = await txn.rawQuery(
       '''
-      SELECT COUNT(*) as count 
-      FROM user_emulator_config uc 
-      JOIN app_emulators e ON uc.emulator_unique_id = e.unique_identifier 
+      SELECT e.os_id as os_id, COUNT(*) as count
+      FROM user_emulator_config uc
+      JOIN app_emulators e ON uc.emulator_unique_id = e.unique_identifier
       WHERE e.system_id = ? AND uc.is_user_default = 1
+      GROUP BY e.os_id
       ''',
       [systemId],
     );
-    final userCount = userResult.isNotEmpty
-        ? (int.tryParse(userResult.first['count']?.toString() ?? '') ?? 0)
-        : 0;
 
-    final hasDefaultInDB = count > 0 || userCount > 0;
+    final Set<int> osWithUserDefault = {};
+    for (final row in userDefaultRows) {
+      final rowOsId = int.tryParse(row['os_id']?.toString() ?? '');
+      final rowCount = int.tryParse(row['count']?.toString() ?? '') ?? 0;
+      if (rowOsId != null && rowCount > 0) {
+        osWithUserDefault.add(rowOsId);
+      }
+    }
 
-    bool defaultSetInLoop = false;
+    // The emulator the systems JSON designates for each OS — the first flagged
+    // entry that is actually applicable there. Recorded during the row loop and
+    // enforced once afterwards, because the flag is only meaningful relative to
+    // the other rows of the same (system_id, os_id).
+    final Map<int, String> osJsonPick = {};
 
     final Set<String> processedUniqueIds = {};
 
@@ -806,7 +825,10 @@ class SqliteService {
           }
         }
 
-        // Determine if we should apply default from JSON
+        // Record which emulator the JSON designates for this OS. Nothing writes
+        // `is_default` inside this loop: the flag only means anything relative
+        // to the rest of the (system_id, os_id) group, so one statement after
+        // the loop owns it — see the enforcement pass below.
         final bool isDefaultCore = emuDef.isDefaultCore;
         final bool isDefaultStandalone = emuDef.isDefaultStandalone;
         // On Android, skip setting is_default for RetroArch cores here;
@@ -814,14 +836,12 @@ class SqliteService {
         final bool isAndroidTarget = osName == 'android';
         final bool isRetroArchCore = isDefaultCore && !isStandalone;
         final bool skipCoreDefault = isAndroidTarget && isRetroArchCore;
-        final bool applyJsonDefault =
-            !hasDefaultInDB &&
-            !defaultSetInLoop &&
-            !skipCoreDefault &&
-            (isDefaultCore || isDefaultStandalone);
 
-        if (applyJsonDefault) {
-          defaultSetInLoop = true;
+        // First flagged entry wins the OS. Systems that flag several (the
+        // ra/ra32/ra64 core trio, on desktop where none of them is skipped)
+        // resolve by JSON array order, which is at least reproducible.
+        if (!skipCoreDefault && (isDefaultCore || isDefaultStandalone)) {
+          osJsonPick.putIfAbsent(osId, () => emuDef.uniqueId);
         }
 
         // Determine RetroAchievements compatibility
@@ -848,9 +868,6 @@ class SqliteService {
             'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
           };
 
-          if (applyJsonDefault) {
-            updateData['is_default'] = 1;
-          }
           if (isDefaultCore) {
             updateData['is_default_core'] = 1;
           }
@@ -904,7 +921,9 @@ class SqliteService {
               'core_filename': coreFilename,
               'android_package_name': packageName,
               'android_activity_name': platformData['_resolved_activity_name'],
-              'is_default': applyJsonDefault ? 1 : 0,
+              // Assigned by the enforcement pass after the loop, which is the
+              // only thing that can see the whole (system_id, os_id) group.
+              'is_default': 0,
               'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
             };
             if (isDefaultCore) {
@@ -915,6 +934,60 @@ class SqliteService {
             processedUniqueIds.add(emuDef.uniqueId);
           }
         }
+      }
+    }
+
+    // Enforce the seed's pick for every OS the JSON designates one for.
+    //
+    // Setting `is_default` on the flagged row is not enough on its own: nothing
+    // else in the sync path ever *clears* the flag, so a row that acquired it
+    // under an older systems JSON (or from a repair pass that guessed) kept it
+    // forever, and the seed's real choice could never take effect. Shipping a
+    // changed default therefore never reached an install that already had one.
+    // Writing the whole group in one statement makes the JSON authoritative and
+    // collapses any duplicates in the same pass.
+    //
+    // Two owners are deliberately not overruled:
+    //   * an OS where the user picked an emulator — their choice outranks the
+    //     seed, and re-asserting `is_default` here would recreate exactly the
+    //     app-default-contradicts-user-choice anomaly v105 exists to clear;
+    //   * RetroArch on Android, where [fixRetroArchDefaultForAndroid] owns the
+    //     flag because only it knows which variant is installed. Its cores are
+    //     already excluded by `skipCoreDefault`; this also declines to demote a
+    //     core it has designated in favour of the JSON's standalone.
+    if (osJsonPick.isNotEmpty) {
+      int? androidOsId;
+      for (final entry in osMap.entries) {
+        if (entry.key.toLowerCase() == 'android') {
+          androidOsId = entry.value;
+          break;
+        }
+      }
+
+      final coreDefaultRows = await txn.rawQuery(
+        'SELECT DISTINCT os_id FROM app_emulators '
+        'WHERE system_id = ? AND is_default = 1 AND is_standalone = 0',
+        [systemId],
+      );
+      final Set<int> osWithCoreDefault = {};
+      for (final row in coreDefaultRows) {
+        final rowOsId = int.tryParse(row['os_id']?.toString() ?? '');
+        if (rowOsId != null) osWithCoreDefault.add(rowOsId);
+      }
+
+      for (final pick in osJsonPick.entries) {
+        final pickOsId = pick.key;
+        if (osWithUserDefault.contains(pickOsId)) continue;
+        if (pickOsId == androidOsId && osWithCoreDefault.contains(pickOsId)) {
+          continue;
+        }
+
+        await txn.rawUpdate(
+          'UPDATE app_emulators '
+          'SET is_default = CASE WHEN unique_identifier = ? THEN 1 ELSE 0 END '
+          'WHERE system_id = ? AND os_id = ?',
+          [pick.value, systemId, pickOsId],
+        );
       }
     }
 
@@ -3766,7 +3839,16 @@ class SqliteService {
           [systemId, osId],
         );
 
-        final hasCoreDefault = cores.any((c) => c['is_default'] == 1);
+        // "Is anything already designated for this (system, os)?" — and a
+        // standalone counts. Asking only the cores made every all-standalone
+        // system (switch, xbox360) look undesignated on every single database
+        // open, so the seeding below ran again and flagged the alphabetically
+        // first standalone *alongside* the one the systems JSON had chosen:
+        // AX360e next to AX360e (Free), Benji-SC next to Eden. That is where
+        // the duplicate defaults v108 repairs came from.
+        final hasAppDefault =
+            cores.any((c) => c['is_default'] == 1) ||
+            standalones.any((s) => s['is_default'] == 1);
         final hasUserDefault = standalones.any(
           (s) => s['is_user_default'] == 1,
         );
@@ -3774,7 +3856,7 @@ class SqliteService {
         if (hasUserDefault) {
           // The user made a choice. It outranks any app-level default, so drop
           // the contradicting `is_default` rather than the choice.
-          if (hasCoreDefault) {
+          if (hasAppDefault) {
             await db.rawUpdate(
               'UPDATE app_emulators SET is_default = 0 '
               'WHERE system_id = ? AND os_id = ?',
@@ -3784,7 +3866,7 @@ class SqliteService {
           continue;
         }
 
-        if (hasCoreDefault) continue;
+        if (hasAppDefault) continue;
 
         // Nothing designated at all — seed the app-level default. Preference:
         // the core the systems JSON marks as canonical, then any standalone

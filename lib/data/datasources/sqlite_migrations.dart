@@ -327,6 +327,9 @@ class SqliteMigrations {
       case 107:
         await _migrateToVersion107(db);
         break;
+      case 108:
+        await _migrateToVersion108(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5124,6 +5127,81 @@ class SqliteMigrations {
       _log.i('Migration v107 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v107: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v108: Repairs databases that hold more than one app-provided
+  /// default emulator for the same (system_id, os_id).
+  ///
+  /// `app_emulators.is_default` is meant to be single-valued per system and OS:
+  /// it is the app's recommendation, and the launch path takes whichever row the
+  /// query happens to return first. Duplicates therefore turn emulator choice
+  /// into a coin flip — on Android this was observed as `xbox360` flipping
+  /// between the paid `aenu.ax360e` and the free `aenu.ax360e.free`, and
+  /// `switch` flipping between Eden and Benji-SC.
+  ///
+  /// The seed data (`assets/systems/*.json`) is the authority on which emulator
+  /// wins, and no SQL rule can reproduce its choice (it is neither "first" nor
+  /// "last" nor "lowest id"). So rather than guess a winner, this migration
+  /// demotes *every* row in an offending (system_id, os_id) group to
+  /// `is_default = 0`. The JSON sync in `SqliteService._syncEmulators` then
+  /// re-applies the single `default_core` / `default_standalone` row for that
+  /// group on the next scan, and on Android the RetroArch detection pass
+  /// re-picks the installed RetroArch variant. Groups that already satisfy the
+  /// invariant are left untouched, so this is safe to re-run.
+  static Future<void> _migrateToVersion108(Database db) async {
+    _log.i(
+      'Migration v108: Collapsing duplicate app_emulators.is_default rows',
+    );
+
+    try {
+      final tables = db.select(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_emulators'",
+      );
+      if (tables.isEmpty) {
+        _log.i('Migration v108: app_emulators table missing, nothing to do');
+        return;
+      }
+
+      const duplicateGroups = '''
+        SELECT system_id, os_id
+        FROM app_emulators
+        WHERE is_default = 1
+        GROUP BY system_id, os_id
+        HAVING COUNT(*) > 1
+      ''';
+
+      final offenders = db.select(duplicateGroups);
+      if (offenders.isEmpty) {
+        _log.i('Migration v108: No duplicate defaults found');
+        return;
+      }
+
+      // Collect the offending groups first and update them explicitly. Doing it
+      // as a single UPDATE with the HAVING sub-select would re-evaluate the
+      // aggregate as rows are written, so a group could stop qualifying halfway
+      // through and keep an arbitrary survivor.
+      for (final row in offenders) {
+        final systemId = row['system_id'];
+        final osId = row['os_id'];
+        _log.w(
+          'Migration v108: system $systemId os $osId had multiple is_default '
+          'rows; clearing so the seed data re-decides',
+        );
+        db.execute(
+          'UPDATE app_emulators SET is_default = 0 '
+          'WHERE system_id = ? AND os_id = ? AND is_default = 1',
+          [systemId, osId],
+        );
+      }
+
+      _log.i(
+        'Migration v108 completed (${offenders.length} group(s) reset)',
+      );
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v108: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

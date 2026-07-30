@@ -304,6 +304,62 @@ void main() {
         expect(await appDefaults(), hasLength(1));
       });
 
+      /// A system whose only emulators are standalones — switch and xbox360
+      /// are the real ones. `defaultUid` is the pick the systems JSON makes,
+      /// which is deliberately *not* the alphabetically first entry.
+      Future<void> seedAllStandaloneSystem({required String defaultUid}) async {
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name) VALUES ('xbox360', 'Xbox 360', 'xbox360')",
+        );
+        for (final emu in [
+          ('AX360e', 'xbox360.aenu.ax360e'),
+          ('AX360e (Free)', 'xbox360.aenu.ax360e.free'),
+          ('X360 Mobile', 'xbox360.x360mobile'),
+          ('Xendroid', 'xbox360.xendroid'),
+        ]) {
+          await db.execute(
+            'INSERT INTO app_emulators (system_id, os_id, name, unique_identifier, is_standalone, is_default) '
+            "VALUES ('xbox360', $osId, '${emu.$1}', '${emu.$2}', 1, "
+            '${emu.$2 == defaultUid ? 1 : 0})',
+          );
+        }
+      }
+
+      Future<List<String>> xbox360Defaults() async {
+        final rows = await db.rawQuery(
+          "SELECT unique_identifier AS uid FROM app_emulators "
+          "WHERE system_id = 'xbox360' AND is_default = 1 ORDER BY uid",
+        );
+        return rows.map<String>((r) => r['uid'].toString()).toList();
+      }
+
+      test('leaves an existing standalone app default alone', () async {
+        // Regression: the designation check only looked at cores, so a system
+        // with nothing but standalones read as undesignated and got seeded
+        // again — every launch, next to the default already there. Two winners
+        // for one (system, os) makes the launch target a coin flip, which is
+        // how xbox360 started booting the paid AX360e instead of the free
+        // build the systems JSON picks.
+        await seedAllStandaloneSystem(
+          defaultUid: 'xbox360.aenu.ax360e.free',
+        );
+
+        await normalize();
+        await normalize();
+
+        expect(await xbox360Defaults(), ['xbox360.aenu.ax360e.free']);
+      });
+
+      test('still seeds an all-standalone system that has no default', () async {
+        // The other half: with no designation at all, seeding must still fire,
+        // or the system launches nothing.
+        await seedAllStandaloneSystem(defaultUid: 'none');
+
+        await normalize();
+
+        expect(await xbox360Defaults(), hasLength(1));
+      });
+
       test('does not touch other operating systems', () async {
         final otherOs = osId == 2 ? 1 : 2;
         await db.execute(
