@@ -1197,9 +1197,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// most of a 1080p handheld's screen, which pushed a long list (platforms,
   /// years) to full height and slid its title under the global tab strip. The
   /// overlay covers the whole tab area — which starts behind the header — so the
-  /// menu keeps the same 64.r header clearance the tab content does, applied as
-  /// a *height cap* rather than as top padding: padding centred the menu in the
-  /// space left below the header, which read as sitting too low on screen.
+  /// menu keeps clear of that header via [_FilterMenuLayout] rather than top
+  /// padding: padding centred the menu in the space left below the header,
+  /// which read as sitting too low on screen.
   Widget _buildFilterMenu(ThemeData theme, String key) {
     final scheme = theme.colorScheme;
     final labels = _menuLabels(key);
@@ -1210,70 +1210,61 @@ class _SearchScreenState extends State<SearchScreen> {
         onTap: _cancelFilterMenu,
         child: ColoredBox(
           color: Colors.black.withValues(alpha: 0.6),
-          child: LayoutBuilder(
-            builder: (context, viewport) {
-              // Budgeting twice the header clearance leaves a centred menu
-              // unable to reach it at any height, so the tallest lists stop
-              // clear of the tab strip while short ones stay optically centred.
-              final topInset = 64.r + 12.r;
-              final maxHeight = math.max(
-                0.0,
-                math.min(
-                  viewport.maxHeight * 0.6,
-                  viewport.maxHeight - topInset * 2,
-                ),
-              );
-              return Center(
-                child: GestureDetector(
-                  onTap: () {},
-                  child: Container(
-                    width: 320.r,
-                    constraints: BoxConstraints(maxHeight: maxHeight),
-                    padding: EdgeInsets.all(12.r),
-                    decoration: BoxDecoration(
-                      color: scheme.surface,
-                      borderRadius: BorderRadius.circular(16.r),
-                      border: Border.all(
-                        color: scheme.primary.withValues(alpha: 0.4),
-                        width: 1.r,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
-                          child: Text(
-                            _filterLabel(key),
-                            style: TextStyle(
-                              fontSize: 15.r,
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        Flexible(
-                          child: ListView.builder(
-                            controller: _menuScroll,
-                            shrinkWrap: true,
-                            itemExtent: _menuExtent.r,
-                            itemCount: labels.length,
-                            itemBuilder: (context, i) => _buildMenuOption(
-                              theme,
-                              key,
-                              labels[i],
-                              i,
-                              selected,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+          child: CustomSingleChildLayout(
+            delegate: _FilterMenuLayout(
+              // The header's own 46.r (see header.dart) plus a 12.r gap — not
+              // the 64.r top spacer the tab *content* starts after, which
+              // reserved space the header never occupied.
+              topInset: 46.r + 12.r,
+              bottomInset: 12.r,
+            ),
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: 320.r,
+                padding: EdgeInsets.all(12.r),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.4),
+                    width: 1.r,
                   ),
                 ),
-              );
-            },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
+                      child: Text(
+                        _filterLabel(key),
+                        style: TextStyle(
+                          fontSize: 15.r,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView.builder(
+                        controller: _menuScroll,
+                        shrinkWrap: true,
+                        itemExtent: _menuExtent.r,
+                        itemCount: labels.length,
+                        itemBuilder: (context, i) => _buildMenuOption(
+                          theme,
+                          key,
+                          labels[i],
+                          i,
+                          selected,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1532,4 +1523,45 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
     );
   }
+}
+
+/// Lays out a filter menu that is centred while it fits, then grows downward.
+///
+/// Centring alone forces a symmetric budget: to keep its top edge below the
+/// header a centred box must leave the same room underneath, which costs a long
+/// list rows to empty space at the bottom of the screen. So the menu is centred
+/// only until centring would push it under the header; past that it stays
+/// pinned at [topInset] and takes the whole run down to [bottomInset]. Short
+/// lists still sit optically centred, long ones use the screen.
+class _FilterMenuLayout extends SingleChildLayoutDelegate {
+  const _FilterMenuLayout({required this.topInset, required this.bottomInset});
+
+  /// Space kept clear at the top, for the global header the overlay covers.
+  final double topInset;
+
+  /// Space kept clear at the bottom, so the menu never meets the screen edge.
+  final double bottomInset;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen().copyWith(
+        maxHeight: math.max(
+          0.0,
+          constraints.maxHeight - topInset - bottomInset,
+        ),
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final centred = (size.height - childSize.height) / 2;
+    return Offset(
+      (size.width - childSize.width) / 2,
+      math.max(centred, topInset),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_FilterMenuLayout oldDelegate) =>
+      oldDelegate.topInset != topInset ||
+      oldDelegate.bottomInset != bottomInset;
 }
