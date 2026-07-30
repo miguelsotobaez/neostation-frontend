@@ -330,6 +330,9 @@ class SqliteMigrations {
       case 108:
         await _migrateToVersion108(db);
         break;
+      case 109:
+        await _migrateToVersion109(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5202,6 +5205,53 @@ class SqliteMigrations {
       );
     } catch (e, stackTrace) {
       _log.e('Error in migration v108: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v109: Records which standalone emulator the systems JSON
+  /// designates, in `app_emulators.is_default_standalone`.
+  ///
+  /// `is_default_core` has always persisted the JSON's `default_core` flag, but
+  /// its `default_standalone` counterpart was only ever consumed in memory
+  /// during the sync and then thrown away. Anything that later had to pick a
+  /// standalone — [SqliteService.clearRetroArchDefaultsForAndroid] when no
+  /// RetroArch is installed, or the launch-time normalizer when a system has no
+  /// default at all — had no way to ask which one the seed meant, so it guessed
+  /// by name and could land on the wrong build entirely (the paid `aenu.ax360e`
+  /// ahead of the free `aenu.ax360e.free`).
+  ///
+  /// The column backfills to `0` and the next emulator sync writes the real
+  /// values, so both consumers degrade to the old name-ordered guess until then
+  /// rather than breaking.
+  static Future<void> _migrateToVersion109(Database db) async {
+    _log.i('Migration v109: Adding is_default_standalone to app_emulators');
+    try {
+      final tables = db.select(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_emulators'",
+      );
+      if (tables.isEmpty) {
+        _log.i('Migration v109: app_emulators table missing, nothing to do');
+        return;
+      }
+
+      final tableInfo = db.select('PRAGMA table_info(app_emulators)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('is_default_standalone')) {
+        db.execute(
+          'ALTER TABLE app_emulators '
+          'ADD COLUMN is_default_standalone INTEGER NOT NULL DEFAULT 0',
+        );
+        _log.i('Column is_default_standalone added via v109');
+      } else {
+        _log.i('Column is_default_standalone already exists');
+      }
+
+      _log.i('Migration v109 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v109: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 108;
+  static const int _databaseVersion = 109;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -871,6 +871,10 @@ class SqliteService {
           if (isDefaultCore) {
             updateData['is_default_core'] = 1;
           }
+          // Written on every pass, unlike is_default_core: it is what tells the
+          // RetroArch fallback which standalone the seed designates, so a JSON
+          // that moves the flag has to be able to move it back off a row.
+          updateData['is_default_standalone'] = isDefaultStandalone ? 1 : 0;
 
           await txn.update(
             'app_emulators',
@@ -901,6 +905,7 @@ class SqliteService {
             if (isDefaultCore) {
               updateData['is_default_core'] = 1;
             }
+            updateData['is_default_standalone'] = isDefaultStandalone ? 1 : 0;
 
             await txn.update(
               'app_emulators',
@@ -929,6 +934,7 @@ class SqliteService {
             if (isDefaultCore) {
               insertData['is_default_core'] = 1;
             }
+            insertData['is_default_standalone'] = isDefaultStandalone ? 1 : 0;
 
             await txn.insert('app_emulators', insertData);
             processedUniqueIds.add(emuDef.uniqueId);
@@ -1708,6 +1714,7 @@ class SqliteService {
           core_filename TEXT,
           is_default INTEGER NOT NULL DEFAULT 0,
           is_default_core INTEGER NOT NULL DEFAULT 0,
+          is_default_standalone INTEGER NOT NULL DEFAULT 0,
           is_ra_compatible INTEGER NOT NULL DEFAULT 0,
           android_package_name TEXT,
           android_activity_name TEXT,
@@ -3869,11 +3876,16 @@ class SqliteService {
         if (hasAppDefault) continue;
 
         // Nothing designated at all — seed the app-level default. Preference:
-        // the core the systems JSON marks as canonical, then any standalone
-        // (more likely to work out of the box than an unverifiable core), then
-        // any core.
+        // the core the systems JSON marks as canonical, then the standalone it
+        // marks, then any standalone (more likely to work out of the box than
+        // an unverifiable core), then any core. Falling straight to "any
+        // standalone" meant an alphabetical guess overrode a seed that had a
+        // perfectly good answer — the paid AX360e ahead of AX360e (Free).
         final seed =
             cores.where((c) => c['is_default_core'] == 1).firstOrNull ??
+            standalones
+                .where((s) => s['is_default_standalone'] == 1)
+                .firstOrNull ??
             standalones.firstOrNull ??
             cores.firstOrNull;
 
@@ -4716,7 +4728,15 @@ class SqliteService {
   /// Clears all RetroArch core defaults on Android when no RetroArch variant
   /// is installed. Systems the user has explicitly configured are left
   /// untouched (see [_systemsWithUserDefaultSql]). For systems that lose their
-  /// default, falls back to the first available standalone emulator.
+  /// default, falls back to a single standalone emulator: the one the systems
+  /// JSON designates, or the first by name if it designates none.
+  ///
+  /// The fallback used to be one set-based `UPDATE ... SET is_default = 1`
+  /// guarded by `NOT EXISTS`, with nothing limiting it to a single row — so it
+  /// promoted *every* standalone of a qualifying system at once and left the
+  /// launch target a coin flip between them, which is the same broken state
+  /// migration v108 exists to repair. Resolving one winner per system in Dart
+  /// also sidesteps the guard re-evaluating as rows are written.
   static Future<void> clearRetroArchDefaultsForAndroid() async {
     final db = await instance.database;
 
@@ -4737,19 +4757,37 @@ class SqliteService {
         [osId, 'com.retroarch%'],
       );
 
-      // For systems with no default after clearing RA, fall back to standalone
-      // Only set standalone as default if it has is_default = 0 AND the system has no other default
-      await txn.rawUpdate(
-        'UPDATE app_emulators SET is_default = 1 '
-        'WHERE os_id = ? AND is_standalone = 1 AND is_default = 0 AND system_id IN ('
-        'SELECT DISTINCT e.system_id FROM app_emulators e '
-        'WHERE e.os_id = ? AND e.android_package_name LIKE ? AND e.is_default = 0'
-        ') AND NOT EXISTS ('
-        'SELECT 1 FROM app_emulators e2 '
-        'WHERE e2.system_id = app_emulators.system_id AND e2.os_id = ? AND e2.is_default = 1'
-        ') AND system_id NOT IN ($_systemsWithUserDefaultSql)',
-        [osId, osId, 'com.retroarch%', osId],
+      // For systems left with no default after clearing RA, fall back to
+      // exactly one standalone — the seed's pick where there is one.
+      final orphaned = await txn.rawQuery(
+        'SELECT DISTINCT e.system_id AS sid FROM app_emulators e '
+        'WHERE e.os_id = ? AND e.android_package_name LIKE ? '
+        'AND e.system_id NOT IN ($_systemsWithUserDefaultSql) '
+        'AND NOT EXISTS ('
+        '  SELECT 1 FROM app_emulators d '
+        '  WHERE d.system_id = e.system_id AND d.os_id = ? AND d.is_default = 1'
+        ')',
+        [osId, 'com.retroarch%', osId],
       );
+
+      for (final row in orphaned) {
+        final systemId = row['sid']?.toString();
+        if (systemId == null) continue;
+
+        final candidates = await txn.rawQuery(
+          'SELECT unique_identifier FROM app_emulators '
+          'WHERE system_id = ? AND os_id = ? AND is_standalone = 1 '
+          'ORDER BY is_default_standalone DESC, name ASC LIMIT 1',
+          [systemId, osId],
+        );
+        if (candidates.isEmpty) continue;
+
+        await txn.rawUpdate(
+          'UPDATE app_emulators SET is_default = 1 '
+          'WHERE system_id = ? AND os_id = ? AND unique_identifier = ?',
+          [systemId, osId, candidates.first['unique_identifier']],
+        );
+      }
     });
 
     try {

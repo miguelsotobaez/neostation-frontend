@@ -142,6 +142,7 @@ class DatabaseTestHelper {
         android_activity_name TEXT,
         is_default INTEGER,
         is_default_core INTEGER,
+        is_default_standalone INTEGER NOT NULL DEFAULT 0,
         is_ra_compatible INTEGER
       )
     ''');

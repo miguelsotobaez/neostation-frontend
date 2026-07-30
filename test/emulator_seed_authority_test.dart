@@ -133,6 +133,30 @@ void main() {
     expect(await defaultsOn(androidOsId), ['xbox360.aenu.ax360e.free']);
   });
 
+  test('records which standalone the seed designates, and moves it', () async {
+    Future<List<String>> flaggedStandalones() async {
+      final rows = await db.rawQuery(
+        "SELECT unique_identifier AS uid FROM app_emulators "
+        "WHERE system_id = 'xbox360' AND is_default_standalone = 1 ORDER BY uid",
+      );
+      return rows.map<String>((r) => r['uid'].toString()).toList();
+    }
+
+    await sync(xbox360);
+    expect(await flaggedStandalones(), ['xbox360.aenu.ax360e.free']);
+
+    // The marker has to be cleared as well as set, or a systems update that
+    // moves `default_standalone` would leave two rows claiming to be the
+    // seed's pick — and it is what the RetroArch fallback consults.
+    await sync([
+      standalone('AX360e', 'xbox360.aenu.ax360e', isDefault: true),
+      standalone('AX360e (Free)', 'xbox360.aenu.ax360e.free'),
+      standalone('Xendroid', 'xbox360.xendroid'),
+    ]);
+
+    expect(await flaggedStandalones(), ['xbox360.aenu.ax360e']);
+  });
+
   test('designates every OS the seed lists, not just the first', () async {
     // The bookkeeping used to be one flag for the whole system, so the first OS
     // in the JSON consumed it and every other platform got no default at all.
