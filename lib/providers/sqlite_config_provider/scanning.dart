@@ -88,6 +88,9 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
     _setScanning(true);
     _error = null;
+    // Re-probe the fast SAF walk once per scan: the permission behind it can be
+    // granted or revoked between scans, but not during one.
+    SafDirectoryService.resetFastWalkAvailability();
     SqliteConfigProvider._log.i(
       'scanSystems starting (romFolders=${_config.romFolders.length}, fastScan=$_isFastScan)',
     );
@@ -431,9 +434,13 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
         _notify();
 
-        // Small pause to avoid overloading
+        // Yield to the event loop so the progress UI can paint between systems.
+        // This used to be a fixed 100 ms sleep, which cost 3.3 s (65% of the
+        // whole scan) across 37 systems while throttling nothing — the loop is
+        // already await-serialized. A zero-duration yield keeps the paint
+        // opportunity at no measurable cost.
         if (endIndex < _detectedSystems.length) {
-          await Future.delayed(Duration(milliseconds: 100));
+          await Future<void>.delayed(Duration.zero);
         }
       }
 

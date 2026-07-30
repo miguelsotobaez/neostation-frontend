@@ -254,10 +254,11 @@ class SqliteDatabaseService {
       ..addAll(deduplicatedEntries);
 
     // Clean orphaned entries (files deleted from disk)
-    final removedCount = await _cleanupOrphanedRomsOptimized(
+    final cleanup = await _cleanupOrphanedRomsOptimized(
       system.id!,
       romEntries.map((e) => e.path).toSet(),
     );
+    final removedCount = cleanup.removed;
 
     if (romEntries.isEmpty) {
       final finalCount = await SqliteService.getRomCountForSystem(system.id!);
@@ -269,16 +270,38 @@ class SqliteDatabaseService {
       );
     }
 
+    // Only rows the database does not already carry need writing. A warm
+    // rescan finds nothing new, so this turns ~9k pointless upserts (and the
+    // 399 transactions around them) into zero work. Entries whose row is
+    // populated from the file itself are always re-upserted so a previously
+    // failed extraction still gets another chance.
+    final entriesToWrite = romEntries
+        .where(
+          (e) =>
+              !cleanup.knownPaths.contains(e.path) ||
+              _needsMetadataExtraction(system.id!, e),
+        )
+        .toList();
+
+    if (entriesToWrite.isEmpty) {
+      return ScanSummary(
+        added: 0,
+        removed: removedCount,
+        total: (initialCount - removedCount).clamp(0, 999999),
+        systemName: system.realName,
+      );
+    }
+
     // Batch insertion with dynamic batch size tuning
-    final batchSize = _calculateOptimalBatchSize(romEntries.length);
+    final batchSize = _calculateOptimalBatchSize(entriesToWrite.length);
     final batches = <List<RomEntry>>[];
-    for (int i = 0; i < romEntries.length; i += batchSize) {
+    for (int i = 0; i < entriesToWrite.length; i += batchSize) {
       batches.add(
-        romEntries.sublist(
+        entriesToWrite.sublist(
           i,
-          (i + batchSize < romEntries.length)
+          (i + batchSize < entriesToWrite.length)
               ? i + batchSize
-              : romEntries.length,
+              : entriesToWrite.length,
         ),
       );
     }
@@ -429,6 +452,18 @@ class SqliteDatabaseService {
     } catch (e) {
       _log.w('Could not set PRAGMA mmap_size = 268435456: $e');
     }
+  }
+
+  /// Whether [entry] carries metadata that [_batchInsertRoms] derives by reading
+  /// the file itself (Switch title info, Vita Title ID, Steam App ID).
+  ///
+  /// Rows like these are re-upserted on every scan even when the path is already
+  /// known, so an extraction that failed once — unreadable file, missing Switch
+  /// keys — is retried later instead of being frozen out by the path diff.
+  static bool _needsMetadataExtraction(String systemId, RomEntry entry) {
+    if (systemId == 'switch' || systemId == 'nintendo-switch') return true;
+    final lower = entry.filename.toLowerCase();
+    return lower.endsWith('.psvita') || lower.endsWith('.steam');
   }
 
   /// Calculates a tuned batch size for insertions based on the total file count.
@@ -679,7 +714,15 @@ class SqliteDatabaseService {
 
   /// Removes database records for ROMs that are no longer physically present
   /// on the storage device.
-  static Future<int> _cleanupOrphanedRomsOptimized(
+  ///
+  /// Returns the number of rows deleted along with the set of `rom_path` values
+  /// that remain in the database for [systemId]. The caller uses that set to
+  /// skip re-upserting rows it already has: the query it comes from has to run
+  /// anyway, so the diff is free. On error the known-path set comes back empty,
+  /// which degrades to the old behaviour (upsert everything) rather than
+  /// silently skipping inserts.
+  static Future<({int removed, Set<String> knownPaths})>
+  _cleanupOrphanedRomsOptimized(
     String systemId,
     Set<String> existingRomPaths,
   ) async {
@@ -689,25 +732,33 @@ class SqliteDatabaseService {
         'SELECT rom_path FROM user_roms WHERE app_system_id = ?',
         [systemId],
       );
-      if (existingRoms.isEmpty) return 0;
+      if (existingRoms.isEmpty) {
+        return (removed: 0, knownPaths: <String>{});
+      }
 
-      final romsToDelete = existingRoms
-          .where(
-            (rom) => !existingRomPaths.contains(rom['rom_path'].toString()),
-          )
-          .toList();
-      if (romsToDelete.isEmpty) return 0;
+      final knownPaths = <String>{};
+      final romsToDelete = <String>[];
+      for (final rom in existingRoms) {
+        final path = rom['rom_path'].toString();
+        if (existingRomPaths.contains(path)) {
+          knownPaths.add(path);
+        } else {
+          romsToDelete.add(path);
+        }
+      }
+      if (romsToDelete.isEmpty) {
+        return (removed: 0, knownPaths: knownPaths);
+      }
 
       await db.transaction((txn) async {
         const batchSize = 100;
         for (int i = 0; i < romsToDelete.length; i += batchSize) {
-          final batch = romsToDelete.sublist(
+          final paths = romsToDelete.sublist(
             i,
             (i + batchSize < romsToDelete.length)
                 ? i + batchSize
                 : romsToDelete.length,
           );
-          final paths = batch.map((r) => r['rom_path'].toString()).toList();
           final placeholders = List.filled(paths.length, '?').join(',');
           await txn.rawDelete(
             'DELETE FROM user_roms WHERE rom_path IN ($placeholders)',
@@ -715,10 +766,10 @@ class SqliteDatabaseService {
           );
         }
       });
-      return romsToDelete.length;
+      return (removed: romsToDelete.length, knownPaths: knownPaths);
     } catch (e) {
       _log.e('Error cleaning up orphaned ROMs for system $systemId: $e');
-      return 0;
+      return (removed: 0, knownPaths: <String>{});
     }
   }
 
@@ -885,6 +936,30 @@ class SqliteDatabaseService {
     bool ignoreHiddenFiles = true,
   }) async {
     final entries = <RomEntry>[];
+
+    // Fast path: walk the tree with direct filesystem I/O in one native call
+    // instead of a DocumentsProvider query per directory. Returns null when it
+    // cannot prove equivalence (non-primary volume, permission not held), in
+    // which case the SAF walk below runs unchanged.
+    final fastEntries = await SafDirectoryService.fastWalkTree(
+      uri,
+      recursive: recursive,
+      extensions: validExtensions,
+      ignoreHiddenFiles: ignoreHiddenFiles,
+    );
+    if (fastEntries != null) {
+      for (final item in fastEntries) {
+        entries.add(
+          RomEntry(
+            path: item['uri'].toString(),
+            filename: item['name'].toString(),
+            size: (item['size'] as num?)?.toInt() ?? 0,
+          ),
+        );
+      }
+      return entries;
+    }
+
     try {
       final content = await SafDirectoryService.listFiles(uri);
       for (final item in content) {
