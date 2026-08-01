@@ -237,7 +237,14 @@ class _SystemCardState extends State<SystemCard> {
             child: InkWell(
               focusNode: _focusNode,
               onTap: () {
-                SfxService().playNavSound();
+                // A tap on the already-selected card confirms it rather than
+                // moving the selection (touch users have no A button), so it
+                // earns the enter sound instead of the nav sound.
+                if (widget.isSelected) {
+                  SfxService().playEnterSound();
+                } else {
+                  SfxService().playNavSound();
+                }
                 widget.onTap?.call();
               },
               canRequestFocus: false,

@@ -26,6 +26,10 @@ class GameListView extends StatefulWidget {
   final int selectedIndex;
   final Color systemColor;
   final Function(GameModel) onGameSelected;
+
+  /// Confirms the row that is already selected (same action as the A button).
+  /// Tapping a row selects it; tapping the selected row again fires this.
+  final VoidCallback onGameConfirmed;
   final bool isAllMode;
   final bool isNavigatingFast;
   final VoidCallback? onGamepadReactivated;
@@ -37,6 +41,7 @@ class GameListView extends StatefulWidget {
     required this.selectedIndex,
     required this.systemColor,
     required this.onGameSelected,
+    required this.onGameConfirmed,
     this.isAllMode = false,
     this.isNavigatingFast = false,
     this.onGamepadReactivated,
@@ -273,6 +278,14 @@ class GameListViewState extends State<GameListView>
 
                       return GestureDetector(
                         onTap: () {
+                          // Touch users have no A button: the first tap selects
+                          // the row (populating the details panel), a second tap
+                          // on that same row launches it.
+                          if (isSelected) {
+                            SfxService().playEnterSound();
+                            widget.onGameConfirmed();
+                            return;
+                          }
                           SfxService().playNavSound();
                           widget.onGameSelected(game);
                         },

@@ -1310,6 +1310,14 @@ class _GamesGridState extends State<GamesGrid> {
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
+        // Second tap on the already-selected card plays it — touch users have
+        // no A button, so the footer's Play is an affordance, not a step.
+        if (index == _selectedIndex) {
+          SfxService().playEnterSound();
+          widget.onPlay();
+          return;
+        }
+
         setState(() {
           _selectedIndex = index;
           _settledIndex = index; // discrete tap: update chrome immediately
@@ -1427,6 +1435,14 @@ class _GamesGridState extends State<GamesGrid> {
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
+        // Second tap on the already-selected card plays it — touch users have
+        // no A button, so the footer's Play is an affordance, not a step.
+        if (index == _selectedIndex) {
+          SfxService().playEnterSound();
+          widget.onPlay();
+          return;
+        }
+
         setState(() {
           _selectedIndex = index;
           _settledIndex = index; // discrete tap: update chrome immediately

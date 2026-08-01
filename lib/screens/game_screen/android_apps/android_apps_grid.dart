@@ -374,6 +374,14 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
                       app: _apps[index],
                       isSelected: _selectedIndex == index,
                       onTap: () {
+                        // Touch users have no A button: tapping the app that is
+                        // already selected launches it. (_launchSelectedApp
+                        // plays the enter sound itself.)
+                        if (index == _selectedIndex) {
+                          _launchSelectedApp();
+                          return;
+                        }
+                        SfxService().playNavSound();
                         setState(() {
                           _selectedIndex = index;
                           _ensureSelectedItemVisible();

@@ -1027,11 +1027,26 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
                   itemBuilder: (context, index) {
                     final game = widget.games[index];
+                    final isCentred = index == _currentIndex;
                     return KeyedSubtree(
                       key: ValueKey(game.romname),
-                      child: isFanart
-                          ? _buildFanartCard(game, index == _currentIndex)
-                          : _buildBoxCard(game, index == _currentIndex),
+                      child: GestureDetector(
+                        // Tapping an off-centre card brings it to the middle;
+                        // tapping the centred one plays it, so touch users
+                        // never need the footer's A button.
+                        onTap: () {
+                          if (isCentred) {
+                            SfxService().playEnterSound();
+                            widget.onPlay();
+                          } else {
+                            SfxService().playNavSound();
+                            _carouselKey.currentState?.animateToPage(index);
+                          }
+                        },
+                        child: isFanart
+                            ? _buildFanartCard(game, isCentred)
+                            : _buildBoxCard(game, isCentred),
+                      ),
                     );
                   },
                   onPageChanged: _onPageChanged,

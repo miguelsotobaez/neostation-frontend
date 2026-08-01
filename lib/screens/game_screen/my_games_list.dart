@@ -1342,6 +1342,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   selectedIndex: _selectedGameIndex,
                   systemColor: widget.system.colorAsColor,
                   onGameSelected: _selectGame,
+                  onGameConfirmed: _selectCurrentGame,
                   isAllMode:
                       widget.system.folderName == 'all' ||
                       widget.system.folderName == SystemFolderNames.favorites,

@@ -982,7 +982,14 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
                     info: card,
                     isSelected: cardIdx == widget.selectedIndex,
                     onTap: () {
-                      SfxService().playNavSound();
+                      // Touch users have no A button: tapping the card that is
+                      // already selected enters it, so reaching for the footer
+                      // is only ever optional. (SystemCard plays the sound.)
+                      if (cardIdx == widget.selectedIndex) {
+                        widget.onEnterPressed?.call();
+                        return;
+                      }
+
                       if (_gamepadNavigationActive) {
                         return;
                       }
