@@ -2,6 +2,46 @@ import 'package:flutter/material.dart';
 
 enum CarouselPageChangeReason { manual, controller }
 
+/// How off-centre pages shrink and fade with distance from the centred card.
+///
+/// The defaults suit a carousel that fits ~2 pages across the viewport (the
+/// games carousel): the neighbours are already half off-screen, so a steep
+/// falloff reads as depth. A carousel that fits more pages — the systems
+/// carousel gets ~3.6 — needs the floors raised, otherwise everything past the
+/// immediate neighbours has collapsed to a dim sliver before it reaches the
+/// screen edge.
+class CarouselDepth {
+  const CarouselDepth({
+    this.scaleFalloff = 0.4,
+    this.minScale = 0.25,
+    this.opacityBase = 0.6,
+    this.opacityFalloff = 1.0,
+    this.minOpacity = 0.1,
+    this.edgePull = 0.0,
+  });
+
+  /// Scale lost per page of distance, and the size distant cards settle at.
+  final double scaleFalloff;
+  final double minScale;
+
+  /// Opacity at the centre, lost per page of distance, and the floor.
+  final double opacityBase;
+  final double opacityFalloff;
+  final double minOpacity;
+
+  /// How far the outer cards are drawn back toward the centre, as a fraction
+  /// of the page pitch.
+  ///
+  /// The pitch is the card width, so a shrunk card leaves a gap proportional
+  /// to how much it shrank — the outermost cards drift away from the pack
+  /// exactly where they can least afford the room. This pulls them back
+  /// (purely visual; scroll positions and snapping are untouched). It ramps in
+  /// past the immediate neighbours and caps one page later, so the centre and
+  /// its two neighbours keep their spacing and the cards beyond the edge stay
+  /// off-screen instead of piling up.
+  final double edgePull;
+}
+
 class NativeCarousel extends StatefulWidget {
   final int itemCount;
   final Widget Function(BuildContext context, int index) itemBuilder;
@@ -16,6 +56,9 @@ class NativeCarousel extends StatefulWidget {
   /// the grid, where the footer is rendered under the artwork.
   final double? footerHeight;
 
+  /// Shrink/fade envelope applied to off-centre pages.
+  final CarouselDepth depth;
+
   const NativeCarousel({
     super.key,
     required this.itemCount,
@@ -24,6 +67,7 @@ class NativeCarousel extends StatefulWidget {
     this.onPageScrolled,
     this.initialIndex = 0,
     this.footerHeight,
+    this.depth = const CarouselDepth(),
   });
 
   @override
@@ -190,15 +234,32 @@ class NativeCarouselState extends State<NativeCarousel> {
                   child: card,
                   builder: (context, page, child) {
                     final distance = (index - page).abs() - 0.6;
-                    final scale = (1.0 - distance * 0.4).clamp(0.25, 1.0);
-                    final opacity = (0.6 - distance * 1).clamp(0.1, 1.0);
+                    final depth = widget.depth;
+                    final scale = (1.0 - distance * depth.scaleFalloff).clamp(
+                      depth.minScale,
+                      1.0,
+                    );
+                    final opacity =
+                        (depth.opacityBase - distance * depth.opacityFalloff)
+                            .clamp(depth.minOpacity, 1.0);
+                    // Ramps in from the neighbours (distance 0.4 at rest) and
+                    // caps a page later, then signed toward the centre.
+                    final pull = depth.edgePull == 0.0
+                        ? 0.0
+                        : (distance - 0.4).clamp(0.0, 1.0) *
+                              depth.edgePull *
+                              pageWidth *
+                              (page - index).sign;
 
                     return Opacity(
                       opacity: opacity,
-                      child: Transform.scale(
-                        scale: scale,
-                        alignment: Alignment.center,
-                        child: child,
+                      child: Transform.translate(
+                        offset: Offset(pull, 0),
+                        child: Transform.scale(
+                          scale: scale,
+                          alignment: Alignment.center,
+                          child: child,
+                        ),
                       ),
                     );
                   },
