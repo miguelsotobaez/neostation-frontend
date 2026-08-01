@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 enum CarouselPageChangeReason { manual, controller }
@@ -42,6 +44,70 @@ class CarouselDepth {
   final double edgePull;
 }
 
+/// Page-snapping physics that lets a fling carry across many cards.
+///
+/// [PageScrollPhysics] — what [PageView] applies when `pageSnapping` is on —
+/// deliberately caps a swipe at one page, so a hard fling through a 9,000-game
+/// library still advances a single card. This instead lets the normal friction
+/// simulation run to wherever momentum would carry it, then settles on the
+/// nearest card. Requires `pageSnapping: false` so [PageScrollPhysics] is not
+/// layered back on top and re-imposes the one-page cap.
+class _FlingPageScrollPhysics extends ScrollPhysics {
+  const _FlingPageScrollPhysics({required this.viewportFraction, super.parent});
+
+  final double viewportFraction;
+
+  @override
+  _FlingPageScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      _FlingPageScrollPhysics(
+        viewportFraction: viewportFraction,
+        parent: buildParent(ancestor),
+      );
+
+  double _pageExtent(ScrollMetrics position) =>
+      math.max(1.0, position.viewportDimension * viewportFraction);
+
+  double _snapTarget(ScrollMetrics position, double pixels) {
+    final extent = _pageExtent(position);
+    final page = (pixels / extent).roundToDouble();
+    return (page * extent).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    // Out of range (overscroll): let the parent spring it back.
+    if ((velocity <= 0.0 && position.pixels <= position.minScrollExtent) ||
+        (velocity >= 0.0 && position.pixels >= position.maxScrollExtent)) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+
+    // Where unrestricted momentum would come to rest, snapped to a card.
+    final friction = super.createBallisticSimulation(position, velocity);
+    final settleAt = friction?.x(double.infinity) ?? position.pixels;
+    final target = _snapTarget(position, settleAt);
+
+    final tolerance = toleranceFor(position);
+    if ((target - position.pixels).abs() < tolerance.distance) return null;
+
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity,
+      tolerance: tolerance,
+    );
+  }
+
+  @override
+  bool get allowImplicitScrolling => false;
+}
+
 class NativeCarousel extends StatefulWidget {
   final int itemCount;
   final Widget Function(BuildContext context, int index) itemBuilder;
@@ -80,6 +146,14 @@ class NativeCarouselState extends State<NativeCarousel> {
   double _lastVpFraction = 0;
   int _lastReportedIndex = 0;
   final ValueNotifier<double> _pageNotifier = ValueNotifier(0.0);
+
+  /// True while a controller-driven page animation is running. Gates pointer
+  /// input so a stray touch cannot cancel the animation mid-flight.
+  final ValueNotifier<bool> _animating = ValueNotifier(false);
+
+  /// Whether a finger is currently on the carousel. A gesture in progress
+  /// always outranks the input gate.
+  bool _pointerDown = false;
   CarouselPageChangeReason _pageChangeReason =
       CarouselPageChangeReason.controller;
 
@@ -97,7 +171,10 @@ class NativeCarouselState extends State<NativeCarousel> {
     if (widget.initialIndex != oldWidget.initialIndex &&
         widget.initialIndex != _currentIndex &&
         _pageController != null) {
-      _animateToPage(widget.initialIndex);
+      // Reconciling with the parent, not acting on a discrete user input. A
+      // fling outruns the parent's index, so this fires mid-swipe — gating
+      // input here would kill the gesture the user is still performing.
+      _animateToPage(widget.initialIndex, gateInput: false);
     }
   }
 
@@ -106,6 +183,7 @@ class NativeCarouselState extends State<NativeCarousel> {
     _pageController?.removeListener(_onPageScroll);
     _pageController?.dispose();
     _pageNotifier.dispose();
+    _animating.dispose();
     super.dispose();
   }
 
@@ -154,13 +232,23 @@ class NativeCarouselState extends State<NativeCarousel> {
     }
   }
 
-  void _animateToPage(int index) {
+  void _animateToPage(int index, {bool gateInput = true}) {
     _pageChangeReason = CarouselPageChangeReason.controller;
-    _pageController?.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutQuart,
-    );
+    // Never gate while a finger is on the glass: the user is mid-gesture and
+    // owns the carousel until they lift it.
+    if (gateInput && !_pointerDown) _animating.value = true;
+    _pageController
+        ?.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutQuart,
+        )
+        // Completing or being interrupted both end the move, so this is where
+        // the input gate lifts.
+        .whenComplete(() {
+          if (!mounted) return;
+          _animating.value = false;
+        });
   }
 
   void jumpToPage(int index) {
@@ -204,67 +292,85 @@ class NativeCarouselState extends State<NativeCarousel> {
 
         return SizedBox(
           height: maxHeight,
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: (_) {
-              _pageChangeReason = CarouselPageChangeReason.manual;
-            },
-            child: PageView.builder(
-              controller: _pageController,
-              clipBehavior: Clip.none,
-              padEnds: true,
-              allowImplicitScrolling: true,
-              itemCount: widget.itemCount,
-              itemBuilder: (context, index) {
-                // Build the card exactly once and pass it as the
-                // ValueListenableBuilder's `child`. Only the cheap
-                // Opacity/Transform.scale envelope reacts to per-frame page
-                // scroll updates — the card subtree (which does disk reads and
-                // Image.file decoding) is NOT rebuilt on every scroll frame.
-                // RepaintBoundary lets the card's raster be cached and reused
-                // as the scale/opacity animate.
-                final card = RepaintBoundary(
-                  child: AspectRatio(
-                    aspectRatio: pageAspectRatio,
-                    child: widget.itemBuilder(context, index),
-                  ),
-                );
-                return ValueListenableBuilder<double>(
-                  valueListenable: _pageNotifier,
-                  child: card,
-                  builder: (context, page, child) {
-                    final distance = (index - page).abs() - 0.6;
-                    final depth = widget.depth;
-                    final scale = (1.0 - distance * depth.scaleFalloff).clamp(
-                      depth.minScale,
-                      1.0,
-                    );
-                    final opacity =
-                        (depth.opacityBase - distance * depth.opacityFalloff)
-                            .clamp(depth.minOpacity, 1.0);
-                    // Ramps in from the neighbours (distance 0.4 at rest) and
-                    // caps a page later, then signed toward the centre.
-                    final pull = depth.edgePull == 0.0
-                        ? 0.0
-                        : (distance - 0.4).clamp(0.0, 1.0) *
-                              depth.edgePull *
-                              pageWidth *
-                              (page - index).sign;
-
-                    return Opacity(
-                      opacity: opacity,
-                      child: Transform.translate(
-                        offset: Offset(pull, 0),
-                        child: Transform.scale(
-                          scale: scale,
-                          alignment: Alignment.center,
-                          child: child,
-                        ),
-                      ),
-                    );
-                  },
-                );
+          // While a page animation is in flight the carousel takes no pointers
+          // at all. A touch anywhere on it — including the gaps between cards —
+          // otherwise holds the scroll position and cancels the animation
+          // part-way, stranding the selection. Held as the builder's `child` so
+          // arming/disarming never rebuilds the PageView subtree.
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _animating,
+            builder: (context, animating, child) =>
+                IgnorePointer(ignoring: animating, child: child),
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) {
+                _pointerDown = true;
+                _pageChangeReason = CarouselPageChangeReason.manual;
               },
+              onPointerUp: (_) => _pointerDown = false,
+              onPointerCancel: (_) => _pointerDown = false,
+              child: PageView.builder(
+                controller: _pageController,
+                clipBehavior: Clip.none,
+                padEnds: true,
+                allowImplicitScrolling: true,
+                // Snapping is handled by the physics below; leaving it on would
+                // layer PageScrollPhysics back over them and restore the
+                // one-card-per-swipe cap.
+                pageSnapping: false,
+                physics: _FlingPageScrollPhysics(viewportFraction: vpFraction),
+                itemCount: widget.itemCount,
+                itemBuilder: (context, index) {
+                  // Build the card exactly once and pass it as the
+                  // ValueListenableBuilder's `child`. Only the cheap
+                  // Opacity/Transform.scale envelope reacts to per-frame page
+                  // scroll updates — the card subtree (which does disk reads and
+                  // Image.file decoding) is NOT rebuilt on every scroll frame.
+                  // RepaintBoundary lets the card's raster be cached and reused
+                  // as the scale/opacity animate.
+                  final card = RepaintBoundary(
+                    child: AspectRatio(
+                      aspectRatio: pageAspectRatio,
+                      child: widget.itemBuilder(context, index),
+                    ),
+                  );
+                  return ValueListenableBuilder<double>(
+                    valueListenable: _pageNotifier,
+                    child: card,
+                    builder: (context, page, child) {
+                      final distance = (index - page).abs() - 0.6;
+                      final depth = widget.depth;
+                      final scale = (1.0 - distance * depth.scaleFalloff).clamp(
+                        depth.minScale,
+                        1.0,
+                      );
+                      final opacity =
+                          (depth.opacityBase - distance * depth.opacityFalloff)
+                              .clamp(depth.minOpacity, 1.0);
+                      // Ramps in from the neighbours (distance 0.4 at rest) and
+                      // caps a page later, then signed toward the centre.
+                      final pull = depth.edgePull == 0.0
+                          ? 0.0
+                          : (distance - 0.4).clamp(0.0, 1.0) *
+                                depth.edgePull *
+                                pageWidth *
+                                (page - index).sign;
+
+                      return Opacity(
+                        opacity: opacity,
+                        child: Transform.translate(
+                          offset: Offset(pull, 0),
+                          child: Transform.scale(
+                            scale: scale,
+                            alignment: Alignment.center,
+                            child: child,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         );
