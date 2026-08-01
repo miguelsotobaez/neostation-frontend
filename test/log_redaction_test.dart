@@ -4,16 +4,19 @@ import 'package:neostation/utils/log_redaction.dart';
 void main() {
   group('redactSecrets — the observed leak', () {
     test('strips the RetroAchievements web API key from a request URI', () {
-      // Verbatim shape of the line seen in app.log on the Thor: the key is in
-      // the URI carried by an http ClientException, not in our own message.
+      // Shape of the line seen in app.log on the Thor: the key is in the URI
+      // carried by an http ClientException, not in our own message.
+      // NOTE: the key below is a dummy of the same shape (32 chars, base62) —
+      // never paste a real key here, this file is public.
+      const fakeKey = 'EXAMPLEexample0123456789ABCDefgh';
       const line =
           'Error getting user profile: ClientException with SocketException: '
           'Failed host lookup, uri=https://retroachievements.org/API/'
-          'API_GetUserProfile.php?u=SomeUser&y=9lUpeq4qAbNeIdtGlGk7D4Co9xPinq2O';
+          'API_GetUserProfile.php?u=SomeUser&y=$fakeKey';
 
       final redacted = redactSecrets(line);
 
-      expect(redacted, isNot(contains('9lUpeq4qAbNeIdtGlGk7D4Co9xPinq2O')));
+      expect(redacted, isNot(contains(fakeKey)));
       expect(redacted, contains('y=<redacted>'));
       // Everything needed to debug the failure survives.
       expect(redacted, contains('u=SomeUser'));
