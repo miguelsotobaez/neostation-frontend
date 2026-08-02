@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -32,6 +34,23 @@ void logDisplayMetrics(BuildContext context, String display) {
     final dpr = view?.devicePixelRatio;
     final physical = view?.physicalSize;
 
+    // Android's density bucket. Flutter's devicePixelRatio *is*
+    // DisplayMetrics.density and density == densityDpi / 160, so this is the
+    // exact figure `wm density` reports and `./sim-rgds.sh` takes as its
+    // argument — a report that quotes it is a one-command repro.
+    //
+    // It is derived, not new information: at the 4dp the line prints, dpr does
+    // multiply back cleanly. It is logged anyway so nobody reading a support
+    // log has to do the arithmetic or decide how to round. (At the 2dp this
+    // line used to print, 2.31 x 160 = 369.6 and the figure really was
+    // unrecoverable — hence the precision bump alongside it.)
+    //
+    // Android-only: elsewhere dpr is not a density bucket, and the Deck's 1.0
+    // would report a meaningless 160.
+    final densityDpi = Platform.isAndroid && dpr != null
+        ? (dpr * 160).round()
+        : null;
+
     final sw = u.scaleWidth;
     final sh = u.scaleHeight;
     final r = u.radius(1);
@@ -52,7 +71,8 @@ void logDisplayMetrics(BuildContext context, String display) {
       '$tag physical='
           '${physical == null ? '?' : '${physical.width.toStringAsFixed(0)}x'
                     '${physical.height.toStringAsFixed(0)}'}'
-          ' dpr=${f(dpr, 2)}'
+          ' dpr=${f(dpr, 4)}'
+          '${densityDpi == null ? '' : ' densityDpi=$densityDpi'}'
           ' logical=${f(u.screenWidth, 1)}x${f(u.screenHeight, 1)}'
           ' orientation=${u.orientation.name}',
       '$tag design=640x480'
