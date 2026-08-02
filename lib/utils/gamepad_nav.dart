@@ -97,6 +97,12 @@ class GamepadNavigation {
   /// cursor — a fixed cadence there stays in step with the cache.
   final bool accelerateRepeats;
 
+  /// Whether holding a direction auto-repeats. Turn it off for small fixed
+  /// layouts (login forms, dialogs) where one move per press is the whole
+  /// interaction: with a wrapping selection there is no boundary to stop the
+  /// timer, so a held direction would otherwise spin the cursor round the form.
+  final bool allowRepeat;
+
   /// Optional override that reports whether a text field is currently focused
   /// in the active UI layer. When provided, it takes precedence over the global
   /// focus search, preventing off-stage text fields from blocking navigation.
@@ -289,6 +295,7 @@ class GamepadNavigation {
     this.onLetterJump,
     this.letterJumpAxis = LetterJumpAxis.vertical,
     this.accelerateRepeats = false,
+    this.allowRepeat = true,
     this.isTextFieldFocused,
   });
 
@@ -1175,6 +1182,8 @@ class GamepadNavigation {
       cancelAllRepeatTimers();
       return;
     }
+
+    if (!allowRepeat) return;
 
     _startRepeatTimer(key, action);
   }

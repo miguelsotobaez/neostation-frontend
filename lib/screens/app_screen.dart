@@ -400,11 +400,13 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   /// Returns whether the selection moved, so the gamepad handler can suppress
   /// the nav sound when repeating against the start/end of a list.
-  bool _navigateContentDown(bool repeat) {
+  ///
+  /// The achievements tab is absent: `RAContent` pushes its own navigation
+  /// layer unconditionally, so this handler is deactivated whenever that tab is
+  /// mounted. Keeping a second route to the same screen is what caused the
+  /// double-dispatch bug fixed in #255.
+  bool _navigateContentDown() {
     if (_selectedTabIndex == AppTabs.systems) return true;
-    if (_selectedTabIndex == AppTabs.achievements) {
-      return RAContent.navigateDown(repeat: repeat);
-    }
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateDown();
       return true;
@@ -415,11 +417,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     return true;
   }
 
-  bool _navigateContentUp(bool repeat) {
+  bool _navigateContentUp() {
     if (_selectedTabIndex == AppTabs.systems) return true;
-    if (_selectedTabIndex == AppTabs.achievements) {
-      return RAContent.navigateUp(repeat: repeat);
-    }
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateUp();
       return true;
