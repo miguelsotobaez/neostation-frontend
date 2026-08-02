@@ -49,6 +49,8 @@
         },
         "linux": {
           "executable": "cemu",
+          "flatpak": "info.cemu.Cemu",
+          "emudeck_launcher": "cemu.sh",
           "args": "-g \"{file.path}\" -f"
         },
         "macos": {

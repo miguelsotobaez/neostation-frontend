@@ -49,6 +49,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L stella_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -181,6 +183,7 @@
         },
         "linux": {
           "executable": "stella",
+          "flatpak": "io.github.stella_emu.Stella",
           "args": "{file.path}"
         },
         "macos": {

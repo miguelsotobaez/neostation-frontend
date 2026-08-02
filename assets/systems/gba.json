@@ -264,6 +264,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vba_next_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -287,6 +289,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vbam_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -311,6 +315,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mgba_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -334,6 +340,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_gba_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -357,6 +365,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L gpsp_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -380,6 +390,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L meteor_libretro.so \"{file.path}\""
         },
         "macos": {

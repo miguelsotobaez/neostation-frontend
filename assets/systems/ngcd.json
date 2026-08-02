@@ -71,6 +71,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L neocd_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -94,6 +96,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

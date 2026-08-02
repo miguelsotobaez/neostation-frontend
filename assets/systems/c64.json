@@ -145,6 +145,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vice_x64sc_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -169,6 +171,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vice_x64_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -192,6 +196,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L frodo_libretro.so \"{file.path}\""
         },
         "macos": {

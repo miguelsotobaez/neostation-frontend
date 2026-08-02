@@ -103,6 +103,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L atari800_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -127,6 +129,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L a5200_libretro.so \"{file.path}\""
         },
         "macos": {

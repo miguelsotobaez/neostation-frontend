@@ -85,6 +85,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -105,6 +107,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -125,6 +129,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -145,6 +151,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -165,6 +173,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -185,6 +195,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -294,6 +306,8 @@
         },
         "linux": {
           "executable": "pcsx2",
+          "flatpak": "net.pcsx2.PCSX2",
+          "emudeck_launcher": "pcsx2-qt.sh",
           "args": "{file.path}"
         },
         "macos": {

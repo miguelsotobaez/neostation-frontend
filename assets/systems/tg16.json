@@ -132,6 +132,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_supergrafx_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -155,6 +157,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_pce_fast_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -178,6 +182,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_pce_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -201,6 +207,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

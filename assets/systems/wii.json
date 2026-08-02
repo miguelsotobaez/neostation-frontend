@@ -94,15 +94,17 @@
         },
         "windows": {
           "executable": "dolphin.exe",
-          "launch_arguments": "-e \"{file.path}\""
+          "args": "-e \"{file.path}\""
         },
         "linux": {
           "executable": "dolphin",
-          "launch_arguments": "-e \"{file.path}\""
+          "flatpak": "org.DolphinEmu.dolphin-emu",
+          "emudeck_launcher": "dolphin-emu.sh",
+          "args": "-e \"{file.path}\""
         },
         "macos": {
           "executable": "dolphin",
-          "launch_arguments": "-e \"{file.path}\""
+          "args": "-e \"{file.path}\""
         }
       }
     },
@@ -145,6 +147,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L dolphin_libretro.so \"{file.path}\""
         },
         "macos": {

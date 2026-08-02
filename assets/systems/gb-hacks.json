@@ -298,6 +298,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L gambatte_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -321,6 +323,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L gearboy_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -344,6 +348,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L sameboy_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -367,6 +373,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L tgbdual_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -390,6 +398,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L DoubleCherryGB_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -413,6 +423,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mesen-s_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -436,6 +448,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vbam_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -459,6 +473,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mgba_libretro.so \"{file.path}\""
         },
         "macos": {

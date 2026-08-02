@@ -71,6 +71,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L 81_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -47,6 +47,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -70,6 +72,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbalpha2012_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -139,6 +143,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mamearcade_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -162,6 +168,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mame2003_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -185,6 +193,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mame2003_midway_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -208,6 +218,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mame2003_plus_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -231,6 +243,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mame2000_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -254,6 +268,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mame2010_libretro.so \"{file.path}\""
         },
         "macos": {

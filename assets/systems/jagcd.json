@@ -43,6 +43,7 @@
         },
         "linux": {
           "executable": "bigpemu",
+          "emudeck_launcher": "bigpemu.sh",
           "args": "\"{file.path}\""
         }
       }

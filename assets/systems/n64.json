@@ -160,6 +160,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mupen64plus_next_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -206,6 +208,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L parallel_n64_libretro.so \"{file.path}\""
         },
         "macos": {

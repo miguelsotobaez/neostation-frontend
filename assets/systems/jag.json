@@ -60,6 +60,7 @@
         },
         "linux": {
           "executable": "bigpemu",
+          "emudeck_launcher": "bigpemu.sh",
           "args": "\"{file.path}\""
         }
       }
@@ -104,6 +105,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L virtualjaguar_libretro.so \"{file.path}\""
         },
         "macos": {

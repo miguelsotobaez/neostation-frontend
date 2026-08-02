@@ -52,6 +52,8 @@
         },
         "linux": {
           "executable": "rpcs3",
+          "flatpak": "net.rpcs3.RPCS3",
+          "emudeck_launcher": "rpcs3.sh",
           "args": "--no-gui \"{file.path}\""
         },
         "macos": {

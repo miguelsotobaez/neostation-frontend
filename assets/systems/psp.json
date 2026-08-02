@@ -49,6 +49,8 @@
         },
         "linux": {
           "executable": "ppsspp",
+          "flatpak": "org.ppsspp.PPSSPP",
+          "emudeck_launcher": "ppsspp.sh",
           "args": "-f {file.path}"
         },
         "macos": {
@@ -119,6 +121,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L ppsspp_libretro.so \"{file.path}\""
         },
         "macos": {

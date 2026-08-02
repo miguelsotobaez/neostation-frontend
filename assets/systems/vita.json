@@ -44,6 +44,7 @@
         },
         "linux": {
           "executable": "vita3k",
+          "emudeck_launcher": "vita3k.sh",
           "args": "--fullscreen -r {tags.vita_game_id}"
         },
         "macos": {

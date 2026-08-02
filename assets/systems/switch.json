@@ -58,6 +58,7 @@
         },
         "linux": {
           "executable": "eden",
+          "emudeck_launcher": "eden.sh",
           "args": "{file.path}"
         }
       }
@@ -129,6 +130,7 @@
         },
         "linux": {
           "executable": "yuzu",
+          "emudeck_launcher": "yuzu.sh",
           "args": "{file.path}"
         }
       }
@@ -181,6 +183,7 @@
         },
         "linux": {
           "executable": "citron",
+          "emudeck_launcher": "citron.sh",
           "args": "{file.path}"
         }
       }

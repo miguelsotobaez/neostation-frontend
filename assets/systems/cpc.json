@@ -101,6 +101,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L crocods_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -125,6 +127,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L cap32_libretro.so \"{file.path}\""
         },
         "macos": {

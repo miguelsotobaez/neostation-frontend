@@ -86,6 +86,7 @@
         },
         "linux": {
           "executable": "Xenia.AppImage",
+          "emudeck_launcher": "xenia.sh",
           "args": "\"{file.path}\""
         }
       }

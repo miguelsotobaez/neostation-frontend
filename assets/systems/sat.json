@@ -176,6 +176,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_saturn_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -199,6 +201,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L yabasanshiro_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -222,6 +226,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L yabause_libretro.so \"{file.path}\""
         },
         "macos": {

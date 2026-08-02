@@ -233,6 +233,17 @@ class LauncherService {
         result['executable'] = platformConfig['executable'];
       }
 
+      // Linux discovery hints. These let the launcher find a Flatpak or an
+      // EmuDeck-installed emulator without the user pointing a file picker at
+      // it, and they live in the systems JSON so a systems update can correct
+      // an app id without an app release. Absent on other platforms.
+      if (platformConfig.containsKey('flatpak')) {
+        result['flatpak'] = platformConfig['flatpak'];
+      }
+      if (platformConfig.containsKey('emudeck_launcher')) {
+        result['emudeck_launcher'] = platformConfig['emudeck_launcher'];
+      }
+
       if (player.containsKey('unique_id')) {
         result['unique_id'] = player['unique_id'];
       }

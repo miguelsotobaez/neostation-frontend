@@ -72,6 +72,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_pcfx_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -59,6 +59,8 @@
         },
         "linux": {
           "executable": "duckstation",
+          "flatpak": "org.duckstation.DuckStation",
+          "emudeck_launcher": "duckstation.sh",
           "args": "-batch {file.path}"
         },
         "macos": {
@@ -240,6 +242,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_psx_hw_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -263,6 +267,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_psx_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -286,6 +292,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L duckstation_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -309,6 +317,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx_rearmed_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -332,6 +342,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L swanstation_libretro.so \"{file.path}\""
         },
         "macos": {
