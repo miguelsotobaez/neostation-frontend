@@ -39,6 +39,11 @@ class _RAContentState extends State<RAContent>
   /// Set while Right is scrolling the header back into view, so the scroll
   /// listener doesn't read that movement as the user leaving the button.
   bool _scrollingToLogout = false;
+
+  /// Matches the ScreenScraper login's password field, which the RA card sits
+  /// next to: an API key is as worth hiding as a password, and as easy to
+  /// mistype without being able to check it.
+  bool _obscureApiKey = true;
   GamepadNavigation? _gamepadNav;
 
   @override
@@ -125,6 +130,18 @@ class _RAContentState extends State<RAContent>
   Future<void> _connectToRA() async {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (raProvider.isLoading) return;
+    // Same up-front check (and message) as the ScreenScraper login: without it
+    // an empty submit round-trips to the API and surfaces a raw connection
+    // error instead of telling the user what is missing.
+    if (_usernameController.text.trim().isEmpty ||
+        _apiKeyController.text.trim().isEmpty) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.pleaseCompleteAllFields.getString(context),
+        type: NotificationType.error,
+      );
+      return;
+    }
     final apiKey = _apiKeyController.text.trim();
     final success = await raProvider.connect(
       _usernameController.text,
@@ -321,8 +338,8 @@ class _RAContentState extends State<RAContent>
         color: theme.cardColor.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12.r),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1,
         ),
       ),
       child: Column(
@@ -344,7 +361,7 @@ class _RAContentState extends State<RAContent>
             ],
           ),
 
-          SizedBox(height: 6.r),
+          SizedBox(height: 12.r),
 
           // Username field
           Container(
@@ -398,6 +415,7 @@ class _RAContentState extends State<RAContent>
                       ),
                     ),
                   ),
+                  enabled: !raProvider.isLoading,
                   style: TextStyle(fontSize: 11.r),
                   textInputAction: TextInputAction.next,
                   onFieldSubmitted: (_) => _apiKeyFocus.requestFocus(),
@@ -418,11 +436,15 @@ class _RAContentState extends State<RAContent>
                 child: TextFormField(
                   controller: _apiKeyController,
                   focusNode: _apiKeyFocus,
-                  obscureText: true,
+                  obscureText: _obscureApiKey,
                   enableSuggestions: false,
                   autocorrect: false,
                   decoration: InputDecoration(
                     labelText: AppLocale.raApiKey.getString(context),
+                    suffixStyle: TextStyle(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                      fontSize: 12.r,
+                    ),
                     labelStyle: TextStyle(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       fontSize: 10.r,
@@ -461,7 +483,25 @@ class _RAContentState extends State<RAContent>
                         width: 1.r,
                       ),
                     ),
+                    suffixIcon: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        size: 18.r,
+                        _obscureApiKey
+                            ? Symbols.visibility_rounded
+                            : Symbols.visibility_off_rounded,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureApiKey = !_obscureApiKey;
+                        });
+                      },
+                    ),
                   ),
+                  enabled: !raProvider.isLoading,
                   style: TextStyle(fontSize: 11.r),
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _connectToRA(),
@@ -473,7 +513,7 @@ class _RAContentState extends State<RAContent>
 
           // Connect button
           Container(
-            constraints: BoxConstraints(maxWidth: 220.r),
+            constraints: BoxConstraints(maxWidth: 320.r),
             decoration: isSelected(submitSlot)
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(8.r),
@@ -498,6 +538,7 @@ class _RAContentState extends State<RAContent>
                     borderRadius: BorderRadius.circular(8.r),
                   ),
                   elevation: 0,
+                  padding: EdgeInsets.zero,
                 ),
                 child: raProvider.isLoading
                     ? SizedBox(
@@ -506,12 +547,12 @@ class _RAContentState extends State<RAContent>
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white.withValues(alpha: 0.8),
+                            theme.colorScheme.onPrimary,
                           ),
                         ),
                       )
                     : Text(
-                        AppLocale.connect.getString(context),
+                        AppLocale.login.getString(context),
                         style: TextStyle(
                           fontSize: 14.r,
                           fontWeight: FontWeight.bold,
@@ -533,8 +574,8 @@ class _RAContentState extends State<RAContent>
         color: theme.cardColor.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12.r),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1,
         ),
       ),
       child: Column(
