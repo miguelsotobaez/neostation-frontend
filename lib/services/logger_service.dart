@@ -18,6 +18,17 @@ class LoggerService {
   Logger _logger;
   bool _initialized = false;
 
+  /// Whether [init] has run and log output is reaching the file as well as the
+  /// console.
+  ///
+  /// False in the secondary display's engine: it is a separate isolate with its
+  /// own copy of this singleton, and its entry point ([subDisplay] in main.dart)
+  /// deliberately does not call [init] — two isolates holding a FileOutput on
+  /// the same path would interleave writes and race the rotation rename. Code
+  /// that must not lose a line in that isolate should check this and fall back
+  /// to `debugPrint`.
+  bool get isFileBacked => _initialized;
+
   LoggerService._internal()
     : _logger = Logger(
         printer: RedactingPrinter(SimplePrinter(colors: true)),

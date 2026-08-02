@@ -15,6 +15,7 @@ import '../../models/secondary_display_state.dart';
 import '../../models/retro_achievement_comment.dart';
 import '../../repositories/retro_achievements_repository.dart';
 import '../../services/retro_achievements_service.dart';
+import '../../utils/display_metrics_log.dart';
 import '../../utils/no_glow_scroll_behavior.dart';
 import 'background_builders.dart';
 import 'now_playing_helpers.dart';
@@ -739,6 +740,9 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       builder: (_, child) => ValueListenableBuilder<SecondaryDisplayStateData?>(
         valueListenable: _secondaryDisplayState ?? ValueNotifier(null),
         builder: (context, value, child) {
+          // Inside ScreenUtilInit, so this reports the secondary panel's own
+          // metrics. Self-throttling: only re-logs when the numbers change.
+          logDisplayMetrics(context, 'secondary');
           final theme = resolveTheme(
             value?.themeName ?? widget.initialThemeName,
           );

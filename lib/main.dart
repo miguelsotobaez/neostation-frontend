@@ -24,6 +24,7 @@ import 'package:neostation/services/startup_theme_cache.dart';
 import 'package:neostation/widgets/splash_status_layout.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
+import 'package:neostation/utils/display_metrics_log.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/config_service.dart';
@@ -865,7 +866,8 @@ class _MyAppState extends State<MyApp> {
             designSize: const Size(640, 480),
             minTextAdapt: true,
             splitScreenMode: true,
-            builder: (_, child) {
+            builder: (screenUtilContext, child) {
+              logDisplayMetrics(screenUtilContext, 'main');
               return FocusTraversalGroup(
                 policy: NoFocusTraversalPolicy(),
                 child: Shortcuts(
