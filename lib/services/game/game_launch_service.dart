@@ -14,6 +14,7 @@ import '../../utils/emulator_loader.dart';
 import '../config_service.dart';
 import '../android_service.dart';
 import '../launcher_service.dart';
+import '../linux_emulator_discovery.dart';
 import 'favorites_service.dart';
 import 'game_session_manager.dart';
 import '../gamepad/gamepad_navigation_manager.dart';
@@ -482,7 +483,33 @@ class GameLaunchService {
     try {
       final detectedEmulators =
           await EmulatorRepository.getUserDetectedEmulators();
-      final retroArch = detectedEmulators['RetroArch'];
+      var retroArch = detectedEmulators['RetroArch'];
+
+      // On Linux a database entry is not required to find RetroArch: it ships
+      // as a Flatpak or behind an EmuDeck launcher script, both of which live
+      // at well-known paths. Discovery runs when there is no configured path or
+      // the configured one has gone stale, so a working install is not reported
+      // as "not detected" just because the user never opened the file picker.
+      if (Platform.isLinux &&
+          (retroArch == null || !await File(retroArch.path).exists())) {
+        final discovered = await LinuxEmulatorDiscovery.resolveExecutable(
+          executable: 'retroarch',
+          flatpakId: 'org.libretro.RetroArch',
+          emudeckLauncher: 'retroarch.sh',
+        );
+        if (discovered != null) {
+          _log.i('Discovered RetroArch on Linux at $discovered');
+          retroArch =
+              (retroArch ??
+                      const EmulatorModel(
+                        name: 'RetroArch',
+                        path: '',
+                        detected: false,
+                      ))
+                  .copyWith(path: discovered, detected: true);
+        }
+      }
+
       if (!context.mounted) return GameLaunchResult.failure('', '');
       if (retroArch == null) {
         return GameLaunchResult.failure(
@@ -666,6 +693,27 @@ class GameLaunchService {
               'RetroArch',
             );
           }
+        }
+      }
+
+      // Last resort on Linux: nothing the database knows about resolved to a
+      // real file. Emulators there are Flatpaks, EmuDeck launcher scripts or
+      // AppImages rather than binaries sitting next to the frontend, so the
+      // bare `executable` from the systems JSON ("retroarch", "dolphin") never
+      // exists as written and every launch failed until the user hunted the
+      // real path down in a file picker. Only runs when the configured path is
+      // already broken, so an explicit user choice is never overridden.
+      if (Platform.isLinux && !await File(executable).exists()) {
+        final discovered = await LinuxEmulatorDiscovery.resolveExecutable(
+          executable: executable,
+          flatpakId: launchCmd['flatpak']?.toString(),
+          emudeckLauncher: launchCmd['emudeck_launcher']?.toString(),
+        );
+        if (discovered != null) {
+          _log.i(
+            'Resolved "$executable" to $discovered via Linux emulator discovery',
+          );
+          executable = discovered;
         }
       }
 

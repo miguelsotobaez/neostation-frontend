@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:neostation/models/core_emulator_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
+import 'package:neostation/services/linux_emulator_discovery.dart';
 import 'package:neostation/services/logger_service.dart';
 
 /// Hydrates the list of supported emulators for [system], verifying package
@@ -68,8 +69,21 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
       // locate a readable cores dir (layout varies by platform/install), fail
       // OPEN and keep the executable-based assumption rather than hide a
       // genuinely-installed core.
-      final retroArchPath =
-          await EmulatorRepository.getRetroArchExecutablePath();
+      var retroArchPath = await EmulatorRepository.getRetroArchExecutablePath();
+
+      // Linux ships RetroArch as a Flatpak or behind an EmuDeck launcher
+      // script, so the database holds no path for it until the user points a
+      // file picker at one — which this feature exists to avoid. Without
+      // discovery here the probe below is skipped entirely and every core is
+      // reported uninstalled on a machine that has all of them installed.
+      if (Platform.isLinux &&
+          (retroArchPath == null || retroArchPath.isEmpty)) {
+        retroArchPath = await LinuxEmulatorDiscovery.resolveExecutable(
+          executable: 'retroarch',
+          flatpakId: 'org.libretro.RetroArch',
+          emudeckLauncher: 'retroarch.sh',
+        );
+      }
 
       // Baseline: on desktop a configured executable path is the only evidence
       // the database holds, so it stands in as the install verdict for anything
