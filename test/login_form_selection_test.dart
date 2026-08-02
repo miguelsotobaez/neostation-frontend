@@ -45,8 +45,10 @@ class _TestFormState extends State<_TestForm>
 }
 
 /// Form whose slot list changes with its mode, the shape the NeoSync login has:
-/// register carries a username the login state doesn't, and the verification
-/// step is a pair of buttons with no field at all.
+/// register carries a username the login state doesn't, the verification step
+/// is a pair of buttons with no field at all, and both entry modes end in a run
+/// of controls — submit followed by the links that switch mode or start a
+/// password reset.
 class _ModalForm extends StatefulWidget {
   const _ModalForm();
 
@@ -66,8 +68,10 @@ class _ModalFormState extends State<_ModalForm>
 
   @override
   List<FocusNode?> get selectionSlots => switch (mode) {
-    _Mode.login => [emailFocus, passwordFocus, null],
-    _Mode.register => [usernameFocus, emailFocus, passwordFocus, null],
+    // login + "sign up" + "forgot password"
+    _Mode.login => [emailFocus, passwordFocus, null, null, null],
+    // sign up + "already have an account"
+    _Mode.register => [usernameFocus, emailFocus, passwordFocus, null, null],
     _Mode.verify => [null, null],
   };
 
@@ -236,9 +240,9 @@ void main() {
     state.moveSelection(-1);
     await tester.pump();
     expect(state.selectedSlot, state.submitSlot);
-    expect(state.selectedSlot, 3);
+    expect(state.selectedSlot, 4);
 
-    // Verification drops to two button slots, stranding the index at 3.
+    // Verification drops to two button slots, stranding the index at 4.
     state.switchTo(_Mode.verify);
     await tester.pump();
 
@@ -260,6 +264,25 @@ void main() {
     await tester.pump();
     state.moveSelection(-1);
     await tester.pump();
+
+    expect(state.selectedFocusNode, isNull);
+    expect(state.focusSelectedField(), isFalse);
+  });
+
+  testWidgets('every control after the submit button is still reachable', (
+    tester,
+  ) async {
+    final state = await _pumpModalForm(tester);
+
+    // Login ends in three controls — submit, then the sign-up and
+    // forgot-password links — and the D-pad has to walk all of them rather
+    // than stopping at the button in the middle.
+    expect(state.slotCount, 5);
+    for (final slot in [1, 2, 3, 4]) {
+      expect(state.moveSelection(1), isTrue);
+      await tester.pump();
+      expect(state.selectedSlot, slot);
+    }
 
     expect(state.selectedFocusNode, isNull);
     expect(state.focusSelectedField(), isFalse);

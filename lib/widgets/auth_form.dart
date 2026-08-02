@@ -61,14 +61,20 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
   /// A null entry is an action button rather than something to focus.
   @override
   List<FocusNode?> get selectionSlots {
-    if (_showResetPassword) return [_resetTokenFocus, _newPasswordFocus, null];
-    if (_showForgotPassword) return [_emailFocus, null];
+    if (_showResetPassword) {
+      return [_resetTokenFocus, _newPasswordFocus, null, null]; // reset + back
+    }
+    if (_showForgotPassword) return [_emailFocus, null, null]; // send + back
     if (_showVerification && !_showEmailVerification) {
       return [_verificationTokenFocus, null];
     }
     if (_showEmailVerification) return [null, null]; // resend + back
-    if (_isLogin) return [_emailFocus, _passwordFocus, null];
-    return [_usernameFocus, _emailFocus, _passwordFocus, null];
+    if (_isLogin) {
+      // login + "sign up" + "forgot password"
+      return [_emailFocus, _passwordFocus, null, null, null];
+    }
+    // sign up + "already have an account"
+    return [_usernameFocus, _emailFocus, _passwordFocus, null, null];
   }
 
   /// Every node the form owns, not just the ones the current mode shows, so
@@ -138,18 +144,46 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
       return;
     }
     if (_showResetPassword) {
-      _resetPassword();
+      isSelected(3) ? _goBackToLogin() : _resetPassword();
       return;
     }
     if (_showForgotPassword) {
-      _sendForgotPasswordEmail();
+      isSelected(2) ? _goBackToLogin() : _sendForgotPasswordEmail();
       return;
     }
     if (_showVerification) {
       _verifyEmail();
       return;
     }
+    // The mode-switch link trails the submit button, so it sits one slot later
+    // in register, which carries a username field the login form doesn't.
+    if (isSelected(_isLogin ? 3 : 4)) {
+      _toggleMode();
+      return;
+    }
+    if (_isLogin && isSelected(4)) {
+      _openForgotPassword();
+      return;
+    }
     _submitForm();
+  }
+
+  /// Tapping a link and pressing A on it both land here, so the two paths
+  /// can't drift on what a mode switch resets.
+  void _toggleMode() {
+    setState(() {
+      _isLogin = !_isLogin;
+      _message = null;
+      resetSelectionInPlace();
+    });
+  }
+
+  void _openForgotPassword() {
+    setState(() {
+      _showForgotPassword = true;
+      _message = null;
+      resetSelectionInPlace();
+    });
   }
 
   /// B leaves a focused field first — that is what it does everywhere else in
@@ -812,57 +846,39 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
                 !_showEmailVerification) ...[
               SizedBox(
                 height: 24.r,
-                child: TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isLogin = !_isLogin;
-                      _message = null;
-                      resetSelectionInPlace();
-                    });
-                  },
-                  child: Text(
-                    _isLogin
-                        ? AppLocale.dontHaveAccount.getString(context)
-                        : AppLocale.alreadyHaveAccount.getString(context),
-                    style: TextStyle(
-                      fontSize: 8.r,
-                      color: theme.colorScheme.secondary.withValues(alpha: 0.9),
-                    ),
-                  ),
+                child: _buildSecondaryButton(
+                  context: context,
+                  slot: _isLogin ? 3 : 4,
+                  onPressed: _toggleMode,
+                  label: _isLogin
+                      ? AppLocale.dontHaveAccount.getString(context)
+                      : AppLocale.alreadyHaveAccount.getString(context),
+                  fontSize: 8.r,
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.9),
                 ),
               ),
               SizedBox(height: 6.r),
               if (_isLogin)
                 SizedBox(
                   height: 24.r,
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showForgotPassword = true;
-                        _message = null;
-                        resetSelectionInPlace();
-                      });
-                    },
-                    child: Text(
-                      AppLocale.forgotPasswordQuestion.getString(context),
-                      style: TextStyle(
-                        fontSize: 8.r,
-                        color: theme.colorScheme.secondary.withValues(
-                          alpha: 0.9,
-                        ),
-                      ),
-                    ),
+                  child: _buildSecondaryButton(
+                    context: context,
+                    slot: 4,
+                    onPressed: _openForgotPassword,
+                    label: AppLocale.forgotPasswordQuestion.getString(context),
+                    fontSize: 8.r,
+                    color: theme.colorScheme.secondary.withValues(alpha: 0.9),
                   ),
                 ),
             ] else if (_showForgotPassword || _showResetPassword) ...[
               SizedBox(
                 height: 24.r,
-                child: TextButton(
-                  onPressed: () => _goBackToLogin(),
-                  child: Text(
-                    AppLocale.backToLogin.getString(context),
-                    style: TextStyle(fontSize: 8.r),
-                  ),
+                child: _buildSecondaryButton(
+                  context: context,
+                  slot: _showForgotPassword ? 2 : 3,
+                  onPressed: _goBackToLogin,
+                  label: AppLocale.backToLogin.getString(context),
+                  fontSize: 8.r,
                 ),
               ),
             ],
@@ -953,6 +969,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
     required VoidCallback? onPressed,
     required String label,
     required double fontSize,
+    Color? color,
   }) {
     final theme = Theme.of(context);
     final selected = slot >= 0 && isSelected(slot);
@@ -968,7 +985,10 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
           : null,
       child: TextButton(
         onPressed: onPressed,
-        child: Text(label, style: TextStyle(fontSize: fontSize)),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: fontSize, color: color),
+        ),
       ),
     );
   }
@@ -1139,19 +1159,13 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
           _buildMessageBox(context),
           SizedBox(height: 12.r),
         ],
+        // No back link here: the shared one below the form covers both this
+        // mode and the forgot-password one, and two of them rendered at once.
         _buildActionButton(
           context: context,
           slot: 2,
           onPressed: _isLoading ? null : _resetPassword,
           label: AppLocale.resetPassword.getString(context),
-        ),
-        SizedBox(height: 6.r),
-        TextButton(
-          onPressed: () => _goBackToLogin(),
-          child: Text(
-            AppLocale.backToLogin.getString(context),
-            style: TextStyle(fontSize: 10.r),
-          ),
         ),
       ],
     );
