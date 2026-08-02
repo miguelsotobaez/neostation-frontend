@@ -15,6 +15,7 @@ import '../config_service.dart';
 import '../android_service.dart';
 import '../launcher_service.dart';
 import '../linux_emulator_discovery.dart';
+import '../linux_host_process.dart';
 import 'favorites_service.dart';
 import 'game_session_manager.dart';
 import '../gamepad/gamepad_navigation_manager.dart';
@@ -582,7 +583,7 @@ class GameLaunchService {
         String executable = retroArch.path;
         final args = ['-f', '-L', coreFullPath, game.romPath!];
 
-        process = await Process.start(executable, args);
+        process = await LinuxHostProcess.start(executable, args);
       }
 
       process.stdout.listen((_) {});
@@ -756,7 +757,11 @@ class GameLaunchService {
         env['HOME'] = ConfigService.getRealHomePath();
       }
 
-      final process = await Process.start(executable, args, environment: env);
+      final process = await LinuxHostProcess.start(
+        executable,
+        args,
+        environment: env,
+      );
 
       process.stdout.listen((_) {});
       process.stderr.listen((_) {});
@@ -1194,7 +1199,7 @@ class GameLaunchService {
           .replaceAll('{emulator_path}', emulatorPath);
 
       final argList = _parseCommandArguments(args);
-      final process = await Process.start(emulatorPath, argList);
+      final process = await LinuxHostProcess.start(emulatorPath, argList);
 
       process.stdout.listen((_) {});
       process.stderr.listen((_) {});
@@ -1534,7 +1539,13 @@ class GameLaunchService {
     if (!Platform.isLinux && !Platform.isMacOS) return false;
 
     try {
-      final result = await Process.run('pgrep', ['-i', '-f', processName]);
+      // On the host, because a sandbox has its own PID namespace and would see
+      // none of the emulators it started.
+      final result = await LinuxHostProcess.run('pgrep', [
+        '-i',
+        '-f',
+        processName,
+      ]);
       return result.exitCode == 0;
     } catch (e) {
       _log.e('Error checking if $processName is running (unix): $e');
