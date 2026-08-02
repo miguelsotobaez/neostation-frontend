@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/services/game/game_launch_service.dart';
 import 'package:neostation/services/linux_emulator_discovery.dart';
 import 'package:path/path.dart' as p;
 
@@ -228,6 +229,84 @@ void main() {
           emudeckLauncher: 'not-installed.sh',
         ),
         isNull,
+      );
+    });
+  });
+
+  group('RetroArch core arguments', () {
+    test('rewrites a bare core filename to an absolute path', () async {
+      final cores = Directory(p.join(home.path, 'cores'))
+        ..createSync(recursive: true);
+      File(p.join(cores.path, 'snes9x_libretro.so')).writeAsStringSync('');
+
+      expect(
+        await GameLaunchService.absolutizeRetroArchCore([
+          '-L',
+          'snes9x_libretro.so',
+          '/roms/snes/game.sfc',
+        ], cores.path),
+        ['-L', p.join(cores.path, 'snes9x_libretro.so'), '/roms/snes/game.sfc'],
+      );
+    });
+
+    test('strips a "cores/" prefix before relocating', () async {
+      final cores = Directory(p.join(home.path, 'cores'))
+        ..createSync(recursive: true);
+      File(
+        p.join(cores.path, 'genesis_plus_gx_libretro.so'),
+      ).writeAsStringSync('');
+
+      expect(
+        await GameLaunchService.absolutizeRetroArchCore([
+          '-L',
+          'cores/genesis_plus_gx_libretro.so',
+          '/roms/md/game.md',
+        ], cores.path),
+        [
+          '-L',
+          p.join(cores.path, 'genesis_plus_gx_libretro.so'),
+          '/roms/md/game.md',
+        ],
+      );
+    });
+
+    test('leaves an already-absolute core path untouched', () async {
+      final cores = Directory(p.join(home.path, 'cores'))
+        ..createSync(recursive: true);
+
+      expect(
+        await GameLaunchService.absolutizeRetroArchCore([
+          '-L',
+          '/opt/retroarch/cores/mgba_libretro.so',
+          '/roms/gba/game.gba',
+        ], cores.path),
+        ['-L', '/opt/retroarch/cores/mgba_libretro.so', '/roms/gba/game.gba'],
+      );
+    });
+
+    test(
+      'leaves a core that is not in the directory for RetroArch to report',
+      () async {
+        // Pointing at a path that does not exist turns RetroArch's own
+        // "core not found" error into a silent black screen.
+        final cores = Directory(p.join(home.path, 'cores'))
+          ..createSync(recursive: true);
+
+        expect(
+          await GameLaunchService.absolutizeRetroArchCore([
+            '-L',
+            'not_installed_libretro.so',
+            '/roms/nes/game.nes',
+          ], cores.path),
+          ['-L', 'not_installed_libretro.so', '/roms/nes/game.nes'],
+        );
+      },
+    );
+
+    test('ignores a trailing -L with no value', () async {
+      expect(
+        await GameLaunchService.absolutizeRetroArchCore(['-L'], home.path),
+        ['-L'],
       );
     });
   });

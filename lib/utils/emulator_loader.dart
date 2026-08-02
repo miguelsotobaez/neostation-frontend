@@ -94,10 +94,18 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
           .toList();
 
       if (retroArchPath != null && retroArchPath.isNotEmpty) {
-        final coresDir =
-            '${File(retroArchPath).parent.path}'
-            '${Platform.pathSeparator}cores';
-        final coresDirReadable = await Directory(coresDir).exists();
+        // Linux keeps cores away from the executable (Flatpak's ~/.var tree,
+        // or a distro's /usr/lib/libretro), so assuming a sibling `cores/`
+        // marks every genuinely-installed core as missing. Ask the discovery
+        // service, which probes the layouts that actually occur.
+        final coresDir = Platform.isLinux
+            ? await LinuxEmulatorDiscovery.resolveRetroArchCoresDir(
+                retroArchPath,
+              )
+            : '${File(retroArchPath).parent.path}'
+                  '${Platform.pathSeparator}cores';
+        final coresDirReadable =
+            coresDir != null && await Directory(coresDir).exists();
         final updated = <CoreEmulatorModel>[];
         for (final e in emulators) {
           final uid = e.uniqueId;

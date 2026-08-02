@@ -728,7 +728,28 @@ class GameLaunchService {
       }
 
       final argsStr = launchCmd['args']?.toString() ?? '';
-      final args = LauncherService.splitArgs(argsStr);
+      var args = LauncherService.splitArgs(argsStr);
+
+      // The systems JSON names cores by filename alone (`-L snes9x_libretro.so`),
+      // which RetroArch resolves against the working directory — ours, not its
+      // own. macOS already rewrote these to absolute paths; Linux did not, and
+      // there the cores are further away than anywhere a relative lookup could
+      // reach (a Flatpak keeps them under ~/.var, a distro under /usr/lib).
+      if (Platform.isLinux &&
+          executable.toLowerCase().contains('retroarch') &&
+          args.contains('-L')) {
+        final coresDir = await LinuxEmulatorDiscovery.resolveRetroArchCoresDir(
+          executable,
+        );
+        if (coresDir != null) {
+          args = await _absolutizeRetroArchCore(args, coresDir);
+        } else {
+          _log.w(
+            'No RetroArch cores directory found for $executable; passing the '
+            'core name through unchanged',
+          );
+        }
+      }
 
       final env = Map<String, String>.from(Platform.environment);
       if (Platform.isMacOS) {
@@ -1351,6 +1372,41 @@ class GameLaunchService {
     return result;
   }
 
+  /// Rewrites a relative `-L <core>` argument to an absolute path in [coresDir].
+  ///
+  /// Leaves the value alone when it is already absolute, and when the file is
+  /// not actually in [coresDir] — a wrong absolute path turns RetroArch's own
+  /// "core not found" message into a silent black screen, so an unresolvable
+  /// name is better left for RetroArch to report.
+  @visibleForTesting
+  static Future<List<String>> absolutizeRetroArchCore(
+    List<String> args,
+    String coresDir,
+  ) => _absolutizeRetroArchCore(args, coresDir);
+
+  static Future<List<String>> _absolutizeRetroArchCore(
+    List<String> args,
+    String coresDir,
+  ) async {
+    final out = List<String>.from(args);
+    for (var i = 0; i < out.length - 1; i++) {
+      if (out[i] != '-L') continue;
+
+      final core = out[i + 1];
+      if (core.isEmpty || path.isAbsolute(core)) continue;
+
+      // Some entries write `cores/foo_libretro.so`; only the filename is ours
+      // to relocate.
+      final resolved = path.join(coresDir, path.basename(core));
+      if (await File(resolved).exists()) {
+        out[i + 1] = resolved;
+      } else {
+        _log.w('RetroArch core "$core" not found in $coresDir');
+      }
+    }
+    return out;
+  }
+
   /// Resolves the absolute path for a specific RetroArch core library.
   static Future<String?> _getCoreFullPath(String coreName) async {
     try {
@@ -1422,21 +1478,21 @@ class GameLaunchService {
     final retroArchDir = path.dirname(retroArch.path);
 
     if (Platform.isLinux) {
-      final homeDir = Platform.environment['HOME'] ?? '';
+      // Cores are almost never beside the executable here, and the install type
+      // is not readable from the path: an EmuDeck launcher script is a
+      // `flatpak run` wrapper but looks like a plain shell script, so the old
+      // `path.contains('flatpak')` test missed it and sent the launch at a
+      // cores directory that does not exist. Probe the known layouts instead.
+      final resolved = await LinuxEmulatorDiscovery.resolveRetroArchCoresDir(
+        retroArch.path,
+      );
+      if (resolved != null) return resolved;
 
-      if (retroArch.path.contains('flatpak')) {
-        return path.join(
-          homeDir,
-          '.var/app/org.libretro.RetroArch/config/retroarch/cores',
-        );
-      }
-
-      final configCores = path.join(homeDir, '.config/retroarch/cores');
-      if (await Directory(configCores).exists()) {
-        return configCores;
-      }
-
-      return path.join(retroArchDir, 'cores');
+      // Nothing exists yet; hand back the most likely location so the caller's
+      // "cores directory not found" message names somewhere actionable.
+      return LinuxEmulatorDiscovery.retroArchCoresDirCandidates(
+        retroArch.path,
+      ).first;
     } else if (Platform.isMacOS) {
       final homeDir = ConfigService.getRealHomePath();
       return path.join(homeDir, 'Library/Application Support/RetroArch/cores');
