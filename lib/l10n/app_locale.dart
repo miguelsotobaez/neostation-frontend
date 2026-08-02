@@ -645,6 +645,7 @@ mixin AppLocale {
   static const String cancelScan = 'cancel_scan';
   static const String progress = 'progress';
   static const String raLogin = 'ra_login';
+  static const String raOfflineBanner = 'ra_offline_banner';
   static const String raWhatIs = 'ra_what_is';
   static const String raDescription = 'ra_description';
   static const String raEarnPoints = 'ra_earn_points';

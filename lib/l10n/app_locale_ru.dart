@@ -652,6 +652,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.cancelScan: 'Отмена',
   AppLocale.progress: 'Прогресс',
   AppLocale.raLogin: 'Вход в RetroAchievements',
+  AppLocale.raOfflineBanner:
+      'Не в сети — показаны последние синхронизированные достижения',
   AppLocale.raWhatIs: 'Что такое RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements — это сообщество, добавляющее достижения в классические игры.',

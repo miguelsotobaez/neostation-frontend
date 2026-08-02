@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/retro_achievements_user_awards.dart';
+import 'package:neostation/services/retro_achievements_cache.dart';
 import 'package:neostation/services/retro_achievements_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -215,5 +218,143 @@ void main() {
         expect(completions.single.title, 'Softcore Game');
       },
     );
+
+    group('offline cache policy', () {
+      // One real API payload, reused so each test differs only in what the
+      // network does the second time round.
+      const recentlyPlayedBody =
+          '[{"GameID":11332,"ConsoleID":12,"ConsoleName":"PlayStation",'
+          '"Title":"Final Fantasy Origins","ImageIcon":"/Images/060249.png",'
+          '"ImageTitle":"/Images/026707.png",'
+          '"ImageIngame":"/Images/026708.png",'
+          '"ImageBoxArt":"/Images/046257.png",'
+          '"LastPlayed":"2023-10-27 00:30:04","AchievementsTotal":119,'
+          '"NumPossibleAchievements":119,"PossibleScore":945,'
+          '"NumAchieved":38,"ScoreAchieved":382,'
+          '"NumAchievedHardcore":38,"ScoreAchievedHardcore":382}]';
+
+      late Directory cacheDir;
+
+      setUp(() {
+        cacheDir = Directory.systemTemp.createTempSync('ra_cache_test');
+        RetroAchievementsCache.setDirectoryForTesting(cacheDir.path);
+      });
+
+      tearDown(() {
+        RetroAchievementsCache.setDirectoryForTesting(null);
+        if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
+      });
+
+      Future<void> primeCache(String username) async {
+        await RetroAchievementsService.getUserRecentlyPlayedGames(
+          username,
+          apiKey: 'secret-key',
+          client: MockClient(
+            (request) async => http.Response(recentlyPlayedBody, 200),
+          ),
+        );
+      }
+
+      test('replays the last good response when the network drops', () async {
+        await primeCache('Cached');
+        expect(
+          RetroAchievementsCache.servedFromCache('recently_played_Cached'),
+          isFalse,
+        );
+
+        final offline =
+            await RetroAchievementsService.getUserRecentlyPlayedGames(
+              'Cached',
+              apiKey: 'secret-key',
+              client: MockClient(
+                (request) async =>
+                    throw const SocketException('Network is unreachable'),
+              ),
+            );
+
+        expect(offline.single.title, 'Final Fantasy Origins');
+        expect(
+          RetroAchievementsCache.servedFromCache('recently_played_Cached'),
+          isTrue,
+        );
+      });
+
+      test('falls back to the cached copy on a 5xx', () async {
+        await primeCache('Flaky');
+
+        final served =
+            await RetroAchievementsService.getUserRecentlyPlayedGames(
+              'Flaky',
+              apiKey: 'secret-key',
+              client: MockClient(
+                (request) async => http.Response('Bad Gateway', 502),
+              ),
+            );
+
+        expect(served.single.gameId, 11332);
+        expect(
+          RetroAchievementsCache.servedFromCache('recently_played_Flaky'),
+          isTrue,
+        );
+      });
+
+      test(
+        'a rate-limited (429) reaches the caller even with a cached copy',
+        () async {
+          // The regression this guards: `onMiss` throws, so throwing it from
+          // inside the fallback's own try block sent 429s into the cache path
+          // and answered them with stale data that looked live. The provider
+          // recognises rate limiting by the "(429)" in the message, so the
+          // status code has to survive the cache layer.
+          await primeCache('Limited');
+
+          await expectLater(
+            RetroAchievementsService.getUserRecentlyPlayedGames(
+              'Limited',
+              apiKey: 'secret-key',
+              client: MockClient(
+                (request) async => http.Response('Too Many Requests', 429),
+              ),
+            ),
+            throwsA(
+              isA<HttpException>().having(
+                (e) => e.message,
+                'message',
+                contains('(429)'),
+              ),
+            ),
+          );
+          expect(
+            RetroAchievementsCache.servedFromCache('recently_played_Limited'),
+            isFalse,
+          );
+        },
+      );
+
+      test(
+        'a transport failure with no cached copy reports itself as offline',
+        () async {
+          final client = MockClient(
+            (request) async =>
+                throw const SocketException('Network is unreachable'),
+          );
+
+          await expectLater(
+            RetroAchievementsService.getUserRecentlyPlayedGames(
+              'Scott',
+              apiKey: 'secret-key',
+              client: client,
+            ),
+            throwsA(
+              isA<HttpException>().having(
+                (e) => e.message,
+                'message',
+                contains('(offline)'),
+              ),
+            ),
+          );
+        },
+      );
+    });
   });
 }

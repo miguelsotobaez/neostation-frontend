@@ -670,6 +670,8 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.cancelScan: 'Annuler l’Analyse',
   AppLocale.progress: 'Progression',
   AppLocale.raLogin: 'Connexion RetroAchievements',
+  AppLocale.raOfflineBanner:
+      'Hors ligne — affichage de vos derniers succès synchronisés',
   AppLocale.raWhatIs: 'Qu’est-ce que RetroAchievements ?',
   AppLocale.raDescription:
       'RetroAchievements est une communauté qui propose des succès pour les jeux classiques via l’émulation.',

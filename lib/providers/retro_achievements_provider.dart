@@ -5,6 +5,7 @@ import 'package:neostation/services/logger_service.dart';
 import '../models/retro_achievements_user.dart';
 import '../models/retro_achievements_summary.dart';
 import '../services/retro_achievements_service.dart';
+import '../services/retro_achievements_cache.dart';
 import '../repositories/retro_achievements_repository.dart';
 import '../models/retro_achievements_dashboard_models.dart';
 import '../models/retro_achievements_game_info.dart';
@@ -127,6 +128,13 @@ class RetroAchievementsProvider extends ChangeNotifier {
   RetroAchievementsUser? get user => _user;
   bool get isLoading => _isLoading;
   bool get isConnected => _isConnected;
+
+  /// True while any part of the signed-in dashboard is being served from the
+  /// offline cache, so the UI can say the data is stale. Derived rather than
+  /// latched: each endpoint drops out of it the moment the API answers that
+  /// endpoint live again.
+  bool get isOffline =>
+      _isConnected && RetroAchievementsCache.anyServedFromCache;
   String? get error => _error;
   String get username => _username;
   String get apiKey => _apiKey;
@@ -570,6 +578,8 @@ class RetroAchievementsProvider extends ChangeNotifier {
     if (clearSavedUser) {
       _clearRAUserFromConfig();
       _clearRAApiKeyFromConfig();
+      // Drop cached API payloads so a different user can't see stale data.
+      unawaited(RetroAchievementsCache.clear());
     }
 
     notifyListeners();

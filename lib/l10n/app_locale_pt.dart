@@ -654,6 +654,8 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.cancelScan: 'Cancelar Varredura',
   AppLocale.progress: 'Progresso',
   AppLocale.raLogin: 'Login RetroAchievements',
+  AppLocale.raOfflineBanner:
+      'Offline — a mostrar as suas últimas conquistas sincronizadas',
   AppLocale.raWhatIs: 'O que é RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements é uma comunidade que oferece conquistas para jogos clássicos via emulação.',

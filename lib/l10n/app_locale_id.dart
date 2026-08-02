@@ -645,6 +645,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.cancelScan: 'Batalkan Pemindaian',
   AppLocale.progress: 'Kemajuan',
   AppLocale.raLogin: 'Login RetroAchievements',
+  AppLocale.raOfflineBanner:
+      'Offline — menampilkan pencapaian terakhir yang disinkronkan',
   AppLocale.raWhatIs: 'Apa itu RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements adalah komunitas yang menawarkan pencapaian untuk game klasik melalui emulasi.',
