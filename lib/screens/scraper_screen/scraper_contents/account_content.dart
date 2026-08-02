@@ -151,27 +151,33 @@ class AccountContent extends StatelessWidget {
             ),
           ),
           SizedBox(width: 8.r),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8.r),
-              border: Border.all(
-                color: isContentFocused && selectedContentIndex == 0
-                    ? theme.colorScheme.primary
-                    : Colors.transparent,
-                width: 2.r,
-              ),
-            ),
-            child: IconButton(
-              onPressed: onLogout,
-              icon: Icon(
-                Symbols.logout_rounded,
-                size: 20.r,
-                color: theme.colorScheme.error,
-              ),
-              tooltip: AppLocale.disconnectAccount.getString(context),
-            ),
-          ),
+          _buildLogoutButton(context, theme),
         ],
+      ),
+    );
+  }
+
+  /// The border keeps this in step with the other option lists, and with the
+  /// RA dashboard's logout, so a destructive slot reads the same way on both
+  /// accounts.
+  Widget _buildLogoutButton(BuildContext context, ThemeData theme) {
+    final selected = isContentFocused && selectedContentIndex == 0;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(
+          color: selected ? theme.colorScheme.primary : Colors.transparent,
+          width: 2.r,
+        ),
+      ),
+      child: IconButton(
+        onPressed: onLogout,
+        icon: Icon(
+          Symbols.logout_rounded,
+          size: 20.r,
+          color: theme.colorScheme.error,
+        ),
+        tooltip: AppLocale.disconnectAccount.getString(context),
       ),
     );
   }

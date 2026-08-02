@@ -266,18 +266,15 @@ class _RADashboardHubState extends State<RADashboardHub> {
             ),
           ),
           Container(
-            decoration: widget.logoutSelected
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(8.r),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.error.withValues(alpha: 0.45),
-                        blurRadius: 8.r,
-                        spreadRadius: 1.r,
-                      ),
-                    ],
-                  )
-                : null,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: widget.logoutSelected
+                    ? theme.colorScheme.primary
+                    : Colors.transparent,
+                width: 2.r,
+              ),
+            ),
             child: IconButton(
               onPressed: widget.onDisconnectRequested,
               icon: Icon(
