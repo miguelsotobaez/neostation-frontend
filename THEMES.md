@@ -2,6 +2,8 @@
 
 Welcome to the NeoStation theme system. This document will explain how to create new themes following established conventions.
 
+> **Note:** This guide covers the app's **UI color themes** (`lib/themes/`). It is unrelated to **System Art packs** — the downloadable system card backgrounds and logos (formerly also called "themes"; their manifest and cache paths still use `theme.json` naming).
+
 ---
 
 ## 📋 Theme Structure
