@@ -10,6 +10,7 @@ import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/shimmering_logo.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
@@ -638,92 +639,37 @@ class _SystemGamesListState extends State<SystemGamesList> {
     return LetterIndicator(letter: _currentLetter!, visible: _isLetterJumping);
   }
 
-  /// Visual placeholder for initial data hydration.
+  /// Visual placeholder for initial data hydration. Matches the startup
+  /// splash: shimmering logo with quiet supporting text, no card chrome.
   Widget _buildLoadingState() {
     return Center(
-      child: Container(
-        padding: EdgeInsets.all(32.w),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-          borderRadius:
-              Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
-              BorderRadius.circular(14.r),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline,
-            width: 1.r,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ShimmeringLogo(width: 200.r),
+          SizedBox(height: 24.r),
+          Text(
+            AppLocale.loadingGames.getString(context),
+            style: TextStyle(
+              fontSize: 20.r,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+              letterSpacing: 0.5,
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
+          SizedBox(height: 8.r),
+          Text(
+            AppLocale.preparingLibrary.getString(context),
+            style: TextStyle(
+              fontSize: 14.r,
+              fontWeight: FontWeight.w400,
               color: Theme.of(
                 context,
-              ).colorScheme.shadow.withValues(alpha: 0.5),
-              blurRadius: 3.r,
-              offset: Offset(2.r, 2.r),
+              ).colorScheme.onSurface.withValues(alpha: 0.7),
+              letterSpacing: 0.3,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64.r,
-              height: 64.r,
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.9),
-                borderRadius:
-                    Theme.of(
-                      context,
-                    ).extension<CornerRadii>()?.radiusExternal ??
-                    BorderRadius.circular(14.r),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline,
-                  width: 1.r,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.shadow.withValues(alpha: 0.5),
-                    blurRadius: 3.r,
-                    offset: Offset(2.r, 2.r),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Theme.of(context).colorScheme.onSurface,
-                  ),
-                  strokeWidth: 3.r,
-                ),
-              ),
-            ),
-            SizedBox(height: 24.r),
-            Text(
-              AppLocale.loadingGames.getString(context),
-              style: TextStyle(
-                fontSize: 20.r,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurface,
-                letterSpacing: 0.5,
-              ),
-            ),
-            SizedBox(height: 8.r),
-            Text(
-              AppLocale.preparingLibrary.getString(context),
-              style: TextStyle(
-                fontSize: 14.r,
-                fontWeight: FontWeight.w400,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.7),
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

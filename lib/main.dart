@@ -20,6 +20,7 @@ import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
+import 'package:neostation/widgets/shimmering_logo.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -419,9 +420,18 @@ String _startupString(String key) {
 /// Shared chrome for the pre-initialization screens: logo, wordmark and a
 /// caller-supplied status area.
 class _StartupScaffold extends StatelessWidget {
-  const _StartupScaffold({required this.children, this.onKeyEvent});
+  const _StartupScaffold({
+    required this.children,
+    this.onKeyEvent,
+    this.animatedLogo = false,
+  });
 
   final List<Widget> children;
+
+  /// Show the shimmering logo instead of the static one. Used by the loading
+  /// screen, where the shine doubles as the activity indicator; the error
+  /// screen keeps the static logo (a shine would imply progress).
+  final bool animatedLogo;
 
   /// Raw key handler used by the error screen. The gamepad navigation manager
   /// is not running this early, so gamepad buttons are read straight from the
@@ -433,39 +443,64 @@ class _StartupScaffold extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        backgroundColor: const Color(0xFF090B10),
+        // Matches the dark theme's scaffold color so the handoff into the
+        // themed splash doesn't read as a background jump.
+        backgroundColor: const Color(0xFF15191e),
         body: Focus(
           autofocus: onKeyEvent != null,
           onKeyEvent: onKeyEvent == null
               ? null
               : (_, event) => onKeyEvent!(event),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/images/logo_transparent.png',
-                    width: 112,
-                    height: 112,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'NeoStation',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
+          // Animated mode pins the logo at the exact screen centre — the same
+          // spot the Android 12+ splash icon occupies — with the status text
+          // hung below centre, so the native→Flutter handoff and the later
+          // screens never move the logo. The error screen keeps the simpler
+          // centred column with the wordmark.
+          child: animatedLogo
+              ? Stack(
+                  children: [
+                    const Center(child: ShimmeringLogo()),
+                    Align(
+                      // Same offset as the scan splash's progress detail so
+                      // the text/progress zone is one fixed place all intro.
+                      alignment: const Alignment(0, 0.55),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: children,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/logo_transparent.png',
+                          width: 112,
+                          height: 112,
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'NeoStation',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ...children,
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  ...children,
-                ],
-              ),
-            ),
-          ),
+                ),
         ),
       ),
     );
@@ -473,28 +508,59 @@ class _StartupScaffold extends StatelessWidget {
 }
 
 /// Lightweight root displayed while the app waits for its persisted data.
-class StartupLoadingApp extends StatelessWidget {
+class StartupLoadingApp extends StatefulWidget {
   const StartupLoadingApp({super.key});
+
+  @override
+  State<StartupLoadingApp> createState() => _StartupLoadingAppState();
+}
+
+class _StartupLoadingAppState extends State<StartupLoadingApp> {
+  /// On a healthy device this screen lasts well under a second, so the
+  /// "waiting for storage" line would only ever flash. Keep it invisible
+  /// (but laid out, so nothing shifts) and fade it in once the wait has
+  /// gone on long enough to actually be a wait.
+  static const _textDelay = Duration(milliseconds: 1500);
+
+  bool _showText = false;
+  Timer? _textTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _textTimer = Timer(_textDelay, () {
+      if (mounted) setState(() => _showText = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _textTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return _StartupScaffold(
+      animatedLogo: true,
       children: [
-        const SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 3,
-            color: Color(0xFF70C8FF),
-          ),
-        ),
-        const SizedBox(height: 20),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Text(
-            _startupString(AppLocale.startupLoading),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFFC4CBD6), fontSize: 16),
+        AnimatedOpacity(
+          opacity: _showText ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 400),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Text(
+              _startupString(AppLocale.startupLoading),
+              textAlign: TextAlign.center,
+              // Same voice as the splash's status line: the app font (Anta),
+              // small and dimmed. GoogleFonts falls back gracefully for the
+              // first frames if the font isn't warmed up yet.
+              style: GoogleFonts.anta(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 17,
+                letterSpacing: 0.3,
+              ),
+            ),
           ),
         ),
       ],
