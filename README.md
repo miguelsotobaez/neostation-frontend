@@ -31,7 +31,7 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 - **RetroAchievements support**: Track achievements and leaderboard progress.
 - **ScreenScraper integration**: Automatic metadata and media scraping.
 - **Gamepad & keyboard navigation**: Full controller support across all platforms.
-- **10 languages supported**: English, Spanish, Portuguese, Russian, Chinese, French, German, Italian, Indonesian, Japanese.
+- **12 languages supported**: English, Spanish, Portuguese, Russian, Chinese (Simplified & Traditional), French, German, Italian, Indonesian, Japanese, Korean.
 
 ## Multi-disc ROM Organization
 
@@ -190,12 +190,13 @@ flutter build macos --release $DART_DEFINES
 lib/
 ├── data/
 │   └── datasources/     # SQLite access, migrations, raw queries
-├── l10n/               # Localization files (10 languages)
+├── l10n/               # Localization files (12 languages)
 ├── models/             # Data models
 ├── providers/          # ChangeNotifier state management
 ├── repositories/       # Data access abstraction layer
 ├── screens/            # Application pages
 ├── services/           # Business logic and external APIs
+├── sync/               # Provider-agnostic cloud sync (SyncManager + adapters)
 ├── themes/             # App themes
 ├── utils/              # Helpers and utilities
 ├── widgets/            # Reusable UI components
@@ -215,7 +216,6 @@ These packages are "vendored" within the /packages directory to ensure long-term
 |---------|-------------|
 | `gamepads` | Cross-platform gamepad input (based on Flame Engine's gamepads) |
 | `flutter_7zip` | FFI bindings for 7-Zip archive extraction |
-| `flutter_soloud` | Low-level audio playback using the SoLoud engine |
 
 ## Systems & Emulator Definitions
 
