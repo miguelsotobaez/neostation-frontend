@@ -5200,9 +5200,7 @@ class SqliteMigrations {
         );
       }
 
-      _log.i(
-        'Migration v108 completed (${offenders.length} group(s) reset)',
-      );
+      _log.i('Migration v108 completed (${offenders.length} group(s) reset)');
     } catch (e, stackTrace) {
       _log.e('Error in migration v108: $e');
       _log.e('   StackTrace: $stackTrace');

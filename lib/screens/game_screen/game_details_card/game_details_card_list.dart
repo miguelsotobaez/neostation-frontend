@@ -295,7 +295,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     widget.onToggleVideoMute?.call(_toggleVideoMute);
 
     widget.onToggleInfo?.call(() {
-      if (_currentTab == DetailTab.screenshotVideo && _isScrapingGame == false) {
+      if (_currentTab == DetailTab.screenshotVideo &&
+          _isScrapingGame == false) {
         if (_game.getDescriptionForLanguage('en').isEmpty ||
             _game.getDescriptionForLanguage('en') ==
                 'No description available.') {

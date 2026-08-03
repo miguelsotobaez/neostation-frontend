@@ -174,8 +174,7 @@ class _SeedEmulator {
   final bool isDefaultStandalone;
   final Map<String, dynamic> platforms;
 
-  static bool _flag(Object? value) =>
-      value.toString().toLowerCase() == 'true';
+  static bool _flag(Object? value) => value.toString().toLowerCase() == 'true';
 
   factory _SeedEmulator.fromJson(Map<String, dynamic> json) {
     return _SeedEmulator(

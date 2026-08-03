@@ -50,7 +50,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
     final double totalTabsWidth = numTabs * tabWidth;
 
     // Resolve the visual index for the cursor animation, accounting for hidden tabs.
-    final int visualIndex = visibleTabs.indexOf(currentTab).clamp(0, numTabs - 1);
+    final int visualIndex = visibleTabs
+        .indexOf(currentTab)
+        .clamp(0, numTabs - 1);
 
     final theme = Theme.of(context);
 

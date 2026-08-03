@@ -50,12 +50,15 @@ void main() {
     return rows.map<String>((r) => r['uid'].toString()).toList();
   }
 
-  test('promotes exactly one standalone, the one the seed designates', () async {
-    await SqliteService.clearRetroArchDefaultsForAndroid();
+  test(
+    'promotes exactly one standalone, the one the seed designates',
+    () async {
+      await SqliteService.clearRetroArchDefaultsForAndroid();
 
-    // Not EmuCoreX, which merely sorts first.
-    expect(await defaults(), ['ps2.nethersx2']);
-  });
+      // Not EmuCoreX, which merely sorts first.
+      expect(await defaults(), ['ps2.nethersx2']);
+    },
+  );
 
   test('falls back to the first by name when the seed designates none', () async {
     await db.execute(

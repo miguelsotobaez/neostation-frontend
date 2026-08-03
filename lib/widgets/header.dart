@@ -280,9 +280,9 @@ class HeaderState extends State<Header> {
                                         context,
                                         tab.index,
                                         navTabSpec(tab).icon,
-                                        navTabSpec(tab).labelKey.getString(
-                                          context,
-                                        ),
+                                        navTabSpec(
+                                          tab,
+                                        ).labelKey.getString(context),
                                         iconData: navTabSpec(tab).iconData,
                                       ),
                                     ),

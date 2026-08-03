@@ -389,8 +389,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.stoppingScraping: 'スクレイピングプロセスを停止中...',
   AppLocale.syncError: 'システムIDの同期中にエラーが発生しました',
   AppLocale.metadataError: 'スクレイピングプロセス中にエラーが発生しました',
-  AppLocale.scrapeQuotaExceeded:
-      'ScreenScraperの1日のスクレイピングクォータを超えました',
+  AppLocale.scrapeQuotaExceeded: 'ScreenScraperの1日のスクレイピングクォータを超えました',
   AppLocale.start: '開始',
   AppLocale.systemsSub: 'スクレイピングするシステムを選択',
   AppLocale.disableAll: 'すべて無効',

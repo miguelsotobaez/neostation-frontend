@@ -396,8 +396,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.stoppingScraping: '게임 정보 가져오기를 중지하는 중...',
   AppLocale.syncError: '시스템 ID를 동기화하는 중 오류가 발생했습니다',
   AppLocale.metadataError: '게임 정보 가져오기 오류',
-  AppLocale.scrapeQuotaExceeded:
-      'ScreenScraper 일일 스크래핑 할당량 초과',
+  AppLocale.scrapeQuotaExceeded: 'ScreenScraper 일일 스크래핑 할당량 초과',
   AppLocale.start: '시작',
   AppLocale.systemsSub: '게임 정보를 가져올 시스템을 선택합니다',
   AppLocale.disableAll: '모두 비활성화',

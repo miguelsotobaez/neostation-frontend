@@ -386,8 +386,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.stoppingScraping: '正在停止抓取过程...',
   AppLocale.syncError: '同步系统 ID 时出错',
   AppLocale.metadataError: '元数据抓取过程中出错',
-  AppLocale.scrapeQuotaExceeded:
-      'ScreenScraper 每日刮削配额已超出',
+  AppLocale.scrapeQuotaExceeded: 'ScreenScraper 每日刮削配额已超出',
   AppLocale.start: '开始',
   AppLocale.systemsSub: '选择要抓取的系统',
   AppLocale.disableAll: '全部禁用',

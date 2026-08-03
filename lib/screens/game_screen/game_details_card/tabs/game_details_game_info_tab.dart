@@ -41,7 +41,25 @@ class GameDetailsGameInfoTab extends StatefulWidget {
 
 class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   static const List<String> _languageLabels = [
-    'en', 'es', 'fr', 'de', 'it', 'pt', 'jp', 'ko', 'ru', 'zh', 'nl', 'sv', 'da', 'fi', 'no', 'pl', 'hu', 'cs', 'ro',
+    'en',
+    'es',
+    'fr',
+    'de',
+    'it',
+    'pt',
+    'jp',
+    'ko',
+    'ru',
+    'zh',
+    'nl',
+    'sv',
+    'da',
+    'fi',
+    'no',
+    'pl',
+    'hu',
+    'cs',
+    'ro',
   ];
 
   static const Map<String, String> _languageNames = {
@@ -70,10 +88,12 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   List<String> _availableLanguages() {
     final descriptions = widget.game.descriptions;
     if (descriptions == null || descriptions.isEmpty) return [];
-    return _languageLabels.where(
-      (lang) =>
-          descriptions[lang] != null && descriptions[lang]!.isNotEmpty,
-    ).toList();
+    return _languageLabels
+        .where(
+          (lang) =>
+              descriptions[lang] != null && descriptions[lang]!.isNotEmpty,
+        )
+        .toList();
   }
 
   @override
@@ -394,8 +414,9 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                               ? Theme.of(context).colorScheme.onPrimary
                               : Theme.of(context).colorScheme.onSurface,
                           fontSize: 9.r,
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ),

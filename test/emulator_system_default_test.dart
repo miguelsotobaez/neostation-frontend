@@ -340,9 +340,7 @@ void main() {
         // for one (system, os) makes the launch target a coin flip, which is
         // how xbox360 started booting the paid AX360e instead of the free
         // build the systems JSON picks.
-        await seedAllStandaloneSystem(
-          defaultUid: 'xbox360.aenu.ax360e.free',
-        );
+        await seedAllStandaloneSystem(defaultUid: 'xbox360.aenu.ax360e.free');
 
         await normalize();
         await normalize();

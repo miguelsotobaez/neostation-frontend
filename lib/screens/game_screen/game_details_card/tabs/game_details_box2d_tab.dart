@@ -108,10 +108,9 @@ class _GameDetailsBox2dTabState extends State<GameDetailsBox2dTab> {
                 BorderRadius.circular(14.r),
             boxShadow: [
               BoxShadow(
-                color: Theme.of(context)
-                    .colorScheme
-                    .shadow
-                    .withValues(alpha: 0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.shadow.withValues(alpha: 0.3),
                 blurRadius: 3.r,
                 offset: Offset(3.0.r, 3.0.r),
               ),
