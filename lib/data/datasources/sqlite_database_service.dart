@@ -176,6 +176,14 @@ class SqliteDatabaseService {
 
     final List<RomEntry> romEntries = [];
 
+    // Resolve every alias folder to a concrete directory before walking any of
+    // them. A system's aliases can name the same physical directory: EmuDeck
+    // ships roms/gamecube as a symlink to roms/gc, and both are aliases of the
+    // GameCube system, so walking each alias in turn finds every file twice and
+    // stores it under two different rom_path spellings.
+    final scanTargets =
+        <({String dirPath, String canonicalPath, bool useSaf})>[];
+
     for (final romFolder in romFolders) {
       final bool useSaf =
           Platform.isAndroid && romFolder.startsWith('content://');
@@ -183,57 +191,70 @@ class SqliteDatabaseService {
 
       for (final folderToScan in allPossibleFolderNames) {
         try {
-          List<RomEntry> entries;
+          final String? dirPath;
 
           if (subdirsForRoot != null) {
-            final folderLower = folderToScan.toLowerCase();
-            final resolvedPath = subdirsForRoot[folderLower];
-
-            if (resolvedPath != null) {
-              if (useSaf) {
-                entries = await _scanSafUri(
-                  resolvedPath,
-                  validExtensionsSet,
-                  system.recursiveScan,
-                  ignoreHiddenFiles: ignoreHiddenFiles,
-                );
-              } else {
-                entries = await _scanStandardPath(
-                  resolvedPath,
-                  validExtensionsSet,
-                  system.recursiveScan,
-                  ignoreHiddenFiles: ignoreHiddenFiles,
-                );
-              }
-            } else {
-              continue;
-            }
+            dirPath = subdirsForRoot[folderToScan.toLowerCase()];
+          } else if (useSaf) {
+            dirPath = await _resolveSafSubfolderUri(
+              romFolder,
+              folderToScan,
+              ignoreHiddenFiles: ignoreHiddenFiles,
+            );
           } else {
-            if (useSaf) {
-              entries = await _scanSafFolder(
-                romFolder,
-                folderToScan,
-                validExtensionsSet,
-                system.recursiveScan,
-                ignoreHiddenFiles: ignoreHiddenFiles,
-              );
-            } else {
-              entries = await _scanStandardFolder(
-                romFolder,
-                folderToScan,
-                validExtensionsSet,
-                system.recursiveScan,
-                ignoreHiddenFiles: ignoreHiddenFiles,
-              );
-            }
+            dirPath = await _resolveStandardSubfolderPath(
+              romFolder,
+              folderToScan,
+              ignoreHiddenFiles: ignoreHiddenFiles,
+            );
           }
 
-          if (entries.isNotEmpty) {
-            romEntries.addAll(entries);
-          }
+          if (dirPath == null) continue;
+
+          scanTargets.add((
+            dirPath: dirPath,
+            canonicalPath: await _canonicalScanPath(dirPath, useSaf: useSaf),
+            useSaf: useSaf,
+          ));
         } catch (e) {
-          _log.e('Error scanning folder $folderToScan in $romFolder: $e');
+          _log.e('Error resolving folder $folderToScan in $romFolder: $e');
         }
+      }
+    }
+
+    // Walk real directories before symlinked aliases so the stored rom_path
+    // names the physical location: if the user later drops the alias link, the
+    // rows that survived still resolve.
+    final orderedTargets = [
+      ...scanTargets.where((t) => t.dirPath == t.canonicalPath),
+      ...scanTargets.where((t) => t.dirPath != t.canonicalPath),
+    ];
+
+    final walkedDirs = <String>{};
+    for (final target in orderedTargets) {
+      // An alias pointing at a directory already walked for this system.
+      if (!walkedDirs.add(target.canonicalPath)) continue;
+
+      try {
+        final entries = target.useSaf
+            ? await _scanSafUri(
+                target.dirPath,
+                validExtensionsSet,
+                system.recursiveScan,
+                ignoreHiddenFiles: ignoreHiddenFiles,
+              )
+            : await _scanStandardPath(
+                target.dirPath,
+                validExtensionsSet,
+                system.recursiveScan,
+                ignoreHiddenFiles: ignoreHiddenFiles,
+              );
+
+        if (entries.isNotEmpty) {
+          romEntries.addAll(entries);
+        }
+      } catch (e) {
+        _log.e('Error scanning folder ${target.dirPath}: $e');
       }
     }
 
@@ -892,18 +913,15 @@ class SqliteDatabaseService {
     return result;
   }
 
-  /// Scans for a system-specific subdirectory within a SAF root URI.
-  static Future<List<RomEntry>> _scanSafFolder(
+  /// Locates a system-specific subdirectory within a SAF root URI.
+  static Future<String?> _resolveSafSubfolderUri(
     String romFolderUri,
-    String folderName,
-    Set<String> validExtensions,
-    bool recursive, {
+    String folderName, {
     bool ignoreHiddenFiles = true,
   }) async {
     try {
       final children = await SafDirectoryService.listFiles(romFolderUri);
-      if (children.isEmpty) return [];
-      String? systemTargetUri;
+      if (children.isEmpty) return null;
       for (final child in children) {
         if (_shouldSkipSafEntry(child, ignoreHiddenFiles: ignoreHiddenFiles)) {
           continue;
@@ -911,20 +929,34 @@ class SqliteDatabaseService {
         if (child['isDirectory'] == true &&
             child['name'].toString().toLowerCase() ==
                 folderName.toLowerCase()) {
-          systemTargetUri = child['uri'].toString();
-          break;
+          return child['uri'].toString();
         }
       }
-      if (systemTargetUri == null) return [];
-      return await _scanSafUri(
-        systemTargetUri,
-        validExtensions,
-        recursive,
-        ignoreHiddenFiles: ignoreHiddenFiles,
-      );
+      return null;
     } catch (e) {
-      _log.e('Error scanning SAF folder $romFolderUri for $folderName: $e');
-      return [];
+      _log.e('Error resolving SAF folder $romFolderUri for $folderName: $e');
+      return null;
+    }
+  }
+
+  /// Returns the key identifying a scan target's physical directory, so alias
+  /// folders resolving to one place are only walked once.
+  ///
+  /// SAF URIs are opaque DocumentsProvider identifiers rather than filesystem
+  /// paths, so they are returned untouched: resolving symbolic links is
+  /// meaningless there, and quietly falling back to a real path would break the
+  /// `content://` rom_path identity the launcher depends on.
+  static Future<String> _canonicalScanPath(
+    String dirPath, {
+    required bool useSaf,
+  }) async {
+    if (useSaf) return dirPath;
+    try {
+      return await Directory(dirPath).resolveSymbolicLinks();
+    } catch (e) {
+      // Unreadable, or gone between listing and resolving. Fall back to the
+      // literal path so the directory is still walked exactly once.
+      return dirPath;
     }
   }
 
@@ -999,18 +1031,15 @@ class SqliteDatabaseService {
     return entries;
   }
 
-  /// Scans for a system-specific subdirectory within a standard filesystem path.
-  static Future<List<RomEntry>> _scanStandardFolder(
+  /// Locates a system-specific subdirectory within a standard filesystem path.
+  static Future<String?> _resolveStandardSubfolderPath(
     String romFolderPath,
-    String folderName,
-    Set<String> validExtensions,
-    bool recursive, {
+    String folderName, {
     bool ignoreHiddenFiles = true,
   }) async {
     try {
       final rootDir = Directory(romFolderPath);
-      if (!await rootDir.exists()) return [];
-      String? systemPath;
+      if (!await rootDir.exists()) return null;
       try {
         final List<FileSystemEntity> children = await rootDir.list().toList();
         for (final child in children) {
@@ -1023,27 +1052,20 @@ class SqliteDatabaseService {
           if (child is Directory &&
               path.basename(child.path).toLowerCase() ==
                   folderName.toLowerCase()) {
-            systemPath = child.path;
-            break;
+            return child.path;
           }
         }
       } catch (e) {
         _log.e('Error listing standard directory $romFolderPath: $e');
         final directPath = path.join(romFolderPath, folderName);
-        if (await Directory(directPath).exists()) systemPath = directPath;
+        if (await Directory(directPath).exists()) return directPath;
       }
-      if (systemPath == null) return [];
-      return await _scanStandardPath(
-        systemPath,
-        validExtensions,
-        recursive,
-        ignoreHiddenFiles: ignoreHiddenFiles,
-      );
+      return null;
     } catch (e) {
       _log.e(
-        'Error scanning standard folder $romFolderPath for $folderName: $e',
+        'Error resolving standard folder $romFolderPath for $folderName: $e',
       );
-      return [];
+      return null;
     }
   }
 
