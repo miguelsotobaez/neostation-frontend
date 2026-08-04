@@ -333,6 +333,9 @@ class SqliteMigrations {
       case 109:
         await _migrateToVersion109(db);
         break;
+      case 110:
+        await _migrateToVersion110(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5250,6 +5253,33 @@ class SqliteMigrations {
       _log.i('Migration v109 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v109: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v110: Persists the game details card tab last chosen with L1/R1
+  /// in `user_config.game_details_tab`, so the choice survives moving between
+  /// games and systems as well as a restart.
+  ///
+  /// Stores the `DetailTab` enum name; an unknown or empty value reads back as
+  /// the wheel tab, which is also the column default for existing rows.
+  static Future<void> _migrateToVersion110(Database db) async {
+    _log.i('Migration v110: Adding game_details_tab to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('game_details_tab')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN game_details_tab TEXT DEFAULT 'wheel'",
+        );
+        _log.i('Column game_details_tab added via v110');
+      } else {
+        _log.i('Column game_details_tab already exists');
+      }
+      _log.i('Migration v110 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v110: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

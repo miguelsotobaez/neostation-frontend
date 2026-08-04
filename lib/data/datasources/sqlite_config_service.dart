@@ -171,6 +171,11 @@ class SqliteConfigService {
             (int.tryParse(userConfig?['legend_hidden']?.toString() ?? '0') ??
                 0) ==
             1,
+        // Missing column/row => the wheel tab (see migration v110).
+        gameDetailsTab:
+            userConfig?['game_details_tab']?.toString().isNotEmpty == true
+            ? userConfig!['game_details_tab'].toString()
+            : 'wheel',
         // Missing column/row => '0' => tab visible (see migration v106).
         hideTabSync:
             (int.tryParse(userConfig?['hide_tab_sync']?.toString() ?? '0') ??
@@ -269,6 +274,7 @@ class SqliteConfigService {
         themeName: config.themeName,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
         legendHidden: config.legendHidden ? 1 : 0,
+        gameDetailsTab: config.gameDetailsTab,
         hideTabSync: config.hideTabSync ? 1 : 0,
         hideTabAchievements: config.hideTabAchievements ? 1 : 0,
         hideTabScraper: config.hideTabScraper ? 1 : 0,

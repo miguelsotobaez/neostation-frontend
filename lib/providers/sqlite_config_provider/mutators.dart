@@ -91,6 +91,15 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists the game details card tab last chosen with L1/R1, as the
+  /// `DetailTab` enum name, so it carries across games, systems and restarts.
+  Future<void> updateGameDetailsTab(String tabName) async {
+    if (_config.gameDetailsTab == tabName) return;
+    _config = _config.copyWith(gameDetailsTab: tabName);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Shows or hides [tab] in the header strip and the L1/R1 tab cycle.
   ///
   /// Routed through the tab's [NavTabSpec] so a future tab needs only a spec
