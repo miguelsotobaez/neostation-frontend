@@ -16,6 +16,7 @@ import '../android_service.dart';
 import '../launcher_service.dart';
 import '../linux_emulator_discovery.dart';
 import '../linux_host_process.dart';
+import 'emulator_launch_diagnostics.dart';
 import 'favorites_service.dart';
 import 'game_session_manager.dart';
 import '../gamepad/gamepad_navigation_manager.dart';
@@ -567,33 +568,37 @@ class GameLaunchService {
       }
 
       Process process;
+      String executable = retroArch.path;
+      List<String> args;
 
       if (Platform.isMacOS) {
-        String executable = retroArch.path;
         if (executable.endsWith('.app')) {
           executable = path.join(executable, 'Contents', 'MacOS', 'RetroArch');
         }
 
-        final args = ['-L', coreFullPath, game.romPath!];
+        args = ['-L', coreFullPath, game.romPath!];
         final env = Map<String, String>.from(Platform.environment);
         env['HOME'] = ConfigService.getRealHomePath();
 
         process = await Process.start(executable, args, environment: env);
       } else {
-        String executable = retroArch.path;
-        final args = ['-f', '-L', coreFullPath, game.romPath!];
+        args = ['-f', '-L', coreFullPath, game.romPath!];
 
         process = await LinuxHostProcess.start(executable, args);
       }
 
-      process.stdout.listen((_) {});
-      process.stderr.listen((_) {});
+      final diagnostics = EmulatorLaunchDiagnostics.attach(
+        process,
+        executable,
+        args,
+      );
 
       GamepadNavigationManager.deactivateAll();
 
       process.exitCode
           .then((exitCode) async {
             _log.i('RetroArch exited with code: $exitCode');
+            diagnostics.reportExit(exitCode);
             await Future.delayed(Duration(seconds: 2));
             bool stillRunning = await _isDefaultEmulatorRunning();
 
@@ -763,14 +768,18 @@ class GameLaunchService {
         environment: env,
       );
 
-      process.stdout.listen((_) {});
-      process.stderr.listen((_) {});
+      final diagnostics = EmulatorLaunchDiagnostics.attach(
+        process,
+        executable,
+        args,
+      );
 
       GamepadNavigationManager.deactivateAll();
 
       process.exitCode
           .then((exitCode) async {
             _log.i('Process exited with code: $exitCode');
+            diagnostics.reportExit(exitCode);
             await Future.delayed(Duration(seconds: 2));
             bool stillRunning = false;
             if (GameSessionManager.launchedEmulatorExe != null) {
@@ -1201,14 +1210,18 @@ class GameLaunchService {
       final argList = _parseCommandArguments(args);
       final process = await LinuxHostProcess.start(emulatorPath, argList);
 
-      process.stdout.listen((_) {});
-      process.stderr.listen((_) {});
+      final diagnostics = EmulatorLaunchDiagnostics.attach(
+        process,
+        emulatorPath,
+        argList,
+      );
 
       GamepadNavigationManager.deactivateAll();
 
       process.exitCode
           .then((exitCode) async {
             _log.i('Standalone emulator exited with code: $exitCode');
+            diagnostics.reportExit(exitCode);
             await Future.delayed(Duration(seconds: 2));
             bool stillRunning = false;
             if (GameSessionManager.launchedEmulatorExe != null) {
