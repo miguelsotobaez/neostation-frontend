@@ -250,10 +250,17 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
     _currentTab = DetailTab.wheel;
 
-    // Reset primary UI 'Game Info' overlay to ensure clean state transitions.
+    // Restore the last tab the user picked with L1/R1. Deferred to the first
+    // frame so _setTab can run its side effects (game info overlay, video
+    // delay) exactly as it would for a live tab change.
+    final restoredTab = _persistedTab();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (restoredTab == DetailTab.wheel) {
+        // Reset primary UI 'Game Info' overlay to ensure clean state transitions.
         context.read<SqliteConfigProvider>().updateShowGameInfo(false);
+      } else {
+        _setTab(restoredTab, persist: false);
       }
     });
 
@@ -319,9 +326,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       () => _currentTab != DetailTab.wheel,
       () => _currentTab == DetailTab.achievements,
     );
-    widget.onRegisterCloseOverlays?.call(() {
-      _setTab(DetailTab.wheel);
-    });
+    widget.onRegisterCloseOverlays?.call(_closeAllOverlays);
     widget.onRegisterTabNavigation?.call(_handleTabNavigation);
     widget.onRegisterSelectButton?.call(_handleSelectAction);
     widget.onRegisterScrapeAction?.call(_onScrapeGameCompact);
@@ -707,7 +712,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         description.trim().isEmpty;
 
     if (!widget.isSecondaryScreenActive) {
-      _setTab(DetailTab.screenshotVideo);
+      // Scraping forces the media tab; it isn't the user picking one.
+      _setTab(DetailTab.screenshotVideo, persist: false);
     }
     _startSingleGameScrape(forceOverwrite: !isDescriptionMissing);
   }
@@ -733,7 +739,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   /// Handles secondary hardware actions (typically mapped to X or RB).
   void _handleSecondaryAction() {
     if (!_isGameInfoHidden) {
-      _setTab(DetailTab.screenshotVideo);
+      _setTab(DetailTab.screenshotVideo, persist: false);
     } else {
       return;
     }
@@ -743,15 +749,35 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     _startSingleGameScrape();
   }
 
+  /// Whether [tab] can be shown for the current game and display setup.
+  bool _isTabAvailable(DetailTab tab) {
+    if (tab == DetailTab.screenshotVideo && _isGameInfoHidden) return false;
+    if (tab == DetailTab.achievements && !_hasRetroAchievements) return false;
+    return true;
+  }
+
+  /// Resolves the persisted tab preference into a tab usable right now.
+  ///
+  /// An unknown name (config written by another build) or a tab this game
+  /// can't show falls back to the wheel, leaving the stored preference intact
+  /// so it returns on a game that supports it.
+  DetailTab _persistedTab() {
+    final storedName = context
+        .read<SqliteConfigProvider>()
+        .config
+        .gameDetailsTab;
+    final tab = DetailTab.values.firstWhere(
+      (t) => t.name == storedName,
+      orElse: () => DetailTab.wheel,
+    );
+    return _isTabAvailable(tab) ? tab : DetailTab.wheel;
+  }
+
   /// Processes tab navigation via hardware bumpers (LB/RB).
   bool _handleTabNavigation(bool isRight) {
     if (!mounted) return false;
 
-    final availableTabs = DetailTab.values.where((tab) {
-      if (tab == DetailTab.screenshotVideo && _isGameInfoHidden) return false;
-      if (tab == DetailTab.achievements && !_hasRetroAchievements) return false;
-      return true;
-    }).toList();
+    final availableTabs = DetailTab.values.where(_isTabAvailable).toList();
 
     int currentIndexInAvailable = availableTabs.indexOf(_currentTab);
     if (currentIndexInAvailable == -1) currentIndexInAvailable = 0;
@@ -764,7 +790,12 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     return true; // Input consumed.
   }
 
-  void _setTab(DetailTab tab) {
+  /// Switches to [tab].
+  ///
+  /// [persist] records the tab as the user's preference so it carries across
+  /// games, systems and restarts; it is disabled for tabs the app forces on the
+  /// user (a scrape jumping to the media tab, or restoring the stored tab).
+  void _setTab(DetailTab tab, {bool persist = true}) {
     if (_currentTab == tab) return;
 
     final wasScreenshotVideo = _currentTab == DetailTab.screenshotVideo;
@@ -773,6 +804,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       _currentTab = tab;
 
       final config = context.read<SqliteConfigProvider>();
+      if (persist) {
+        config.updateGameDetailsTab(tab.name);
+      }
       if (tab == DetailTab.screenshotVideo) {
         config.updateShowGameInfo(true);
         widget.videoController?.setVolume(0);
@@ -794,7 +828,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   }
 
   void _closeAllOverlays() {
-    _setTab(DetailTab.wheel);
+    // Dismissing an overlay isn't a tab choice, so it leaves the preference be.
+    _setTab(DetailTab.wheel, persist: false);
   }
 
   /// Orchestrates a metadata acquisition process via ScreenScraperService.
