@@ -1542,7 +1542,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
         _reorderGamesListFollowingGame(updatedGame.romname);
 
         if (mounted && _selectedGame != null) {
-          _updateSecondaryDisplay(updatedGame);
+          // A re-scrape rewrites the art at the same paths, so the dedup in
+          // the push below would skip it and the secondary engine would keep
+          // showing the bitmap it already decoded.
+          _updateSecondaryDisplay(updatedGame, forceMediaRefresh: true);
           _updateBackground(updatedGame);
           _startVideoTimer();
         }
