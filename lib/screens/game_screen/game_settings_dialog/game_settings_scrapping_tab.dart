@@ -18,6 +18,7 @@ import 'package:neostation/screens/game_screen/my_games_grid.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenscraper_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/artwork_cache.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 
 /// Sub-tabs inside the Scrapping tab of [GameSettingsDialog].
@@ -247,29 +248,8 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
 
   // ── Force rescrape ──────────────────────────────────────────────────────
 
-  List<String> _artworkPaths() {
-    final folder = _folder;
-    return [
-      widget.game.getImagePath(folder, 'fanarts', widget.fileProvider),
-      widget.game.getImagePath(folder, 'wheels', widget.fileProvider),
-      widget.game.getImagePath(folder, 'box2d', widget.fileProvider),
-      widget.game.getScreenshotPath(folder, widget.fileProvider),
-    ];
-  }
-
-  /// Evicts Flutter's [ImageCache] entries for the given artwork [paths] and
-  /// clears live images so every visible widget reloads the fresh files.
-  Future<void> _evictArtworkFromFlutterCache(Iterable<String> paths) async {
-    final imageCache = PaintingBinding.instance.imageCache;
-    for (final path in paths) {
-      final file = File(path);
-      if (await file.exists()) {
-        await FileImage(file).evict();
-      }
-    }
-    imageCache.clear();
-    imageCache.clearLiveImages();
-  }
+  List<String> _artworkPaths() =>
+      scrapedArtworkPaths(widget.game, _folder, widget.fileProvider);
 
   Future<void> _forceRescrape() async {
     if (_isScraping) return;
@@ -310,7 +290,7 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       );
 
       // Bust cached artwork so the fresh media shows up everywhere.
-      await _evictArtworkFromFlutterCache(_artworkPaths());
+      await evictScrapedArtwork(_artworkPaths());
       GamesGrid.evictArtworkCaches(_artworkPaths());
       GamesCarousel.evictArtworkCaches(_artworkPaths());
 
@@ -353,7 +333,7 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       final targetPath = _pathForImageType(type);
       await File(targetPath).parent.create(recursive: true);
       await File(srcPath).copy(targetPath);
-      await _evictArtworkFromFlutterCache([targetPath]);
+      await evictScrapedArtwork([targetPath]);
       GamesGrid.evictArtworkCaches([targetPath]);
       GamesCarousel.evictArtworkCaches([targetPath]);
 

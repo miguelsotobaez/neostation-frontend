@@ -48,6 +48,7 @@ import '../../widgets/game_action_buttons.dart';
 import '../../widgets/legend_edge_reshow_zone.dart';
 import '../../widgets/letter_indicator.dart';
 import '../../constants/system_folder_names.dart';
+import '../../utils/artwork_cache.dart';
 import '../../utils/game_list_update.dart';
 import '../../themes/corner_radii.dart';
 
@@ -273,7 +274,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _invalidateArtworkCaches() {
     GamesGrid.evictArtworkCaches(const []);
     GamesCarousel.evictArtworkCaches(const []);
-    PaintingBinding.instance.imageCache.clear();
+    final imageCache = PaintingBinding.instance.imageCache;
+    imageCache.clear();
+    imageCache.clearLiveImages();
   }
 
   /// Synchronizes UI state with global configuration changes.
@@ -1515,11 +1518,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
       if (updatedGame != null) {
         final artworkFolder =
             updatedGame.systemFolderName ?? widget.system.primaryFolderName;
-        final artworkPaths = [
-          updatedGame.getScreenshotPath(artworkFolder, _fileProvider),
-          updatedGame.getImagePath(artworkFolder, 'box2d', _fileProvider),
-          updatedGame.getImagePath(artworkFolder, 'fanarts', _fileProvider),
-        ];
+        final artworkPaths = scrapedArtworkPaths(
+          updatedGame,
+          artworkFolder,
+          _fileProvider,
+        );
         GamesGrid.evictArtworkCaches(artworkPaths);
         GamesCarousel.evictArtworkCaches(artworkPaths);
         setState(() {
@@ -1639,22 +1642,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
       if (!mounted) return;
       if (result['success'] == true) {
-        // Evict cached artwork so the grid rebuilds with the new assets.
-        try {
-          final imagesToEvict = [
-            game.getScreenshotPath(targetSystemFolder, _fileProvider),
-            game.getImagePath(targetSystemFolder, 'wheels', _fileProvider),
-            game.getImagePath(targetSystemFolder, 'fanarts', _fileProvider),
-          ];
-          for (final imagePath in imagesToEvict) {
-            final imageFile = File(imagePath);
-            if (await imageFile.exists()) {
-              await FileImage(imageFile).evict();
-            }
-          }
-        } catch (e) {
-          _log.e('Image cache eviction failed: $e');
-        }
+        // Drop the decoded copies of every artwork file the scrape may have
+        // rewritten, so the rebuild below reads the new files from disk.
+        await evictScrapedArtwork(
+          scrapedArtworkPaths(game, targetSystemFolder, _fileProvider),
+        );
+        if (!mounted) return;
 
         await _handleGameUpdated();
         if (mounted) {

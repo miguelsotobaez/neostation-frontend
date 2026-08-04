@@ -11,11 +11,17 @@ class GameDetailsBox2dTab extends StatefulWidget {
   final GameModel game;
   final FileProvider fileProvider;
 
+  /// Bumped when a scrape rewrites the artwork. It keys the image so a
+  /// re-scraped box art is resolved again instead of being redrawn from the
+  /// copy this widget already holds.
+  final int imageVersion;
+
   const GameDetailsBox2dTab({
     super.key,
     required this.system,
     required this.game,
     required this.fileProvider,
+    this.imageVersion = 0,
   });
 
   @override
@@ -128,7 +134,8 @@ class _GameDetailsBox2dTabState extends State<GameDetailsBox2dTab> {
                   ? Image.file(
                       File(box2dPath),
                       key: ValueKey(
-                        'box2d_${widget.game.romPath ?? widget.game.romname}',
+                        'box2d_${widget.game.romPath ?? widget.game.romname}'
+                        '_v${widget.imageVersion}',
                       ),
                       fit: BoxFit.contain,
                       cacheWidth: 640,

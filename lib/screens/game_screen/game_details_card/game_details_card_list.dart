@@ -3,7 +3,6 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
-import 'dart:io';
 import 'dart:async';
 import '../../../models/system_model.dart';
 import '../../../models/game_model.dart';
@@ -13,6 +12,7 @@ import '../../../sync/i_sync_provider.dart';
 import '../../../models/retro_achievements_game_info.dart';
 import '../../../repositories/game_repository.dart';
 import '../../../services/retro_achievements_helper.dart';
+import '../../../utils/artwork_cache.dart';
 import '../../../utils/gamepad_nav.dart';
 import 'package:flutter/foundation.dart';
 
@@ -648,6 +648,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               system: _effectiveSystem,
               game: _game,
               fileProvider: widget.fileProvider,
+              imageVersion: _imageVersion,
               androidAppIconFuture: _androidAppIconFuture,
             ),
           if (_currentTab == DetailTab.box2d)
@@ -655,6 +656,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               system: _effectiveSystem,
               game: _game,
               fileProvider: widget.fileProvider,
+              imageVersion: _imageVersion,
             ),
           Visibility(
             visible: _currentTab == DetailTab.screenshotVideo,
@@ -922,31 +924,12 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
       if (mounted) {
         if (result['success'] == true) {
-          // Protocol: Evict all cached artwork to force immediate UI refresh with new assets.
-          try {
-            final imagesToEvict = [
-              _game.getScreenshotPath(targetSystemFolder),
-              _game.getImagePath(
-                targetSystemFolder,
-                'wheels',
-                widget.fileProvider,
-              ),
-              _game.getImagePath(
-                targetSystemFolder,
-                'fanarts',
-                widget.fileProvider,
-              ),
-            ];
-
-            for (final imagePath in imagesToEvict) {
-              final imageFile = File(imagePath);
-              if (await imageFile.exists()) {
-                await FileImage(imageFile).evict();
-              }
-            }
-          } catch (e) {
-            _log.e('Image cache eviction failed: $e');
-          }
+          // Evict every artwork file the scrape may have rewritten — box art
+          // included — so the tabs below reload them instead of redrawing the
+          // decoded copies they were already showing.
+          await evictScrapedArtwork(
+            scrapedArtworkPaths(_game, targetSystemFolder, widget.fileProvider),
+          );
 
           if (!context.mounted) return;
 

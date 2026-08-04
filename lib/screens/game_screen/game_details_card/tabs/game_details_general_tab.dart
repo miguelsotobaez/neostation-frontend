@@ -14,6 +14,11 @@ class GameDetailsGeneralTab extends StatelessWidget {
   final SystemModel system;
   final GameModel game;
   final FileProvider fileProvider;
+
+  /// Bumped when a scrape rewrites the artwork. It keys the wheel images so a
+  /// re-scraped logo is resolved again instead of being redrawn from the copy
+  /// this widget already holds.
+  final int imageVersion;
   final Future<Uint8List?>? androidAppIconFuture;
 
   const GameDetailsGeneralTab({
@@ -21,6 +26,7 @@ class GameDetailsGeneralTab extends StatelessWidget {
     required this.system,
     required this.game,
     required this.fileProvider,
+    this.imageVersion = 0,
     this.androidAppIconFuture,
   });
 
@@ -58,7 +64,8 @@ class GameDetailsGeneralTab extends StatelessWidget {
                       ? Image.file(
                           File(wheelPath),
                           key: ValueKey(
-                            'wheel_shadow_${game.romPath ?? game.romname}',
+                            'wheel_shadow_${game.romPath ?? game.romname}'
+                            '_v$imageVersion',
                           ),
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.low,
@@ -115,7 +122,10 @@ class GameDetailsGeneralTab extends StatelessWidget {
                 child: wheelExists
                     ? Image.file(
                         File(wheelPath),
-                        key: ValueKey('wheel_${game.romPath ?? game.romname}'),
+                        key: ValueKey(
+                          'wheel_${game.romPath ?? game.romname}'
+                          '_v$imageVersion',
+                        ),
                         fit: BoxFit.contain,
                         cacheWidth: 640,
                         height: 140.r,
