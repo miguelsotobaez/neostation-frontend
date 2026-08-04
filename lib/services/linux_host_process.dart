@@ -17,10 +17,14 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 /// NeoStation is sandboxed, and the day the Flatpak build is abandoned this
 /// file is the only thing to delete.
 ///
-/// NeoStation ships as an AppImage today, so on every machine this has run on
-/// [isSandboxed] is false and [start] is a plain [Process.start]. The sandboxed
-/// branch is a fallback for a Flatpak build that does not exist yet, and has
-/// therefore never executed anywhere: treat it as unverified.
+/// The release path ships an AppImage, so on every machine this has run on
+/// [isSandboxed] is false and [start] is a plain [Process.start] — the
+/// sandboxed branch has never executed, and should be treated as unverified.
+/// That is a statement about what has been *exercised*, not about what exists:
+/// `linux/flatpak/` builds a working Flatpak, and one was installed on a Steam
+/// Deck as recently as 2026-07-27. Verifying this branch is a matter of
+/// building that manifest and launching a game from it, not of waiting for a
+/// packaging format that has yet to arrive.
 class LinuxHostProcess {
   LinuxHostProcess._();
 
