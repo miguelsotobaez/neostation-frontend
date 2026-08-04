@@ -742,10 +742,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         description == AppLocale.noDescription.getString(context) ||
         description.trim().isEmpty;
 
-    if (!widget.isSecondaryScreenActive) {
-      // Scraping forces the media tab; it isn't the user picking one.
-      _setTab(DetailTab.screenshotVideo, persist: false);
-    }
+    // No tab switch at all: the progress panel overlays whichever tab is open,
+    // so the user stays where they were — and the tab they chose stays the
+    // remembered one (#284).
     _startSingleGameScrape(forceOverwrite: !isDescriptionMissing);
   }
 
@@ -769,11 +768,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
   /// Handles secondary hardware actions (typically mapped to X or RB).
   void _handleSecondaryAction() {
-    if (!_isGameInfoHidden) {
-      _setTab(DetailTab.screenshotVideo, persist: false);
-    } else {
-      return;
-    }
+    // Unchanged condition — the action stays tied to the screenshot tab being
+    // available — but it no longer switches to that tab: the progress panel
+    // overlays whichever tab the user is on.
+    if (_isGameInfoHidden) return;
 
     if (_isScrapingGame) return;
 
