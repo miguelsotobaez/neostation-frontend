@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:neostation/models/core_emulator_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
+import 'package:neostation/services/launcher_service.dart';
 import 'package:neostation/services/linux_emulator_discovery.dart';
 import 'package:neostation/services/logger_service.dart';
 
@@ -92,6 +93,45 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
       emulators = emulators
           .map((e) => e.copyWith(isInstalled: e.hasConfiguredPath))
           .toList();
+
+      // Linux: nothing configures a path on a Deck — emulators arrive as
+      // Flatpaks and EmuDeck launcher scripts — so the baseline above reports
+      // every standalone as uninstalled. Selection then cannot see that a
+      // working standalone exists and falls back to the JSON default, which for
+      // several systems is a RetroArch core the user never installed: RetroArch
+      // rejects the missing core at parse time, exits 0, and the game "launches"
+      // and instantly closes (verified on a Steam Deck with GameCube, where
+      // Standalone Dolphin was installed and discoverable the whole time).
+      //
+      // Ask discovery instead. A resolvable executable is the same evidence a
+      // configured path is, just gathered rather than typed in.
+      if (Platform.isLinux) {
+        await LauncherService.instance.loadSystemConfig(
+          '${system.folderName}.json',
+        );
+        final updated = <CoreEmulatorModel>[];
+        for (final e in emulators) {
+          if (e.isInstalled || !e.isStandalone) {
+            updated.add(e);
+            continue;
+          }
+          final hints = LauncherService.instance.getLinuxDiscoveryHints(
+            system.folderName,
+            e.uniqueId,
+          );
+          if (hints == null) {
+            updated.add(e);
+            continue;
+          }
+          final resolved = await LinuxEmulatorDiscovery.resolveExecutable(
+            executable: hints['executable']!,
+            flatpakId: hints['flatpak'],
+            emudeckLauncher: hints['emudeck_launcher'],
+          );
+          updated.add(e.copyWith(isInstalled: resolved != null));
+        }
+        emulators = updated;
+      }
 
       if (retroArchPath != null && retroArchPath.isNotEmpty) {
         // Linux keeps cores away from the executable (Flatpak's ~/.var tree,

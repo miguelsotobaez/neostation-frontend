@@ -72,6 +72,36 @@ class LauncherService {
     );
   }
 
+  /// Returns the Linux discovery hints for one emulator, or `null` when the
+  /// system config isn't loaded or the emulator declares no Linux block.
+  ///
+  /// The map holds `executable` plus the optional `flatpak` / `emudeck_launcher`
+  /// hints — everything [LinuxEmulatorDiscovery] needs to decide whether an
+  /// emulator is actually present. It exists so the *emulator list* can answer
+  /// "is this installed?" without a game in hand, which `getLaunchCommand`
+  /// requires. Keeping the platform-block shape known to this class alone means
+  /// callers never learn the JSON layout.
+  Map<String, String>? getLinuxDiscoveryHints(
+    String systemId,
+    String uniqueId,
+  ) {
+    final player = getPlayerConfig(systemId, uniqueId);
+    if (player == null) return null;
+    final platforms = player['platforms'] as Map<String, dynamic>?;
+    final linux = platforms?['linux'] as Map<String, dynamic>?;
+    if (linux == null) return null;
+
+    final executable = linux['executable']?.toString();
+    if (executable == null || executable.isEmpty) return null;
+
+    return {
+      'executable': executable,
+      if (linux['flatpak'] != null) 'flatpak': linux['flatpak'].toString(),
+      if (linux['emudeck_launcher'] != null)
+        'emudeck_launcher': linux['emudeck_launcher'].toString(),
+    };
+  }
+
   /// Generates a comprehensive launch command or intent specification for a game.
   ///
   /// Resolves placeholders, platform-specific arguments, and Android intent

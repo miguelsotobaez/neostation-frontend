@@ -77,4 +77,32 @@ void main() {
     expect(command['emudeck_launcher'], 'retroarch.sh');
     expect(command['args'].toString(), contains('dolphin_libretro.so'));
   });
+
+  group('getLinuxDiscoveryHints', () {
+    // The emulator *list* has to answer "is this installed?" with no game in
+    // hand, so it cannot go through getLaunchCommand. Without these hints a
+    // standalone emulator reads as uninstalled on any machine where the user
+    // never file-pickered a path — every Steam Deck — and selection falls back
+    // to a RetroArch core that may not be installed. That combination launched
+    // and instantly closed on a real Deck.
+    test('exposes the hints an install check needs', () {
+      final hints = service.getLinuxDiscoveryHints(
+        'gc',
+        'gc.org.dolphinemu.dolphinemu',
+      );
+
+      expect(hints, isNotNull);
+      expect(hints!['executable'], 'dolphin');
+      expect(hints['flatpak'], 'org.DolphinEmu.dolphin-emu');
+      expect(hints['emudeck_launcher'], 'dolphin-emu.sh');
+    });
+
+    test('returns null for an emulator the config does not define', () {
+      expect(service.getLinuxDiscoveryHints('gc', 'gc.does.not.exist'), isNull);
+    });
+
+    test('returns null for a system that was never loaded', () {
+      expect(service.getLinuxDiscoveryHints('not-a-system', 'x'), isNull);
+    });
+  });
 }
