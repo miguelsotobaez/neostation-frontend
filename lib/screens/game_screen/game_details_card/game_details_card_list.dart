@@ -49,6 +49,12 @@ class GameDetailsCardList extends StatefulWidget {
   final ISyncProvider syncProvider;
   final String? localizedDescription;
 
+  /// Bumped by the games list whenever this game's artwork files change on
+  /// disk — a scrape, or a media file replaced from the settings dialog. The
+  /// card folds it into its own version so the artwork tabs reload; without it
+  /// they keep the decode they already resolved until another game is selected.
+  final int artworkVersion;
+
   /// True when an external (list-level) scrape is running for this game, e.g.
   /// triggered by the Select button. Drives the scrape button spinner so the
   /// feedback matches a scrape started from the button itself.
@@ -120,6 +126,7 @@ class GameDetailsCardList extends StatefulWidget {
     required this.retroAchievementsProvider,
     required this.syncProvider,
     this.localizedDescription,
+    this.artworkVersion = 0,
     this.isExternallyScraping = false,
     this.onDeactivateNavigation,
     this.onReactivateNavigation,
@@ -190,6 +197,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   final ScrollController _achievementsScrollController = ScrollController();
   int _imageVersion =
       0; // Cache-busting version for images after metadata refreshes.
+
+  /// Cache-busting version for the artwork tabs, covering both the card's own
+  /// scrape and artwork the games list saw change underneath it.
+  int get _artworkImageVersion => _imageVersion + widget.artworkVersion;
 
   Future<Uint8List?>? _androidAppIconFuture;
   SecondaryDisplayState? _secondaryState;
@@ -648,7 +659,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               system: _effectiveSystem,
               game: _game,
               fileProvider: widget.fileProvider,
-              imageVersion: _imageVersion,
+              imageVersion: _artworkImageVersion,
               androidAppIconFuture: _androidAppIconFuture,
             ),
           if (_currentTab == DetailTab.box2d)
@@ -656,7 +667,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               system: _effectiveSystem,
               game: _game,
               fileProvider: widget.fileProvider,
-              imageVersion: _imageVersion,
+              imageVersion: _artworkImageVersion,
             ),
           Visibility(
             visible: _currentTab == DetailTab.screenshotVideo,
@@ -668,7 +679,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               screenshotPath: screenshotPath,
               isVideoDelayActive: _isVideoDelayActive,
               videoController: widget.videoController,
-              imageVersion: _imageVersion,
+              imageVersion: _artworkImageVersion,
               onToggleVideoMute: _toggleVideoMute,
             ),
           ),

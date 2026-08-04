@@ -1395,6 +1395,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         retroAchievementsProvider: _retroAchievementsProvider,
         syncProvider: syncManager.active!,
         localizedDescription: _localizedDescription,
+        artworkVersion: _artworkVersion,
         isExternallyScraping: _scrapingGameRomnames.contains(
           _selectedGame!.romname,
         ),
