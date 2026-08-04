@@ -75,6 +75,7 @@ class DatabaseTestHelper {
         players TEXT,
         app_system_id TEXT,
         ra_hash TEXT,
+        ss_hash TEXT,
         id_ra INTEGER,
         is_favorite INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,
@@ -84,6 +85,7 @@ class DatabaseTestHelper {
         updated_at TEXT,
         app_emulator_unique_id TEXT,
         app_emulator_os_id INTEGER,
+        app_alternative_emulators_id INTEGER,
         box2d_aspect_ratio TEXT
       )
     ''');

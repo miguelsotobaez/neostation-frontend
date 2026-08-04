@@ -771,6 +771,24 @@ class SqliteDatabaseService {
         return (removed: 0, knownPaths: knownPaths);
       }
 
+      // Rows stored before the scan learned to skip symlinked alias folders
+      // still spell the path through the alias (…/roms/gamecube/x.rvz for a
+      // file the scan now keeps as …/roms/gc/x.rvz). Those files are not
+      // missing, so their play time, favourite flag and scraped ids have to be
+      // folded into the surviving row before the delete below discards them.
+      final renamed = await _mergeAliasDuplicateRoms(
+        romsToDelete,
+        existingRomPaths,
+        knownPaths,
+      );
+      if (renamed.isNotEmpty) {
+        romsToDelete.removeWhere(renamed.containsKey);
+        knownPaths.addAll(renamed.values);
+        if (romsToDelete.isEmpty) {
+          return (removed: 0, knownPaths: knownPaths);
+        }
+      }
+
       await db.transaction((txn) async {
         const batchSize = 100;
         for (int i = 0; i < romsToDelete.length; i += batchSize) {
@@ -792,6 +810,149 @@ class SqliteDatabaseService {
       _log.e('Error cleaning up orphaned ROMs for system $systemId: $e');
       return (removed: 0, knownPaths: <String>{});
     }
+  }
+
+  /// Folds rows that reach an already-scanned file through a symlinked alias
+  /// folder into the row the scan keeps, and returns the ones that were instead
+  /// renamed in place (orphan path -> surviving path).
+  ///
+  /// Only runs when a scan found orphans at all, so a warm rescan never pays
+  /// for it, and it resolves one directory at a time rather than one file at a
+  /// time. `content://` paths are skipped outright: a SAF URI is an opaque
+  /// DocumentsProvider identifier with no symbolic link to resolve.
+  static Future<Map<String, String>> _mergeAliasDuplicateRoms(
+    List<String> orphanPaths,
+    Set<String> scannedPaths,
+    Set<String> knownPaths,
+  ) async {
+    final dirCache = <String, String?>{};
+
+    Future<String?> canonicalDirOf(String dirPath) async {
+      if (dirCache.containsKey(dirPath)) return dirCache[dirPath];
+      String? resolved;
+      try {
+        resolved = await Directory(dirPath).resolveSymbolicLinks();
+      } catch (e) {
+        resolved = null;
+      }
+      dirCache[dirPath] = resolved;
+      return resolved;
+    }
+
+    // Index the scanned files by canonical path, so a row spelled through an
+    // alias can find the row the scan kept whatever the two spellings are.
+    final canonicalToScanned = <String, String>{};
+    for (final scanned in scannedPaths) {
+      if (scanned.startsWith('content://')) continue;
+      final dir = await canonicalDirOf(path.dirname(scanned));
+      if (dir == null) continue;
+      canonicalToScanned[path.join(dir, path.basename(scanned))] = scanned;
+    }
+    if (canonicalToScanned.isEmpty) return const {};
+
+    final renames = <String, String>{};
+    final merges = <String, String>{};
+    final claimed = <String>{};
+
+    for (final orphanPath in orphanPaths) {
+      if (orphanPath.startsWith('content://')) continue;
+      final dir = await canonicalDirOf(path.dirname(orphanPath));
+      if (dir == null) continue; // The directory is gone: a genuine orphan.
+
+      final survivor =
+          canonicalToScanned[path.join(dir, path.basename(orphanPath))];
+      if (survivor == null || survivor == orphanPath) continue;
+
+      if (knownPaths.contains(survivor) || claimed.contains(survivor)) {
+        merges[orphanPath] = survivor;
+      } else {
+        // Only the alias spelling was ever stored, so the row can simply move
+        // to the surviving path and keep everything it carries.
+        renames[orphanPath] = survivor;
+        claimed.add(survivor);
+      }
+    }
+
+    if (renames.isEmpty && merges.isEmpty) return const {};
+
+    int asInt(Object? value) =>
+        value is int ? value : int.tryParse('${value ?? ''}') ?? 0;
+
+    String? latest(Object? a, Object? b) {
+      final x = (a == null || a.toString().isEmpty) ? null : a.toString();
+      final y = (b == null || b.toString().isEmpty) ? null : b.toString();
+      if (x == null) return y;
+      if (y == null) return x;
+      return x.compareTo(y) >= 0 ? x : y;
+    }
+
+    const columns =
+        'is_favorite, play_time, last_played, id_ra, ra_hash, ss_hash, '
+        'app_emulator_unique_id, app_emulator_os_id, '
+        'app_alternative_emulators_id';
+
+    final db = await SqliteService.getDatabase();
+    await db.transaction((txn) async {
+      for (final entry in renames.entries) {
+        await txn.rawUpdate(
+          "UPDATE user_roms SET rom_path = ?, updated_at = datetime('now') "
+          'WHERE rom_path = ?',
+          [entry.value, entry.key],
+        );
+      }
+
+      for (final entry in merges.entries) {
+        final duplicateRows = await txn.rawQuery(
+          'SELECT $columns FROM user_roms WHERE rom_path = ?',
+          [entry.key],
+        );
+        final survivorRows = await txn.rawQuery(
+          'SELECT $columns FROM user_roms WHERE rom_path = ?',
+          [entry.value],
+        );
+        if (duplicateRows.isEmpty || survivorRows.isEmpty) continue;
+
+        final d = duplicateRows.first;
+        final s = survivorRows.first;
+
+        // The surviving row wins every scalar it already carries; the duplicate
+        // only fills gaps. Play time is summed because each launch was recorded
+        // against exactly one of the two rows.
+        await txn.rawUpdate(
+          '''
+          UPDATE user_roms SET
+            is_favorite = ?,
+            play_time = ?,
+            last_played = ?,
+            id_ra = ?,
+            ra_hash = ?,
+            ss_hash = ?,
+            app_emulator_unique_id = ?,
+            app_emulator_os_id = ?,
+            app_alternative_emulators_id = ?,
+            updated_at = datetime('now')
+          WHERE rom_path = ?
+          ''',
+          [
+            (asInt(s['is_favorite']) == 1 || asInt(d['is_favorite']) == 1)
+                ? 1
+                : 0,
+            asInt(s['play_time']) + asInt(d['play_time']),
+            latest(s['last_played'], d['last_played']),
+            s['id_ra'] ?? d['id_ra'],
+            s['ra_hash'] ?? d['ra_hash'],
+            s['ss_hash'] ?? d['ss_hash'],
+            s['app_emulator_unique_id'] ?? d['app_emulator_unique_id'],
+            s['app_emulator_os_id'] ?? d['app_emulator_os_id'],
+            s['app_alternative_emulators_id'] ??
+                d['app_alternative_emulators_id'],
+            entry.value,
+          ],
+        );
+      }
+    });
+
+    return renames;
   }
 
   /// Performs a specialized scan of installed Android applications.
