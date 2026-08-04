@@ -903,14 +903,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
     if (!mounted) return;
 
-    // Surface immediate feedback — a scrape takes several seconds and can be
-    // triggered "blind" via the Select + A chord from the games list.
-    AppNotification.showNotification(
-      context,
-      AppLocale.scrapingGameData.getString(context),
-      type: NotificationType.info,
-    );
-
+    // No "scraping…" toast: the progress panel above says the same thing for
+    // the whole run, wherever the scrape was started from.
     final secondaryState = context.read<SecondaryDisplayState?>();
     if (secondaryState != null && widget.isSecondaryScreenActive) {
       secondaryState.updateState(
