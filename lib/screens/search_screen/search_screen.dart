@@ -278,6 +278,12 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Shows/hides the filter chip row, moving focus to follow.
   void _toggleFilters() {
     setState(() {
+      // Activating a control other than the field itself ends text entry —
+      // reachable by touch while the keyboard is up, and by gamepad because
+      // Left/Right off the field deliberately leave it focused (B is the way
+      // out of a field, so the keyboard has to be dismissed on use, not on
+      // direction).
+      _nameFocus.unfocus();
       _filtersExpanded = !_filtersExpanded;
       if (_filtersExpanded) {
         _region = _FocusRegion.filters;
@@ -292,11 +298,27 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// Empties the name query, leaving the filter chips as they are, and hands
   /// focus back to the field the user was typing in.
+  ///
+  /// Also claims the search band: the X is tappable from anywhere on screen, so
+  /// a touch user can clear the query while the selection sits in the results.
   void _clearQuery() {
     setState(() {
       _nameController.clear();
+      _region = _FocusRegion.search;
       _searchIndex = 0;
       _recompute();
+    });
+    SfxService().playNavSound();
+  }
+
+  /// Claims the search band for the text field, so touching into the field
+  /// moves the on-screen selection there instead of leaving it stranded on a
+  /// result or a filter chip while the user types.
+  void _focusNameField() {
+    if (_region == _FocusRegion.search && _searchIndex == 0) return;
+    setState(() {
+      _region = _FocusRegion.search;
+      _searchIndex = 0;
     });
     SfxService().playNavSound();
   }
@@ -605,6 +627,33 @@ class _SearchScreenState extends State<SearchScreen> {
       _recompute();
     });
     SfxService().playNavSound();
+  }
+
+  /// Touch handler for a result row.
+  ///
+  /// Follows the same two-step contract as the games list/grid: touch users
+  /// have no A button, so the first tap only moves the selection onto the row
+  /// and a second tap on that same row confirms it — here opening the
+  /// Go-to-game / Play chooser, exactly as [_handleSelect] does.
+  void _handleResultTap(int index) {
+    if (_region == _FocusRegion.results && _resultIndex == index) {
+      SfxService().playEnterSound();
+      setState(() {
+        _actionTarget = _results[index];
+        _actionIndex = 0;
+        _region = _FocusRegion.action;
+      });
+      return;
+    }
+
+    setState(() {
+      _nameFocus.unfocus();
+      _region = _FocusRegion.results;
+      _resultIndex = index;
+    });
+    SfxService().playNavSound();
+    // Deliberately no _scrollResultIntoView(): the row is already under the
+    // user's finger, and recentring it would slide it out from under them.
   }
 
   void _scrollResultIntoView() {
@@ -1021,6 +1070,7 @@ class _SearchScreenState extends State<SearchScreen> {
         controller: _nameController,
         focusNode: _nameFocus,
         textInputAction: TextInputAction.done,
+        onTap: _focusNameField,
         onChanged: (_) => setState(_recompute),
         onSubmitted: (_) => _nameFocus.unfocus(),
         decoration: InputDecoration(
@@ -1090,6 +1140,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return GestureDetector(
       onTap: () {
         setState(() {
+          _nameFocus.unfocus();
           _region = _FocusRegion.filters;
           _barIndex = _barItems.indexOf(key);
         });
@@ -1154,7 +1205,17 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildClearChip(ThemeData theme, bool isFocused) {
     final scheme = theme.colorScheme;
     return GestureDetector(
-      onTap: _clearFilters,
+      onTap: () {
+        // Tapping Clear also lands focus on it, so gamepad navigation carries
+        // on from the chip the user just used rather than from wherever the
+        // selection happened to be.
+        setState(() {
+          _nameFocus.unfocus();
+          _region = _FocusRegion.filters;
+          _barIndex = _barItems.indexOf('clear');
+        });
+        _clearFilters();
+      },
       child: Container(
         margin: EdgeInsets.only(right: 8.r),
         padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
@@ -1400,67 +1461,71 @@ class _SearchScreenState extends State<SearchScreen> {
         g.developer!.trim(),
     ];
 
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 3.r),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 6.r),
-        decoration: BoxDecoration(
-          color: isFocused
-              ? scheme.primary.withValues(alpha: 0.18)
-              : scheme.surface.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: isFocused ? scheme.primary : Colors.transparent,
-            width: 2.r,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _handleResultTap(index),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 3.r),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 6.r),
+          decoration: BoxDecoration(
+            color: isFocused
+                ? scheme.primary.withValues(alpha: 0.18)
+                : scheme.surface.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(
+              color: isFocused ? scheme.primary : Colors.transparent,
+              width: 2.r,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            _buildBoxArt(theme, g),
-            SizedBox(width: 10.r),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    g.realName ?? g.filename,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.r,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                  if (subtitleParts.isNotEmpty)
+          child: Row(
+            children: [
+              _buildBoxArt(theme, g),
+              SizedBox(width: 10.r),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitleParts.join('  •  '),
+                      g.realName ?? g.filename,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11.r,
-                        color: scheme.onSurface.withValues(alpha: 0.6),
+                        fontSize: 13.r,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
                       ),
                     ),
-                ],
-              ),
-            ),
-            if (g.rating != null && g.rating! > 0) ...[
-              SizedBox(width: 8.r),
-              Icon(Symbols.star_rounded, size: 14.r, color: scheme.primary),
-              SizedBox(width: 2.r),
-              Text(
-                // Stored 0..20, shown out of 10 as everywhere else in the app.
-                searchRatingScore(g.rating!).toStringAsFixed(1),
-                style: TextStyle(
-                  fontSize: 12.r,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface.withValues(alpha: 0.8),
+                    if (subtitleParts.isNotEmpty)
+                      Text(
+                        subtitleParts.join('  •  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.r,
+                          color: scheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              if (g.rating != null && g.rating! > 0) ...[
+                SizedBox(width: 8.r),
+                Icon(Symbols.star_rounded, size: 14.r, color: scheme.primary),
+                SizedBox(width: 2.r),
+                Text(
+                  // Stored 0..20, shown out of 10 as everywhere else in the app.
+                  searchRatingScore(g.rating!).toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 12.r,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
