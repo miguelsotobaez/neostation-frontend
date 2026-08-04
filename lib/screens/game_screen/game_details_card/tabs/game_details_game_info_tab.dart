@@ -16,10 +16,9 @@ class GameDetailsGameInfoTab extends StatefulWidget {
   final GameModel game;
   final FileProvider fileProvider;
   final String description;
+
+  /// Hides the metadata pills while the card's scrape panel covers this tab.
   final bool isScrapingGame;
-  final double scrapeProgress;
-  final String scrapeStatus;
-  final bool isSecondaryScreenActive;
   final VoidCallback onScrapeGame;
 
   const GameDetailsGameInfoTab({
@@ -29,9 +28,6 @@ class GameDetailsGameInfoTab extends StatefulWidget {
     required this.fileProvider,
     required this.description,
     required this.isScrapingGame,
-    required this.scrapeProgress,
-    required this.scrapeStatus,
-    required this.isSecondaryScreenActive,
     required this.onScrapeGame,
   });
 
@@ -200,11 +196,9 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                 padding: EdgeInsets.all(8.r),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    if (widget.isScrapingGame &&
-                        !widget.isSecondaryScreenActive) {
-                      return _buildScrapingProgressView();
-                    }
-
+                    // While scraping, the card lays ScrapingProgressPanel over
+                    // this whole region — every tab gets the same feedback, so
+                    // this tab no longer draws its own copy.
                     return showScrapeView
                         ? _buildNonScrapedView()
                         : _buildScrapedView();
@@ -214,66 +208,6 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildScrapingProgressView() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(16.r),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: SizedBox(
-              width: 24.r,
-              height: 24.r,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-          SizedBox(height: 24.r),
-          Text(
-            AppLocale.scrapingGameData.getString(context),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 18.r,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 12.r),
-          SizedBox(
-            width: 250.r,
-            child: Column(
-              children: [
-                LinearProgressIndicator(
-                  value: widget.scrapeProgress,
-                  backgroundColor: Colors.white10,
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(4.r),
-                ),
-                SizedBox(height: 8.r),
-                Text(
-                  widget.scrapeStatus,
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontSize: 10.r,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

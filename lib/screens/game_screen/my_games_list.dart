@@ -176,6 +176,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // carousel views, which have no details card to own the scrape).
   bool _isScrapingSelectedGame = false;
 
+  // Localized step of that scrape, forwarded to the details card so its
+  // progress panel reads the same whoever started the scrape.
+  String _selectedScrapeStatus = '';
+
   // Bumped whenever artwork is replaced so background/detail images rebuild.
   int _artworkVersion = 0;
 
@@ -1399,6 +1403,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
         isExternallyScraping: _scrapingGameRomnames.contains(
           _selectedGame!.romname,
         ),
+        externalScrapeProgress: _scrapeProgress[_selectedGame!.romname],
+        externalScrapeStatus: _selectedScrapeStatus,
         isNavigatingFast: _isNavigatingFast,
         isSecondaryScreenActive:
             _secondaryDisplayState?.value?.isSecondaryActive ?? false,
@@ -1599,6 +1605,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     setState(() {
       _scrapingGameRomnames.add(game.romname);
       _scrapeProgress[game.romname] = 0.0;
+      _selectedScrapeStatus = AppLocale.scrapingGameData.getString(context);
     });
 
     AppNotification.showNotification(
@@ -1632,12 +1639,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
         forceOverwrite: forceOverwrite,
         onProgress: (statusKey, progress) {
           if (!mounted) return;
+          final localizedStatus = statusKey.getString(context);
           setState(() {
             _scrapeProgress[game.romname] = progress;
+            _selectedScrapeStatus = localizedStatus;
           });
           if (secondaryState != null && isSecondaryActive) {
             secondaryState.updateState(
-              scrapeStatus: statusKey.getString(context),
+              scrapeStatus: localizedStatus,
               scrapeProgress: progress,
             );
           }
@@ -1683,6 +1692,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         setState(() {
           _scrapingGameRomnames.remove(game.romname);
           _scrapeProgress.remove(game.romname);
+          _selectedScrapeStatus = '';
         });
         if (secondaryState != null && isSecondaryActive) {
           // Latency buffer so file descriptors release before the secondary

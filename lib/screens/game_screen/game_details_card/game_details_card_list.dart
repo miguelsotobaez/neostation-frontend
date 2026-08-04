@@ -26,6 +26,7 @@ import 'package:neostation/widgets/custom_notification.dart';
 import '../../../models/secondary_display_state.dart';
 import 'widgets/game_details_footer.dart';
 import 'widgets/game_details_tabs_header.dart';
+import 'widgets/scraping_progress_panel.dart';
 import 'tabs/game_details_general_tab.dart';
 import 'tabs/game_details_box2d_tab.dart';
 import 'tabs/game_details_screenshot_video_tab.dart';
@@ -59,6 +60,11 @@ class GameDetailsCardList extends StatefulWidget {
   /// triggered by the Select button. Drives the scrape button spinner so the
   /// feedback matches a scrape started from the button itself.
   final bool isExternallyScraping;
+
+  /// Progress and step of that external scrape, so the card's progress panel
+  /// reports it exactly as it reports a scrape the card started itself.
+  final double? externalScrapeProgress;
+  final String? externalScrapeStatus;
 
   final VoidCallback? onDeactivateNavigation;
   final VoidCallback? onReactivateNavigation;
@@ -128,6 +134,8 @@ class GameDetailsCardList extends StatefulWidget {
     this.localizedDescription,
     this.artworkVersion = 0,
     this.isExternallyScraping = false,
+    this.externalScrapeProgress,
+    this.externalScrapeStatus,
     this.onDeactivateNavigation,
     this.onReactivateNavigation,
     this.onShowAchievements,
@@ -694,9 +702,6 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
                       ? AppLocale.noDescription.getString(context)
                       : _game.getDescriptionForLanguage('en')),
               isScrapingGame: _isScrapingGame || widget.isExternallyScraping,
-              scrapeProgress: _scrapeProgress,
-              scrapeStatus: _scrapeStatus,
-              isSecondaryScreenActive: widget.isSecondaryScreenActive,
               onScrapeGame: _onScrapeGameCompact,
             ),
           if (_currentTab == DetailTab.achievements)
@@ -705,6 +710,19 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               gameInfo: _currentGameInfo,
               isLoading: _isLoadingAchievements,
               onRefresh: refreshAchievements,
+            ),
+
+          // Scrape feedback for every tab. A scrape can start from any of them
+          // (the Scrape button, Select + A, or the games list), so it is drawn
+          // over the tab panels rather than inside one of them.
+          if (_isScrapingGame || widget.isExternallyScraping)
+            ScrapingProgressPanel(
+              progress: _isScrapingGame
+                  ? _scrapeProgress
+                  : (widget.externalScrapeProgress ?? 0.0),
+              status: _isScrapingGame
+                  ? _scrapeStatus
+                  : (widget.externalScrapeStatus ?? ''),
             ),
         ],
       ),
