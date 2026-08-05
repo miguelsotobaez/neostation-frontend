@@ -185,10 +185,10 @@ class GamepadNavigation {
 
   /// How long a direction must be held before repeats escalate from stepping
   /// item-by-item to ES-DE style alphabetical jumping (see [onLetterJump]).
-  /// Long enough that the accelerated step scroll (~30 items by this point) is
-  /// the normal way to browse, and letter jumping only takes over on a
-  /// deliberate hold.
-  static const Duration _letterJumpAfter = Duration(milliseconds: 1600);
+  /// Long enough that the accelerated step scroll (~17 items by this point) is
+  /// still the normal way to browse a short list, but short enough that holding
+  /// a direction to skim a big library reaches the alphabet quickly.
+  static const Duration _letterJumpAfter = Duration(milliseconds: 1200);
 
   /// Dwell time on each letter while letter jumping — long enough to read the
   /// letter and release on it, short enough to cross the alphabet quickly.
