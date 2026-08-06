@@ -11,6 +11,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/app_themes.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/marquee_text.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 import '../../themes/corner_radii.dart';
 
 /// A reusable footer used by the game grid and carousel views.
@@ -235,7 +236,7 @@ class _PlayTimePill extends StatelessWidget {
       height: 32.r,
       padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: ChromeSurface.fill(context),
         borderRadius: radii.radiusExternal,
         border: Border.all(
           color: Theme.of(context).colorScheme.outline,
@@ -295,7 +296,7 @@ class _SteamStyleRating extends StatelessWidget {
       height: 32.r,
       padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: ChromeSurface.fill(context),
         borderRadius: radii.radiusExternal,
         border: Border.all(
           color: Theme.of(context).colorScheme.outline,
@@ -400,7 +401,7 @@ class _CompactAchievementsIndicator extends StatelessWidget {
           width: 101.r,
           height: 32.r,
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withValues(alpha: 0.9),
+            color: ChromeSurface.fill(context),
             borderRadius: radii.radiusExternal,
             border: Border.all(color: theme.colorScheme.outline, width: 1.r),
             boxShadow: [
@@ -508,7 +509,7 @@ class _MuteHintPill extends StatelessWidget {
       selector: (_, provider) => !provider.config.videoSound,
       builder: (context, isMuted, _) {
         return Material(
-          color: scheme.surface.withValues(alpha: 0.9),
+          color: ChromeSurface.fill(context),
           borderRadius: radii.radiusExternal,
           child: InkWell(
             onTap: () {

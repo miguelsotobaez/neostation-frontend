@@ -6,6 +6,7 @@ import '../models/game_model.dart';
 import '../models/system_model.dart';
 import '../services/game_legend_visibility.dart';
 import '../sync/i_sync_provider.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 import '../themes/corner_radii.dart';
 import '../utils/gamepad_nav.dart';
 import 'game_action_button.dart';
@@ -62,9 +63,10 @@ class GameActionButtons extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.all(6.r),
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.9),
+              // Same left-to-right falloff as the game list panel beside it,
+              // so the rail and the list read as one lit surface rather than
+              // two separate cut-outs over the fanart.
+              gradient: ChromeSurface.fadeNarrow(context),
               borderRadius:
                   Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
                   BorderRadius.circular(14.r),

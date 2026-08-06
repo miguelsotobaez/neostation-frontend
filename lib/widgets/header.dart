@@ -18,6 +18,7 @@ import 'package:neostation/utils/nav_tabs.dart';
 import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 
+import 'package:neostation/themes/chrome_surface.dart';
 import '../themes/corner_radii.dart';
 
 class Header extends StatefulWidget {
@@ -207,7 +208,7 @@ class HeaderState extends State<Header> {
                   height: 32.r,
                   padding: EdgeInsets.symmetric(horizontal: 2.r),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
+                    color: ChromeSurface.fill(context),
                     border: Border.all(
                       color: Theme.of(context).colorScheme.outline,
                       width: 1.r,
@@ -310,7 +311,7 @@ class HeaderState extends State<Header> {
                     vertical: 4.r,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
+                    color: ChromeSurface.fill(context),
                     border: Border.all(
                       color: Theme.of(context).colorScheme.outline,
                       width: 1.r,

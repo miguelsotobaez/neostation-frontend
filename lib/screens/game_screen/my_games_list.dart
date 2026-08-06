@@ -50,6 +50,7 @@ import '../../widgets/letter_indicator.dart';
 import '../../constants/system_folder_names.dart';
 import '../../utils/artwork_cache.dart';
 import '../../utils/game_list_update.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 import '../../themes/corner_radii.dart';
 
 part 'my_games_list/gamepad_nav.dart';
@@ -1129,18 +1130,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 // opaque where the row text sits and thins out towards its
                 // right edge, so the fanart bleeds through and it reads as a
                 // pane laid over the artwork instead of a cut-out block.
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Theme.of(
-                      context,
-                    ).colorScheme.surface.withValues(alpha: 0.78),
-                    Theme.of(
-                      context,
-                    ).colorScheme.surface.withValues(alpha: 0.38),
-                  ],
-                ),
+                gradient: ChromeSurface.fade(context),
                 borderRadius:
                     Theme.of(
                       context,
@@ -1330,9 +1320,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
               width: 64.r,
               height: 64.r,
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.9),
+                color: ChromeSurface.fill(context),
                 borderRadius:
                     Theme.of(
                       context,

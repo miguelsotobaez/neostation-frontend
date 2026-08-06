@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 import '../themes/corner_radii.dart';
 
 /// Large, semi-transparent alphabetical indicator shown while the user scrolls
@@ -28,9 +29,7 @@ class LetterIndicator extends StatelessWidget {
             width: 120.r,
             height: 120.r,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.9),
+              color: ChromeSurface.fill(context),
               borderRadius:
                   Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
                   BorderRadius.circular(14.r),

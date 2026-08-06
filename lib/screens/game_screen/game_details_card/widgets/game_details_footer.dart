@@ -10,6 +10,7 @@ import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../models/retro_achievements_game_info.dart';
 import '../../../../sync/i_sync_provider.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../../../../widgets/marquee_text.dart';
@@ -336,9 +337,7 @@ class GameDetailsFooter extends StatelessWidget {
             width: 120.r + (availableWidth - 120.r) * t,
             height: 45.r,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.9),
+              color: ChromeSurface.fill(context),
               borderRadius:
                   Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
                   BorderRadius.circular(14.r),
@@ -470,7 +469,7 @@ class _SteamStyleRating extends StatelessWidget {
       height: 45.r,
       padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 6.r),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: ChromeSurface.fill(context),
         borderRadius:
             Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
             BorderRadius.circular(14.r),
@@ -543,7 +542,7 @@ class _PlayTimePill extends StatelessWidget {
       height: 45.r,
       padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: ChromeSurface.fill(context),
         borderRadius:
             Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
             BorderRadius.circular(14.r),
