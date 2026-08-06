@@ -1125,9 +1125,22 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 bottom: 12.r,
               ),
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.9),
+                // A horizontal wash rather than a flat fill: the panel stays
+                // opaque where the row text sits and thins out towards its
+                // right edge, so the fanart bleeds through and it reads as a
+                // pane laid over the artwork instead of a cut-out block.
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.78),
+                    Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.38),
+                  ],
+                ),
                 borderRadius:
                     Theme.of(
                       context,
