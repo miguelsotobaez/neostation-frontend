@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 import 'package:neostation/themes/corner_radii.dart';
 
 /// A concrete custom-colors holder for imported (user-supplied) themes.
@@ -185,7 +186,10 @@ class CustomTheme {
       colorScheme: colorScheme,
       cardColor: card,
       scaffoldBackgroundColor: surface,
-      extensions: [_radiiFromEffects(json['effects'])],
+      extensions: [
+        _radiiFromEffects(json['effects']),
+        ChromeSurface.standard(),
+      ],
       textTheme: TextTheme(
         displayLarge: TextStyle(
           color: onSurface,

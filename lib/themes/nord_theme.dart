@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:neostation/themes/corner_radii.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 
 const Color _primaryColor = Color(0xFF5e81ac);
 const Color _onPrimaryColor = Color(0xFF03060b);
@@ -54,7 +55,7 @@ final ThemeData nordTheme = ThemeData(
 
   cardColor: _backgroundColor,
   scaffoldBackgroundColor: _backgroundColor,
-  extensions: [CornerRadii.xs()],
+  extensions: [CornerRadii.xs(), ChromeSurface.standard()],
 
   textTheme: TextTheme(
     displayLarge: TextStyle(
