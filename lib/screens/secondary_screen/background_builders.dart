@@ -40,6 +40,14 @@ Widget buildDefaultBackground() {
   return const SizedBox.shrink();
 }
 
+/// Offset of the wheel logo's drop shadow on the secondary display.
+///
+/// Derived from the main screen's treatment rather than picked by eye: it
+/// offsets by 6.r on a 280.r-wide logo, so the shadow sits at ~2.1% of the
+/// logo's width. This display renders the same logo at 600.r, so matching that
+/// proportion is what makes the two screens read alike.
+double get _wheelShadowOffset => 600.r * (6 / 280);
+
 /// Mirrors the main screen's game art as a fallback when no screenshot or
 /// video is available: fanart filling the screen (cover) with the game's
 /// wheel/logo centered on top. Either asset is optional — a logo-only game
@@ -69,19 +77,35 @@ Widget buildFanartWithLogo(SecondaryDisplayStateData value) {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Drop shadow: black-tinted copy offset behind the logo,
-                // mirroring the main screen's wheel shadow treatment.
-                Transform.translate(
-                  offset: Offset(4.r, 4.r),
-                  child: Image.file(
-                    File(value.gameWheel!),
-                    fit: BoxFit.contain,
-                    width: 600.r,
-                    filterQuality: FilterQuality.low,
-                    cacheWidth: 32,
-                    color: Colors.black.withValues(alpha: 0.7),
-                    errorBuilder: (context, error, stackTrace) =>
-                        const SizedBox.shrink(),
+                // Drop shadow: tinted copy offset behind the logo, mirroring
+                // the main screen's wheel shadow treatment (see the general
+                // details tab) — same tint and the same offset *relative to
+                // the logo*. The offset has to be scaled, not copied: this
+                // logo renders at 600.r against the main screen's 280.r, so
+                // the main screen's 6.r would tuck under the artwork here
+                // instead of reading as a shadow.
+                //
+                // Decoded at the same cacheWidth as the logo below it. That is
+                // not just for fidelity — at 600.r a smaller decode is visibly
+                // blocky — but also cheaper: cacheWidth is part of the
+                // ResizeImage cache key, so matching it means both copies share
+                // one decode instead of each holding its own bitmap.
+                Builder(
+                  builder: (context) => Transform.translate(
+                    offset: Offset(_wheelShadowOffset, _wheelShadowOffset),
+                    child: Image.file(
+                      File(value.gameWheel!),
+                      fit: BoxFit.contain,
+                      width: 600.r,
+                      filterQuality: FilterQuality.low,
+                      isAntiAlias: false,
+                      cacheWidth: 640,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.shadow.withValues(alpha: 0.5),
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
+                    ),
                   ),
                 ),
                 Image.file(
