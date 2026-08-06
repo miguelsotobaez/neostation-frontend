@@ -14,6 +14,18 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 /// a shape this small however far its opacity is dropped; blurring removes the
 /// edge entirely, so the glyph gains separation without gaining weight.
 ///
+/// The asset is a filled blob with its "LB"/"RB" lettering knocked out to
+/// transparent, so artwork behind would otherwise show through the letters and
+/// leave them muddy. Backing it with the same asset does not help — the holes
+/// line up exactly and the copy stays hidden — so a `_filled` variant of each
+/// glyph, identical but with the lettering closed, is drawn underneath. It is
+/// covered everywhere the glyph is opaque and shows only through the letters,
+/// giving the legend a solid colour. Its silhouette matches the glyph's
+/// exactly, so it fills without ringing.
+///
+/// The halo uses the filled variant too, so the blur reads as one soft shape
+/// rather than smearing through the lettering.
+///
 /// Tune with [_haloAlpha] (how dark) and [_haloBlur] (how far it spreads).
 class BumperGlyph extends StatelessWidget {
   final bool isLeft;
@@ -34,9 +46,12 @@ class BumperGlyph extends StatelessWidget {
     final String asset = isLeft
         ? 'assets/images/gamepad/Xbox_LB_bumper.png'
         : 'assets/images/gamepad/Xbox_RB_bumper.png';
+    final String filledAsset = isLeft
+        ? 'assets/images/gamepad/Xbox_LB_bumper_filled.png'
+        : 'assets/images/gamepad/Xbox_RB_bumper_filled.png';
 
-    Widget copy(Color color) =>
-        Image.asset(asset, width: dimension, height: dimension, color: color);
+    Widget copy(String path, Color color) =>
+        Image.asset(path, width: dimension, height: dimension, color: color);
 
     return SizedBox(
       width: dimension,
@@ -49,9 +64,14 @@ class BumperGlyph extends StatelessWidget {
               sigmaX: _haloBlur.r,
               sigmaY: _haloBlur.r,
             ),
-            child: copy(scheme.surface.withValues(alpha: _haloAlpha)),
+            child: copy(
+              filledAsset,
+              scheme.surface.withValues(alpha: _haloAlpha),
+            ),
           ),
-          copy(scheme.onSurface),
+          // Backs the knocked-out lettering so it reads solid, not see-through.
+          copy(filledAsset, scheme.surface),
+          copy(asset, scheme.onSurface),
         ],
       ),
     );
