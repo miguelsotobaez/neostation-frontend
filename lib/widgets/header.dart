@@ -12,6 +12,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
+import 'package:neostation/widgets/bumper_glyph.dart';
 import 'package:neostation/widgets/notification_bell.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/utils/nav_tabs.dart';
@@ -204,48 +205,50 @@ class HeaderState extends State<Header> {
               Align(
                 key: const ValueKey('tabs-container'),
                 alignment: Alignment.center,
-                child: Container(
-                  height: 32.r,
-                  padding: EdgeInsets.symmetric(horizontal: 2.r),
-                  decoration: BoxDecoration(
-                    color: ChromeSurface.fill(context),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outline,
-                      width: 1.r,
-                    ),
-                    borderRadius:
-                        Theme.of(
-                          context,
-                        ).extension<CornerRadii>()?.radiusExternal ??
-                        BorderRadius.circular(8.r),
-                    // normal black shadow
-                    boxShadow: [
-                      BoxShadow(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.shadow.withValues(alpha: 0.1),
-                        blurRadius: 4.r,
-                        offset: Offset(2.0.r, 2.0.r),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Bumper glyphs sit outside the pill so the pill reads as a
+                    // single switch and the hardware hints stay distinct from it.
+                    _buildShoulderButton('LB', true),
+                    Container(
+                      height: 32.r,
+                      padding: EdgeInsets.symmetric(horizontal: 4.r),
+                      decoration: BoxDecoration(
+                        color: ChromeSurface.fill(context),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outline,
+                          width: 1.r,
+                        ),
+                        borderRadius:
+                            Theme.of(
+                              context,
+                            ).extension<CornerRadii>()?.radiusExternal ??
+                            BorderRadius.circular(8.r),
+                        // normal black shadow
+                        boxShadow: [
+                          BoxShadow(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.shadow.withValues(alpha: 0.1),
+                            blurRadius: 4.r,
+                            offset: Offset(2.0.r, 2.0.r),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Builder(
-                    builder: (context) {
-                      final visibleTabs = visibleNavTabs(configProvider.config);
-                      // The indicator tracks the tab's slot in the *rendered*
-                      // strip, not its canonical index — otherwise hiding a tab
-                      // parks it past the end of a shortened strip.
-                      final selectedSlot = visibleTabs.indexOf(
-                        NavTab.values[widget.selectedTabIndex],
-                      );
+                      child: Builder(
+                        builder: (context) {
+                          final visibleTabs = visibleNavTabs(
+                            configProvider.config,
+                          );
+                          // The indicator tracks the tab's slot in the *rendered*
+                          // strip, not its canonical index — otherwise hiding a tab
+                          // parks it past the end of a shortened strip.
+                          final selectedSlot = visibleTabs.indexOf(
+                            NavTab.values[widget.selectedTabIndex],
+                          );
 
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // LB button (left)
-                          _buildShoulderButton('LB', true),
-                          // Tabs Section
-                          Stack(
+                          return Stack(
                             children: [
                               // Moving indicator
                               AnimatedPositioned(
@@ -291,13 +294,12 @@ class HeaderState extends State<Header> {
                                 ],
                               ),
                             ],
-                          ),
-                          // RB button (right)
-                          _buildShoulderButton('RB', false),
-                        ],
-                      );
-                    },
-                  ),
+                          );
+                        },
+                      ),
+                    ),
+                    _buildShoulderButton('RB', false),
+                  ],
                 ),
               ),
 
@@ -426,20 +428,9 @@ class HeaderState extends State<Header> {
 
   // Steam-style shoulder button (LB/RB)
   Widget _buildShoulderButton(String label, bool isLeft) {
-    final iconPath = isLeft
-        ? 'assets/images/gamepad/Xbox_LB_bumper.png'
-        : 'assets/images/gamepad/Xbox_RB_bumper.png';
-
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 2.r),
-      child: SizedBox(
-        width: 24.r,
-        height: 24.r,
-        child: Image.asset(
-          iconPath,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-      ),
+      child: BumperGlyph(isLeft: isLeft, size: 24.r),
     );
   }
 }

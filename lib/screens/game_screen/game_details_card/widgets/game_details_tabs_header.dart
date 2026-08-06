@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/widgets/bumper_glyph.dart';
 
 import '../../../../themes/corner_radii.dart';
 
@@ -64,6 +65,11 @@ class GameDetailsTabsHeader extends StatelessWidget {
           children: [
             const Spacer(),
 
+            // Bumper glyphs sit outside the pill so the pill reads as a single
+            // switch and the hardware hints stay visually distinct from it.
+            const BumperGlyph(isLeft: true),
+            SizedBox(width: 6.r),
+
             // Tab Navigation Group: Hardware-mapped navigation controls.
             Container(
               height: 36.r,
@@ -89,67 +95,49 @@ class GameDetailsTabsHeader extends StatelessWidget {
                   ),
                 ],
               ),
-              child: ClipRRect(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              child: SizedBox(
+                width: totalTabsWidth,
+                height: 36.r,
+                child: Stack(
                   children: [
-                    Image.asset(
-                      'assets/images/gamepad/Xbox_LB_bumper.png',
-                      width: 22.r,
-                      height: 22.r,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    SizedBox(width: 4.r),
-                    SizedBox(
-                      width: totalTabsWidth,
-                      height: 36.r,
-                      child: Stack(
-                        children: [
-                          // Transition Cursor: Fluidly follows the active selection.
-                          AnimatedPositioned(
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeInOut,
-                            left: visualIndex * tabWidth,
-                            top: 4.r,
-                            bottom: 4.r,
-                            width: tabWidth,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary,
-                                borderRadius:
-                                    Theme.of(context)
-                                        .extension<CornerRadii>()
-                                        ?.radiusInternal ??
-                                    BorderRadius.circular(14.r),
-                              ),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              for (final tab in visibleTabs)
-                                _TabItem(
-                                  icon: _iconForTab(tab),
-                                  tab: tab,
-                                  width: tabWidth,
-                                  isSelected: currentTab == tab,
-                                  onTap: onTabChanged,
-                                ),
-                            ],
-                          ),
-                        ],
+                    // Transition Cursor: Fluidly follows the active selection.
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeInOut,
+                      left: visualIndex * tabWidth,
+                      top: 4.r,
+                      bottom: 4.r,
+                      width: tabWidth,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary,
+                          borderRadius:
+                              Theme.of(
+                                context,
+                              ).extension<CornerRadii>()?.radiusInternal ??
+                              BorderRadius.circular(14.r),
+                        ),
                       ),
                     ),
-                    SizedBox(width: 4.r),
-                    Image.asset(
-                      'assets/images/gamepad/Xbox_RB_bumper.png',
-                      width: 22.r,
-                      height: 22.r,
-                      color: theme.colorScheme.onSurface,
+                    Row(
+                      children: [
+                        for (final tab in visibleTabs)
+                          _TabItem(
+                            icon: _iconForTab(tab),
+                            tab: tab,
+                            width: tabWidth,
+                            isSelected: currentTab == tab,
+                            onTap: onTabChanged,
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
+
+            SizedBox(width: 6.r),
+            const BumperGlyph(isLeft: false),
           ],
         ),
       ),
