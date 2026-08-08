@@ -12,10 +12,24 @@ import '../data/datasources/sqlite_service.dart';
 import 'custom_notification.dart';
 import 'core_footer.dart';
 
+/// Signature of [SystemsUpdateService.checkAndUpdate], so tests can drive the
+/// dialog's download states without touching the network.
+typedef SystemsUpdateRunner =
+    Future<SystemsUpdateResult?> Function({
+      SystemsUpdateInfo? knownUpdate,
+      void Function(double progress, String status)? onProgress,
+      bool Function()? shouldCancel,
+    });
+
 class SystemsUpdateDialog extends StatefulWidget {
   final SystemsUpdateInfo updateInfo;
 
-  const SystemsUpdateDialog({super.key, required this.updateInfo});
+  /// Overrides the download call. Defaults to the real service; exists so the
+  /// progress, cancel and layout states can be tested deterministically.
+  @visibleForTesting
+  final SystemsUpdateRunner? runner;
+
+  const SystemsUpdateDialog({super.key, required this.updateInfo, this.runner});
 
   @override
   State<SystemsUpdateDialog> createState() => _SystemsUpdateDialogState();
@@ -24,6 +38,9 @@ class SystemsUpdateDialog extends StatefulWidget {
 class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
   bool _isDownloading = false;
   bool _cancelRequested = false;
+  // The DB sync that follows a completed download is past the point of no
+  // return, so the cancel affordance is withdrawn for it.
+  bool _isSyncing = false;
   double _downloadProgress = 0.0;
   String _downloadStatus = '';
   late final GamepadNavigation _gamepadNav;
@@ -76,7 +93,7 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
   }
 
   void _requestCancel() {
-    if (_cancelRequested) return;
+    if (_cancelRequested || _isSyncing) return;
     setState(() {
       _cancelRequested = true;
       _downloadStatus = AppLocale.systemsUpdateCancelling.getString(context);
@@ -240,15 +257,17 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
                                 ),
                               ],
                             ),
-                            SizedBox(height: 12.r),
-                            GamepadControl(
-                              iconPath:
-                                  'assets/images/gamepad/Xbox_B_button.png',
-                              label: AppLocale.cancel.getString(context),
-                              onTap: _cancelRequested ? null : _requestCancel,
-                              backgroundColor: theme.colorScheme.tertiary,
-                              textColor: theme.colorScheme.onSurface,
-                            ),
+                            if (!_isSyncing) ...[
+                              SizedBox(height: 12.r),
+                              GamepadControl(
+                                iconPath:
+                                    'assets/images/gamepad/Xbox_B_button.png',
+                                label: AppLocale.cancel.getString(context),
+                                onTap: _cancelRequested ? null : _requestCancel,
+                                backgroundColor: theme.colorScheme.tertiary,
+                                textColor: theme.colorScheme.onSurface,
+                              ),
+                            ],
                           ],
                         ),
                       ] else ...[
@@ -299,8 +318,9 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
     });
 
     SystemsUpdateResult? result;
+    final run = widget.runner ?? SystemsUpdateService.checkAndUpdate;
     try {
-      result = await SystemsUpdateService.checkAndUpdate(
+      result = await run(
         // checkForUpdate already resolved these to open this dialog.
         knownUpdate: widget.updateInfo,
         onProgress: (progress, status) {
@@ -330,6 +350,7 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
 
     if (result != null) {
       setState(() {
+        _isSyncing = true;
         _downloadStatus = AppLocale.systemsUpdateSyncing.getString(context);
       });
       await SqliteService.loadAndSyncSystems();
