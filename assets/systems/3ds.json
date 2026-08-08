@@ -294,6 +294,17 @@
       }
     },
     {
+      "name": "Standalone Mandarine-Neo",
+      "unique_id": "3ds.mandarine.neo",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n io.github.ptyfyre.mandarine.neo/io.github.mandarine3ds.mandarine.activities.EmulationActivity\n  -a android.intent.action.VIEW\n  -d {file.uri}\n  --activity-clear-task\n  --activity-clear-top\n"
+        }
+      }
+    },
+    {
       "name": "Standalone Citra Emu (Antutu)",
       "unique_id": "3ds.citraemu_antutu",
       "is_retroachievements_compatible": false,
