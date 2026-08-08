@@ -6,10 +6,15 @@ class NavLayer {
   final void Function() onActivate;
   final void Function() onDeactivate;
 
+  /// Whether this layer belongs to a modal surface that must keep input focus
+  /// until it is dismissed. See [GamepadNavigationManager.pushLayer].
+  final bool modal;
+
   NavLayer({
     required this.id,
     required this.onActivate,
     required this.onDeactivate,
+    this.modal = false,
   });
 }
 
@@ -24,12 +29,48 @@ class GamepadNavigationManager {
   /// Pushes a new navigation layer to the top of the stack and activates it.
   ///
   /// Automatically deactivates the previously active layer.
+  ///
+  /// Set [modal] for layers owned by a modal surface (dialogs). A modal layer
+  /// cannot be displaced by a later non-modal push: background widgets that
+  /// mount while the dialog is open are inserted *beneath* it instead, keeping
+  /// their registration without taking input focus. Without this, a widget that
+  /// appears late — e.g. the systems grid mounting when the startup ROM scan
+  /// finishes behind the systems-update dialog — pushed itself on top and stole
+  /// the controller, so A opened a system behind the dialog.
+  ///
+  /// CAVEAT: anything a modal opens *on top of itself* (a dropdown, an option
+  /// picker) must be pushed with [modal] too, or it lands underneath its own
+  /// parent and never receives input. Only mark self-contained dialogs modal.
   static void pushLayer(
     String id, {
     required void Function() onActivate,
     required void Function() onDeactivate,
+    bool modal = false,
   }) {
-    _log.i('[GamepadNavigationManager] Pushing layer: $id');
+    _log.i('[GamepadNavigationManager] Pushing layer: $id (modal: $modal)');
+
+    // A non-modal layer never displaces an open modal. Slot it below the
+    // lowest modal so the dialogs above it stay ordered, and so it becomes the
+    // active layer once they are all dismissed.
+    final firstModal = _stack.indexWhere((layer) => layer.modal);
+    if (!modal && firstModal != -1) {
+      _log.i(
+        '[GamepadNavigationManager] Modal ${_stack[firstModal].id} holds focus; '
+        'inserting $id beneath it',
+      );
+      _stack.insert(
+        firstModal,
+        NavLayer(
+          id: id,
+          onActivate: onActivate,
+          onDeactivate: onDeactivate,
+          modal: modal,
+        ),
+      );
+      // Not activated: the modal above keeps focus. The new layer starts
+      // inactive, which is the state a freshly built navigator is already in.
+      return;
+    }
 
     if (_stack.isNotEmpty) {
       _log.d(
@@ -46,6 +87,7 @@ class GamepadNavigationManager {
       id: id,
       onActivate: onActivate,
       onDeactivate: onDeactivate,
+      modal: modal,
     );
     _stack.add(newLayer);
 

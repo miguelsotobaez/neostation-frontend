@@ -37,10 +37,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
     );
     _gamepadNav.initialize();
     _gamepadNav.activate();
+    // Modal for the same reason as the systems update dialog: it opens during
+    // startup and must keep controller focus while the ROM scan finishes and
+    // the library widgets mount behind it.
     GamepadNavigationManager.pushLayer(
       'update_dialog',
       onActivate: () => _gamepadNav.activate(),
       onDeactivate: () => _gamepadNav.deactivate(),
+      modal: true,
     );
   }
 

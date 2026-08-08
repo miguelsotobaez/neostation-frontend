@@ -40,10 +40,15 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
     );
     _gamepadNav.initialize();
     _gamepadNav.activate();
+    // Modal: this dialog is shown during startup, while the initial ROM scan
+    // is still running. The systems grid mounts when that scan finishes and
+    // would otherwise push its layer on top of this one, so A would open a
+    // system behind the dialog instead of starting the update.
     GamepadNavigationManager.pushLayer(
       'systems_update_dialog',
       onActivate: () => _gamepadNav.activate(),
       onDeactivate: () => _gamepadNav.deactivate(),
+      modal: true,
     );
   }
 
