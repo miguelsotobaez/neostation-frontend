@@ -854,6 +854,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.systemsUpdateNewVersion: 'Neue Version: {version}',
   AppLocale.systemsUpdateDownloading:
       'System-Configs werden heruntergeladen...',
+  AppLocale.systemsUpdateCancelling: 'Abbrechen...',
   AppLocale.systemsUpdateSyncing: 'Systemdatenbank wird synchronisiert...',
   AppLocale.systemsUpdateComplete: 'Systeme erfolgreich aktualisiert!',
   AppLocale.systemsUpdateError:

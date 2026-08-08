@@ -751,6 +751,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.systemsUpdateCurrentVersion: '現在のバージョン: {version}',
   AppLocale.systemsUpdateNewVersion: '新しいバージョン: {version}',
   AppLocale.systemsUpdateDownloading: 'システム設定をダウンロード中...',
+  AppLocale.systemsUpdateCancelling: 'キャンセル中...',
   AppLocale.systemsUpdateSyncing: 'システムデータベースを同期中...',
   AppLocale.systemsUpdateComplete: 'システムが正常に更新されました！',
   AppLocale.systemsUpdateError: 'システムの更新に失敗しました。後でもう一度試してください。',

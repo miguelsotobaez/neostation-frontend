@@ -850,6 +850,7 @@ mixin AppLocale {
       'systems_update_current_version';
   static const String systemsUpdateNewVersion = 'systems_update_new_version';
   static const String systemsUpdateDownloading = 'systems_update_downloading';
+  static const String systemsUpdateCancelling = 'systems_update_cancelling';
   static const String systemsUpdateSyncing = 'systems_update_syncing';
   static const String systemsUpdateComplete = 'systems_update_complete';
   static const String systemsUpdateError = 'systems_update_error';

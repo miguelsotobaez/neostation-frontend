@@ -829,6 +829,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemsUpdateCurrentVersion: 'Versi saat ini: {version}',
   AppLocale.systemsUpdateNewVersion: 'Versi baru: {version}',
   AppLocale.systemsUpdateDownloading: 'Mengunduh konfigurasi sistem...',
+  AppLocale.systemsUpdateCancelling: 'Membatalkan...',
   AppLocale.systemsUpdateSyncing: 'Menyinkronkan database sistem...',
   AppLocale.systemsUpdateComplete: 'Sistem berhasil diperbarui!',
   AppLocale.systemsUpdateError: 'Gagal memperbarui sistem. Coba lagi nanti.',

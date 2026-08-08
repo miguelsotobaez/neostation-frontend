@@ -760,6 +760,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.systemsUpdateCurrentVersion: '현재 버전: {version}',
   AppLocale.systemsUpdateNewVersion: '새 버전: {version}',
   AppLocale.systemsUpdateDownloading: '시스템 구성 다운로드 중...',
+  AppLocale.systemsUpdateCancelling: '취소하는 중...',
   AppLocale.systemsUpdateSyncing: '시스템 데이터베이스 동기화 중...',
   AppLocale.systemsUpdateComplete: '시스템이 성공적으로 업데이트되었습니다!',
   AppLocale.systemsUpdateError: '시스템을 업데이트하지 못했습니다. 나중에 다시 시도해 주세요.',

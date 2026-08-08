@@ -196,8 +196,13 @@ class SystemsUpdateService {
   ///
   /// [onProgress] receives normalized progress (0.0–1.0) and a status string
   /// after each file is downloaded.
+  ///
+  /// [shouldCancel] is polled before each file; once it returns true the
+  /// remaining downloads are skipped and null is returned. The stored version
+  /// is left untouched so the next check retries the whole update.
   static Future<SystemsUpdateResult?> checkAndUpdate({
     void Function(double progress, String status)? onProgress,
+    bool Function()? shouldCancel,
   }) async {
     try {
       // 1. Fetch manifest — failure here means no internet, bail silently.
@@ -236,6 +241,7 @@ class SystemsUpdateService {
           systemIds,
           _downloadConcurrency,
           (id) async {
+            if (shouldCancel?.call() ?? false) return;
             final fileName = '$id.json';
             final url = '$_baseRawUrl/$fileName';
             final response = await client
@@ -262,6 +268,16 @@ class SystemsUpdateService {
         );
       } finally {
         client.close();
+      }
+
+      // Leave systems_version alone on cancel: the cache now holds a mix of
+      // old and new definitions, and only an unchanged version makes the next
+      // check re-download the full set.
+      if (shouldCancel?.call() ?? false) {
+        _log.i(
+          'SystemsUpdateService: cancelled after $downloaded/$total files',
+        );
+        return null;
       }
 
       if (downloaded == 0) return null;

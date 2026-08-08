@@ -740,6 +740,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.systemsUpdateCurrentVersion: '当前版本：{version}',
   AppLocale.systemsUpdateNewVersion: '新版本：{version}',
   AppLocale.systemsUpdateDownloading: '正在下载系统配置...',
+  AppLocale.systemsUpdateCancelling: '正在取消...',
   AppLocale.systemsUpdateSyncing: '正在同步系统数据库...',
   AppLocale.systemsUpdateComplete: '系统更新成功！',
   AppLocale.systemsUpdateError: '系统更新失败，请稍后再试。',
