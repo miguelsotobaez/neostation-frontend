@@ -819,6 +819,10 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.pressToClose: 'Premi [ESC], [ENTER] o [SPAZIO] per chiudere',
 
   AppLocale.selectStorage: 'Seleziona Archiviazione',
+
+  AppLocale.homeFolder: 'Cartella home',
+
+  AppLocale.filesystemRoot: 'File system',
   AppLocale.internalStorage: 'Archiviazione Interna',
   AppLocale.externalStorage: 'Archiviazione Esterna ({name})',
   AppLocale.folderRestrictedAndroid: 'Cartella limitata da Android',

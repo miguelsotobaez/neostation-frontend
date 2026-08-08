@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import '../utils/gamepad_nav.dart';
 import '../services/game_service.dart';
+import '../services/logger_service.dart';
 import '../services/permission_service.dart';
 
 /// Full-screen directory/file browser for Android TV / Google TV.
@@ -45,6 +47,32 @@ class TvDirectoryPicker extends StatefulWidget {
       barrierDismissible: false,
       builder: (_) => TvDirectoryPicker(allowedExtensions: extensions),
     );
+  }
+
+  /// Picks a directory through the desktop picker, falling back to the in-app
+  /// browser when the platform cannot serve the request.
+  ///
+  /// On Linux the picker is the XDG portal, which exposes no `FileChooser`
+  /// interface in SteamOS Game Mode and **throws** rather than returning null.
+  /// That is what separates an unavailable picker from a user cancelling one:
+  /// a cancel yields null and must not reopen anything.
+  static Future<String?> pickDirectory(
+    BuildContext context, {
+    String? dialogTitle,
+    String? initialDirectory,
+  }) async {
+    try {
+      return await FilePicker.getDirectoryPath(
+        dialogTitle: dialogTitle,
+        initialDirectory: initialDirectory,
+      );
+    } catch (e) {
+      LoggerService.instance.w(
+        'Directory picker unavailable ($e); using the in-app browser',
+      );
+      if (!context.mounted) return null;
+      return show(context);
+    }
   }
 
   /// Portal-free executable picker for Linux and SteamOS Game Mode.
@@ -213,37 +241,94 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
     Navigator.of(context).pop();
   }
 
+  /// Volume roots offered when browsing for a *directory* on Linux.
+  ///
+  /// The XDG portal exposes no `FileChooser` interface in SteamOS Game Mode —
+  /// `xdg-desktop-portal` selects a backend from `XDG_CURRENT_DESKTOP`, which
+  /// gamescope leaves unset — so this list is the only way to reach a ROM
+  /// folder there.
+  Future<List<_StorageVolume>> _linuxDirectoryVolumes(
+    BuildContext context,
+  ) async {
+    // Read localized labels before the first await: no context after a gap.
+    final homeLabel = AppLocale.homeFolder.getString(context);
+    final rootLabel = AppLocale.filesystemRoot.getString(context);
+    final home = Platform.environment['HOME'] ?? '';
+    final user = Platform.environment['USER'] ?? '';
+
+    final volumes = <_StorageVolume>[
+      if (home.isNotEmpty)
+        _StorageVolume(name: homeLabel, path: home, isInternal: true),
+    ];
+    final seen = <String>{for (final volume in volumes) volume.path};
+
+    // Removable and secondary media. SteamOS mounts the SD card and any USB
+    // drive at /run/media/<user>/<label>; older layouts omit the user segment
+    // and other distributions use /media or /mnt. The user-scoped roots are
+    // marked seen so the bare roots do not offer them a second time.
+    final userScoped = <String>[
+      if (user.isNotEmpty) '/run/media/$user',
+      if (user.isNotEmpty) '/media/$user',
+    ];
+    seen.addAll(userScoped);
+    for (final root in [...userScoped, '/run/media', '/media', '/mnt']) {
+      final dir = Directory(root);
+      if (!await dir.exists()) continue;
+      try {
+        for (final entry in await dir.list().toList()) {
+          if (entry is! Directory || !seen.add(entry.path)) continue;
+          volumes.add(
+            _StorageVolume(
+              name: entry.path.split('/').last,
+              path: entry.path,
+              isInternal: false,
+            ),
+          );
+        }
+      } on FileSystemException {
+        // An unreadable mount root is not fatal — keep the other volumes.
+      }
+    }
+
+    if (seen.add('/')) {
+      volumes.add(_StorageVolume(name: rootLabel, path: '/', isInternal: true));
+    }
+    return volumes;
+  }
+
   Future<void> _detectVolumes(BuildContext context) async {
     final volumes = <_StorageVolume>[];
 
-    if (Platform.isLinux && widget.executableMode) {
+    if (Platform.isLinux) {
       final home = Platform.environment['HOME'] ?? '';
-      final candidates = <_StorageVolume>[
-        if (home.isNotEmpty)
-          _StorageVolume(name: 'Home', path: home, isInternal: true),
-        if (home.isNotEmpty)
-          _StorageVolume(
-            name: 'Applications',
-            path: '$home/Applications',
-            isInternal: true,
-          ),
-        if (home.isNotEmpty)
-          _StorageVolume(
-            name: 'Local binaries',
-            path: '$home/.local/bin',
-            isInternal: true,
-          ),
-        const _StorageVolume(
-          name: 'System binaries',
-          path: '/usr/bin',
-          isInternal: true,
-        ),
-        const _StorageVolume(
-          name: 'Host system binaries',
-          path: '/run/host/usr/bin',
-          isInternal: true,
-        ),
-      ];
+      final candidates = widget.executableMode
+          ? <_StorageVolume>[
+              if (home.isNotEmpty)
+                _StorageVolume(name: 'Home', path: home, isInternal: true),
+              if (home.isNotEmpty)
+                _StorageVolume(
+                  name: 'Applications',
+                  path: '$home/Applications',
+                  isInternal: true,
+                ),
+              if (home.isNotEmpty)
+                _StorageVolume(
+                  name: 'Local binaries',
+                  path: '$home/.local/bin',
+                  isInternal: true,
+                ),
+              const _StorageVolume(
+                name: 'System binaries',
+                path: '/usr/bin',
+                isInternal: true,
+              ),
+              const _StorageVolume(
+                name: 'Host system binaries',
+                path: '/run/host/usr/bin',
+                isInternal: true,
+              ),
+            ]
+          : await _linuxDirectoryVolumes(context);
       for (final candidate in candidates) {
         if (await Directory(candidate.path).exists()) volumes.add(candidate);
       }

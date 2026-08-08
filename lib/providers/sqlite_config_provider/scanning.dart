@@ -716,8 +716,15 @@ extension SqliteConfigScanning on SqliteConfigProvider {
             }
           }
         }
+      } else if (context != null && context.mounted) {
+        // Desktop: the platform picker, falling back to the in-app browser
+        // where no XDG portal backend exists (SteamOS Game Mode).
+        result = await TvDirectoryPicker.pickDirectory(
+          context,
+          dialogTitle: 'Select ROM Folder',
+        );
       } else {
-        // Desktop: Use standard file picker
+        // Desktop without a context to host the fallback browser.
         result = await FilePicker.getDirectoryPath(
           dialogTitle: 'Select ROM Folder',
         );

@@ -732,6 +732,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.pressToClose: '닫으려면 [ESC], [ENTER] 또는 [SPACE]를 누르세요',
 
   AppLocale.selectStorage: '저장소 선택',
+
+  AppLocale.homeFolder: '홈',
+
+  AppLocale.filesystemRoot: '파일 시스템',
   AppLocale.internalStorage: '내부 저장소',
   AppLocale.externalStorage: '외부 저장소({name})',
   AppLocale.folderRestrictedAndroid: 'Android에서 제한된 폴더',

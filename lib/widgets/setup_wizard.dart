@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
@@ -766,7 +765,8 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           }
         }
       } else {
-        selected = await FilePicker.getDirectoryPath(
+        selected = await TvDirectoryPicker.pickDirectory(
+          context,
           dialogTitle: AppLocale.selectUserDataFolder.getString(context),
           initialDirectory: _selectedUserDataPath,
         );
@@ -1449,7 +1449,8 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           }
         }
       } else {
-        selected = await FilePicker.getDirectoryPath(
+        selected = await TvDirectoryPicker.pickDirectory(
+          context,
           dialogTitle: AppLocale.esdeSelectFolder.getString(context),
         );
       }
@@ -1947,7 +1948,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           await configProvider.addRomFolder(result, scan: false);
         }
       } else {
-        await configProvider.selectRomFolder(scan: false);
+        await configProvider.selectRomFolder(scan: false, context: context);
         // Provider already called addRomFolder internally; read back the path
         result = configProvider.config.romFolder;
       }

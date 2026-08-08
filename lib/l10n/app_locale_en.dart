@@ -795,6 +795,10 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.pressToClose: 'Press [ESC], [ENTER] or [SPACE] to close',
 
   AppLocale.selectStorage: 'Select Storage',
+
+  AppLocale.homeFolder: 'Home',
+
+  AppLocale.filesystemRoot: 'Filesystem',
   AppLocale.internalStorage: 'Internal Storage',
   AppLocale.externalStorage: 'External Storage ({name})',
   AppLocale.folderRestrictedAndroid: 'Folder restricted by Android',

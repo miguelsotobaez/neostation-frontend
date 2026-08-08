@@ -715,6 +715,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.pressToClose: '按 [ESC], [ENTER] 或 [空格] 關閉',
 
   AppLocale.selectStorage: '選擇儲存空間',
+
+  AppLocale.homeFolder: '主目錄',
+
+  AppLocale.filesystemRoot: '檔案系統',
   AppLocale.internalStorage: '內部儲存空間',
   AppLocale.externalStorage: '外部儲存空間 ({name})',
   AppLocale.folderRestrictedAndroid: '資料夾受 Android 限制',

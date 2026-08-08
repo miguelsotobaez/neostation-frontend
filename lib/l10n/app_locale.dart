@@ -821,6 +821,8 @@ mixin AppLocale {
   // TV directory picker
   // ---------------------------------------------------------------------------
   static const String selectStorage = 'select_storage';
+  static const String homeFolder = 'home_folder';
+  static const String filesystemRoot = 'filesystem_root';
   static const String internalStorage = 'internal_storage';
   static const String externalStorage = 'external_storage';
   static const String folderRestrictedAndroid = 'folder_restricted_android';

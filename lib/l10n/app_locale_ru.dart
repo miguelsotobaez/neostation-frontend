@@ -798,6 +798,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.pressToClose: 'Нажмите [ESC], [ENTER] или [ПРОБЕЛ], чтобы закрыть',
 
   AppLocale.selectStorage: 'Выбрать хранилище',
+
+  AppLocale.homeFolder: 'Домашняя папка',
+
+  AppLocale.filesystemRoot: 'Файловая система',
   AppLocale.internalStorage: 'Внутренняя память',
   AppLocale.externalStorage: 'Внешняя память ({name})',
   AppLocale.folderRestrictedAndroid: 'Папка ограничена Android',

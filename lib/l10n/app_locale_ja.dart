@@ -725,6 +725,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.pressToClose: ' [ESC], [ENTER], または [SPACE] を押して閉じる',
 
   AppLocale.selectStorage: 'ストレージを選択',
+
+  AppLocale.homeFolder: 'ホーム',
+
+  AppLocale.filesystemRoot: 'ファイルシステム',
   AppLocale.internalStorage: '内部ストレージ',
   AppLocale.externalStorage: '外部ストレージ ({name})',
   AppLocale.folderRestrictedAndroid: 'Androidによる制限付きフォルダ',

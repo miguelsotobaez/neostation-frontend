@@ -4,7 +4,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/providers/file_provider.dart';
@@ -268,7 +267,8 @@ class DirectoriesSettingsContentState
           }
         }
       } else {
-        selected = await FilePicker.getDirectoryPath(
+        selected = await TvDirectoryPicker.pickDirectory(
+          context,
           dialogTitle: AppLocale.esdeSelectFolder.getString(context),
         );
       }
@@ -502,7 +502,8 @@ class DirectoriesSettingsContentState
           }
         }
       } else {
-        selected = await FilePicker.getDirectoryPath(
+        selected = await TvDirectoryPicker.pickDirectory(
+          context,
           dialogTitle: AppLocale.selectRomsFolder.getString(context),
         );
       }
@@ -581,7 +582,8 @@ class DirectoriesSettingsContentState
           }
         }
       } else {
-        selected = await FilePicker.getDirectoryPath(
+        selected = await TvDirectoryPicker.pickDirectory(
+          context,
           dialogTitle: AppLocale.selectUserDataFolder.getString(context),
           initialDirectory: _currentUserDataPath,
         );

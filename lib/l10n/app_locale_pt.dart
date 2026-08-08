@@ -807,6 +807,10 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.pressToClose: 'Pressione [ESC], [ENTER] ou [ESPAÇO] para fechar',
 
   AppLocale.selectStorage: 'Selecionar Armazenamento',
+
+  AppLocale.homeFolder: 'Pasta pessoal',
+
+  AppLocale.filesystemRoot: 'Sistema de ficheiros',
   AppLocale.internalStorage: 'Armazenamento Interno',
   AppLocale.externalStorage: 'Armazenamento Externo ({name})',
   AppLocale.folderRestrictedAndroid: 'Pasta restrita pelo Android',

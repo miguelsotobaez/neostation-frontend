@@ -800,6 +800,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.pressToClose: 'Tekan [ESC], [ENTER], atau [SPASI] untuk menutup',
 
   AppLocale.selectStorage: 'Pilih Penyimpanan',
+
+  AppLocale.homeFolder: 'Beranda',
+
+  AppLocale.filesystemRoot: 'Sistem berkas',
   AppLocale.internalStorage: 'Penyimpanan Internal',
   AppLocale.externalStorage: 'Penyimpanan Eksternal ({name})',
   AppLocale.folderRestrictedAndroid: 'Folder dibatasi oleh Android',

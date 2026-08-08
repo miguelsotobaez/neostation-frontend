@@ -824,6 +824,10 @@ const Map<String, dynamic> appLocaleDe = {
       'Drücke [ESC], [ENTER] oder [LEERTASTE] zum Schließen',
 
   AppLocale.selectStorage: 'Speicher auswählen',
+
+  AppLocale.homeFolder: 'Persönlicher Ordner',
+
+  AppLocale.filesystemRoot: 'Dateisystem',
   AppLocale.internalStorage: 'Interner Speicher',
   AppLocale.externalStorage: 'Externer Speicher ({name})',
   AppLocale.folderRestrictedAndroid: 'Von Android eingeschränkter Ordner',
