@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'config_service.dart';
 import 'logger_service.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../utils/bounded_concurrency.dart';
 
 const _manifestUrl =
     'https://raw.githubusercontent.com/misobadev/neostation-frontend/main/assets/manifest.json';
@@ -45,6 +46,18 @@ class SystemsUpdateInfo {
 /// JSON files into the user data directory so LauncherService can use them.
 /// When no internet is available the bundled assets are used as-is.
 class SystemsUpdateService {
+  /// Max system files fetched at once. The payload is tiny (~7 KB per file,
+  /// ~885 KB for the full set) but each request costs a round trip, so the
+  /// download is latency-bound and concurrency is what makes it fast.
+  /// Downloading the ~120 files serially takes ~20 s on a wired connection
+  /// and well over a minute on handheld Wi-Fi; a pool of 6 brings that to
+  /// about a second. Kept modest so slow devices and GitHub both stay happy.
+  static const int _downloadConcurrency = 6;
+
+  /// Per-file request timeout. Without one, a single stalled connection would
+  /// hang the whole update with no way out.
+  static const Duration _fileTimeout = Duration(seconds: 15);
+
   static Future<String> _getSystemsCachePath() async {
     final base = await ConfigService.getUserDataPath();
     final dir = Directory(path.join(base, 'systems'));
@@ -210,31 +223,45 @@ class SystemsUpdateService {
 
       // 4. Download each file to the local cache.
       final cacheDir = await _getSystemsCachePath();
-      var downloaded = 0;
       final total = systemIds.length;
+      var downloaded = 0;
+      var completed = 0;
 
-      for (int i = 0; i < total; i++) {
-        final id = systemIds[i];
-        final fileName = '$id.json';
-        final url = '$_baseRawUrl/$fileName';
-        try {
-          final response = await http.get(Uri.parse(url));
-          if (response.statusCode == 200) {
-            final file = File(path.join(cacheDir, fileName));
-            await file.writeAsString(response.body, flush: true);
-            downloaded++;
-          } else {
-            _log.w(
-              'SystemsUpdateService: failed to download $fileName (${response.statusCode})',
+      // One client for the whole batch: the top-level `http.get` helper builds
+      // and closes a Client per call, so it can never reuse a connection and
+      // every file pays a fresh TCP + TLS handshake.
+      final client = http.Client();
+      try {
+        await runBounded<String>(
+          systemIds,
+          _downloadConcurrency,
+          (id) async {
+            final fileName = '$id.json';
+            final url = '$_baseRawUrl/$fileName';
+            final response = await client
+                .get(Uri.parse(url))
+                .timeout(_fileTimeout);
+            if (response.statusCode == 200) {
+              final file = File(path.join(cacheDir, fileName));
+              await file.writeAsString(response.body, flush: true);
+              downloaded++;
+            } else {
+              _log.w(
+                'SystemsUpdateService: failed to download $fileName (${response.statusCode})',
+              );
+            }
+          },
+          onEach: () {
+            completed++;
+            onProgress?.call(
+              completed / total,
+              'Downloading systems ($completed/$total)...',
             );
-          }
-        } catch (e) {
-          _log.w('SystemsUpdateService: error downloading $fileName: $e');
-        }
-        onProgress?.call(
-          (i + 1) / total,
-          'Downloading systems (${i + 1}/$total)...',
+          },
+          label: 'SystemsUpdateService: download',
         );
+      } finally {
+        client.close();
       }
 
       if (downloaded == 0) return null;
