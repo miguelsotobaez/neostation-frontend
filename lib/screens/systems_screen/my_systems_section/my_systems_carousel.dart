@@ -180,7 +180,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       onNavigateRight: _navigateNext,
       onSelectItem: _selectCurrentSystem,
       onSettings: _openSystemSettingsFromCarousel,
-      onBack: AppNavigation.requestExit,
       onXButton: () {
         HeaderSortDropdown.globalKey.currentState?.showDropdown();
       },
