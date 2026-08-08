@@ -47,12 +47,16 @@ class SystemsUpdateInfo {
 /// When no internet is available the bundled assets are used as-is.
 class SystemsUpdateService {
   /// Max system files fetched at once. The payload is tiny (~7 KB per file,
-  /// ~885 KB for the full set) but each request costs a round trip, so the
+  /// ~865 KB for the full set) but each request costs a round trip, so the
   /// download is latency-bound and concurrency is what makes it fast.
-  /// Downloading the ~120 files serially takes ~20 s on a wired connection
-  /// and well over a minute on handheld Wi-Fi; a pool of 6 brings that to
-  /// about a second. Kept modest so slow devices and GitHub both stay happy.
-  static const int _downloadConcurrency = 6;
+  ///
+  /// Measured against the live endpoint: serially the ~120 files cost ~196 ms
+  /// each (~24 s total) on a wired connection, and well over a minute on
+  /// handheld Wi-Fi. Pooled, the same set takes ~3 s cold and ~0.3 s warm.
+  /// Raising the pool past 8 kept helping slightly (~176 ms warm at 16) but
+  /// not enough to justify the extra sockets on a handheld's Wi-Fi stack, and
+  /// 8 matches the pool NeoAssetsService already uses for theme assets.
+  static const int _downloadConcurrency = 8;
 
   /// Per-file request timeout. Without one, a single stalled connection would
   /// hang the whole update with no way out.
