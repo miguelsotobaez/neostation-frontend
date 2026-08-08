@@ -24,7 +24,12 @@ import 'widgets/app_dock.dart';
 import 'widgets/now_playing_panel.dart';
 
 class SecondaryScreen extends StatefulWidget {
-  const SecondaryScreen({super.key});
+  const SecondaryScreen({super.key, this.initialThemeName});
+
+  /// Theme name read from the database by this engine's entrypoint, used until
+  /// the main engine pushes its state. Without it the display would open on
+  /// the platform-brightness fallback — black on a light theme.
+  final String? initialThemeName;
 
   @override
   State<SecondaryScreen> createState() => _SecondaryScreenState();
@@ -734,7 +739,9 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       builder: (_, child) => ValueListenableBuilder<SecondaryDisplayStateData?>(
         valueListenable: _secondaryDisplayState ?? ValueNotifier(null),
         builder: (context, value, child) {
-          final theme = resolveTheme(value?.themeName);
+          final theme = resolveTheme(
+            value?.themeName ?? widget.initialThemeName,
+          );
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             localizationsDelegates:
@@ -758,9 +765,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                 // so the _buildXxx helpers can resolve AppLocale strings.
                 _l10nContext = context;
                 return Scaffold(
+                  // Falls back to the resolved theme rather than black: before
+                  // the main engine pushes a background, a light-theme user
+                  // would otherwise get a black panel on startup.
                   backgroundColor: value?.backgroundColor != null
                       ? Color(value!.backgroundColor!)
-                      : Colors.black,
+                      : theme.scaffoldBackgroundColor,
                   body: value == null
                       ? _buildDefaultStaticUI()
                       : Stack(

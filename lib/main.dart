@@ -20,6 +20,7 @@ import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
+import 'package:neostation/services/startup_theme_cache.dart';
 import 'package:neostation/widgets/shimmering_logo.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
@@ -352,6 +353,12 @@ void main() async {
     }
   }
 
+  // Resolve the saved theme before the first themed frame. Created lazily,
+  // ThemeProvider would paint its platform-brightness fallback until the
+  // database read returned — a white flash on any platform that reports a
+  // light brightness (the Steam Deck does) for a user on a dark theme.
+  final themeProvider = await ThemeProvider.create();
+
   // Build NeoSync provider graph before runApp so SyncManager can register it.
   final neoSyncService = NeoSyncService();
   final neoSyncProvider = NeoSyncProvider(neoSyncService);
@@ -374,6 +381,7 @@ void main() async {
       sqliteDatabaseProvider: sqliteDatabaseProvider,
       neoSyncService: neoSyncService,
       neoSyncProvider: neoSyncProvider,
+      themeProvider: themeProvider,
     ),
   );
 
@@ -423,14 +431,20 @@ String _startupString(String key) {
 
 /// Shared chrome for the pre-initialization screens: logo, wordmark and a
 /// caller-supplied status area.
-class _StartupScaffold extends StatelessWidget {
+///
+/// These screens run before the database is readable, so they cannot ask
+/// [ThemeProvider] for the selected theme. They read the palette mirrored into
+/// [StartupThemeCache] on the last theme change instead, which keeps the whole
+/// intro in the user's theme rather than always-dark chrome.
+class _StartupScaffold extends StatefulWidget {
   const _StartupScaffold({
-    required this.children,
+    required this.childrenBuilder,
     this.onKeyEvent,
     this.animatedLogo = false,
   });
 
-  final List<Widget> children;
+  /// Builds the status area, given the resolved startup palette.
+  final List<Widget> Function(StartupThemeColors colors) childrenBuilder;
 
   /// Show the shimmering logo instead of the static one. Used by the loading
   /// screen, where the shine doubles as the activity indicator; the error
@@ -443,24 +457,45 @@ class _StartupScaffold extends StatelessWidget {
   final KeyEventResult Function(KeyEvent)? onKeyEvent;
 
   @override
+  State<_StartupScaffold> createState() => _StartupScaffoldState();
+}
+
+class _StartupScaffoldState extends State<_StartupScaffold> {
+  /// Starts on the dark chrome — the same color the Android splash hands over
+  /// — and is replaced once the cache read returns. That read is a fast
+  /// preferences lookup, so on a light theme the handoff lands within the
+  /// first frames rather than being visible as a change of screen.
+  StartupThemeColors _colors = StartupThemeColors.fallback;
+
+  @override
+  void initState() {
+    super.initState();
+    StartupThemeCache.load().then((colors) {
+      if (mounted) setState(() => _colors = colors);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final children = widget.childrenBuilder(_colors);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: _colors.themeData,
       home: Scaffold(
-        // Matches the dark theme's scaffold color so the handoff into the
+        // Matches the selected theme's scaffold color so the handoff into the
         // themed splash doesn't read as a background jump.
-        backgroundColor: const Color(0xFF15191e),
+        backgroundColor: _colors.background,
         body: Focus(
-          autofocus: onKeyEvent != null,
-          onKeyEvent: onKeyEvent == null
+          autofocus: widget.onKeyEvent != null,
+          onKeyEvent: widget.onKeyEvent == null
               ? null
-              : (_, event) => onKeyEvent!(event),
+              : (_, event) => widget.onKeyEvent!(event),
           // Animated mode pins the logo at the exact screen centre — the same
           // spot the Android 12+ splash icon occupies — with the status text
           // hung below centre, so the native→Flutter handoff and the later
           // screens never move the logo. The error screen keeps the simpler
           // centred column with the wordmark.
-          child: animatedLogo
+          child: widget.animatedLogo
               ? Stack(
                   children: [
                     const Center(child: ShimmeringLogo()),
@@ -490,10 +525,10 @@ class _StartupScaffold extends StatelessWidget {
                           height: 112,
                         ),
                         const SizedBox(height: 24),
-                        const Text(
+                        Text(
                           'NeoStation',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: _colors.foreground,
                             fontSize: 28,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 1.2,
@@ -547,7 +582,7 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
   Widget build(BuildContext context) {
     return _StartupScaffold(
       animatedLogo: true,
-      children: [
+      childrenBuilder: (colors) => [
         AnimatedOpacity(
           opacity: _showText ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 400),
@@ -560,7 +595,7 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
               // small and dimmed. GoogleFonts falls back gracefully for the
               // first frames if the font isn't warmed up yet.
               style: GoogleFonts.anta(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: colors.foreground.withValues(alpha: 0.6),
                 fontSize: 17,
                 letterSpacing: 0.3,
               ),
@@ -609,7 +644,7 @@ class StartupStorageErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return _StartupScaffold(
       onKeyEvent: _handleKey,
-      children: [
+      childrenBuilder: (colors) => [
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Column(
@@ -618,15 +653,18 @@ class StartupStorageErrorApp extends StatelessWidget {
               Text(
                 _startupString(AppLocale.startupStorageUnavailable),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFC4CBD6), fontSize: 16),
+                style: TextStyle(
+                  color: colors.foreground.withValues(alpha: 0.8),
+                  fontSize: 16,
+                ),
               ),
               if (storagePath != null && storagePath!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
                   storagePath!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF8A93A3),
+                  style: TextStyle(
+                    color: colors.foreground.withValues(alpha: 0.55),
                     fontSize: 13,
                   ),
                 ),
@@ -698,13 +736,18 @@ Future<void> subDisplay() async {
   // localization independently — otherwise AppLocale.getString() falls back to
   // raw keys here. Mirror the persisted-language init done in main().
   String initLang = 'en';
+  // The main engine only pushes the theme name once it has state to share, so
+  // without this the display would open on the brightness fallback (black)
+  // even for a user on a light theme. Read it from the same config row.
+  String? initThemeName;
   try {
     final rawConfig = await ConfigRepository.getUserConfig();
     if (rawConfig != null && rawConfig['app_language'] != null) {
       initLang = rawConfig['app_language'].toString();
     }
+    initThemeName = rawConfig?['theme_name']?.toString();
   } catch (e) {
-    debugPrint('Secondary display could not load saved language: $e');
+    debugPrint('Secondary display could not load saved config: $e');
   }
   await FlutterLocalization.instance.ensureInitialized();
   FlutterLocalization.instance.init(
@@ -725,7 +768,7 @@ Future<void> subDisplay() async {
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
 
-  runApp(const SecondaryScreen());
+  runApp(SecondaryScreen(initialThemeName: initThemeName));
 }
 
 /// Provides MaterialLocalizations as a fallback for locales that Flutter's
@@ -757,6 +800,10 @@ class MyApp extends StatefulWidget {
   final NeoSyncService neoSyncService;
   final NeoSyncProvider neoSyncProvider;
 
+  /// Built in `main()` with the saved theme already resolved, so the first
+  /// frame paints in the user's theme rather than the brightness fallback.
+  final ThemeProvider themeProvider;
+
   const MyApp({
     super.key,
     required this.fileProvider,
@@ -765,6 +812,7 @@ class MyApp extends StatefulWidget {
     required this.sqliteDatabaseProvider,
     required this.neoSyncService,
     required this.neoSyncProvider,
+    required this.themeProvider,
   });
 
   @override
@@ -803,7 +851,7 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider.value(value: SyncManager.instance),
         ChangeNotifierProvider(create: (context) => BillingService()),
         ChangeNotifierProvider(create: (context) => NotificationService()),
-        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider.value(value: widget.themeProvider),
         ChangeNotifierProvider(create: (context) => ScrapingProvider()),
         ChangeNotifierProvider(
           // Eager (not lazy): auto-login must run at startup so RA is connected

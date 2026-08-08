@@ -4,6 +4,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/themes/app_themes.dart';
 import 'package:neostation/services/custom_theme_service.dart';
+import 'package:neostation/services/startup_theme_cache.dart';
 import 'package:neostation/repositories/config_repository.dart';
 
 /// Provider responsible for managing the application's visual theme.
@@ -82,9 +83,22 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
     'horizon': 'Horizon',
   };
 
-  ThemeProvider() {
-    _loadSavedTheme();
+  ThemeProvider._() {
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Builds a provider whose saved theme is already resolved.
+  ///
+  /// Deliberately the only way to construct one: resolving the theme after
+  /// construction leaves the first frames on the platform-brightness fallback,
+  /// and on a device whose OS reports a light brightness (the Steam Deck does)
+  /// that fallback is the light theme — a white flash for anyone on a dark
+  /// theme. Awaiting this before `runApp` means the very first painted frame
+  /// already uses the user's theme.
+  static Future<ThemeProvider> create() async {
+    final provider = ThemeProvider._();
+    await provider._loadSavedTheme();
+    return provider;
   }
 
   @override
@@ -99,8 +113,16 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (_currentThemeName == 'system') {
       _log.i('Platform brightness changed, updating system theme...');
       _updateSystemTheme();
-      notifyListeners();
+      _notifyThemeChanged();
     }
+  }
+
+  /// Notifies listeners and mirrors the resolved palette for the startup
+  /// screens. Every theme change goes through here, so those screens are never
+  /// a launch behind the user's choice.
+  void _notifyThemeChanged() {
+    StartupThemeCache.save(currentTheme);
+    notifyListeners();
   }
 
   /// Internal logic to resolve the appropriate theme based on system brightness.
@@ -136,15 +158,15 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (savedThemeName == 'system') {
         _currentThemeName = 'system';
         _updateSystemTheme();
-        notifyListeners();
+        _notifyThemeChanged();
       } else if (availableThemes.containsKey(savedThemeName)) {
         _currentTheme = availableThemes[savedThemeName]!;
         _currentThemeName = savedThemeName;
-        notifyListeners();
+        _notifyThemeChanged();
       } else if (AppThemes.customThemes.containsKey(savedThemeName)) {
         _currentTheme = AppThemes.customThemes[savedThemeName]!.themeData;
         _currentThemeName = savedThemeName;
-        notifyListeners();
+        _notifyThemeChanged();
       } else {
         // The previously selected theme is no longer available (e.g. removed
         // in an update). Fall back to the system theme and persist it.
@@ -154,7 +176,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         _currentThemeName = 'system';
         _updateSystemTheme();
         await ConfigRepository.updateThemeName('system');
-        notifyListeners();
+        _notifyThemeChanged();
       }
     } catch (e) {
       _log.e('Error loading saved theme: $e');
@@ -175,7 +197,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         _log.e('Error saving theme: $e');
       }
 
-      notifyListeners();
+      _notifyThemeChanged();
       return;
     }
 
@@ -192,7 +214,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         _log.e('Error saving theme: $e');
       }
 
-      notifyListeners();
+      _notifyThemeChanged();
     }
   }
 

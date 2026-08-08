@@ -216,9 +216,16 @@ Widget _withFanartDim(Widget art, SecondaryDisplayStateData value) {
 }
 
 Widget buildShaderFallback(SecondaryDisplayStateData value) {
-  return Container(
-    color: value.backgroundColor != null
-        ? Color(value.backgroundColor!)
-        : Colors.black,
+  if (value.backgroundColor != null) {
+    return Container(color: Color(value.backgroundColor!));
+  }
+  // No background pushed yet — the WELCOME screen during startup, before the
+  // main engine has sent one. Falling back to the theme rather than a hardcoded
+  // black keeps the panel in the user's theme instead of showing a dark screen
+  // for the whole of the boot. OLED resolves to black here anyway, so the
+  // empty-case OLED look described above is preserved.
+  return Builder(
+    builder: (context) =>
+        Container(color: Theme.of(context).scaffoldBackgroundColor),
   );
 }
