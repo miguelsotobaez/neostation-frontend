@@ -200,27 +200,44 @@ class SystemsUpdateService {
   /// [shouldCancel] is polled before each file; once it returns true the
   /// remaining downloads are skipped and null is returned. The stored version
   /// is left untouched so the next check retries the whole update.
+  ///
+  /// [knownUpdate] short-circuits the version check. Pass the result of an
+  /// earlier [checkForUpdate] — as the update dialog does — to skip re-fetching
+  /// the manifest and re-comparing versions that were just resolved.
   static Future<SystemsUpdateResult?> checkAndUpdate({
+    SystemsUpdateInfo? knownUpdate,
     void Function(double progress, String status)? onProgress,
     bool Function()? shouldCancel,
   }) async {
     try {
-      // 1. Fetch manifest — failure here means no internet, bail silently.
-      final manifest = await _fetchManifest();
-      if (manifest == null) return null;
+      // 1. Resolve the target version, unless the caller already has it.
+      final String remoteVersion;
+      if (knownUpdate != null) {
+        remoteVersion = knownUpdate.remoteVersion;
+        _log.i(
+          'SystemsUpdateService: new version $remoteVersion '
+          '(local: ${knownUpdate.currentVersion})',
+        );
+      } else {
+        // Fetching the manifest here doubles as the connectivity check —
+        // failure means no internet, so bail silently.
+        final manifest = await _fetchManifest();
+        if (manifest == null) return null;
 
-      if (!await _appMeetsManifestMinimum(manifest)) return null;
+        if (!await _appMeetsManifestMinimum(manifest)) return null;
 
-      final remoteVersion = manifest['latest_version']?.toString() ?? '';
-      if (remoteVersion.isEmpty) return null;
+        final version = manifest['latest_version']?.toString() ?? '';
+        if (version.isEmpty) return null;
 
-      // 2. Compare with locally stored version.
-      final localVersion = await SqliteService.getSystemsVersion();
-      if (_meetsMinimumVersion(localVersion, remoteVersion)) return null;
+        // 2. Compare with locally stored version.
+        final localVersion = await SqliteService.getSystemsVersion();
+        if (_meetsMinimumVersion(localVersion, version)) return null;
 
-      _log.i(
-        'SystemsUpdateService: new version $remoteVersion (local: $localVersion)',
-      );
+        remoteVersion = version;
+        _log.i(
+          'SystemsUpdateService: new version $remoteVersion (local: $localVersion)',
+        );
+      }
 
       // 3. Get the full list of system files from the GitHub repo directory.
       final systemIds = await _fetchSystemListFromApi();

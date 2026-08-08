@@ -301,6 +301,8 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
     SystemsUpdateResult? result;
     try {
       result = await SystemsUpdateService.checkAndUpdate(
+        // checkForUpdate already resolved these to open this dialog.
+        knownUpdate: widget.updateInfo,
         onProgress: (progress, status) {
           // Once cancellation is requested the status line belongs to the
           // cancelling message — don't let trailing progress overwrite it.
