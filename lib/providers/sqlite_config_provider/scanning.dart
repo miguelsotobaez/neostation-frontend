@@ -17,6 +17,21 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     if (_config.romFolders.contains(folderPath)) return;
     if (_config.romFolders.length >= 5) return;
 
+    // A desktop-portal document path outlives neither the reboot nor the grant
+    // that produced it, so storing one hands the user a library that silently
+    // empties later. Refuse it at the door and say why.
+    if (isTransientPortalPath(folderPath)) {
+      _error =
+          'That folder came from a temporary desktop-portal path '
+          '($folderPath) and would stop working after a restart. '
+          'Pick it again with the built-in folder browser.';
+      SqliteConfigProvider._log.w(
+        'Rejected transient portal ROM folder: $folderPath',
+      );
+      _notify();
+      return;
+    }
+
     try {
       _setLoading(true);
       final newList = [..._config.romFolders, folderPath];
@@ -147,6 +162,46 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         _setScanning(false);
         _notify();
         return;
+      }
+    }
+
+    // A configured ROM root can stop resolving between scans: an unmounted
+    // drive, a deleted folder, or a desktop-portal document path whose grant
+    // expired. Off Android nothing verified that until now, so the walk found
+    // nothing and the prune phase deleted every ROM row — indistinguishable
+    // from data loss to the user. Keep the library and explain instead.
+    if (!Platform.isAndroid && _config.romFolders.isNotEmpty) {
+      final unreachable = <String>[];
+      for (final folder in _config.romFolders) {
+        if (!await Directory(folder).exists()) unreachable.add(folder);
+      }
+      if (unreachable.isNotEmpty && await _hasStoredRoms()) {
+        // A portal grant cannot be restored by plugging anything back in, so
+        // that case needs different advice from a missing drive.
+        final advice = unreachable.any(isTransientPortalPath)
+            ? 'That path came from a temporary desktop-portal grant and '
+                  'cannot come back — remove it in Settings > Directories '
+                  'and add the folder again.'
+            : 'Reconnect the drive, or remove the folder in '
+                  'Settings > Directories.';
+        final plural = unreachable.length == 1 ? '' : 's';
+        _error =
+            'Cannot reach ROM folder$plural: ${unreachable.join(', ')}. '
+            'Existing games were kept. $advice';
+        SqliteConfigProvider._log.e(
+          'Scan aborted, ${unreachable.length} unreachable ROM folder(s); '
+          'library preserved: ${unreachable.join(', ')}',
+        );
+        _setScanning(false);
+        _notify();
+        return;
+      }
+      if (unreachable.isNotEmpty) {
+        // No library at risk, so scanning on is safe — but still say so.
+        SqliteConfigProvider._log.w(
+          'Unreachable ROM folder(s) ignored (no stored ROMs): '
+          '${unreachable.join(', ')}',
+        );
       }
     }
 
