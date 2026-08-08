@@ -22,10 +22,17 @@ final _log = LoggerService.instance;
 class SystemsUpdateResult {
   final String newVersion;
   final int filesUpdated;
+  final int filesTotal;
   const SystemsUpdateResult({
     required this.newVersion,
     required this.filesUpdated,
+    required this.filesTotal,
   });
+
+  /// Whether every file in the set landed. A partial update applies the files
+  /// it did get but deliberately leaves the stored version behind, so the next
+  /// check retries — see `checkAndUpdate`.
+  bool get isComplete => filesUpdated == filesTotal;
 }
 
 /// Info returned when a systems update is available but not yet downloaded.
@@ -303,14 +310,32 @@ class SystemsUpdateService {
 
       if (downloaded == 0) return null;
 
-      // 5. Persist new version.
-      await SqliteService.updateSystemsVersion(remoteVersion);
-      _log.i(
-        'SystemsUpdateService: updated $downloaded files to v$remoteVersion',
-      );
+      // 5. Persist the new version — but only once every file actually landed.
+      //
+      // Advancing it on a partial download strands the files that failed: the
+      // stored version would claim the set is current, so no later check would
+      // ever consider them out of date and they would stay stale forever.
+      // Leaving it means the next check retries the whole set instead. The
+      // shortfall is logged rather than swallowed, so a file that fails
+      // systematically (a genuine 404 in the repo listing, say) shows up as a
+      // repeating warning instead of silently re-downloading forever.
+      if (downloaded < total) {
+        _log.w(
+          'SystemsUpdateService: only $downloaded/$total files downloaded — '
+          'leaving systems_version at "${await SqliteService.getSystemsVersion()}" '
+          'so the next check retries the full set',
+        );
+      } else {
+        await SqliteService.updateSystemsVersion(remoteVersion);
+        _log.i(
+          'SystemsUpdateService: updated $downloaded files to v$remoteVersion',
+        );
+      }
+
       return SystemsUpdateResult(
         newVersion: remoteVersion,
         filesUpdated: downloaded,
+        filesTotal: total,
       );
     } catch (e, st) {
       _log.e(
