@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'config_service.dart';
 import 'logger_service.dart';
+import '../utils/bounded_concurrency.dart';
 
 const _baseRaw =
     'https://raw.githubusercontent.com/misobadev/neostation-assets/main';
@@ -711,36 +712,6 @@ class NeoAssetsService {
   /// linearly without overwhelming the network or the host.
   static const int _downloadConcurrency = 8;
 
-  /// Runs [task] over [items] with at most [concurrency] tasks in flight,
-  /// invoking [onEach] after each completion (for progress). A single failing
-  /// task never aborts the batch. Safe on Dart's single-threaded event loop:
-  /// the `next++` cursor and progress counter are only touched synchronously.
-  static Future<void> _runBounded<T>(
-    List<T> items,
-    int concurrency,
-    Future<void> Function(T item) task, {
-    void Function()? onEach,
-  }) async {
-    if (items.isEmpty) return;
-    int next = 0;
-
-    Future<void> worker() async {
-      while (true) {
-        final i = next++;
-        if (i >= items.length) return;
-        try {
-          await task(items[i]);
-        } catch (e) {
-          _log.w('Bounded task failed for item ${items[i]}: $e');
-        }
-        onEach?.call();
-      }
-    }
-
-    final workerCount = concurrency < items.length ? concurrency : items.length;
-    await Future.wait(List.generate(workerCount, (_) => worker()));
-  }
-
   /// Downloads all background and logo assets for a theme, optionally
   /// forcing a refresh.
   static Future<void> downloadAllThemeAssets(
@@ -755,7 +726,7 @@ class NeoAssetsService {
 
     final total = systemFolderNames.length;
     int done = 0;
-    await _runBounded<String>(
+    await runBounded<String>(
       systemFolderNames,
       _downloadConcurrency,
       (system) => getCachedBackground(themeFolder, system),
@@ -783,7 +754,7 @@ class NeoAssetsService {
     int done = 0;
     // getCachedBackground tries .webp then .gif and records a negative-cache
     // marker when neither exists remotely.
-    await _runBounded<String>(
+    await runBounded<String>(
       pending,
       _downloadConcurrency,
       (system) => getCachedBackground(themeFolder, system),
