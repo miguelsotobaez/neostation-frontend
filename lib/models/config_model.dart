@@ -54,8 +54,8 @@ class ConfigModel {
   /// Preferred display mode for the system list (e.g., 'grid', 'list').
   final String systemViewMode;
 
-  /// Identifier of the currently active UI palette.
-  final String paletteName;
+  /// Identifier of the currently active UI theme.
+  final String themeName;
 
   /// Whether to display detailed game metadata by default.
   final bool showGameInfo;
@@ -103,6 +103,36 @@ class ConfigModel {
   /// Whether to hide the "Recently Played" card from the main dashboard.
   final bool hideRecentCard;
 
+  /// Whether the vertical action-button legend is hidden across every game view
+  /// (list, grid, carousel). Toggled by the Select + B chord.
+  final bool legendHidden;
+
+  /// The game details card tab the user last selected with L1/R1, stored as the
+  /// `DetailTab` enum name (e.g. 'wheel', 'box2d', 'screenshotVideo').
+  ///
+  /// Persisting it keeps the choice across games, systems and restarts. A tab
+  /// that is unavailable for the current game (no achievements, for instance)
+  /// falls back to the wheel for display only — the preference is kept so it
+  /// comes back on a game that supports it.
+  final String gameDetailsTab;
+
+  /// Whether the Sync navigation tab is hidden from the header strip and the
+  /// L1/R1 tab cycle.
+  ///
+  /// Stored as "hidden" rather than "shown" so the default (`false`) is
+  /// visible: a tab added in a future version appears for upgrading users
+  /// instead of silently staying hidden. See `NavTab` in utils/nav_tabs.dart.
+  final bool hideTabSync;
+
+  /// Whether the Achievements navigation tab is hidden. See [hideTabSync].
+  final bool hideTabAchievements;
+
+  /// Whether the Scraper navigation tab is hidden. See [hideTabSync].
+  final bool hideTabScraper;
+
+  /// Whether the Search navigation tab is hidden. See [hideTabSync].
+  final bool hideTabSearch;
+
   /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
   /// to never dim. Only meaningful when a secondary display is active.
   final int nowPlayingDimDelay;
@@ -145,6 +175,11 @@ class ConfigModel {
   /// Preferred card style for the game carousel ('fanart' or 'box').
   final String gameCarouselCardStyle;
 
+  /// Absolute path to the user's ES-DE application folder (the one containing
+  /// `gamelists/` and `downloaded_media/`), or empty if not configured. Used
+  /// by the ES-DE import and read-time fallback artwork resolution.
+  final String esdeFolderPath;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -152,7 +187,7 @@ class ConfigModel {
     this.emulators = const {},
     this.gameViewMode = 'list',
     this.systemViewMode = 'grid',
-    this.paletteName = 'system',
+    this.themeName = 'system',
     this.showGameInfo = false,
     this.isFullscreen = true,
     this.bartopExitPoweroff = false,
@@ -168,6 +203,12 @@ class ConfigModel {
     this.systemSortOrder = 'asc',
     this.appLanguage = 'es',
     this.hideRecentCard = false,
+    this.legendHidden = false,
+    this.gameDetailsTab = 'wheel',
+    this.hideTabSync = false,
+    this.hideTabAchievements = false,
+    this.hideTabScraper = false,
+    this.hideTabSearch = false,
     this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
@@ -180,6 +221,7 @@ class ConfigModel {
     this.dockApps = const ['', '', '', '', ''],
     this.dockEnabled = true,
     this.dockSlotCount = 3,
+    this.esdeFolderPath = '',
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -220,7 +262,7 @@ class ConfigModel {
       emulators: emulators,
       gameViewMode: (json['gameViewMode'] ?? 'list').toString(),
       systemViewMode: (json['systemViewMode'] ?? 'grid').toString(),
-      paletteName: (json['paletteName'] ?? 'system').toString(),
+      themeName: (json['themeName'] ?? 'system').toString(),
       showGameInfo:
           (json['showGameInfo'] ?? false).toString().toLowerCase() == 'true',
       isFullscreen:
@@ -256,9 +298,7 @@ class ConfigModel {
               '1' ||
           (json['use12HourClock'] ?? false).toString().toLowerCase() == 'true',
       subfolderViewDefault:
-          (json['subfolderViewDefault'] ??
-                      json['subfolder_view_default'] ??
-                      0)
+          (json['subfolderViewDefault'] ?? json['subfolder_view_default'] ?? 0)
                   .toString() ==
               '1' ||
           (json['subfolderViewDefault'] ?? false).toString().toLowerCase() ==
@@ -276,6 +316,34 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      legendHidden:
+          (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
+              '1' ||
+          (json['legendHidden'] ?? false).toString().toLowerCase() == 'true',
+      gameDetailsTab:
+          (json['gameDetailsTab'] ?? json['game_details_tab'] ?? 'wheel')
+              .toString(),
+      // Absent key => false => tab visible. Keeps a config written by an older
+      // build (or restored from cloud sync) from hiding tabs it never knew about.
+      hideTabSync:
+          (json['hideTabSync'] ?? json['hide_tab_sync'] ?? 0).toString() ==
+              '1' ||
+          (json['hideTabSync'] ?? false).toString().toLowerCase() == 'true',
+      hideTabAchievements:
+          (json['hideTabAchievements'] ?? json['hide_tab_achievements'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideTabAchievements'] ?? false).toString().toLowerCase() ==
+              'true',
+      hideTabScraper:
+          (json['hideTabScraper'] ?? json['hide_tab_scraper'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideTabScraper'] ?? false).toString().toLowerCase() == 'true',
+      hideTabSearch:
+          (json['hideTabSearch'] ?? json['hide_tab_search'] ?? 0).toString() ==
+              '1' ||
+          (json['hideTabSearch'] ?? false).toString().toLowerCase() == 'true',
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
@@ -331,6 +399,8 @@ class ConfigModel {
                   ) ??
                   3)
               .clamp(dockMinSlotCount, dockMaxSlotCount),
+      esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
+          .toString(),
     );
   }
 
@@ -348,7 +418,7 @@ class ConfigModel {
       'emulators': emulatorsJson,
       'gameViewMode': gameViewMode,
       'systemViewMode': systemViewMode,
-      'paletteName': paletteName,
+      'themeName': themeName,
       'showGameInfo': showGameInfo,
       'isFullscreen': isFullscreen,
       'bartopExitPoweroff': bartopExitPoweroff,
@@ -364,6 +434,12 @@ class ConfigModel {
       'systemSortOrder': systemSortOrder,
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
+      'legendHidden': legendHidden,
+      'gameDetailsTab': gameDetailsTab,
+      'hideTabSync': hideTabSync,
+      'hideTabAchievements': hideTabAchievements,
+      'hideTabScraper': hideTabScraper,
+      'hideTabSearch': hideTabSearch,
       'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
       'autoUpdateSystems': autoUpdateSystems,
@@ -376,6 +452,7 @@ class ConfigModel {
       'dockApps': dockApps,
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
+      'esdeFolderPath': esdeFolderPath,
     };
   }
 
@@ -387,7 +464,7 @@ class ConfigModel {
     Map<String, EmulatorModel>? emulators,
     String? gameViewMode,
     String? systemViewMode,
-    String? paletteName,
+    String? themeName,
     bool? showGameInfo,
     bool? isFullscreen,
     bool? bartopExitPoweroff,
@@ -403,6 +480,12 @@ class ConfigModel {
     String? systemSortOrder,
     String? appLanguage,
     bool? hideRecentCard,
+    bool? legendHidden,
+    String? gameDetailsTab,
+    bool? hideTabSync,
+    bool? hideTabAchievements,
+    bool? hideTabScraper,
+    bool? hideTabSearch,
     String? activeSyncProvider,
     bool? autoUpdateApp,
     bool? autoUpdateSystems,
@@ -415,6 +498,7 @@ class ConfigModel {
     List<String>? dockApps,
     bool? dockEnabled,
     int? dockSlotCount,
+    String? esdeFolderPath,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -423,7 +507,7 @@ class ConfigModel {
       emulators: emulators ?? this.emulators,
       gameViewMode: gameViewMode ?? this.gameViewMode,
       systemViewMode: systemViewMode ?? this.systemViewMode,
-      paletteName: paletteName ?? this.paletteName,
+      themeName: themeName ?? this.themeName,
       showGameInfo: showGameInfo ?? this.showGameInfo,
       isFullscreen: isFullscreen ?? this.isFullscreen,
       bartopExitPoweroff: bartopExitPoweroff ?? this.bartopExitPoweroff,
@@ -439,6 +523,12 @@ class ConfigModel {
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
+      legendHidden: legendHidden ?? this.legendHidden,
+      gameDetailsTab: gameDetailsTab ?? this.gameDetailsTab,
+      hideTabSync: hideTabSync ?? this.hideTabSync,
+      hideTabAchievements: hideTabAchievements ?? this.hideTabAchievements,
+      hideTabScraper: hideTabScraper ?? this.hideTabScraper,
+      hideTabSearch: hideTabSearch ?? this.hideTabSearch,
       activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
       autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,
@@ -452,6 +542,7 @@ class ConfigModel {
       dockApps: dockApps ?? this.dockApps,
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
     );
   }
 

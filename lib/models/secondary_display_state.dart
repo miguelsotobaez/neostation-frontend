@@ -197,6 +197,22 @@ class SecondaryDisplayStateData {
   /// engine; slots beyond it stay in [dockApps] but are hidden.
   final int dockSlotCount;
 
+  /// Whether the main NeoStation UI has rendered its first frame and is ready
+  /// for use. Pushed by the main engine once, on cold start. The secondary
+  /// display holds the app dock off-screen until this flips true, then slides
+  /// it up — so the dock arrives as the main UI settles rather than popping in
+  /// while the app is still loading.
+  final bool appReady;
+
+  /// Whether the first-run setup wizard is on screen on the main display.
+  /// Pushed by the main engine while the wizard runs and cleared once setup
+  /// completes. The secondary display keeps the app dock and its all-apps
+  /// launcher parked off-screen while this is true — [appReady] latches at the
+  /// main engine's first frame, which happens *behind* the wizard, so without
+  /// this the dock slides up and offers app shortcuts before the user has even
+  /// picked a ROM folder.
+  final bool setupWizardActive;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -247,11 +263,20 @@ class SecondaryDisplayStateData {
     this.lastPlayedMillis,
     this.nowPlayingDimDelay = 5,
     this.nowPlayingDimLevel = 100,
-    this.fanartDimLevel = 0,
+    // Mirror the config default (fanart_dim_level DEFAULT 25). On first launch
+    // the native shared-state store is empty, so the initial WELCOME seed
+    // constructs a *fresh* data object and broadcasts it to the secondary
+    // engine before the real _config value is pushed. If this defaulted to 0,
+    // that first snapshot would render the system art undimmed until the later
+    // seed landed. Keeping it in sync with the config default (like
+    // nowPlayingDimLevel = 100 above) makes the 25% dim apply from frame one.
+    this.fanartDimLevel = 25,
     this.dockApps = const ['', '', '', '', ''],
     this.dockEditTrigger = 0,
     this.dockEnabled = true,
     this.dockSlotCount = 3,
+    this.appReady = false,
+    this.setupWizardActive = false,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -328,6 +353,8 @@ class SecondaryDisplayStateData {
     int? dockEditTrigger,
     bool? dockEnabled,
     int? dockSlotCount,
+    bool? appReady,
+    bool? setupWizardActive,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -405,6 +432,8 @@ class SecondaryDisplayStateData {
       dockEditTrigger: dockEditTrigger ?? this.dockEditTrigger,
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      appReady: appReady ?? this.appReady,
+      setupWizardActive: setupWizardActive ?? this.setupWizardActive,
     );
   }
 
@@ -475,7 +504,7 @@ class SecondaryDisplayStateData {
       lastPlayedMillis: (json['lastPlayedMillis'] as num?)?.toInt(),
       nowPlayingDimDelay: (json['nowPlayingDimDelay'] as num?)?.toInt() ?? 5,
       nowPlayingDimLevel: (json['nowPlayingDimLevel'] as num?)?.toInt() ?? 100,
-      fanartDimLevel: (json['fanartDimLevel'] as num?)?.toInt() ?? 0,
+      fanartDimLevel: (json['fanartDimLevel'] as num?)?.toInt() ?? 25,
       dockApps: json['dockApps'] is List
           ? (json['dockApps'] as List<dynamic>)
                 .map((e) => e?.toString() ?? '')
@@ -484,6 +513,8 @@ class SecondaryDisplayStateData {
       dockEditTrigger: (json['dockEditTrigger'] as num?)?.toInt() ?? 0,
       dockEnabled: json['dockEnabled'] as bool? ?? true,
       dockSlotCount: (json['dockSlotCount'] as num?)?.toInt() ?? 3,
+      appReady: json['appReady'] as bool? ?? false,
+      setupWizardActive: json['setupWizardActive'] as bool? ?? false,
     );
   }
 
@@ -546,6 +577,8 @@ class SecondaryDisplayStateData {
       'dockEditTrigger': dockEditTrigger,
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
+      'appReady': appReady,
+      'setupWizardActive': setupWizardActive,
     };
   }
 }
@@ -658,6 +691,8 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     int? dockEditTrigger,
     bool? dockEnabled,
     int? dockSlotCount,
+    bool? appReady,
+    bool? setupWizardActive,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -739,6 +774,8 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           dockEditTrigger: dockEditTrigger,
           dockEnabled: dockEnabled,
           dockSlotCount: dockSlotCount,
+          appReady: appReady,
+          setupWizardActive: setupWizardActive,
         ),
       );
     } catch (e) {

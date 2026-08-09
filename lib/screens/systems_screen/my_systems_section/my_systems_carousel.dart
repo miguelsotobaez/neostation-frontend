@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -12,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../providers/sqlite_database_provider.dart';
 import '../../../providers/file_provider.dart';
+import '../../../themes/corner_radii.dart';
 import '../../../utils/gamepad_nav.dart';
 import '../../../services/game_service.dart';
 import '../../../utils/game_launch_utils.dart';
@@ -21,19 +21,15 @@ import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/services/secondary_achievements_controller.dart';
 import '../../game_screen/my_games_list.dart';
-import '../../../widgets/shaders/shader_gif_widget.dart';
-import '../../../widgets/shaders/music_card_shader_background.dart';
-import '../../../utils/image_utils.dart';
 import 'package:neostation/models/secondary_display_state.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/widgets/native_carousel.dart';
-import '../../../widgets/system_logo_fallback.dart';
-import 'package:neostation/services/music_player_service.dart';
 import 'system_list_builder.dart';
+import 'system_card.dart';
 
 /// A premium carousel-based orchestrator for system and recent game selection.
 ///
@@ -59,7 +55,6 @@ class MySystemsCarousel extends StatefulWidget {
 class _MySystemsCarouselState extends State<MySystemsCarousel> {
   final GlobalKey<NativeCarouselState> _carouselKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
-  final MusicPlayerService _musicPlayerService = MusicPlayerService();
 
   /// Active selection index within the carousel.
   int _currentIndex = 0;
@@ -88,12 +83,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   final SecondaryAchievementsController _achievementsController =
       SecondaryAchievementsController();
 
-  /// In-memory cache for resolved ID3v2 album art.
-  Uint8List? _resolvedMusicCoverBytes;
-  bool _isResolvingMusicCover = false;
-  String? _coverResolutionPath;
-  String? _lastActiveTrackPath;
-
   /// Asset mapping caches for the active theme.
   final Map<String, String?> _themeBackgrounds = {};
   String _lastThemeFolder = '';
@@ -101,9 +90,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
   /// Cache for computed TextPainter widths in the system indicator bar.
   final Map<String, double> _itemWidthCache = {};
-
-  /// Cache for File.existsSync() results keyed by path — avoids sync I/O on every build.
-  final Map<String, bool> _fileExistsCache = {};
 
   /// Tracks the last index for which _updateBackground was scheduled, to avoid
   /// firing redundant postFrameCallbacks on every build.
@@ -138,11 +124,12 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       // Also attempt direct update — works when secondary is already connected.
       _updateSecondaryScreenName();
     });
-    _musicPlayerService.addListener(_handleMusicStateChanged);
-    _handleMusicStateChanged();
   }
 
   bool _prevIsSecondaryActive = false;
+  // Tracks the scan-active state across builds so we can re-push the settled
+  // selection to the secondary display exactly when the initial scan finishes.
+  bool _wasScanning = false;
 
   // When secondary display signals it's active (startup or reconnect),
   // immediately push current system state so default logo never shows.
@@ -177,7 +164,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
   @override
   void dispose() {
-    _musicPlayerService.removeListener(_handleMusicStateChanged);
     // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _cleanupGamepad();
@@ -185,83 +171,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     _scrollController.dispose();
     _achievementsController.dispose();
     super.dispose();
-  }
-
-  /// Hierarchy for music cover resolution:
-  /// Active Instance Art > Cached Resolved Art > Last Known Picture.
-  Uint8List? get _musicCoverBytes =>
-      _musicPlayerService.activePicture ??
-      _resolvedMusicCoverBytes ??
-      _musicPlayerService.currentPicture;
-
-  /// Logic check for specialized music playback visual state.
-  bool get _shouldShowMusicPlaybackBackground =>
-      _musicPlayerService.isPlaying && _musicCoverBytes != null;
-
-  /// Synchronizes visual state with the global music playback engine.
-  void _handleMusicStateChanged() {
-    if (!mounted) return;
-
-    final activePath = _musicPlayerService.activeTrack?.romPath;
-    if (activePath != _lastActiveTrackPath) {
-      _lastActiveTrackPath = activePath;
-      _coverResolutionPath = null;
-      if (_resolvedMusicCoverBytes != null) {
-        setState(() {
-          _resolvedMusicCoverBytes = null;
-        });
-      }
-    }
-
-    final immediateCover =
-        _musicPlayerService.activePicture ?? _musicPlayerService.currentPicture;
-    if (immediateCover != null) {
-      if (!listEquals(immediateCover, _resolvedMusicCoverBytes)) {
-        setState(() {
-          _resolvedMusicCoverBytes = immediateCover;
-        });
-      } else {
-        setState(() {});
-      }
-      return;
-    }
-
-    if (_musicPlayerService.isPlaying ||
-        _musicPlayerService.activeTrack != null) {
-      _tryResolveMusicCover();
-      setState(() {});
-      return;
-    }
-
-    if (_resolvedMusicCoverBytes != null) {
-      setState(() {
-        _resolvedMusicCoverBytes = null;
-      });
-    }
-  }
-
-  /// Background extraction of ID3v2/Embedded album art.
-  Future<void> _tryResolveMusicCover() async {
-    if (_isResolvingMusicCover) return;
-
-    final path =
-        _musicPlayerService.activeTrack?.romPath ??
-        _musicPlayerService.currentTrack?.romPath;
-    if (path == null || path.isEmpty) return;
-
-    _isResolvingMusicCover = true;
-    _coverResolutionPath = path;
-    try {
-      final bytes = await _musicPlayerService.extractPicture(path);
-      if (!mounted) return;
-      if (_coverResolutionPath != path) return;
-      if (bytes == null) return;
-      setState(() {
-        _resolvedMusicCoverBytes = bytes;
-      });
-    } finally {
-      _isResolvingMusicCover = false;
-    }
   }
 
   /// Configures hardware navigation layers for the carousel.
@@ -661,27 +570,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     });
   }
 
-  /// Background resolution for carousel items, including music cover shader support.
-  Widget _buildCarouselBackground(SystemInfo system, bool isSelected) {
-    if (system.folderName == 'music' && _shouldShowMusicPlaybackBackground) {
-      return Positioned.fill(
-        child: MusicCardShaderBackground(
-          key: ValueKey(
-            _musicPlayerService.activeTrack?.romPath ??
-                _musicPlayerService.currentTrack?.romPath,
-          ),
-          coverBytes: _musicCoverBytes!,
-          tintColor:
-              system.color1AsColor ?? Theme.of(context).colorScheme.primary,
-          borderRadius: 12.r,
-          opacity: 1.0,
-        ),
-      );
-    }
-
-    return _buildDefaultCarouselBackground(system);
-  }
-
   /// Synchronously loads theme-specific backgrounds and logos for the carousel library.
   void _loadThemeAssetsForSystems() {
     if (!mounted || _loadingThemeAssets) return;
@@ -720,68 +608,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
         ..addAll(newBgs);
       _itemWidthCache.clear();
     });
-  }
-
-  /// Standard background resolution for carousel cards.
-  Widget _buildDefaultCarouselBackground(SystemInfo system) {
-    final customBgPath = system.customBackgroundPath;
-    final hasCustomBg = customBgPath != null && customBgPath.isNotEmpty;
-
-    // SCENARIO A: Animated GIF (custom or theme-provided).
-    if (hasCustomBg && ImageUtils.isGif(customBgPath)) {
-      return Positioned.fill(
-        child: Container(
-          color: Theme.of(context).colorScheme.surface,
-          child: ShaderGifWidget(
-            imagePath: customBgPath,
-            key: ValueKey('${customBgPath}_${system.imageVersion}'),
-          ),
-        ),
-      );
-    }
-
-    // SCENARIO B: Animated GIF from theme.
-    final folderKey = system.primaryFolderName ?? system.folderName ?? '';
-    final themeBgPath = hasCustomBg ? null : _themeBackgrounds[folderKey];
-    if (!hasCustomBg && ImageUtils.isGif(themeBgPath)) {
-      return Positioned.fill(
-        child: Container(
-          color: Theme.of(context).colorScheme.surface,
-          child: ShaderGifWidget(
-            imagePath: themeBgPath!,
-            key: ValueKey('${themeBgPath}_${system.imageVersion}'),
-          ),
-        ),
-      );
-    }
-
-    // SCENARIO C: Static Asset resolution (Priority: custom > theme > color).
-    final activeBgPath = hasCustomBg ? customBgPath : themeBgPath;
-    final hasActiveBg = activeBgPath != null && activeBgPath.isNotEmpty;
-
-    return Positioned.fill(
-      child: hasActiveBg
-          ? Image.file(
-              File(activeBgPath),
-              key: ValueKey('${activeBgPath}_${system.imageVersion}'),
-              fit: BoxFit.cover,
-              cacheWidth: 512,
-              errorBuilder: (context, error, stackTrace) => Stack(
-                children: [
-                  Container(color: Theme.of(context).colorScheme.surface),
-                  Container(
-                    color: system.color1AsColor?.withValues(alpha: 0.4),
-                  ),
-                ],
-              ),
-            )
-          : Stack(
-              children: [
-                Container(color: Theme.of(context).colorScheme.surface),
-                Container(color: system.color1AsColor?.withValues(alpha: 0.4)),
-              ],
-            ),
-    );
   }
 
   /// Logic to update the global system background provider on selection change.
@@ -826,11 +652,32 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     final neoThemeFolder = context.select<NeoAssetsProvider, String>(
       (p) => p.activeThemeFolder,
     );
+    final isScanning = context.select<SqliteConfigProvider, bool>(
+      (p) => p.isScanning,
+    );
     if (neoThemeFolder != _lastThemeFolder) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadThemeAssetsForSystems();
+        // Theme assets (and thus _themeBackgrounds) have only just resolved.
+        // Re-push the current selection so the secondary display picks up the
+        // now-available background — otherwise the initially-settled system
+        // (e.g. the 'All' virtual system) stays blank on the secondary until
+        // the user navigates and triggers a push via onPageChanged.
+        // Skip while scanning so the background doesn't pop in over the scan
+        // display; the scan-settle branch below re-pushes once the scan ends.
+        if (!isScanning) _updateSecondaryScreenName();
       });
     }
+    // When the initial scan settles, re-push the settled selection so the
+    // secondary display reveals its background at the same moment the primary
+    // screen settles — not partway through the scan.
+    if (_wasScanning && !isScanning) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadThemeAssetsForSystems();
+        _updateSecondaryScreenName();
+      });
+    }
+    _wasScanning = isScanning;
 
     final theme = Theme.of(context);
 
@@ -943,14 +790,44 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
                           key: _carouselKey,
                           itemCount: allSystems.length,
                           initialIndex: _currentIndex,
+                          footerHeight: 60.r,
+                          // System cards are height-bound (square art + footer)
+                          // so ~3.6 of them fit across the screen. With the
+                          // default envelope the 4th card is already down to
+                          // 44% scale / 10% opacity by the time it reaches the
+                          // edge, leaving a ~16px sliver. Floor the scale, lift
+                          // the fade, and pull the outer pair back toward the
+                          // pack so the row visibly continues past both edges.
+                          depth: const CarouselDepth(
+                            minScale: 0.7,
+                            opacityBase: 0.75,
+                            opacityFalloff: 0.55,
+                            minOpacity: 0.3,
+                            edgePull: 0.15,
+                          ),
                           itemBuilder: (context, index) {
                             final system = allSystems[index];
                             final isSelected = index == _currentIndex;
-                            return _buildSystemCard(
-                              context,
-                              system,
-                              isSelected,
-                              index,
+                            return SystemCard(
+                              key: ValueKey(
+                                'carousel_system_card_${system.title}_$index',
+                              ),
+                              info: system,
+                              isSelected: isSelected,
+                              backgroundCacheWidth: 1024,
+                              onTap: () {
+                                // Tapping an off-centre card brings it to the
+                                // middle; tapping the centred one enters it, so
+                                // touch users never need the footer's A button.
+                                // (SystemCard plays the sound.)
+                                if (isSelected) {
+                                  _selectCurrentSystem();
+                                } else {
+                                  _carouselKey.currentState?.animateToPage(
+                                    index,
+                                  );
+                                }
+                              },
                             );
                           },
                           onPageScrolled: (page) {
@@ -984,9 +861,30 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
                   padding: EdgeInsets.symmetric(vertical: 6.r, horizontal: 4.r),
                   child: Stack(
                     children: [
-                      // Focused item sliding indicator. Driven by the
-                      // fractional carousel page so it tracks the carousel
-                      // image in lock-step while scrolling.
+                      // Background track: every label keeps its surface shape
+                      // so unselected items still look like buttons.
+                      Row(
+                        children: allSystems.asMap().entries.map((entry) {
+                          final itemWidth = widths[entry.key];
+                          return Container(
+                            width: itemWidth,
+                            height: 32.r,
+                            margin: EdgeInsets.only(right: 4.r),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius:
+                                  Theme.of(
+                                    context,
+                                  ).extension<CornerRadii>()?.radiusExternal ??
+                                  BorderRadius.circular(14.r),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                      // Focused item sliding indicator. Painted between the
+                      // backgrounds and the text so the selected label gets a
+                      // solid fill while the text stays perfectly readable.
                       Positioned.fill(
                         child: ValueListenableBuilder<double>(
                           valueListenable: _pageOffsetNotifier,
@@ -1001,8 +899,12 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
                                   width: width,
                                   child: Container(
                                     decoration: BoxDecoration(
-                                      color: theme.colorScheme.secondary,
-                                      borderRadius: BorderRadius.circular(12.r),
+                                      color: theme.colorScheme.primary,
+                                      borderRadius:
+                                          Theme.of(context)
+                                              .extension<CornerRadii>()
+                                              ?.radiusExternal ??
+                                          BorderRadius.circular(14.r),
                                     ),
                                   ),
                                 ),
@@ -1012,15 +914,16 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
                         ),
                       ),
 
-                      // Label track. Selection color flips in sync with the
-                      // sliding cursor (driven by the fractional carousel page)
-                      // so the highlighted label never lags under the pill.
+                      // Foreground text track. Transparent background so the
+                      // selector and surface backgrounds show through, while
+                      // the selected label uses onPrimary for contrast.
                       ValueListenableBuilder<double>(
                         valueListenable: _pageOffsetNotifier,
                         builder: (context, page, _) {
-                          final selectedIndex = page
-                              .round()
-                              .clamp(0, allSystems.length - 1);
+                          final selectedIndex = page.round().clamp(
+                            0,
+                            allSystems.length - 1,
+                          );
                           return Row(
                             children: allSystems.asMap().entries.map((entry) {
                               final index = entry.key;
@@ -1040,11 +943,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
                                   height: 32.r,
                                   margin: EdgeInsets.only(right: 4.r),
                                   alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12.r),
-                                  ),
+                                  color: Colors.transparent,
                                   child: Text(
                                     (system.shortName ??
                                             system.title ??
@@ -1109,157 +1008,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     );
   }
 
-  /// Renders the carousel branding logo following a specific resolution hierarchy.
-  Widget _buildCarouselLogo({
-    required SystemInfo system,
-    required String assetLogoPath,
-    required String? displayFolderName,
-  }) {
-    final fallback = SystemLogoFallback(
-      title: system.title,
-      shortName: system.shortName,
-    );
-
-    // 1. Custom branding set via user configuration.
-    final customLogoPath = system.customLogoPath;
-    if (customLogoPath != null && customLogoPath.isNotEmpty) {
-      return Image.file(
-        File(customLogoPath),
-        key: ValueKey('${customLogoPath}_${system.imageVersion}'),
-        cacheWidth: 512,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => Image.asset(
-          assetLogoPath,
-          cacheWidth: 512,
-          fit: BoxFit.contain,
-          errorBuilder: (context, e2, st2) => fallback,
-        ),
-      );
-    }
-
-    // 2. Fallback: Bundled internal asset.
-    return Image.asset(
-      assetLogoPath,
-      cacheWidth: 512,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) => fallback,
-    );
-  }
-
-  /// Builds a high-fidelity carousel card for a system or recent game.
-  Widget _buildSystemCard(
-    BuildContext context,
-    SystemInfo system,
-    bool isSelected,
-    int index,
-  ) {
-    final displayFolderName = system.primaryFolderName?.isNotEmpty == true
-        ? system.primaryFolderName!
-        : (system.folderName?.isNotEmpty == true ? system.folderName! : 'all');
-
-    // Primary identification asset resolution.
-    final assetLogoPath = 'assets/images/logos/$displayFolderName.webp';
-    final customWheelPath = system.customWheelImage;
-    final wheelFile =
-        (system.isGame && customWheelPath != null && customWheelPath.isNotEmpty)
-        ? File(customWheelPath)
-        : null;
-    final hasWheelFile =
-        wheelFile != null &&
-        _fileExistsCache.putIfAbsent(
-          customWheelPath!,
-          () => wheelFile.existsSync(),
-        );
-    final theme = Theme.of(context);
-
-    return GestureDetector(
-      onTap: () {
-        if (!isSelected) {
-          SfxService().playNavSound();
-          _carouselKey.currentState?.animateToPage(index);
-        }
-      },
-      child: RepaintBoundary(
-        child: Container(
-          clipBehavior: Clip.antiAlias,
-          margin: EdgeInsets.all(5.r),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(32.r),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 5.r,
-                offset: Offset(2.0.r, 2.0.r),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(32.r),
-            clipBehavior: Clip.antiAliasWithSaveLayer,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildCarouselBackground(system, isSelected),
-                Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Premium 'RECENT' badge for game cards.
-                    if (system.isGame)
-                      Positioned(
-                        top: 20.r,
-                        right: 20.r,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10.r,
-                            vertical: 5.r,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary,
-                            borderRadius: BorderRadius.circular(5.r),
-                          ),
-                          child: Text(
-                            AppLocale.recentBadge.getString(context),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Central Branding / Game Wheel Art.
-                    if (!system.hideLogo || hasWheelFile)
-                      hasWheelFile
-                          ? Image.file(
-                              wheelFile,
-                              height: 512.r,
-                              cacheWidth: 512,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  SystemLogoFallback(
-                                    title: system.title,
-                                    shortName: system.isGame
-                                        ? null
-                                        : system.shortName,
-                                  ),
-                            )
-                          : _buildCarouselLogo(
-                              system: system,
-                              assetLogoPath: assetLogoPath,
-                              displayFolderName: displayFolderName,
-                            ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Pushes carousel state updates to secondary hardware displays (OEM support).
   Future<void> _updateSecondaryScreenName() async {
     if (!Platform.isAndroid) return;
@@ -1289,11 +1037,8 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       final String? systemBackground = hasCustomBg ? customBg : themeBg;
       final bool isBackgroundAsset = false;
 
-      final paletteProvider = Provider.of<PaletteProvider>(
-        context,
-        listen: false,
-      );
-      final isOled = paletteProvider.isOled;
+      final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+      final isOled = themeProvider.isOled;
 
       _secondaryDisplayState?.updateState(
         systemName: systemName,

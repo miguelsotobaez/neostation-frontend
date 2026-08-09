@@ -30,8 +30,46 @@ class CoreEmulatorModel {
   /// Android package name for intent-based launching (e.g., 'com.retroarch'), if applicable.
   final String? androidPackageName;
 
-  /// Runtime flag indicating if the emulator is currently installed on the device.
+  /// Whether the emulator is actually present and usable on this device.
+  ///
+  /// Only a verifying enumerator sets this: `loadEmulatorsForSystem` checks the
+  /// Android package *and* the libretro core file, or probes the desktop cores
+  /// directory. A model built straight from a database row leaves it `false` —
+  /// the row alone cannot answer the question. If you need a trustworthy
+  /// answer, go through `loadEmulatorsForSystem`, not a raw query.
   final bool isInstalled;
+
+  /// Whether a desktop executable path is configured for this emulator.
+  ///
+  /// Desktop-only signal, read from `user_emulator_config.emulator_path`.
+  /// Nothing populates that column on Android, so it is always `false` there —
+  /// it is *not* an install check, and was previously aliased as one
+  /// (`is_installed`), which made every Android emulator look uninstalled.
+  final bool hasConfiguredPath;
+
+  /// Whether this emulator is a RetroArch variant (e.g. `com.retroarch`,
+  /// `com.retroarch.aarch64`). RetroArch variants all share the same launch
+  /// activity, so only their package differs — which is why substituting one
+  /// variant's package into a RetroArch intent is safe, while substituting a
+  /// standalone emulator's package is not.
+  bool get isRetroArch =>
+      androidPackageName != null &&
+      androidPackageName!.startsWith(CoreEmulatorModel.retroArchPackagePrefix);
+
+  /// Package prefix shared by every RetroArch variant.
+  static const String retroArchPackagePrefix = 'com.retroarch';
+
+  /// Every RetroArch variant, best first.
+  ///
+  /// "Best" means most capable on the widest range of current devices, so an
+  /// arm64 build outranks the legacy universal one, which outranks the 32-bit
+  /// build. Callers that must choose between several *installed* variants
+  /// should follow this order rather than whatever order the database returns.
+  static const List<String> retroArchPackagePriority = [
+    'com.retroarch.aarch64',
+    'com.retroarch',
+    'com.retroarch.ra32',
+  ];
 
   const CoreEmulatorModel({
     required this.uniqueId,
@@ -45,6 +83,7 @@ class CoreEmulatorModel {
     required this.isretroAchievementsCompatible,
     this.androidPackageName,
     this.isInstalled = false,
+    this.hasConfiguredPath = false,
   });
 
   /// Creates a [CoreEmulatorModel] from a database row map.
@@ -64,6 +103,9 @@ class CoreEmulatorModel {
           (int.tryParse(map['is_ra_compatible']?.toString() ?? '0') ?? 0) == 1,
       androidPackageName: map['android_package_name']?.toString(),
       isInstalled: (map['is_installed'] == 1 || map['is_installed'] == true),
+      hasConfiguredPath:
+          (map['has_configured_path'] == 1 ||
+          map['has_configured_path'] == true),
     );
   }
 
@@ -96,6 +138,7 @@ class CoreEmulatorModel {
     bool? isretroAchievementsCompatible,
     String? androidPackageName,
     bool? isInstalled,
+    bool? hasConfiguredPath,
   }) {
     return CoreEmulatorModel(
       uniqueId: uniqueId ?? this.uniqueId,
@@ -110,6 +153,7 @@ class CoreEmulatorModel {
           isretroAchievementsCompatible ?? this.isretroAchievementsCompatible,
       androidPackageName: androidPackageName ?? this.androidPackageName,
       isInstalled: isInstalled ?? this.isInstalled,
+      hasConfiguredPath: hasConfiguredPath ?? this.hasConfiguredPath,
     );
   }
 
@@ -155,6 +199,8 @@ class CoreEmulatorModel {
         return androidPackageName;
       case 'is_installed':
         return isInstalled;
+      case 'has_configured_path':
+        return hasConfiguredPath;
       default:
         return null;
     }

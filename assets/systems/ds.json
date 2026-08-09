@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ds",
+    "multidisc": false,
     "name": "Nintendo DS",
     "short_name": "DS",
     "details": {
@@ -47,6 +48,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L melonds_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -70,6 +73,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L melondsds_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -93,6 +98,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L desmume_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -185,6 +192,8 @@
         },
         "linux": {
           "executable": "melonds.AppImage",
+          "flatpak": "net.kuribo64.melonDS",
+          "emudeck_launcher": "melonds.sh",
           "args": "\"{file.path}\""
         },
         "macos": {

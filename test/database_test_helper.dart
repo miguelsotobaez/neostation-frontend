@@ -42,6 +42,7 @@ class DatabaseTestHelper {
         type TEXT,
         color1 TEXT,
         color2 TEXT,
+        multidisc INTEGER NOT NULL DEFAULT 0,
         neosync_json TEXT
       )
     ''');
@@ -74,6 +75,7 @@ class DatabaseTestHelper {
         players TEXT,
         app_system_id TEXT,
         ra_hash TEXT,
+        ss_hash TEXT,
         id_ra INTEGER,
         is_favorite INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,
@@ -83,6 +85,7 @@ class DatabaseTestHelper {
         updated_at TEXT,
         app_emulator_unique_id TEXT,
         app_emulator_os_id INTEGER,
+        app_alternative_emulators_id INTEGER,
         box2d_aspect_ratio TEXT
       )
     ''');
@@ -93,7 +96,6 @@ class DatabaseTestHelper {
         last_scan TEXT,
         system_view_mode TEXT,
         theme_name TEXT,
-        palette_name TEXT,
         video_sound INTEGER,
         ra_user TEXT,
         show_game_info INTEGER,
@@ -118,6 +120,8 @@ class DatabaseTestHelper {
         auto_update_systems INTEGER,
         system_grid_columns TEXT DEFAULT 'M',
         use_12_hour_clock INTEGER DEFAULT 0,
+        game_details_tab TEXT DEFAULT 'wheel',
+        esde_folder_path TEXT,
         subfolder_view_default INTEGER DEFAULT 0
       )
     ''');
@@ -139,7 +143,10 @@ class DatabaseTestHelper {
         is_standalone INTEGER,
         core_filename TEXT,
         android_package_name TEXT,
+        android_activity_name TEXT,
         is_default INTEGER,
+        is_default_core INTEGER,
+        is_default_standalone INTEGER NOT NULL DEFAULT 0,
         is_ra_compatible INTEGER
       )
     ''');
@@ -148,7 +155,9 @@ class DatabaseTestHelper {
       CREATE TABLE user_emulator_config (
         emulator_unique_id TEXT PRIMARY KEY,
         emulator_path TEXT,
-        is_user_default INTEGER
+        is_user_default INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -179,6 +188,7 @@ class DatabaseTestHelper {
         subfolder_view INTEGER DEFAULT 0,
         custom_background_path TEXT,
         custom_logo_path TEXT,
+        esde_media_dir TEXT,
         updated_at TEXT
       )
     ''');
@@ -255,6 +265,8 @@ class DatabaseTestHelper {
         genre TEXT,
         players TEXT,
         is_fully_scraped INTEGER DEFAULT 0,
+        esde_media_subdir TEXT,
+        esde_imported INTEGER DEFAULT 0,
         updated_at TEXT,
         UNIQUE(app_system_id, filename)
       )

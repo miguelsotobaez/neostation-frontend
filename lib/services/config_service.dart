@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -32,6 +33,63 @@ class ConfigService {
   }
 
   static const String _customPathKey = 'custom_user_data_path';
+  static const Duration _androidStorageRetryDelay = Duration(seconds: 3);
+  static const int _androidStorageMaxAttempts = 20;
+
+  /// In-flight Android cold-boot wait, shared by every concurrent caller so the
+  /// retry loop runs once instead of once per consumer.
+  static Future<String>? _androidStorageWait;
+
+  /// Set when the retry loop has already given up on [_unavailableStoragePath].
+  /// Later callers then fail fast instead of each blocking for another full
+  /// timeout — `getUserDataPath()` has a dozen call sites, and serialising
+  /// their waits used to stall startup for minutes.
+  static bool _androidStorageUnavailable = false;
+  static String? _unavailableStoragePath;
+
+  /// Session-only opt-out: the user explicitly chose to continue with the
+  /// platform default location after the configured volume never appeared.
+  static bool _useDefaultPathFallback = false;
+
+  /// Whether the configured user-data volume was declared unreachable this
+  /// session. UI may use this to explain the state instead of silently
+  /// presenting an empty library.
+  static bool get storageUnavailable => _androidStorageUnavailable;
+
+  /// The configured path that [storageUnavailable] refers to, if any.
+  static String? get unavailableStoragePath => _unavailableStoragePath;
+
+  /// Clears the cached "unavailable" verdict so the next resolution retries
+  /// from scratch. Call after the configured path changes or when the user
+  /// asks to retry.
+  static void resetStorageAvailability() {
+    _androidStorageUnavailable = false;
+    _unavailableStoragePath = null;
+    _useDefaultPathFallback = false;
+  }
+
+  /// Abandons the configured custom path for the remainder of this session and
+  /// resolves to the platform default instead. This is the user's explicit
+  /// escape hatch from an unmountable volume; it is deliberately not persisted.
+  static void continueWithDefaultUserDataPath() {
+    _log.w('User opted to continue with the default user-data path');
+    _androidStorageUnavailable = false;
+    _useDefaultPathFallback = true;
+  }
+
+  /// Resolves the user-data path once, up front, so the cold-boot wait happens
+  /// while a loading UI is visible rather than piecemeal inside later callers.
+  ///
+  /// Returns false when the configured volume never became available.
+  static Future<bool> ensureUserDataStorageReady() async {
+    try {
+      await getUserDataPath();
+      return true;
+    } catch (e) {
+      _log.e('User-data storage is not ready: $e');
+      return false;
+    }
+  }
 
   /// Resolves the absolute path to the user's local data directory.
   ///
@@ -40,14 +98,32 @@ class ConfigService {
   static Future<String> getUserDataPath() async {
     final prefs = await SharedPreferences.getInstance();
     final customPath = prefs.getString(_customPathKey);
-    if (customPath != null && customPath.isNotEmpty) {
+    if (customPath != null &&
+        customPath.isNotEmpty &&
+        !_useDefaultPathFallback) {
       final dir = Directory(customPath);
       if (await dir.exists()) {
         return customPath;
       }
+
+      if (Platform.isAndroid) {
+        // A default launcher can start while the removable volume containing
+        // the user data is still mounting. Falling back to the app-private
+        // default here creates a second, empty database and makes the whole
+        // app look freshly installed. Wait for the configured volume instead.
+        if (_androidStorageUnavailable &&
+            _unavailableStoragePath == customPath) {
+          throw StateError(
+            'Configured user-data storage is unavailable: $customPath',
+          );
+        }
+
+        return _androidStorageWait ??= _startAndroidStorageWait(customPath);
+      }
+
       // Directory missing — try to create it (first-run on new device or new location).
-      // If creation fails (SD card not mounted, permission revoked, etc.) fall back
-      // to the default path so we never open a fresh empty DB at a wrong location.
+      // On desktop, falling back keeps the application usable when a removable
+      // custom path has genuinely been removed.
       try {
         await dir.create(recursive: true);
         return customPath;
@@ -60,6 +136,50 @@ class ConfigService {
       }
     }
     return getDefaultUserDataPath();
+  }
+
+  /// Runs the Android cold-boot retry loop for [customPath] and clears the
+  /// shared in-flight slot once it settles. A success does not need caching —
+  /// the `exists()` check in [getUserDataPath] is cheap — while a failure is
+  /// remembered via [_androidStorageUnavailable] so later callers fail fast.
+  static Future<String> _startAndroidStorageWait(String customPath) {
+    final wait = _waitForAndroidStorage(customPath);
+    unawaited(
+      wait
+          .then((_) {}, onError: (Object _) {})
+          .whenComplete(() => _androidStorageWait = null),
+    );
+    return wait;
+  }
+
+  /// Waits for the volume holding [customPath] to appear, creating the final
+  /// directory only once its parent volume is mounted. Throws a [StateError]
+  /// (and latches [storageUnavailable]) when it never shows up.
+  static Future<String> _waitForAndroidStorage(String customPath) async {
+    final dir = Directory(customPath);
+    for (var attempt = 1; attempt <= _androidStorageMaxAttempts; attempt++) {
+      if (await dir.exists()) return customPath;
+
+      // A missing last directory is safe to create only once its parent
+      // volume is available. Do not create a lookalike path before that.
+      if (await dir.parent.exists()) {
+        await dir.create(recursive: true);
+        return customPath;
+      }
+
+      if (attempt < _androidStorageMaxAttempts) {
+        _log.i(
+          'Waiting for custom user-data storage ($attempt/$_androidStorageMaxAttempts): $customPath',
+        );
+        await Future<void>.delayed(_androidStorageRetryDelay);
+      }
+    }
+
+    _androidStorageUnavailable = true;
+    _unavailableStoragePath = customPath;
+    throw StateError(
+      'Configured user-data storage is unavailable: $customPath',
+    );
   }
 
   /// Returns the platform default user-data path, ignoring any custom override.

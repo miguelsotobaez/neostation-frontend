@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "palm",
+    "multidisc": false,
     "name": "Palm OS",
     "short_name": "Palm",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "palm",
-      "Palm OS"
+      "Palm OS",
+      "palm-os"
     ],
     "colors": [
       "#BDBDBD",

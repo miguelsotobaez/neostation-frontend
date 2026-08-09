@@ -4,6 +4,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/sqlite_config_provider.dart';
 import 'setup_wizard.dart';
+import 'shimmering_logo.dart';
 
 /// Widget that checks the initial configuration and shows the wizard if necessary
 class PermissionCheckWrapper extends StatefulWidget {
@@ -41,6 +42,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       // early-launcher boot races. If set, skip the wizard unconditionally.
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool(PermissionCheckWrapper.setupCompletedKey) == true) {
+        _pushWizardActive(false);
         setState(() {
           _needsSetup = false;
           _isChecking = false;
@@ -64,11 +66,13 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       if (hasRomFolder || setupCompleted) {
         // Backfill the SharedPreferences flag for existing users upgrading.
         await prefs.setBool(PermissionCheckWrapper.setupCompletedKey, true);
+        _pushWizardActive(false);
         setState(() {
           _needsSetup = false;
           _isChecking = false;
         });
       } else {
+        _pushWizardActive(true);
         setState(() {
           _needsSetup = true;
           _isChecking = false;
@@ -76,11 +80,24 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       }
     } catch (e) {
       _log.e('Error checking initial setup: $e');
+      _pushWizardActive(false);
       setState(() {
         _needsSetup = false;
         _isChecking = false;
       });
     }
+  }
+
+  /// Mirrors "the wizard is on screen" to the secondary display, which parks
+  /// its app dock and launcher while setup runs. Pushed from here — the single
+  /// place that decides whether the wizard shows — so a normal boot also clears
+  /// a flag left behind by a run that was killed mid-wizard.
+  void _pushWizardActive(bool active) {
+    if (!mounted) return;
+    Provider.of<SqliteConfigProvider>(
+      context,
+      listen: false,
+    ).setSetupWizardActive(active);
   }
 
   void _completeSetup() async {
@@ -89,6 +106,9 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       listen: false,
     );
     await configProvider.completeSetup();
+
+    // Setup is done — let the secondary display bring in the dock/launcher.
+    configProvider.setSetupWizardActive(false);
 
     // Persist flag to SharedPreferences so the wizard is never shown again
     // even if the SQLite DB is temporarily inaccessible (e.g. SD card not ready).
@@ -103,8 +123,9 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
-      // Show loading while checking
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      // Show loading while checking — same shimmering logo as the rest of the
+      // startup chain, so this gate doesn't read as a separate plain screen.
+      return const Scaffold(body: Center(child: ShimmeringLogo()));
     }
 
     if (_needsSetup) {

@@ -1,38 +1,24 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
-import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../providers/file_provider.dart';
-import '../../../../providers/sqlite_config_provider.dart';
 import '../../../../services/screenscraper_service.dart';
-import '../../../../services/sfx_service.dart';
+import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../widgets/scrolling_description_text.dart';
 
-/// A tab component that renders comprehensive game metadata, descriptions, and media previews.
-///
-/// Handles media arbitration (prioritizing video over screenshots), dynamic aspect ratio
-/// calculation for non-standard artwork, and real-time scraping progress visualization.
 class GameDetailsGameInfoTab extends StatefulWidget {
   final SystemModel system;
   final GameModel game;
   final FileProvider fileProvider;
   final String description;
-  final String screenshotPath;
+
+  /// Hides the metadata pills while the card's scrape panel covers this tab.
   final bool isScrapingGame;
-  final double scrapeProgress;
-  final String scrapeStatus;
-  final bool isSecondaryScreenActive;
-  final bool isVideoDelayActive;
-  final VideoPlayerController? videoController;
-  final int imageVersion;
-  final VoidCallback onToggleVideoMute;
   final VoidCallback onScrapeGame;
 
   const GameDetailsGameInfoTab({
@@ -41,15 +27,7 @@ class GameDetailsGameInfoTab extends StatefulWidget {
     required this.game,
     required this.fileProvider,
     required this.description,
-    required this.screenshotPath,
     required this.isScrapingGame,
-    required this.scrapeProgress,
-    required this.scrapeStatus,
-    required this.isSecondaryScreenActive,
-    required this.isVideoDelayActive,
-    this.videoController,
-    required this.imageVersion,
-    required this.onToggleVideoMute,
     required this.onScrapeGame,
   });
 
@@ -58,64 +36,66 @@ class GameDetailsGameInfoTab extends StatefulWidget {
 }
 
 class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
-  /// Local cache for resolved image aspect ratios to prevent jitter during layout.
-  final Map<String, double> _imageAspectRatios = {};
+  static const List<String> _languageLabels = [
+    'en',
+    'es',
+    'fr',
+    'de',
+    'it',
+    'pt',
+    'jp',
+    'ko',
+    'ru',
+    'zh',
+    'nl',
+    'sv',
+    'da',
+    'fi',
+    'no',
+    'pl',
+    'hu',
+    'cs',
+    'ro',
+  ];
 
-  ImageStream? _currentImageStream;
-  ImageStreamListener? _currentImageListener;
+  static const Map<String, String> _languageNames = {
+    'en': 'English',
+    'es': 'Espanol',
+    'fr': 'Francais',
+    'de': 'Deutsch',
+    'it': 'Italiano',
+    'pt': 'Portugues',
+    'jp': 'Japanese',
+    'ko': 'Korean',
+    'zh': 'Chinese',
+    'nl': 'Nederlands',
+    'sv': 'Svenska',
+    'da': 'Dansk',
+    'fi': 'Suomi',
+    'no': 'Norsk',
+    'pl': 'Polski',
+    'hu': 'Magyar',
+    'cs': 'Cesky',
+    'ro': 'Romanian',
+  };
 
-  /// Asynchronously resolves the intrinsic aspect ratio of a local image file.
-  void _loadImageAspectRatio(String path) {
-    if (_imageAspectRatios.containsKey(path) || path.isEmpty) return;
+  String _selectedLanguage = 'en';
 
-    final File file = File(path);
-    if (!file.existsSync()) return;
-
-    // Remove any pending listener from a previous path to avoid leaks.
-    _removeImageListener();
-
-    final Image image = Image.file(file);
-    final ImageStream stream = image.image.resolve(const ImageConfiguration());
-
-    final listener = ImageStreamListener((
-      ImageInfo info,
-      bool synchronousCall,
-    ) {
-      if (mounted) {
-        final double aspectRatio = info.image.width / info.image.height;
-        if (aspectRatio > 0 && (_imageAspectRatios[path] != aspectRatio)) {
-          setState(() {
-            _imageAspectRatios[path] = aspectRatio;
-          });
-        }
-      }
-    });
-
-    stream.addListener(listener);
-    _currentImageStream = stream;
-    _currentImageListener = listener;
-  }
-
-  void _removeImageListener() {
-    if (_currentImageStream != null && _currentImageListener != null) {
-      _currentImageStream!.removeListener(_currentImageListener!);
-      _currentImageStream = null;
-      _currentImageListener = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _removeImageListener();
-    super.dispose();
+  List<String> _availableLanguages() {
+    final descriptions = widget.game.descriptions;
+    if (descriptions == null || descriptions.isEmpty) return [];
+    return _languageLabels
+        .where(
+          (lang) =>
+              descriptions[lang] != null && descriptions[lang]!.isNotEmpty,
+        )
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final description = widget.description;
-    final screenshotPath = widget.screenshotPath;
 
-    // Check if the metadata is functionally empty to determine the initial view state.
     final bool showScrapeView =
         description.isEmpty ||
         description == AppLocale.noDescription.getString(context) ||
@@ -125,14 +105,22 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
       left: 12.r,
       right: 12.r,
       top: 55.r,
-      bottom: 98.r,
+      bottom: 110.r,
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8.r),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+              BorderRadius.circular(14.r),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline,
+            width: 1.r,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.25),
               blurRadius: 2.r,
               offset: Offset(2.0.r, 2.0.r),
             ),
@@ -141,16 +129,15 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Section: Title and metadata summary pills.
             Padding(
-              padding: EdgeInsets.fromLTRB(8.r, 8.r, 8.r, 0),
+              padding: EdgeInsets.fromLTRB(8.r, 8.r, 8.r, 0.r),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Icon(
-                        Symbols.info_rounded,
+                        Symbols.description_rounded,
                         color: Theme.of(context).colorScheme.onSurface,
                         size: 13.r,
                       ),
@@ -204,20 +191,17 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
               ),
             ),
 
-            // Content Section: Dynamic switching between scraping, missing, and resolved states.
             Expanded(
               child: Padding(
                 padding: EdgeInsets.all(8.r),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    if (widget.isScrapingGame &&
-                        !widget.isSecondaryScreenActive) {
-                      return _buildScrapingProgressView();
-                    }
-
+                    // While scraping, the card lays ScrapingProgressPanel over
+                    // this whole region — every tab gets the same feedback, so
+                    // this tab no longer draws its own copy.
                     return showScrapeView
                         ? _buildNonScrapedView()
-                        : _buildScrapedView(description, screenshotPath);
+                        : _buildScrapedView();
                   },
                 ),
               ),
@@ -228,68 +212,6 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
     );
   }
 
-  /// Renders a deterministic progress visualization for active scraping operations.
-  Widget _buildScrapingProgressView() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(16.r),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: SizedBox(
-              width: 24.r,
-              height: 24.r,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-          SizedBox(height: 24.r),
-          Text(
-            AppLocale.scrapingGameData.getString(context),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 18.r,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 12.r),
-          SizedBox(
-            width: 250.r,
-            child: Column(
-              children: [
-                LinearProgressIndicator(
-                  value: widget.scrapeProgress,
-                  backgroundColor: Colors.white10,
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(4.r),
-                ),
-                SizedBox(height: 8.r),
-                Text(
-                  widget.scrapeStatus,
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
-                    fontSize: 10.r,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Renders a placeholder view for games missing local metadata assets.
   Widget _buildNonScrapedView() {
     return Center(
       child: Column(
@@ -348,182 +270,100 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
     );
   }
 
-  /// Main metadata view containing descriptions and media previews.
-  Widget _buildScrapedView(String description, String screenshotPath) {
+  Widget _buildScrapedView() {
+    final availableLanguages = _availableLanguages();
+
+    if (availableLanguages.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(12.r),
+          child: ScrollingDescriptionText(
+            text: GameUtils.cleanupDescription(widget.description),
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.8),
+              fontSize: 11.r,
+              height: 1.6,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final activeDesc = widget.game.getDescriptionForLanguage(_selectedLanguage);
+
     return Column(
       children: [
         Expanded(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.r),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: ScrollingDescriptionText(
-                    text: GameUtils.cleanupDescription(description),
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.8),
-                      fontSize: 11.r,
-                      height: 1.6,
-                    ),
-                  ),
-                ),
-                SizedBox(width: 16.r),
-                Expanded(flex: 3, child: _buildMediaPreview(screenshotPath)),
-              ],
+            child: ScrollingDescriptionText(
+              text: GameUtils.cleanupDescription(
+                activeDesc.isNotEmpty ? activeDesc : widget.description,
+              ),
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.8),
+                fontSize: 11.r,
+                height: 1.6,
+              ),
             ),
           ),
         ),
-        SizedBox(height: 8.r),
-      ],
-    );
-  }
-
-  /// Manages media arbitration and rendering for screenshots or video previews.
-  Widget _buildMediaPreview(String screenshotPath) {
-    final bool hasVideo =
-        widget.videoController != null &&
-        widget.videoController!.value.isInitialized;
-
-    if (screenshotPath.isNotEmpty) {
-      _loadImageAspectRatio(screenshotPath);
-    }
-
-    double mediaAspectRatio = 16 / 9;
-
-    // Prioritize video aspect ratio if active; fall back to resolved image ratio.
-    if (!widget.isVideoDelayActive && hasVideo) {
-      mediaAspectRatio = widget.videoController!.value.aspectRatio;
-    } else if (_imageAspectRatios.containsKey(screenshotPath)) {
-      mediaAspectRatio = _imageAspectRatios[screenshotPath]!;
-    }
-
-    // Defensive check to avoid layout breaks.
-    if (mediaAspectRatio <= 0 || mediaAspectRatio.isNaN) {
-      mediaAspectRatio = 16 / 9;
-    }
-
-    return Center(
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6.r),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 2.r,
-              offset: Offset(2.0.r, 2.0.r),
-            ),
-          ],
-          color: Colors.transparent,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6.r),
-          clipBehavior: Clip.antiAlias,
-          child: AspectRatio(
-            aspectRatio: mediaAspectRatio,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Render Video Layer.
-                if (!widget.isVideoDelayActive &&
-                    hasVideo &&
-                    widget.videoController!.value.isInitialized &&
-                    widget.videoController!.value.size.width > 0 &&
-                    widget.videoController!.value.size.height > 0) ...[
-                  Consumer<SqliteConfigProvider>(
-                    builder: (context, config, child) {
-                      return VideoPlayer(widget.videoController!);
+        if (availableLanguages.length > 1)
+          Container(
+            height: 28.r,
+            margin: EdgeInsets.only(bottom: 4.r),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: 8.r),
+              itemCount: availableLanguages.length,
+              separatorBuilder: (_, _) => SizedBox(width: 4.r),
+              itemBuilder: (context, index) {
+                final lang = availableLanguages[index];
+                final isSelected = lang == _selectedLanguage;
+                return Material(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6.r),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedLanguage = lang;
+                      });
                     },
-                  ),
-                ] else if (File(screenshotPath).existsSync()) ...[
-                  // Fallback: Render Screenshot Layer.
-                  Image.file(
-                    File(screenshotPath),
-                    height: double.infinity,
-                    cacheHeight: 640,
-                    key: ValueKey(
-                      '${screenshotPath}_fg_${widget.imageVersion}',
-                    ),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
-                ] else
-                  Center(
-                    child: Icon(
-                      Symbols.videogame_asset_rounded,
-                      size: 48.r,
-                      color: Colors.white24,
-                    ),
-                  ),
-
-                // Audio Status Indicator (Floating Overlay).
-                if (!widget.isVideoDelayActive && hasVideo)
-                  Positioned(
-                    bottom: 8.r,
-                    right: 8.r,
-                    child: ExcludeFocus(
-                      child: Material(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6.r),
-                        child: InkWell(
-                          onTap: () {
-                            SfxService().playNavSound();
-                            widget.onToggleVideoMute();
-                          },
-                          canRequestFocus: false,
-                          focusColor: Colors.transparent,
-                          hoverColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          splashColor: Colors.transparent,
-                          borderRadius: BorderRadius.circular(12.r),
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8.r,
-                              vertical: 4.r,
-                            ),
-                            child: Consumer<SqliteConfigProvider>(
-                              builder: (context, configProvider, child) {
-                                final isMuted =
-                                    !configProvider.config.videoSound;
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Image.asset(
-                                      'assets/images/gamepad/Xbox_Menu_button.png',
-                                      width: 14.r,
-                                      height: 14.r,
-                                      color: Colors.white,
-                                    ),
-                                    SizedBox(width: 4.r),
-                                    Icon(
-                                      isMuted
-                                          ? Symbols.volume_off_rounded
-                                          : Symbols.volume_up_rounded,
-                                      size: 12.r,
-                                      color: Colors.white,
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
+                    borderRadius: BorderRadius.circular(6.r),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 8.r,
+                        vertical: 4.r,
+                      ),
+                      child: Text(
+                        _languageNames[lang] ?? lang.toUpperCase(),
+                        style: TextStyle(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onSurface,
+                          fontSize: 9.r,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ),
                   ),
-              ],
+                );
+              },
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
 }
 
-/// A compact metadata indicator styled as a pill badge.
 class _InfoPill extends StatelessWidget {
   final IconData icon;
   final String text;

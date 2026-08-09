@@ -6,7 +6,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Discord](https://img.shields.io/discord/1088818368129273946?label=Discord&logo=discord&color=5865f2)](https://discord.gg/xE2kgKsRVq) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/miguelsotobaez/neostation-frontend/total) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/miguelsotobaez/neostation-frontend/build-and-deploy.yml) [![Stars](https://img.shields.io/github/stars/misobadev/neostation-frontend?logo=github)](https://github.com/misobadev/neostation-frontend) [![Issues](https://img.shields.io/github/issues/misobadev/neostation-frontend)](https://github.com/misobadev/neostation-frontend/issues)  [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(x64%2Farm64)%20%7C%20macOS%20%7C%20Android-blue)](https://github.com/misobadev/neostation-frontend)
 
-![NeoStation Hero](https://repository-images.githubusercontent.com/1223168847/145cb04c-3479-4eb5-bbb6-23d14d047a7c)
+![NeoStation Hero](https://repository-images.githubusercontent.com/1223168847/4e7a727d-9855-4597-a999-c07167d8552f)
 
 </div>
 
@@ -22,6 +22,7 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 
 - **Modern & customizable UI**: Designed for both large screens and handheld devices, with themes and animations.
 - **Collection management**: Intuitively organize your ROMs and platforms.
+- **Multi-disc ROM organization**: Automatically create `.m3u` playlists for your multi-disc games and organize them into game folders.
 - **RetroArch & standalone emulator integration**: Easy configuration and auto-detection.
 - **Multi-platform support**: Windows, Linux, macOS, and Android.
 - **Lightweight & fast**: Built with web and native technologies for maximum performance.
@@ -30,7 +31,18 @@ NeoStation provides a fast, lightweight, and customizable experience for managin
 - **RetroAchievements support**: Track achievements and leaderboard progress.
 - **ScreenScraper integration**: Automatic metadata and media scraping.
 - **Gamepad & keyboard navigation**: Full controller support across all platforms.
-- **10 languages supported**: English, Spanish, Portuguese, Russian, Chinese, French, German, Italian, Indonesian, Japanese.
+- **12 languages supported**: English, Spanish, Portuguese, Russian, Chinese (Simplified & Traditional), French, German, Italian, Indonesian, Japanese, Korean.
+
+## Multi-disc ROM Organization
+
+The built-in organizer helps prepare multi-disc games for emulators that use `.m3u` playlists:
+
+1. Open **Settings > Tools**.
+2. Select **Organize Multi-Disc Games**.
+3. NeoStation recursively scans all configured ROM folders and detects disc sets using `Disc`, `Disk`, or `CD` filename markers.
+4. Each detected set is placed in a game folder with an `.m3u` playlist. Existing playlists are reused rather than duplicated.
+
+Folders that already contain `.m3u` playlists are skipped during the scan.
 
 ## Supported Platforms
 
@@ -58,6 +70,24 @@ flatpak-builder --user --install-deps-from=flathub \
   --repo=repo --force-clean \
   build-dir linux/flatpak/com.neogamelab.neostation.yml
 ```
+
+### Steam Deck
+
+Download the x86_64 AppImage, then **add it to Steam and launch it from there** —
+either from Game Mode, or from the desktop with Steam running:
+
+1. Steam → *Games → Add a Non-Steam Game to My Library* → *Browse*
+2. Set the file filter to *All Files* (the picker hides `.AppImage` by default)
+3. Select the AppImage, then launch NeoStation from your library
+
+This matters for the controls. With Steam not running, the Deck's controller sits
+in **lizard mode**, where the hardware emulates a keyboard and mouse instead of a
+gamepad: the D-pad sends arrow keys, A/B send Enter/Escape, the trackpad moves the
+mouse pointer, and **the bumpers send nothing at all**. Running through Steam hands
+the app a proper virtual gamepad, and every button works.
+
+So if the shoulder buttons seem dead, or A/B behave oddly, or a mouse cursor sits on
+screen, the app isn't at fault — it's being run outside Steam.
 
 ### Build from source
 
@@ -160,13 +190,14 @@ flutter build macos --release $DART_DEFINES
 lib/
 ├── data/
 │   └── datasources/     # SQLite access, migrations, raw queries
-├── l10n/               # Localization files (10 languages)
+├── l10n/               # Localization files (12 languages)
 ├── models/             # Data models
 ├── providers/          # ChangeNotifier state management
 ├── repositories/       # Data access abstraction layer
 ├── screens/            # Application pages
 ├── services/           # Business logic and external APIs
-├── themes/             # App themes and palettes
+├── sync/               # Provider-agnostic cloud sync (SyncManager + adapters)
+├── themes/             # App themes
 ├── utils/              # Helpers and utilities
 ├── widgets/            # Reusable UI components
 ├── main.dart           # Entry point
@@ -185,16 +216,13 @@ These packages are "vendored" within the /packages directory to ensure long-term
 |---------|-------------|
 | `gamepads` | Cross-platform gamepad input (based on Flame Engine's gamepads) |
 | `flutter_7zip` | FFI bindings for 7-Zip archive extraction |
-| `flutter_soloud` | Low-level audio playback using the SoLoud engine |
 
 ## Systems & Emulator Definitions
 
-NeoStation's system configurations, emulator definitions, and launch arguments are maintained in a separate repository.  
-**If you want to add new emulators, fix launch arguments, or update system configurations, please open a pull request in the dedicated systems repository:**
+NeoStation's system configurations, emulator definitions, and launch arguments are maintained in this repository under [`assets/systems/`](assets/systems/).  
+**If you want to add new emulators, fix launch arguments, or update system configurations, please open a pull request here.**
 
-👉 [**misobadev/neostation-systems**](https://github.com/misobadev/neostation-systems)
-
-Changes to these files are not accepted in this frontend repository.
+The bundled `assets/manifest.json` drives the over-the-air systems update mechanism, so compatible changes can be delivered to existing installs without requiring a full app release.
 
 ## Contributing
 
@@ -203,6 +231,25 @@ Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines on bug reports, 
 ## Security
 
 If you discover a security vulnerability, please follow the instructions in [`SECURITY.md`](SECURITY.md) to report it responsibly.
+
+## Project Team
+
+### Lead
+
+- **@misobadev**
+  - Ko-fi: https://ko-fi.com/neostation
+
+### Official Co-Maintainers
+
+- **@androosio**
+  - Ko-fi: https://ko-fi.com/androosio
+
+### Official Collaborators
+
+- **@ItsRetroPup**
+  - Ko-fi: https://ko-fi.com/retropup84752
+
+These co-maintainers and collaborators work very hard to make NeoStation what it is today.
 
 ## License
 

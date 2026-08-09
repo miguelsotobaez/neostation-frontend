@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "n64",
+    "multidisc": false,
     "name": "Nintendo 64",
     "short_name": "N64",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "n64",
       "Nintendo 64",
-      "n64dd"
+      "n64dd",
+      "64dd"
     ],
     "colors": [
       "#546e7a",
@@ -158,6 +160,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mupen64plus_next_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -204,6 +208,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L parallel_n64_libretro.so \"{file.path}\""
         },
         "macos": {

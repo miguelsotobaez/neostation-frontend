@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ast",
+    "multidisc": false,
     "name": "Atari ST",
     "short_name": "AST",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "ast",
       "atarist",
-      "Atari ST"
+      "Atari ST",
+      "atari-st"
     ],
     "colors": [
       "#BDBDBD",
@@ -74,6 +76,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L hatari_libretro.so \"{file.path}\""
         },
         "macos": {

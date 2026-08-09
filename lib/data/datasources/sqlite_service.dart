@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 97;
+  static const int _databaseVersion = 112;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -531,6 +531,7 @@ class SqliteService {
               'type': jsonSystem.type,
               'color1': jsonSystem.color1,
               'color2': jsonSystem.color2,
+              'multidisc': jsonSystem.multiDisc ? 1 : 0,
             },
             where: 'id = ?',
             whereArgs: [systemId],
@@ -550,6 +551,7 @@ class SqliteService {
             'type': jsonSystem.type,
             'color1': jsonSystem.color1,
             'color2': jsonSystem.color2,
+            'multidisc': jsonSystem.multiDisc ? 1 : 0,
             'neosync_json': json.encode(jsonSystem.neosync.toJson()),
           });
         }
@@ -625,6 +627,16 @@ class SqliteService {
     return syncedSystems;
   }
 
+  /// Runs one emulator sync pass against [txn] — the seed data applied to the
+  /// database, including which row ends up carrying `is_default`.
+  @visibleForTesting
+  static Future<void> syncEmulatorsForTesting(
+    TransactionAdapter txn,
+    String systemId,
+    List<EmulatorDefinition> emulators,
+    Map<String, int> osMap,
+  ) => _syncEmulators(txn, systemId, emulators, osMap, systemId);
+
   static Future<void> _syncEmulators(
     TransactionAdapter txn,
     String systemId,
@@ -632,32 +644,41 @@ class SqliteService {
     Map<String, int> osMap,
     String systemFolderName,
   ) async {
-    // Check if any default exists for this system (Core in app_emulators)
-    final result = await txn.rawQuery(
-      'SELECT COUNT(*) as count FROM app_emulators WHERE system_id = ? AND is_default = 1',
-      [systemId],
-    );
-    final count = result.isNotEmpty
-        ? (int.tryParse(result.first['count']?.toString() ?? '') ?? 0)
-        : 0;
+    // The invariant is "at most one default per (system_id, os_id)", so every
+    // default bookkeeping below is scoped per OS. Scoping it per system would
+    // both starve secondary platforms of a default (the first OS in the JSON
+    // wins and every other OS silently gets none) and let a stale default on
+    // one OS suppress the JSON default on another.
 
-    // Also check if user has set a default standalone emulator
-    final userResult = await txn.rawQuery(
+    // Existing user-chosen defaults for this system, per OS. A user choice
+    // outranks the seed data, so these operating systems are left entirely
+    // alone below — [_fixEmulatorDefaults] already keeps `is_default` from
+    // contradicting them.
+    final userDefaultRows = await txn.rawQuery(
       '''
-      SELECT COUNT(*) as count 
-      FROM user_emulator_config uc 
-      JOIN app_emulators e ON uc.emulator_unique_id = e.unique_identifier 
+      SELECT e.os_id as os_id, COUNT(*) as count
+      FROM user_emulator_config uc
+      JOIN app_emulators e ON uc.emulator_unique_id = e.unique_identifier
       WHERE e.system_id = ? AND uc.is_user_default = 1
+      GROUP BY e.os_id
       ''',
       [systemId],
     );
-    final userCount = userResult.isNotEmpty
-        ? (int.tryParse(userResult.first['count']?.toString() ?? '') ?? 0)
-        : 0;
 
-    final hasDefaultInDB = count > 0 || userCount > 0;
+    final Set<int> osWithUserDefault = {};
+    for (final row in userDefaultRows) {
+      final rowOsId = int.tryParse(row['os_id']?.toString() ?? '');
+      final rowCount = int.tryParse(row['count']?.toString() ?? '') ?? 0;
+      if (rowOsId != null && rowCount > 0) {
+        osWithUserDefault.add(rowOsId);
+      }
+    }
 
-    bool defaultSetInLoop = false;
+    // The emulator the systems JSON designates for each OS — the first flagged
+    // entry that is actually applicable there. Recorded during the row loop and
+    // enforced once afterwards, because the flag is only meaningful relative to
+    // the other rows of the same (system_id, os_id).
+    final Map<int, String> osJsonPick = {};
 
     final Set<String> processedUniqueIds = {};
 
@@ -711,16 +732,24 @@ class SqliteService {
 
         if (osName == 'android') {
           packageName = platformData['package'];
+          String? activityName = platformData['activity'];
 
-          // Fallback: Parse launch_arguments if package is missing (new format)
-          if (packageName == null &&
+          // Parse launch_arguments if package/activity are missing (new format)
+          if ((packageName == null || activityName == null) &&
               platformData.containsKey('launch_arguments')) {
             final args = platformData['launch_arguments'].toString();
 
-            // Extract package from "-n package/activity"
-            final componentMatch = RegExp(r'-n\s+([^\s/]+)').firstMatch(args);
+            // Extract package and activity from "-n package/activity"
+            final componentMatch = RegExp(
+              r'-n\s+([^\s/]+)/([^\s]+)',
+            ).firstMatch(args);
             if (componentMatch != null) {
-              packageName = componentMatch.group(1);
+              packageName ??= componentMatch.group(1);
+              var activity = componentMatch.group(2)!;
+              if (activity.startsWith('.') && packageName != null) {
+                activity = '$packageName$activity';
+              }
+              activityName ??= activity;
             }
 
             // Check if RetroArch
@@ -751,6 +780,10 @@ class SqliteService {
               }
             }
           }
+
+          // Persist the resolved activity alongside the package so standalone
+          // fallback launches have a complete component name.
+          platformData['_resolved_activity_name'] = activityName;
         } else if (osName == 'windows') {
           executable = platformData['executable'];
           if (executable != null &&
@@ -793,7 +826,10 @@ class SqliteService {
           }
         }
 
-        // Determine if we should apply default from JSON
+        // Record which emulator the JSON designates for this OS. Nothing writes
+        // `is_default` inside this loop: the flag only means anything relative
+        // to the rest of the (system_id, os_id) group, so one statement after
+        // the loop owns it — see the enforcement pass below.
         final bool isDefaultCore = emuDef.isDefaultCore;
         final bool isDefaultStandalone = emuDef.isDefaultStandalone;
         // On Android, skip setting is_default for RetroArch cores here;
@@ -801,14 +837,12 @@ class SqliteService {
         final bool isAndroidTarget = osName == 'android';
         final bool isRetroArchCore = isDefaultCore && !isStandalone;
         final bool skipCoreDefault = isAndroidTarget && isRetroArchCore;
-        final bool applyJsonDefault =
-            !hasDefaultInDB &&
-            !defaultSetInLoop &&
-            !skipCoreDefault &&
-            (isDefaultCore || isDefaultStandalone);
 
-        if (applyJsonDefault) {
-          defaultSetInLoop = true;
+        // First flagged entry wins the OS. Systems that flag several (the
+        // ra/ra32/ra64 core trio, on desktop where none of them is skipped)
+        // resolve by JSON array order, which is at least reproducible.
+        if (!skipCoreDefault && (isDefaultCore || isDefaultStandalone)) {
+          osJsonPick.putIfAbsent(osId, () => emuDef.uniqueId);
         }
 
         // Determine RetroAchievements compatibility
@@ -831,15 +865,17 @@ class SqliteService {
             'is_standalone': isStandalone ? 1 : 0,
             'core_filename': coreFilename,
             'android_package_name': packageName,
+            'android_activity_name': platformData['_resolved_activity_name'],
             'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
           };
 
-          if (applyJsonDefault) {
-            updateData['is_default'] = 1;
-          }
           if (isDefaultCore) {
             updateData['is_default_core'] = 1;
           }
+          // Written on every pass, unlike is_default_core: it is what tells the
+          // RetroArch fallback which standalone the seed designates, so a JSON
+          // that moves the flag has to be able to move it back off a row.
+          updateData['is_default_standalone'] = isDefaultStandalone ? 1 : 0;
 
           await txn.update(
             'app_emulators',
@@ -864,11 +900,13 @@ class SqliteService {
               'is_standalone': isStandalone ? 1 : 0,
               'core_filename': coreFilename,
               'android_package_name': packageName,
+              'android_activity_name': platformData['_resolved_activity_name'],
               'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
             };
             if (isDefaultCore) {
               updateData['is_default_core'] = 1;
             }
+            updateData['is_default_standalone'] = isDefaultStandalone ? 1 : 0;
 
             await txn.update(
               'app_emulators',
@@ -888,17 +926,75 @@ class SqliteService {
               'is_standalone': isStandalone ? 1 : 0,
               'core_filename': coreFilename,
               'android_package_name': packageName,
-              'is_default': applyJsonDefault ? 1 : 0,
+              'android_activity_name': platformData['_resolved_activity_name'],
+              // Assigned by the enforcement pass after the loop, which is the
+              // only thing that can see the whole (system_id, os_id) group.
+              'is_default': 0,
               'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
             };
             if (isDefaultCore) {
               insertData['is_default_core'] = 1;
             }
+            insertData['is_default_standalone'] = isDefaultStandalone ? 1 : 0;
 
             await txn.insert('app_emulators', insertData);
             processedUniqueIds.add(emuDef.uniqueId);
           }
         }
+      }
+    }
+
+    // Enforce the seed's pick for every OS the JSON designates one for.
+    //
+    // Setting `is_default` on the flagged row is not enough on its own: nothing
+    // else in the sync path ever *clears* the flag, so a row that acquired it
+    // under an older systems JSON (or from a repair pass that guessed) kept it
+    // forever, and the seed's real choice could never take effect. Shipping a
+    // changed default therefore never reached an install that already had one.
+    // Writing the whole group in one statement makes the JSON authoritative and
+    // collapses any duplicates in the same pass.
+    //
+    // Two owners are deliberately not overruled:
+    //   * an OS where the user picked an emulator — their choice outranks the
+    //     seed, and re-asserting `is_default` here would recreate exactly the
+    //     app-default-contradicts-user-choice anomaly v105 exists to clear;
+    //   * RetroArch on Android, where [fixRetroArchDefaultForAndroid] owns the
+    //     flag because only it knows which variant is installed. Its cores are
+    //     already excluded by `skipCoreDefault`; this also declines to demote a
+    //     core it has designated in favour of the JSON's standalone.
+    if (osJsonPick.isNotEmpty) {
+      int? androidOsId;
+      for (final entry in osMap.entries) {
+        if (entry.key.toLowerCase() == 'android') {
+          androidOsId = entry.value;
+          break;
+        }
+      }
+
+      final coreDefaultRows = await txn.rawQuery(
+        'SELECT DISTINCT os_id FROM app_emulators '
+        'WHERE system_id = ? AND is_default = 1 AND is_standalone = 0',
+        [systemId],
+      );
+      final Set<int> osWithCoreDefault = {};
+      for (final row in coreDefaultRows) {
+        final rowOsId = int.tryParse(row['os_id']?.toString() ?? '');
+        if (rowOsId != null) osWithCoreDefault.add(rowOsId);
+      }
+
+      for (final pick in osJsonPick.entries) {
+        final pickOsId = pick.key;
+        if (osWithUserDefault.contains(pickOsId)) continue;
+        if (pickOsId == androidOsId && osWithCoreDefault.contains(pickOsId)) {
+          continue;
+        }
+
+        await txn.rawUpdate(
+          'UPDATE app_emulators '
+          'SET is_default = CASE WHEN unique_identifier = ? THEN 1 ELSE 0 END '
+          'WHERE system_id = ? AND os_id = ?',
+          [pick.value, systemId, pickOsId],
+        );
       }
     }
 
@@ -1190,6 +1286,17 @@ class SqliteService {
     );
     final tableNames = tables.map((r) => r['name'].toString()).toSet();
 
+    // Recovery guard: if the database already has tables but app_os is missing
+    // (e.g. after a failed downgrade/recreate cycle), recreate it immediately so
+    // downstream hotfixes and queries do not crash.
+    if (tableNames.isNotEmpty && !tableNames.contains('app_os')) {
+      _log.w(
+        'app_os table is missing on an existing database; recreating it defensively.',
+      );
+      await _ensureAppOsTable(db);
+      tableNames.add('app_os');
+    }
+
     // Only run hotfixes if the target tables exist.
 
     // FIX: Ensure user_rom_folders exists even if migrations were skipped.
@@ -1214,6 +1321,7 @@ class SqliteService {
         tableNames.contains('app_emulators')) {
       try {
         await _fixEmulatorDefaults(db);
+        await logEmulatorDefaultAnomalies(db);
       } catch (e) {
         _log.e('Minor fix for defaults failed (expected in first run): $e');
       }
@@ -1300,6 +1408,33 @@ class SqliteService {
       }
     } catch (e) {
       _log.e('Minor fix ensuring emulator default core column failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Ensures the [app_os] lookup table exists and contains the base OS rows.
+  ///
+  /// This is a defensive guard used both during first install and as a recovery
+  /// mechanism if the table was lost during a failed downgrade/recreate cycle.
+  Future<void> _ensureAppOsTable(DatabaseAdapter db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS app_os (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE
+        );
+      ''');
+
+      await db.execute('''
+        INSERT OR IGNORE INTO app_os (id, name) VALUES
+        (1, 'windows'),
+        (2, 'android'),
+        (3, 'linux'),
+        (4, 'macos'),
+        (5, 'ios')
+      ''');
+    } catch (e) {
+      _log.e('Failed to ensure app_os table: $e');
       rethrow;
     }
   }
@@ -1502,17 +1637,27 @@ class SqliteService {
   }
 
   /// Completely drops and recreates the database schema.
+  ///
+  /// Foreign keys are disabled while dropping tables so that parent tables
+  /// (e.g. [app_os], [app_systems]) can be removed even when child tables
+  /// reference them. They are re-enabled before returning.
   Future<void> _recreateDatabase(DatabaseAdapter db) async {
-    final tables = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
-    );
+    try {
+      await db.execute('PRAGMA foreign_keys = OFF;');
 
-    for (final table in tables) {
-      final tableName = table['name'].toString();
-      await db.execute('DROP TABLE IF EXISTS $tableName;');
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
+      );
+
+      for (final table in tables) {
+        final tableName = table['name'].toString();
+        await db.execute('DROP TABLE IF EXISTS $tableName;');
+      }
+
+      await _onCreate(db, _databaseVersion);
+    } finally {
+      await db.execute('PRAGMA foreign_keys = ON;');
     }
-
-    await _onCreate(db, _databaseVersion);
   }
 
   /// Creates internal application tables (systems, emulators, etc.).
@@ -1538,6 +1683,7 @@ class SqliteService {
           type TEXT,
           color1 TEXT,
           color2 TEXT,
+          multidisc INTEGER NOT NULL DEFAULT 0,
           neosync_json TEXT
       );
       ''',
@@ -1569,6 +1715,7 @@ class SqliteService {
           core_filename TEXT,
           is_default INTEGER NOT NULL DEFAULT 0,
           is_default_core INTEGER NOT NULL DEFAULT 0,
+          is_default_standalone INTEGER NOT NULL DEFAULT 0,
           is_ra_compatible INTEGER NOT NULL DEFAULT 0,
           android_package_name TEXT,
           android_activity_name TEXT,
@@ -1593,7 +1740,7 @@ class SqliteService {
         last_scan TEXT,
         game_view_mode TEXT DEFAULT 'list',
         system_view_mode TEXT DEFAULT 'grid',
-        palette_name TEXT DEFAULT 'system',
+        theme_name TEXT DEFAULT 'system',
         video_sound INTEGER DEFAULT 1,
         ra_user TEXT,
         show_game_info INTEGER DEFAULT 0,
@@ -1609,6 +1756,12 @@ class SqliteService {
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
+        legend_hidden INTEGER DEFAULT 0,
+        game_details_tab TEXT DEFAULT 'wheel',
+        hide_tab_sync INTEGER DEFAULT 0,
+        hide_tab_achievements INTEGER DEFAULT 0,
+        hide_tab_scraper INTEGER DEFAULT 0,
+        hide_tab_search INTEGER DEFAULT 0,
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         neostation_app_version TEXT DEFAULT '',
@@ -1624,7 +1777,8 @@ class SqliteService {
         dock_slot_count INTEGER DEFAULT 3,
         now_playing_dim_delay INTEGER DEFAULT 3,
         now_playing_dim_level INTEGER DEFAULT 100,
-        fanart_dim_level INTEGER DEFAULT 25
+        fanart_dim_level INTEGER DEFAULT 25,
+        esde_folder_path TEXT DEFAULT ''
       );
       ''',
       '''
@@ -1751,6 +1905,8 @@ class SqliteService {
         genre TEXT,
         players TEXT,
         is_fully_scraped INTEGER DEFAULT 0,
+        esde_media_subdir TEXT,
+        esde_imported INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
         UNIQUE(app_system_id, filename)
@@ -1775,6 +1931,7 @@ class SqliteService {
         hide_logo INTEGER DEFAULT 0,
         prefer_file_name INTEGER DEFAULT 0,
         subfolder_view INTEGER DEFAULT 0,
+        esde_media_dir TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
         UNIQUE(app_system_id)
@@ -1873,14 +2030,7 @@ class SqliteService {
 
     try {
       await db.transaction((txn) async {
-        await txn.execute('''
-          INSERT OR IGNORE INTO app_os (id, name) VALUES
-          (1, 'windows'),
-          (2, 'android'),
-          (3, 'linux'),
-          (4, 'macos'),
-          (5, 'ios')
-        ''');
+        await _ensureAppOsTable(txn);
         await txn.execute('''
           INSERT OR IGNORE INTO user_screenscraper_config (id, scrape_mode) VALUES (1, 'new_only')
         ''');
@@ -2069,6 +2219,7 @@ class SqliteService {
 
       // Verify presence of critical tables
       final criticalTables = [
+        'app_os',
         'app_system_extensions',
         'app_systems',
         'app_emulators',
@@ -2225,7 +2376,7 @@ class SqliteService {
         'id': 1,
         'last_scan': null,
         'system_view_mode': 'grid',
-        'palette_name': 'system',
+        'theme_name': 'system',
         'video_sound': 1,
         'ra_user': null,
         'show_game_info': 0,
@@ -2256,6 +2407,46 @@ class SqliteService {
     final db = await instance.database;
     final results = await db.query('user_rom_folders', orderBy: 'id ASC');
     return results.map((row) => row['path'].toString()).toList();
+  }
+
+  /// Rebuilds Android ROM roots from existing library entries when a previous
+  /// migration or interrupted save left [user_rom_folders] empty. Both SAF tree
+  /// URIs and traditional paths are supported so the library remains usable
+  /// while the user moves from legacy storage access to SAF.
+  static Future<List<String>> recoverRomFoldersFromStoredRoms() async {
+    final db = await instance.database;
+    final rows = await db.rawQuery('''
+      SELECT ur.rom_path, s.folder_name
+      FROM user_roms ur
+      JOIN app_systems s ON s.id = ur.app_system_id
+      WHERE ur.rom_path IS NOT NULL AND ur.rom_path != ''
+    ''');
+
+    final roots = <String>{};
+    for (final row in rows) {
+      final romPath = row['rom_path']?.toString() ?? '';
+      final systemFolder = row['folder_name']?.toString() ?? '';
+      if (romPath.isEmpty || systemFolder.isEmpty) continue;
+
+      // SAF files retain their selected tree URI before the document segment.
+      final documentIndex = romPath.indexOf('/document/');
+      if (romPath.startsWith('content://') && documentIndex > 0) {
+        roots.add(romPath.substring(0, documentIndex));
+        continue;
+      }
+
+      // Legacy paths generally look like /root/<system>/<rom>. Derive the
+      // root only when the stored system folder appears as a full path segment.
+      final normalizedPath = romPath.replaceAll('\\', '/');
+      final lowerPath = normalizedPath.toLowerCase();
+      final marker = '/${systemFolder.toLowerCase()}/';
+      final folderIndex = lowerPath.lastIndexOf(marker);
+      if (folderIndex > 0) {
+        roots.add(normalizedPath.substring(0, folderIndex));
+      }
+    }
+
+    return roots.toList()..sort();
   }
 
   /// Persists a complete list of ROM directories, replacing existing ones.
@@ -2322,7 +2513,7 @@ class SqliteService {
     String? lastScan,
     String? gameViewMode,
     String? systemViewMode,
-    String? paletteName,
+    String? themeName,
     int? videoSound,
     String? raUser,
     int? showGameInfo,
@@ -2340,6 +2531,12 @@ class SqliteService {
     String? appLanguage,
     String? activeTheme,
     int? hideRecentCard,
+    int? legendHidden,
+    String? gameDetailsTab,
+    int? hideTabSync,
+    int? hideTabAchievements,
+    int? hideTabScraper,
+    int? hideTabSearch,
     String? activeSyncProvider,
     String? systemsVersion,
     String? neostationAppVersion,
@@ -2354,6 +2551,7 @@ class SqliteService {
     int? nowPlayingDimDelay,
     int? nowPlayingDimLevel,
     int? fanartDimLevel,
+    String? esdeFolderPath,
   }) async {
     final db = await instance.database;
 
@@ -2373,7 +2571,7 @@ class SqliteService {
       newConfig['game_view_mode'] = gameViewMode;
     }
     if (systemViewMode != null) newConfig['system_view_mode'] = systemViewMode;
-    if (paletteName != null) newConfig['palette_name'] = paletteName;
+    if (themeName != null) newConfig['theme_name'] = themeName;
     if (videoSound != null) newConfig['video_sound'] = videoSound;
     if (raUser != null) newConfig['ra_user'] = raUser;
     if (showGameInfo != null) newConfig['show_game_info'] = showGameInfo;
@@ -2417,6 +2615,24 @@ class SqliteService {
     if (hideRecentCard != null) {
       newConfig['hide_recent_card'] = hideRecentCard;
     }
+    if (legendHidden != null) {
+      newConfig['legend_hidden'] = legendHidden;
+    }
+    if (gameDetailsTab != null) {
+      newConfig['game_details_tab'] = gameDetailsTab;
+    }
+    if (hideTabSync != null) {
+      newConfig['hide_tab_sync'] = hideTabSync;
+    }
+    if (hideTabAchievements != null) {
+      newConfig['hide_tab_achievements'] = hideTabAchievements;
+    }
+    if (hideTabScraper != null) {
+      newConfig['hide_tab_scraper'] = hideTabScraper;
+    }
+    if (hideTabSearch != null) {
+      newConfig['hide_tab_search'] = hideTabSearch;
+    }
     if (activeSyncProvider != null) {
       newConfig['active_sync_provider'] = activeSyncProvider;
     }
@@ -2458,6 +2674,9 @@ class SqliteService {
     }
     if (fanartDimLevel != null) {
       newConfig['fanart_dim_level'] = fanartDimLevel;
+    }
+    if (esdeFolderPath != null) {
+      newConfig['esde_folder_path'] = esdeFolderPath;
     }
 
     await db.insert(
@@ -2542,10 +2761,6 @@ class SqliteService {
     await _updateSystemSetting(systemId, 'hide_brackets', enabled ? 1 : 0);
   }
 
-  static Future<void> setSystemHideLogo(String systemId, bool enabled) async {
-    await _updateSystemSetting(systemId, 'hide_logo', enabled ? 1 : 0);
-  }
-
   static Future<void> setSystemPreferFileName(
     String systemId,
     bool enabled,
@@ -2623,6 +2838,10 @@ class SqliteService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     });
+
+    // Invalidate the systems cache so subsequent reads reflect the updated
+    // setting (e.g. hide_logo) instead of returning a stale cached model.
+    _cachedSystems = null;
   }
 
   /// Sets custom images for a system.
@@ -2674,15 +2893,15 @@ class SqliteService {
     await saveUserConfig(systemViewMode: mode);
   }
 
-  /// Updates the palette name.
-  static Future<void> updatePaletteName(String paletteName) async {
-    await saveUserConfig(paletteName: paletteName);
+  /// Updates the theme name.
+  static Future<void> updateThemeName(String themeName) async {
+    await saveUserConfig(themeName: themeName);
   }
 
-  /// Retrieves the current palette name.
-  static Future<String> getPaletteName() async {
+  /// Retrieves the current theme name.
+  static Future<String> getThemeName() async {
     final config = await getUserConfig();
-    return config?['palette_name']?.toString() ?? 'system';
+    return config?['theme_name']?.toString() ?? 'system';
   }
 
   /// Retrieves the active asset theme (neostation-assets).
@@ -3253,6 +3472,13 @@ class SqliteService {
       getAllSystems();
 
   /// Retrieves all emulator cores available for a specific system and operating system.
+  ///
+  /// The `isInstalled` on the returned models is a *package-level* check: on
+  /// Android it means the emulator app is present, which for a RetroArch entry
+  /// says nothing about whether the libretro core itself is there; on desktop it
+  /// is unconditionally true. `loadEmulatorsForSystem` is the enumerator that
+  /// verifies cores as well — prefer it unless you specifically want the cheaper
+  /// package-only answer.
   static Future<List<CoreEmulatorModel>> getCoresBySystemId(
     String systemId,
   ) async {
@@ -3346,6 +3572,85 @@ class SqliteService {
     });
   }
 
+  /// Makes [uniqueIdentifier] the one and only default emulator for [systemId],
+  /// clearing every competing marker first.
+  ///
+  /// The system default is expressed across two tables — `app_emulators.is_default`
+  /// (cores) and `user_emulator_config.is_user_default` (the user's explicit pick,
+  /// core or standalone) — and [getUserDefaultEmulatorForSystem] reads the latter
+  /// with a `LIMIT 1`. Anything that leaves a second `is_user_default = 1` row on
+  /// the system therefore makes the resolved default non-deterministic, and in
+  /// practice the *oldest* selection wins: pick a core, then a standalone, and the
+  /// core still launches. Both setters funnel through here so that can't happen.
+  ///
+  /// The `is_user_default` clear is deliberately system-wide rather than
+  /// system+OS: `user_emulator_config`'s primary key is `emulator_unique_id`
+  /// alone, so a single row is shared across operating systems and anything
+  /// narrower cannot make the invariant hold.
+  static Future<void> _applySystemDefaultEmulator(
+    TransactionAdapter txn,
+    String systemId,
+    String uniqueIdentifier,
+    int osId, {
+    required bool isStandalone,
+  }) async {
+    // 1. Clear the core default across the whole system+OS — standalone rows
+    //    included, in case a seed ever flagged one.
+    await txn.rawUpdate(
+      'UPDATE app_emulators SET is_default = 0 WHERE system_id = ? AND os_id = ?',
+      [systemId, osId],
+    );
+
+    // 2. Clear every explicit user default belonging to this system.
+    await txn.rawUpdate(
+      'UPDATE user_emulator_config SET is_user_default = 0 '
+      'WHERE emulator_unique_id IN '
+      '(SELECT unique_identifier FROM app_emulators WHERE system_id = ?)',
+      [systemId],
+    );
+
+    // 3. Cores additionally carry the app-level default flag.
+    if (!isStandalone) {
+      await txn.update(
+        'app_emulators',
+        {'is_default': 1},
+        where: 'os_id = ? AND unique_identifier = ?',
+        whereArgs: [osId, uniqueIdentifier],
+      );
+    }
+
+    _log.i(
+      '[EmuSel] set system default: system=$systemId emulator=$uniqueIdentifier '
+      'osId=$osId standalone=$isStandalone',
+    );
+
+    // 4. Record the user's pick so emulator auto-detection cannot override it
+    //    on subsequent startups.
+    final now = DateTime.now().toIso8601String();
+    final existing = await txn.query(
+      'user_emulator_config',
+      columns: ['emulator_unique_id'],
+      where: 'emulator_unique_id = ?',
+      whereArgs: [uniqueIdentifier],
+    );
+    if (existing.isNotEmpty) {
+      await txn.update(
+        'user_emulator_config',
+        {'is_user_default': 1, 'updated_at': now},
+        where: 'emulator_unique_id = ?',
+        whereArgs: [uniqueIdentifier],
+      );
+    } else {
+      await txn.insert('user_emulator_config', {
+        'emulator_unique_id': uniqueIdentifier,
+        'emulator_path': '', // Path resolution is handled during launch.
+        'is_user_default': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+  }
+
   /// Sets the primary emulator core for a given system.
   static Future<void> setDefaultCore(
     String systemId,
@@ -3355,54 +3660,13 @@ class SqliteService {
     final db = await instance.database;
 
     await db.transaction((txn) async {
-      // Reset defaults for all cores within the target system and OS.
-      await txn.rawUpdate(
-        'UPDATE app_emulators SET is_default = 0 WHERE system_id = ? AND os_id = ? AND is_standalone = 0',
-        [systemId, osId],
+      await _applySystemDefaultEmulator(
+        txn,
+        systemId,
+        uniqueIdentifier,
+        osId,
+        isStandalone: false,
       );
-
-      // Mutually exclusive: Disable standalone defaults when a core is selected.
-      await txn.rawUpdate(
-        'UPDATE user_emulator_config SET is_user_default = 0 '
-        'WHERE emulator_unique_id IN (SELECT unique_identifier FROM app_emulators WHERE system_id = ? AND os_id = ? AND is_standalone = 1)',
-        [systemId, osId],
-      );
-
-      // Assign the new default core.
-      await txn.update(
-        'app_emulators',
-        {'is_default': 1},
-        where: 'os_id = ? AND unique_identifier = ?',
-        whereArgs: [osId, uniqueIdentifier],
-      );
-
-      // Track user selection in user_emulator_config so RA auto-detection
-      // does not override it on subsequent startups.
-      final existing = await txn.query(
-        'user_emulator_config',
-        columns: ['emulator_unique_id'],
-        where: 'emulator_unique_id = ?',
-        whereArgs: [uniqueIdentifier],
-      );
-      if (existing.isNotEmpty) {
-        await txn.update(
-          'user_emulator_config',
-          {
-            'is_user_default': 1,
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'emulator_unique_id = ?',
-          whereArgs: [uniqueIdentifier],
-        );
-      } else {
-        await txn.insert('user_emulator_config', {
-          'emulator_unique_id': uniqueIdentifier,
-          'emulator_path': '',
-          'is_user_default': 1,
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      }
     });
 
     // Enforce disk persistence via WAL checkpoint.
@@ -3449,56 +3713,25 @@ class SqliteService {
   ) async {
     final db = await instance.database;
 
-    final emulators = await getStandaloneEmulatorsBySystemId(systemId);
+    final osRow = await db.rawQuery('SELECT id FROM app_os WHERE name = ?', [
+      getCurrentOs(),
+    ]);
+    final osId = osRow.isEmpty
+        ? null
+        : int.tryParse(osRow.first['id']?.toString() ?? '');
+    if (osId == null) {
+      _log.e('Cannot set standalone default: OS context unresolved');
+      return;
+    }
 
     await db.transaction((txn) async {
-      // 1. Unset user defaults for all standalone emulators belonging to this system.
-      for (final emu in emulators) {
-        final uniqueId = emu['unique_identifier']?.toString();
-        if (uniqueId != null) {
-          await txn.rawUpdate(
-            'UPDATE user_emulator_config SET is_user_default = 0 WHERE emulator_unique_id = ?',
-            [uniqueId],
-          );
-        }
-      }
-
-      // 2. Unset core defaults for the system (exclusive relationship).
-      final currentOs = getCurrentOs();
-      await txn.rawUpdate(
-        'UPDATE app_emulators SET is_default = 0 '
-        'WHERE system_id = ? AND os_id = (SELECT id FROM app_os WHERE name = ?) AND is_standalone = 0',
-        [systemId, currentOs],
+      await _applySystemDefaultEmulator(
+        txn,
+        systemId,
+        emulatorUniqueId,
+        osId,
+        isStandalone: true,
       );
-
-      // 3. Assign and persist the new standalone default.
-      final existing = await txn.query(
-        'user_emulator_config',
-        columns: ['emulator_unique_id'],
-        where: 'emulator_unique_id = ?',
-        whereArgs: [emulatorUniqueId],
-      );
-
-      if (existing.isNotEmpty) {
-        await txn.update(
-          'user_emulator_config',
-          {
-            'is_user_default': 1,
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'emulator_unique_id = ?',
-          whereArgs: [emulatorUniqueId],
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-      } else {
-        await txn.insert('user_emulator_config', {
-          'emulator_unique_id': emulatorUniqueId,
-          'emulator_path': '', // Path resolution is handled during launch.
-          'is_user_default': 1,
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      }
     });
 
     try {
@@ -3526,90 +3759,186 @@ class SqliteService {
     return results.map((row) => CoreEmulatorModel.fromMap(row)).toList();
   }
 
-  /// Heuristic logic to fix inconsistencies in default emulator assignments.
+  /// Seeds a sane app-level default emulator for any system that lacks one, and
+  /// removes app/user default contradictions. Runs on every launch.
+  ///
+  /// Two hard rules, both learned from bugs this routine used to cause:
+  ///
+  /// 1. **It never writes `user_emulator_config.is_user_default`.** That column
+  ///    means "the user picked this", and [_resolveDefaultInstalledEmulator]
+  ///    honors it outright — installed or not — precisely because it is a
+  ///    deliberate choice. Auto-seeding it made a guess indistinguishable from a
+  ///    choice, and the old PS1 branch went further and *cleared* a real user
+  ///    choice on every single launch, silently reverting anyone who picked a
+  ///    standalone for PS1. Seeding belongs in `app_emulators.is_default`, which
+  ///    [getDefaultEmulatorForSystem] already falls back to and which resolves
+  ///    standalones just as well as cores.
+  /// 2. **Every statement is scoped to the current OS.** The old writes cleared
+  ///    `is_default` for a system across *all* operating systems, corrupting the
+  ///    other platforms' state in a synced database.
+  ///
+  /// Ordering is explicit throughout so the seeded pick is reproducible rather
+  /// than whatever the storage engine happened to return first.
+  @visibleForTesting
+  static Future<void> normalizeEmulatorDefaultsForTesting(
+    DatabaseExecutorAdapter db,
+  ) => instance._fixEmulatorDefaults(db);
+
+  /// Logs any system whose default-emulator state is self-contradictory.
+  ///
+  /// The invariant is "at most one `is_user_default` per system, and no app
+  /// default contradicting it". Violations are what made a chosen emulator
+  /// launch a different one, so surface them at startup rather than waiting for
+  /// a user to notice the wrong emulator booting. Silent when everything is
+  /// consistent, which is the normal case.
+  static Future<void> logEmulatorDefaultAnomalies(
+    DatabaseExecutorAdapter db,
+  ) async {
+    try {
+      // NB: messages here deliberately avoid a word ending in "y" immediately
+      // before a colon — `y` is a redacted query parameter, so "ANOMALY: system
+      // ds" gets scrubbed to "ANOMALY: <redacted> ds" by the log redactor.
+      final dupes = await db.rawQuery('''
+        SELECT e.system_id AS sid,
+               COUNT(*) AS n,
+               GROUP_CONCAT(uc.emulator_unique_id) AS uids
+        FROM user_emulator_config uc
+        JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id
+        WHERE uc.is_user_default = 1
+        GROUP BY e.system_id
+        HAVING COUNT(*) > 1
+      ''');
+
+      for (final row in dupes) {
+        _log.w(
+          '[EmuSel] anomaly - system=${row['sid']} has ${row['n']} user '
+          'defaults (${row['uids']})',
+        );
+      }
+
+      // Scoped to the current OS: `is_default` is per (system, os), so an
+      // unscoped check reports another platform's perfectly valid default as a
+      // contradiction on this one.
+      final contradictions = await db.rawQuery(
+        '''
+        SELECT DISTINCT e.system_id AS sid
+        FROM app_emulators e
+        WHERE e.is_default = 1
+          AND e.os_id = (SELECT id FROM app_os WHERE name = ?)
+          AND EXISTS (
+            SELECT 1 FROM user_emulator_config uc
+            JOIN app_emulators e2
+              ON e2.unique_identifier = uc.emulator_unique_id
+            WHERE uc.is_user_default = 1
+              AND e2.system_id = e.system_id
+              AND e2.os_id = e.os_id
+              AND e2.unique_identifier != e.unique_identifier
+          )
+        ''',
+        [getCurrentOs()],
+      );
+
+      for (final row in contradictions) {
+        _log.w(
+          '[EmuSel] anomaly - system=${row['sid']} has an app default that '
+          'contradicts the user-selected default',
+        );
+      }
+
+      if (dupes.isEmpty && contradictions.isEmpty) {
+        _log.i('[EmuSel] default-emulator state consistent across all systems');
+      }
+    } catch (e) {
+      _log.w('[EmuSel] Could not scan for default-emulator anomalies: $e');
+    }
+  }
+
   Future<void> _fixEmulatorDefaults(DatabaseExecutorAdapter db) async {
     try {
-      final systems = await db.query(
-        'app_systems',
-        columns: ['id', 'folder_name'],
-      );
+      final systems = await db.query('app_systems', columns: ['id']);
       final currentOs = getCurrentOs();
+
+      final osRow = await db.rawQuery('SELECT id FROM app_os WHERE name = ?', [
+        currentOs,
+      ]);
+      if (osRow.isEmpty) {
+        _log.w(
+          'Skipping emulator default normalization: unknown OS $currentOs',
+        );
+        return;
+      }
+      final osId = int.tryParse(osRow.first['id']?.toString() ?? '');
+      if (osId == null) return;
 
       for (final system in systems) {
         final systemId = system['id'].toString();
-        final folderName = system['folder_name'].toString();
 
         final cores = await db.rawQuery(
-          'SELECT * FROM app_emulators WHERE system_id = ? AND is_standalone = 0 AND os_id = (SELECT id FROM app_os WHERE name = ?)',
-          [systemId, currentOs],
+          'SELECT * FROM app_emulators '
+          'WHERE system_id = ? AND is_standalone = 0 AND os_id = ? '
+          'ORDER BY name ASC',
+          [systemId, osId],
         );
         final standalones = await db.rawQuery(
           '''
-          SELECT e.*, uc.is_user_default 
-          FROM app_emulators e 
-          LEFT JOIN user_emulator_config uc ON e.unique_identifier = uc.emulator_unique_id 
-          WHERE e.system_id = ? AND e.is_standalone = 1 AND e.os_id = (SELECT id FROM app_os WHERE name = ?)
+          SELECT e.*, uc.is_user_default
+          FROM app_emulators e
+          LEFT JOIN user_emulator_config uc ON e.unique_identifier = uc.emulator_unique_id
+          WHERE e.system_id = ? AND e.is_standalone = 1 AND e.os_id = ?
+          ORDER BY e.name ASC
           ''',
-          [systemId, currentOs],
+          [systemId, osId],
         );
 
-        final coreDefault = cores.firstWhere(
-          (c) => c['is_default'] == 1,
-          orElse: () => {},
-        );
-        final standaloneDefault = standalones.firstWhere(
+        // "Is anything already designated for this (system, os)?" — and a
+        // standalone counts. Asking only the cores made every all-standalone
+        // system (switch, xbox360) look undesignated on every single database
+        // open, so the seeding below ran again and flagged the alphabetically
+        // first standalone *alongside* the one the systems JSON had chosen:
+        // AX360e next to AX360e (Free), Benji-SC next to Eden. That is where
+        // the duplicate defaults v108 repairs came from.
+        final hasAppDefault =
+            cores.any((c) => c['is_default'] == 1) ||
+            standalones.any((s) => s['is_default'] == 1);
+        final hasUserDefault = standalones.any(
           (s) => s['is_user_default'] == 1,
-          orElse: () => {},
         );
 
-        bool hasCoreDefault = coreDefault.isNotEmpty;
-        bool hasStandaloneDefault = standaloneDefault.isNotEmpty;
+        if (hasUserDefault) {
+          // The user made a choice. It outranks any app-level default, so drop
+          // the contradicting `is_default` rather than the choice.
+          if (hasAppDefault) {
+            await db.rawUpdate(
+              'UPDATE app_emulators SET is_default = 0 '
+              'WHERE system_id = ? AND os_id = ?',
+              [systemId, osId],
+            );
+          }
+          continue;
+        }
 
-        // RULE: PS1/PSX systems should prioritize cores unless overridden.
-        if (folderName == 'ps1' ||
-            folderName == 'psx' ||
-            folderName == 'sony-psx' ||
-            folderName == 'playstation') {
-          if (hasCoreDefault && hasStandaloneDefault) {
-            await db.rawUpdate(
-              'UPDATE user_emulator_config SET is_user_default = 0 '
-              'WHERE emulator_unique_id IN (SELECT unique_identifier FROM app_emulators WHERE system_id = ? AND is_standalone = 1)',
-              [systemId],
-            );
-          }
-        }
-        // GENERAL RULE: Prioritize user-selected standalone if both defaults are set.
-        else if (hasCoreDefault && hasStandaloneDefault) {
+        if (hasAppDefault) continue;
+
+        // Nothing designated at all — seed the app-level default. Preference:
+        // the core the systems JSON marks as canonical, then the standalone it
+        // marks, then any standalone (more likely to work out of the box than
+        // an unverifiable core), then any core. Falling straight to "any
+        // standalone" meant an alphabetical guess overrode a seed that had a
+        // perfectly good answer — the paid AX360e ahead of AX360e (Free).
+        final seed =
+            cores.where((c) => c['is_default_core'] == 1).firstOrNull ??
+            standalones
+                .where((s) => s['is_default_standalone'] == 1)
+                .firstOrNull ??
+            standalones.firstOrNull ??
+            cores.firstOrNull;
+
+        if (seed != null) {
           await db.rawUpdate(
-            'UPDATE app_emulators SET is_default = 0 WHERE system_id = ? AND is_standalone = 0',
-            [systemId],
+            'UPDATE app_emulators SET is_default = 1 '
+            'WHERE unique_identifier = ? AND os_id = ?',
+            [seed['unique_identifier'], osId],
           );
-        }
-        // FALLBACK: Assign the first available default_core, then standalone, then any core.
-        else if (!hasCoreDefault && !hasStandaloneDefault) {
-          // Prefer the core marked as default_core in JSON
-          final defaultCore = cores.firstWhere(
-            (c) => c['is_default_core'] == 1,
-            orElse: () => {},
-          );
-          if (defaultCore.isNotEmpty) {
-            await db.rawUpdate(
-              'UPDATE app_emulators SET is_default = 1 WHERE unique_identifier = ? AND os_id = ?',
-              [defaultCore['unique_identifier'], defaultCore['os_id']],
-            );
-          } else if (standalones.isNotEmpty) {
-            // Fall back to the first standalone
-            await db.rawUpdate(
-              'UPDATE user_emulator_config SET is_user_default = 1 WHERE emulator_unique_id = ?',
-              [standalones.first['unique_identifier']],
-            );
-          } else if (cores.isNotEmpty) {
-            // Absolute fallback: any core
-            await db.rawUpdate(
-              'UPDATE app_emulators SET is_default = 1 WHERE unique_identifier = ? AND os_id = ?',
-              [cores.first['unique_identifier'], cores.first['os_id']],
-            );
-          }
         }
       }
     } catch (e) {
@@ -3639,13 +3968,16 @@ class SqliteService {
   }
 
   /// Retrieves the effective default emulator for a system, respecting user overrides.
-  static Future<CoreEmulatorModel?> getDefaultEmulatorForSystem(
+  /// Returns the emulator the *user* explicitly set as default for [systemId]
+  /// (`is_user_default = 1`), or null if the user hasn't chosen one. Callers use
+  /// this to honor an explicit user choice before applying any auto-selection
+  /// heuristics.
+  static Future<CoreEmulatorModel?> getUserDefaultEmulatorForSystem(
     String systemId,
   ) async {
     final db = await instance.database;
     final currentOs = getCurrentOs();
 
-    // 1. Check for user-selected standalone default.
     final userStandalone = await db.rawQuery(
       '''
       SELECT e.*, os.name as os_name, uc.emulator_path, uc.is_user_default
@@ -3653,6 +3985,7 @@ class SqliteService {
       JOIN app_os os ON e.os_id = os.id
       JOIN user_emulator_config uc ON e.unique_identifier = uc.emulator_unique_id
       WHERE e.system_id = ? AND os.name = ? AND uc.is_user_default = 1
+      ORDER BY uc.updated_at DESC
       LIMIT 1
       ''',
       [systemId, currentOs],
@@ -3660,6 +3993,20 @@ class SqliteService {
 
     if (userStandalone.isNotEmpty) {
       return CoreEmulatorModel.fromMap(userStandalone.first);
+    }
+    return null;
+  }
+
+  static Future<CoreEmulatorModel?> getDefaultEmulatorForSystem(
+    String systemId,
+  ) async {
+    final db = await instance.database;
+    final currentOs = getCurrentOs();
+
+    // 1. Check for user-selected standalone default.
+    final userDefault = await getUserDefaultEmulatorForSystem(systemId);
+    if (userDefault != null) {
+      return userDefault;
     }
 
     // 2. Fallback to system-provided default (usually a core).
@@ -4004,6 +4351,12 @@ class SqliteService {
   }
 
   /// Retrieves all emulators available for a system on the current operating system.
+  ///
+  /// The returned models carry `isInstalled = false`: a database row cannot say
+  /// whether an emulator is actually present. Callers that need install state
+  /// must use `loadEmulatorsForSystem`, which verifies packages and core files.
+  /// `hasConfiguredPath` is the only install-adjacent signal available here, and
+  /// it is desktop-only.
   static Future<List<CoreEmulatorModel>> getEmulatorsForSystemCurrentOs(
     String systemId,
   ) async {
@@ -4015,7 +4368,7 @@ class SqliteService {
         CASE
           WHEN uc.emulator_path IS NOT NULL AND uc.emulator_path != '' THEN 1
           ELSE 0
-        END as is_installed
+        END as has_configured_path
       FROM app_emulators e
       JOIN app_os os ON e.os_id = os.id
       LEFT JOIN user_emulator_config uc ON uc.emulator_unique_id = e.unique_identifier
@@ -4046,12 +4399,32 @@ class SqliteService {
   }) async {
     final db = await instance.database;
     final system = await getSystemByFolderName(systemFolderName);
-    final defaultEmu = await getDefaultEmulatorForSystem(system.id!);
+
+    // Per-game emulator is an OVERRIDE, not an inherited default: leave it NULL
+    // (= "inherit the system default", resolved live at launch) unless the
+    // caller passes an explicit choice. Freezing the default here is what made
+    // per-game settings "whack-a-mole" (stale/uninstalled emulators). We only
+    // store a concrete id when we can also resolve its os_id, so the composite
+    // FK (app_emulator_os_id, app_emulator_unique_id) stays valid.
+    String? emulatorUniqueId;
+    int? emulatorOsId;
+    if (emulatorName != null && emulatorName.isNotEmpty) {
+      final osRow = await db.rawQuery(
+        'SELECT os_id FROM app_emulators '
+        'WHERE system_id = ? AND unique_identifier = ? '
+        'AND os_id = (SELECT id FROM app_os WHERE name = ?) LIMIT 1',
+        [system.id, emulatorName, getCurrentOs()],
+      );
+      if (osRow.isNotEmpty) {
+        emulatorUniqueId = emulatorName;
+        emulatorOsId = osRow.first['os_id'] as int?;
+      }
+    }
 
     await db.insert('user_roms', {
       'app_system_id': system.id,
-      'app_emulator_unique_id': defaultEmu?.uniqueId,
-      'app_emulator_os_id': defaultEmu?.osId,
+      'app_emulator_unique_id': emulatorUniqueId,
+      'app_emulator_os_id': emulatorOsId,
       'filename': filename,
       'rom_path': romPath,
       'ra_hash': raHash,
@@ -4233,6 +4606,7 @@ class SqliteService {
           path: '',
           detected: false,
           possiblePaths: {},
+          uniqueId: row['unique_identifier']?.toString(),
         ),
       );
     }
@@ -4324,29 +4698,31 @@ class SqliteService {
         .toList();
   }
 
+  /// The systems the user has explicitly chosen an emulator for.
+  ///
+  /// Used to exclude those systems from automatic default management. Both
+  /// RetroArch alignment routines below previously answered "has the user
+  /// chosen anything, anywhere?" with a global `COUNT(*)` and skipped
+  /// wholesale if so. That made one deliberate pick on one system freeze
+  /// variant alignment for *every* system: a user on a non-aarch64 build hits a
+  /// launch failure, sets an emulator by hand to work around it, and thereby
+  /// disables the very repair that would have fixed the rest of their library.
+  /// Scoping the guard per system respects the same intent without the
+  /// collateral damage.
+  static const String _systemsWithUserDefaultSql =
+      'SELECT e.system_id FROM user_emulator_config uc '
+      'JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id '
+      'WHERE uc.is_user_default = 1 AND e.system_id IS NOT NULL';
+
   /// Updates [is_default] so that [preferredPackage] is the active RetroArch
-  /// variant on Android. Skips entirely if the user has made any custom
-  /// emulator selections (tracked in [user_emulator_config]). Sets only the
-  /// entries marked as [is_default_core] for the preferred package, and
-  /// clears conflicting standalone defaults.
+  /// variant on Android. Systems the user has explicitly configured are left
+  /// untouched (see [_systemsWithUserDefaultSql]). Sets only the entries marked
+  /// as [is_default_core] for the preferred package, and clears conflicting
+  /// standalone defaults.
   static Future<void> fixRetroArchDefaultForAndroid(
     String preferredPackage,
   ) async {
     final db = await instance.database;
-
-    // If user has made any emulator selections, respect them and skip
-    final userChoices = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM user_emulator_config WHERE is_user_default = 1',
-    );
-    final userChoiceCount = userChoices.isNotEmpty
-        ? (int.tryParse(userChoices.first['count']?.toString() ?? '0') ?? 0)
-        : 0;
-    if (userChoiceCount > 0) {
-      _log.i(
-        'Android: User has custom emulator choices ($userChoiceCount), skipping RA defaults',
-      );
-      return;
-    }
 
     final osResult = await db.query(
       'app_os',
@@ -4360,14 +4736,16 @@ class SqliteService {
       // Clear all RetroArch core defaults
       await txn.rawUpdate(
         'UPDATE app_emulators SET is_default = 0 '
-        'WHERE os_id = ? AND android_package_name LIKE ?',
+        'WHERE os_id = ? AND android_package_name LIKE ? '
+        'AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, 'com.retroarch%'],
       );
 
       // Set default only for entries with default_core marker
       await txn.rawUpdate(
         'UPDATE app_emulators SET is_default = 1 '
-        'WHERE os_id = ? AND android_package_name = ? AND is_default_core = 1',
+        'WHERE os_id = ? AND android_package_name = ? AND is_default_core = 1 '
+        'AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, preferredPackage],
       );
 
@@ -4377,7 +4755,7 @@ class SqliteService {
         'WHERE os_id = ? AND is_standalone = 1 AND system_id IN ('
         'SELECT DISTINCT system_id FROM app_emulators '
         'WHERE os_id = ? AND android_package_name = ? AND is_default_core = 1 AND is_default = 1'
-        ')',
+        ') AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, osId, preferredPackage],
       );
     });
@@ -4393,25 +4771,19 @@ class SqliteService {
   }
 
   /// Clears all RetroArch core defaults on Android when no RetroArch variant
-  /// is installed. Skips entirely if the user has made custom selections.
-  /// For systems that lose their default, falls back to the first available
-  /// standalone emulator.
+  /// is installed. Systems the user has explicitly configured are left
+  /// untouched (see [_systemsWithUserDefaultSql]). For systems that lose their
+  /// default, falls back to a single standalone emulator: the one the systems
+  /// JSON designates, or the first by name if it designates none.
+  ///
+  /// The fallback used to be one set-based `UPDATE ... SET is_default = 1`
+  /// guarded by `NOT EXISTS`, with nothing limiting it to a single row — so it
+  /// promoted *every* standalone of a qualifying system at once and left the
+  /// launch target a coin flip between them, which is the same broken state
+  /// migration v108 exists to repair. Resolving one winner per system in Dart
+  /// also sidesteps the guard re-evaluating as rows are written.
   static Future<void> clearRetroArchDefaultsForAndroid() async {
     final db = await instance.database;
-
-    // If user has made any emulator selections, respect them and skip
-    final userChoices = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM user_emulator_config WHERE is_user_default = 1',
-    );
-    final userChoiceCount = userChoices.isNotEmpty
-        ? (int.tryParse(userChoices.first['count']?.toString() ?? '0') ?? 0)
-        : 0;
-    if (userChoiceCount > 0) {
-      _log.i(
-        'Android: User has custom emulator choices ($userChoiceCount), skipping RA default clear',
-      );
-      return;
-    }
 
     final osResult = await db.query(
       'app_os',
@@ -4425,23 +4797,42 @@ class SqliteService {
       // Reset all RetroArch core defaults
       await txn.rawUpdate(
         'UPDATE app_emulators SET is_default = 0 '
-        'WHERE os_id = ? AND android_package_name LIKE ?',
+        'WHERE os_id = ? AND android_package_name LIKE ? '
+        'AND system_id NOT IN ($_systemsWithUserDefaultSql)',
         [osId, 'com.retroarch%'],
       );
 
-      // For systems with no default after clearing RA, fall back to standalone
-      // Only set standalone as default if it has is_default = 0 AND the system has no other default
-      await txn.rawUpdate(
-        'UPDATE app_emulators SET is_default = 1 '
-        'WHERE os_id = ? AND is_standalone = 1 AND is_default = 0 AND system_id IN ('
-        'SELECT DISTINCT e.system_id FROM app_emulators e '
-        'WHERE e.os_id = ? AND e.android_package_name LIKE ? AND e.is_default = 0'
-        ') AND NOT EXISTS ('
-        'SELECT 1 FROM app_emulators e2 '
-        'WHERE e2.system_id = app_emulators.system_id AND e2.os_id = ? AND e2.is_default = 1'
+      // For systems left with no default after clearing RA, fall back to
+      // exactly one standalone — the seed's pick where there is one.
+      final orphaned = await txn.rawQuery(
+        'SELECT DISTINCT e.system_id AS sid FROM app_emulators e '
+        'WHERE e.os_id = ? AND e.android_package_name LIKE ? '
+        'AND e.system_id NOT IN ($_systemsWithUserDefaultSql) '
+        'AND NOT EXISTS ('
+        '  SELECT 1 FROM app_emulators d '
+        '  WHERE d.system_id = e.system_id AND d.os_id = ? AND d.is_default = 1'
         ')',
-        [osId, osId, 'com.retroarch%', osId],
+        [osId, 'com.retroarch%', osId],
       );
+
+      for (final row in orphaned) {
+        final systemId = row['sid']?.toString();
+        if (systemId == null) continue;
+
+        final candidates = await txn.rawQuery(
+          'SELECT unique_identifier FROM app_emulators '
+          'WHERE system_id = ? AND os_id = ? AND is_standalone = 1 '
+          'ORDER BY is_default_standalone DESC, name ASC LIMIT 1',
+          [systemId, osId],
+        );
+        if (candidates.isEmpty) continue;
+
+        await txn.rawUpdate(
+          'UPDATE app_emulators SET is_default = 1 '
+          'WHERE system_id = ? AND os_id = ? AND unique_identifier = ?',
+          [systemId, osId, candidates.first['unique_identifier']],
+        );
+      }
     });
 
     try {

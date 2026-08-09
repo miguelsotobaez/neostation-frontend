@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "naomi2",
+    "multidisc": false,
     "name": "Sega Naomi 2",
     "short_name": "Naomi 2",
     "details": {
@@ -82,6 +83,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L flycast_libretro.so \"{file.path}\""
         },
         "macos": {

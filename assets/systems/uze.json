@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "uze",
+    "multidisc": false,
     "name": "Uzebox",
     "short_name": "UZE",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "uze",
-      "Uzebox"
+      "Uzebox",
+      "uzebox"
     ],
     "colors": [
       "#1976D2",
@@ -68,6 +70,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L uzem_libretro.so \"{file.path}\""
         },
         "macos": {

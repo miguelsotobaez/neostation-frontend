@@ -1,10 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:provider/provider.dart';
 import '../../providers/retro_achievements_provider.dart';
+import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/custom_notification.dart';
 import '../../responsive.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -14,90 +13,144 @@ import '../../services/game_service.dart' show GamepadNavigationManager;
 import '../app_screen.dart' show AppNavigation;
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import '../../utils/login_form_selection.dart';
 import 'ra_dashboard.dart';
 
 class RAContent extends StatefulWidget {
   const RAContent({super.key});
 
-  /// Returns whether the selection/scroll actually moved, so the gamepad
-  /// handler can suppress the nav sound when repeating against a boundary.
-  static bool navigateUp() => _RAContentState.navigateUp();
-
-  static bool navigateDown() => _RAContentState.navigateDown();
-
   @override
   State<RAContent> createState() => _RAContentState();
 }
 
-class _RAContentState extends State<RAContent> {
-  static _RAContentState? _currentInstance;
-
+class _RAContentState extends State<RAContent>
+    with LoginFormSelection<RAContent> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
   final FocusNode _usernameFocus = FocusNode();
   final FocusNode _apiKeyFocus = FocusNode();
   final ScrollController _dashboardScrollController = ScrollController();
 
-  bool _isTelevision = false;
-  int _tvFieldIndex = 0;
-  GamepadNavigation? _tvNav;
+  /// Connected dashboard: whether the cursor is parked on the header's logout
+  /// button. Nothing is selected at rest — Right parks on it, Left releases it,
+  /// and Up/Down stay dedicated to scrolling the dashboard.
+  bool _logoutSelected = false;
+
+  /// Set while Right is scrolling the header back into view, so the scroll
+  /// listener doesn't read that movement as the user leaving the button.
+  bool _scrollingToLogout = false;
+
+  /// Matches the ScreenScraper login's password field, which the RA card sits
+  /// next to: an API key is as worth hiding as a password, and as easy to
+  /// mistype without being able to check it.
+  bool _obscureApiKey = true;
+  GamepadNavigation? _gamepadNav;
+
+  @override
+  List<FocusNode?> get selectionSlots => [
+    _usernameFocus,
+    _apiKeyFocus,
+    null,
+    null,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _currentInstance = this;
-    _initTvMode();
+    attachFocusSelectionListeners();
+    _dashboardScrollController.addListener(_releaseLogoutOnScroll);
+    _initControllerNavigation();
   }
 
-  Future<void> _initTvMode() async {
-    if (!Platform.isAndroid) return;
-    final isTV = await PermissionService.isTelevision();
-    if (!mounted) return;
-    setState(() => _isTelevision = isTV);
-    if (!isTV) return;
-    _tvNav = GamepadNavigation(
+  void _initControllerNavigation() {
+    _gamepadNav = GamepadNavigation(
       onNavigateUp: _handleNavigateUp,
       onNavigateDown: _handleNavigateDown,
-      onSelectItem: _tvSelect,
+      onNavigateLeft: _handleNavigateLeft,
+      onNavigateRight: _handleNavigateRight,
+      onSelectItem: _selectCurrent,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
       onRightBumper: AppNavigation.nextTab,
+      allowRepeat: false,
+      isTextFieldFocused: isAnyFieldFocused,
+      onBack: exitTextEntry,
     );
-    _tvNav!.initialize();
+    _gamepadNav!.initialize();
     GamepadNavigationManager.pushLayer(
       'ra_content',
-      onActivate: () => _tvNav?.activate(),
-      onDeactivate: () => _tvNav?.deactivate(),
+      onActivate: () => _gamepadNav?.activate(),
+      onDeactivate: () => _gamepadNav?.deactivate(),
     );
   }
 
-  bool _tvMove(int delta) {
-    if (!_isTelevision || _usernameFocus.hasFocus) return false;
-    final next = (_tvFieldIndex + delta).clamp(0, 2);
-    if (next == _tvFieldIndex) return false;
-    setState(() {
-      _tvFieldIndex = next;
-    });
+  void _selectCurrent() {
+    final raProvider = context.read<RetroAchievementsProvider>();
+    if (raProvider.isConnected) {
+      if (_logoutSelected) _requestDisconnect();
+      return;
+    }
+    if (focusSelectedField()) return;
+    if (selectedSlot == 2) {
+      _openRaControlPanel();
+      return;
+    }
+    _connectToRA();
+  }
+
+  bool _setLogoutSelected(bool selected) {
+    if (!mounted || _logoutSelected == selected) return false;
+    setState(() => _logoutSelected = selected);
     return true;
   }
 
-  void _tvSelect() {
-    if (!_isTelevision) return;
-    if (_tvFieldIndex == 0) {
-      _usernameFocus.requestFocus();
-    } else if (_tvFieldIndex == 1) {
-      _apiKeyFocus.requestFocus();
-    } else {
-      _connectToRA();
+  /// Releases the logout parking when the dashboard scrolls off the top by any
+  /// means, so a touch scroll can't leave the button armed behind the content.
+  void _releaseLogoutOnScroll() {
+    if (_scrollingToLogout) return;
+    if (!_logoutSelected || !_dashboardScrollController.hasClients) return;
+    final position = _dashboardScrollController.position;
+    if (position.pixels > position.minScrollExtent + 1) {
+      _setLogoutSelected(false);
     }
   }
 
-  bool _isTvSelected(int slot) => _isTelevision && _tvFieldIndex == slot;
+  Future<void> _requestDisconnect() async {
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.disconnectRaConfirm.getString(context),
+      body: AppLocale.disconnectRaConfirmBody.getString(context),
+      confirmLabel: AppLocale.logout.getString(context),
+      icon: Symbols.logout_rounded,
+    );
+    if (!confirmed || !mounted) return;
+    context.read<RetroAchievementsProvider>().disconnect(clearSavedUser: true);
+    if (!mounted) return;
+    resetSelection();
+    _setLogoutSelected(false);
+    AppNotification.showNotification(
+      context,
+      AppLocale.disconnectedRA.getString(context),
+      type: NotificationType.info,
+    );
+  }
 
   Future<void> _connectToRA() async {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (raProvider.isLoading) return;
+    // Same up-front check (and message) as the ScreenScraper login: without it
+    // an empty submit round-trips to the API and surfaces a raw connection
+    // error instead of telling the user what is missing.
+    if (_usernameController.text.trim().isEmpty ||
+        _apiKeyController.text.trim().isEmpty) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.pleaseCompleteAllFields.getString(context),
+        type: NotificationType.error,
+      );
+      return;
+    }
     final apiKey = _apiKeyController.text.trim();
     final success = await raProvider.connect(
       _usernameController.text,
@@ -119,13 +172,20 @@ class _RAContentState extends State<RAContent> {
     }
   }
 
+  Future<void> _openRaControlPanel() async {
+    final url = Uri.parse(
+      'https://retroachievements.org/settings?tab=applications',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   void dispose() {
-    if (identical(_currentInstance, this)) {
-      _currentInstance = null;
-    }
     GamepadNavigationManager.popLayer('ra_content');
-    _tvNav?.dispose();
+    _gamepadNav?.dispose();
+    detachFocusSelectionListeners();
     _usernameController.dispose();
     _apiKeyController.dispose();
     _usernameFocus.dispose();
@@ -134,24 +194,51 @@ class _RAContentState extends State<RAContent> {
     super.dispose();
   }
 
-  static bool navigateUp() => _currentInstance?._handleNavigateUp() ?? true;
-
-  static bool navigateDown() => _currentInstance?._handleNavigateDown() ?? true;
-
+  /// Returns whether the selection/scroll actually moved, so the gamepad
+  /// handler can suppress the nav sound at a boundary.
   bool _handleNavigateUp() {
-    final raProvider = context.read<RetroAchievementsProvider>();
-    if (!raProvider.isConnected) {
-      return _tvMove(-1);
+    if (!context.read<RetroAchievementsProvider>().isConnected) {
+      return moveSelection(-1);
     }
     return _scrollDashboard(-160.r);
   }
 
   bool _handleNavigateDown() {
-    final raProvider = context.read<RetroAchievementsProvider>();
-    if (!raProvider.isConnected) {
-      return _tvMove(1);
+    if (!context.read<RetroAchievementsProvider>().isConnected) {
+      return moveSelection(1);
     }
     return _scrollDashboard(160.r);
+  }
+
+  /// Right parks the cursor on the header's logout button.
+  ///
+  /// The header scrolls with the content, so anything below the top has to come
+  /// back into view first — parking on a button that is off screen would leave
+  /// the highlight invisible and A destructive-looking out of nowhere.
+  bool _handleNavigateRight() {
+    if (!context.read<RetroAchievementsProvider>().isConnected) return false;
+    if (_logoutSelected) return false;
+    _scrollHeaderIntoView();
+    return _setLogoutSelected(true);
+  }
+
+  bool _handleNavigateLeft() {
+    if (!context.read<RetroAchievementsProvider>().isConnected) return false;
+    return _setLogoutSelected(false);
+  }
+
+  void _scrollHeaderIntoView() {
+    if (!_dashboardScrollController.hasClients) return;
+    final position = _dashboardScrollController.position;
+    if (position.pixels <= position.minScrollExtent + 1) return;
+    _scrollingToLogout = true;
+    _dashboardScrollController
+        .animateTo(
+          position.minScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        )
+        .whenComplete(() => _scrollingToLogout = false);
   }
 
   bool _scrollDashboard(double delta) {
@@ -223,8 +310,12 @@ class _RAContentState extends State<RAContent> {
             ),
           ] else ...[
             Expanded(
-              child: RADashboardHub(
-                scrollController: _dashboardScrollController,
+              child: RepaintBoundary(
+                child: RADashboardHub(
+                  scrollController: _dashboardScrollController,
+                  logoutSelected: _logoutSelected,
+                  onDisconnectRequested: _requestDisconnect,
+                ),
               ),
             ),
           ],
@@ -233,12 +324,12 @@ class _RAContentState extends State<RAContent> {
     );
   }
 
-  Widget _buildTvFieldHighlight({
+  Widget _buildFieldHighlight({
     required int slot,
     required ThemeData theme,
     required Widget child,
   }) {
-    if (!_isTvSelected(slot)) return child;
+    if (!isSelected(slot)) return child;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8.r),
@@ -265,8 +356,8 @@ class _RAContentState extends State<RAContent> {
         color: theme.cardColor.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12.r),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1,
         ),
       ),
       child: Column(
@@ -288,12 +379,12 @@ class _RAContentState extends State<RAContent> {
             ],
           ),
 
-          SizedBox(height: 6.r),
+          SizedBox(height: 12.r),
 
           // Username field
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
-            child: _buildTvFieldHighlight(
+            child: _buildFieldHighlight(
               slot: 0,
               theme: theme,
               child: SizedBox(
@@ -328,10 +419,10 @@ class _RAContentState extends State<RAContent> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.r),
                       borderSide: BorderSide(
-                        color: _isTvSelected(0)
+                        color: isSelected(0)
                             ? theme.colorScheme.primary
                             : theme.colorScheme.primary.withValues(alpha: 0.1),
-                        width: _isTvSelected(0) ? 2.r : 1.r,
+                        width: isSelected(0) ? 2.r : 1.r,
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -342,6 +433,7 @@ class _RAContentState extends State<RAContent> {
                       ),
                     ),
                   ),
+                  enabled: !raProvider.isLoading,
                   style: TextStyle(fontSize: 11.r),
                   textInputAction: TextInputAction.next,
                   onFieldSubmitted: (_) => _apiKeyFocus.requestFocus(),
@@ -354,7 +446,7 @@ class _RAContentState extends State<RAContent> {
           // API key field
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
-            child: _buildTvFieldHighlight(
+            child: _buildFieldHighlight(
               slot: 1,
               theme: theme,
               child: SizedBox(
@@ -362,11 +454,15 @@ class _RAContentState extends State<RAContent> {
                 child: TextFormField(
                   controller: _apiKeyController,
                   focusNode: _apiKeyFocus,
-                  obscureText: true,
+                  obscureText: _obscureApiKey,
                   enableSuggestions: false,
                   autocorrect: false,
                   decoration: InputDecoration(
                     labelText: AppLocale.raApiKey.getString(context),
+                    suffixStyle: TextStyle(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                      fontSize: 12.r,
+                    ),
                     labelStyle: TextStyle(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       fontSize: 10.r,
@@ -392,10 +488,10 @@ class _RAContentState extends State<RAContent> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.r),
                       borderSide: BorderSide(
-                        color: _isTvSelected(1)
+                        color: isSelected(1)
                             ? theme.colorScheme.primary
                             : theme.colorScheme.primary.withValues(alpha: 0.1),
-                        width: _isTvSelected(1) ? 2.r : 1.r,
+                        width: isSelected(1) ? 2.r : 1.r,
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -405,7 +501,25 @@ class _RAContentState extends State<RAContent> {
                         width: 1.r,
                       ),
                     ),
+                    suffixIcon: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        size: 18.r,
+                        _obscureApiKey
+                            ? Symbols.visibility_rounded
+                            : Symbols.visibility_off_rounded,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureApiKey = !_obscureApiKey;
+                        });
+                      },
+                    ),
                   ),
+                  enabled: !raProvider.isLoading,
                   style: TextStyle(fontSize: 11.r),
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _connectToRA(),
@@ -415,10 +529,57 @@ class _RAContentState extends State<RAContent> {
           ),
           SizedBox(height: 6.r),
 
+          // Direct users to the page where RetroAchievements exposes their
+          // personal Web API key, without asking the app to handle passwords.
+          Container(
+            constraints: BoxConstraints(maxWidth: 320.r),
+            decoration: isSelected(2)
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(8.r),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.35,
+                        ),
+                        blurRadius: 8.r,
+                        spreadRadius: 1.r,
+                      ),
+                    ],
+                  )
+                : null,
+            child: OutlinedButton.icon(
+              onPressed: _openRaControlPanel,
+              icon: Icon(Symbols.key_rounded, size: 14.r),
+              label: Text(
+                AppLocale.raGetApiKey.getString(context),
+                style: TextStyle(fontSize: 11.r, fontWeight: FontWeight.w600),
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: Size(double.infinity, 32.r),
+                side: BorderSide(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: 4.r),
+          Text(
+            AppLocale.raApiKeyHelp.getString(context),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              fontSize: 8.r,
+            ),
+          ),
+          SizedBox(height: 6.r),
+
           // Connect button
           Container(
-            constraints: BoxConstraints(maxWidth: 220.r),
-            decoration: _isTvSelected(2)
+            constraints: BoxConstraints(maxWidth: 320.r),
+            decoration: isSelected(submitSlot)
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(8.r),
                     boxShadow: [
@@ -442,6 +603,7 @@ class _RAContentState extends State<RAContent> {
                     borderRadius: BorderRadius.circular(8.r),
                   ),
                   elevation: 0,
+                  padding: EdgeInsets.zero,
                 ),
                 child: raProvider.isLoading
                     ? SizedBox(
@@ -450,12 +612,12 @@ class _RAContentState extends State<RAContent> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white.withValues(alpha: 0.8),
+                            theme.colorScheme.onPrimary,
                           ),
                         ),
                       )
                     : Text(
-                        AppLocale.connect.getString(context),
+                        AppLocale.login.getString(context),
                         style: TextStyle(
                           fontSize: 14.r,
                           fontWeight: FontWeight.bold,
@@ -477,8 +639,8 @@ class _RAContentState extends State<RAContent> {
         color: theme.cardColor.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12.r),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-          width: 1.r,
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1,
         ),
       ),
       child: Column(

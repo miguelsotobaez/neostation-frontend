@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ngpc",
+    "multidisc": false,
     "name": "NeoGeo Pocket Color",
     "short_name": "NGPC",
     "details": {
@@ -18,7 +19,8 @@
       "Neo Geo Pocket Color",
       "NeoGeo Pocket Color",
       "Neo-Geo Pocket Color",
-      "SNK Neo Geo Pocket Color"
+      "SNK Neo Geo Pocket Color",
+      "neo-geo-pocket-color"
     ],
     "colors": [
       "#455A64",
@@ -105,6 +107,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_ngp_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -128,6 +132,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L race_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -151,6 +157,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

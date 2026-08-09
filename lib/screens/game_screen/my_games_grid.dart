@@ -14,12 +14,20 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
+import 'package:neostation/widgets/game_action_buttons.dart';
+import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
+import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
 import 'package:neostation/constants/system_folder_names.dart';
+import 'package:neostation/models/retro_achievements_game_info.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:neostation/services/retro_achievements_helper.dart';
+import 'package:neostation/screens/game_screen/game_details_card/dialogs/game_achievements_dialog.dart';
 
 class GamesGrid extends StatefulWidget {
   final SystemModel system;
@@ -35,6 +43,20 @@ class GamesGrid extends StatefulWidget {
   final VoidCallback? onScrape;
   final Set<String> scrapingGameRomnames;
   final Map<String, double> scrapeProgress;
+  final int artworkVersion;
+
+  /// Clears path-derived caches after artwork is added or overwritten.
+  static void evictArtworkCaches(Iterable<String> paths) {
+    if (paths.isEmpty) {
+      _GamesGridState._imageSizeCache.clear();
+      _GameCardImageState._existsCache.clear();
+      return;
+    }
+    for (final path in paths) {
+      _GamesGridState._imageSizeCache.remove(path);
+      _GameCardImageState._existsCache.remove(path);
+    }
+  }
 
   /// Subfolder navigation: the first [folderCount] entries of [games] are folder
   /// placeholders rendered from [folderEntries]; tapping one calls
@@ -73,6 +95,7 @@ class GamesGrid extends StatefulWidget {
     this.folderEntries = const [],
     this.onFolderActivated,
     this.folderCoverResolver,
+    this.artworkVersion = 0,
   });
 
   @override
@@ -85,8 +108,59 @@ class _GamesGridState extends State<GamesGrid> {
   int _selectedIndex = 0;
   int _crossAxisCount = 5;
   bool _isNavigatingFast = false;
+
+  // RetroAchievements info for the selected game (shown in the footer pill).
+  GameInfoAndUserProgress? _currentGameInfo;
+  bool _isLoadingAchievements = false;
+  String? _achievementsTargetRomname;
+  // Loading RA (plus its setState churn) on every gamepad move floods the UI
+  // thread during fast navigation. Debounce so it loads once selection settles.
+  Timer? _achievementsDebounce;
+  static const Duration _achievementsSettleDelay = Duration(milliseconds: 280);
   DateTime? _lastNavTime;
   static const Duration _fastNavThreshold = Duration(milliseconds: 150);
+
+  // Debounced "settled" selection that drives the footer pill + action-button
+  // legend. Rebuilding that chrome on every fast-nav move floods the UI thread
+  // (measured: ~18% severe frame drops vs ~11% without it). Instead we only
+  // advance _settledIndex once rapid navigation stops, and memoize the built
+  // chrome by signature so build() returns identical instances during a burst
+  // (Flutter then skips those subtrees). The highlight cursor still tracks
+  // _selectedIndex every move for immediate feedback.
+  int _settledIndex = 0;
+  Timer? _settleTimer;
+  static const Duration _chromeSettleDelay = Duration(milliseconds: 160);
+  String? _chromeSig;
+  Widget? _chromeFooter;
+  Widget? _chromeLegend;
+
+  // Preview-video existence per resolved media path — see _hasVideoFor.
+  final Map<String, bool> _videoExistsCache = {};
+
+  // Memoized grid rows. buildRow→_buildCard is a pure function of layout
+  // (`_layoutGen`), `targetWidth`, `theme`, and per-card favorite/scrape state —
+  // it never reads `_selectedIndex` (selection is drawn by the Positioned cursor
+  // overlay). So on a steady scroll the rows are identical across a settle /
+  // RA-load / legend-animating setState, yet an un-memoized SliverList.builder
+  // rebuilds all ~50 visible cards each time (profile-build VM timeline measured
+  // ~5 full-viewport rebuilds per scroll = 22–31 ms UI-thread BUILD spikes; the
+  // raster pipeline stays <5 ms). Cache built rows by index and gate on a cheap
+  // signature so those setStates return identical Row instances and Flutter
+  // skips the whole subtree. `_layoutGen` bumps whenever _positionCards actually
+  // re-runs (width/reflow/dim-reload), so the legend reflow still rebuilds while
+  // steady scroll does not. The cache is also cleared in didUpdateWidget when the
+  // game set or scrape state changes (favorite stars / scrape progress overlays).
+  int _layoutGen = 0;
+  final Map<int, Widget> _rowCache = {};
+  String? _rowCacheSig;
+
+  // Selection cursor. The border is a scroll-compensated overlay positioned from
+  // the layout model (_cardRects[selectedIndex]) minus the live scroll offset,
+  // rebuilt every scroll tick. An earlier CompositedTransformFollower/LayerLink
+  // approach rendered a few rows north of the real card during scrolling because
+  // the leader (inside a RepaintBoundary-wrapped SliverList row) reports a stale
+  // composited transform. The cursor is now drawn inside the selected card's
+  // cell (see buildRow), which tracks the scroll content natively.
 
   // Layout
   List<_CardRect> _cardRects = [];
@@ -96,8 +170,26 @@ class _GamesGridState extends State<GamesGrid> {
   double _spY = 0;
   double? _lastLayoutWidth;
   int? _lastLayoutCols;
-  int? _lastLayoutGameCount;
   bool? _lastIsFanart;
+  // Exact laid-out height of all rows (set by _positionCards). See its use in
+  // _centerTargetFor for why we don't trust the SliverList's own estimate.
+  double _contentHeight = 0;
+
+  // Set just before any non-scroll layout change (legend toggle, card-size
+  // cycle, fanart↔box2d). The selected card is the source of truth: after the
+  // new layout is painted we scroll the view to centre that card, so the cursor
+  // is always brought back into view. Steady scroll and dpad nav never set it
+  // (nav scrolls via _ensureSelectedVisible).
+  bool _recenterAfterLayout = false;
+
+  // Per-card height/width ratio (aspect), which is INDEPENDENT of the card
+  // width. Measuring it is the expensive part of layout (file-header reads +
+  // string parsing per game), so it is cached here and only recomputed when the
+  // game set / column count / fanart mode / loaded dimensions change — never on
+  // a mere width change. That lets the Select+B reflow animate the width with
+  // cheap per-frame arithmetic instead of re-measuring every card each frame.
+  List<double> _cardHOverW = [];
+  bool _needsMeasure = true;
 
   // Image dimension cache
   static final Map<String, Size?> _imageSizeCache = {};
@@ -188,6 +280,24 @@ class _GamesGridState extends State<GamesGrid> {
     return widget.system.primaryFolderName;
   }
 
+  /// Whether the game has a preview video, so the footer knows whether a mute
+  /// control is worth showing.
+  ///
+  /// Scraped media lives on the plain filesystem (unlike SAF ROM paths), so a
+  /// sync stat is safe, and this only runs when the selection settles — not
+  /// per frame. Memoized because a back-and-forth between two games would
+  /// otherwise re-stat both every time.
+  bool _hasVideoFor(GameModel game) {
+    final videoPath = game.getVideoPath(
+      _folderForGame(game),
+      widget.fileProvider,
+    );
+    return _videoExistsCache.putIfAbsent(
+      videoPath,
+      () => File(videoPath).existsSync(),
+    );
+  }
+
   String _box2dPath(int index) {
     final game = widget.games[index];
     return game.getImagePath(
@@ -224,36 +334,6 @@ class _GamesGridState extends State<GamesGrid> {
       context.read<SqliteConfigProvider>().config.gameCarouselCardStyle ==
       'fanart';
 
-  double _cardHeightFor(int index) {
-    if (_isFanart) return _cardWidth;
-
-    // Folder tiles are always square (no box art to measure).
-    if (index < widget.folderCount) return _cardWidth;
-
-    final game = widget.games[index];
-    // 1. From DB
-    if (game.box2dAspectRatio != null && game.box2dAspectRatio!.isNotEmpty) {
-      final parts = game.box2dAspectRatio!.split('/');
-      if (parts.length == 2) {
-        final w = double.tryParse(parts[0]);
-        final h = double.tryParse(parts[1]);
-        if (w != null && h != null && w > 0 && h > 0) {
-          return _cardWidth / (w / h);
-        }
-      }
-    }
-    // 2. From file header
-    final path = _box2dPath(index);
-    final size = _readImageSize(path);
-    if (size != null && size.width > 0 && size.height > 0) {
-      // Save to DB for next time
-      final ratio = '${size.width.toInt()}/${size.height.toInt()}';
-      _scheduleAspectRatioSave(game, ratio);
-      return _cardWidth / (size.width / size.height);
-    }
-    return _cardWidth; // 1:1 fallback
-  }
-
   final Set<String> _pendingSaves = {};
   void _scheduleAspectRatioSave(GameModel game, String ratio) {
     final key = '${game.systemId}_${game.romname}';
@@ -272,22 +352,95 @@ class _GamesGridState extends State<GamesGrid> {
     });
   }
 
-  // ---- Layout (computed once, cached) ----
-  bool _needsLayout(double w) =>
-      _lastLayoutWidth != w ||
-      _lastLayoutCols != _cols ||
-      _lastLayoutGameCount != widget.games.length ||
-      _lastIsFanart != _isFanart ||
-      _needsDimReload;
+  /// Height/width ratio for a card, INDEPENDENT of the current card width.
+  /// This is the expensive lookup (DB string parse or image-header read) that
+  /// [_measureCards] caches into [_cardHOverW]. Note `_cardHeightFor(i)` equals
+  /// `_cardWidth * _heightRatioFor(i)`.
+  double _heightRatioFor(int index) {
+    if (_isFanart) return 1.0;
+
+    // Folder tiles are always square (no box art to measure).
+    if (index < widget.folderCount) return 1.0;
+
+    final game = widget.games[index];
+    // 1. From DB
+    if (game.box2dAspectRatio != null && game.box2dAspectRatio!.isNotEmpty) {
+      final parts = game.box2dAspectRatio!.split('/');
+      if (parts.length == 2) {
+        final w = double.tryParse(parts[0]);
+        final h = double.tryParse(parts[1]);
+        if (w != null && h != null && w > 0 && h > 0) {
+          return h / w;
+        }
+      }
+    }
+    // 2. From file header
+    final path = _box2dPath(index);
+    final size = _readImageSize(path);
+    if (size != null && size.width > 0 && size.height > 0) {
+      // Save to DB for next time
+      final ratio = '${size.width.toInt()}/${size.height.toInt()}';
+      _scheduleAspectRatioSave(game, ratio);
+      return size.height / size.width;
+    }
+    return 1.0; // 1:1 fallback
+  }
+
+  /// Measures every card's aspect ratio into [_cardHOverW]. This is the only
+  /// O(n) width-INDEPENDENT pass and is deliberately kept out of the per-frame
+  /// path so a width animation (Select+B reflow) never re-reads image headers.
+  void _measureCards() {
+    final n = widget.games.length;
+    _cardHOverW = List<double>.filled(n, 1.0);
+    _loadedDims.clear();
+    if (!_isFanart) {
+      for (int i = 0; i < n; i++) {
+        _cardHOverW[i] = _heightRatioFor(i);
+        if (_imageSizeCache.containsKey(_box2dPath(i))) _loadedDims.add(i);
+      }
+    }
+    _needsMeasure = false;
+  }
+
+  // ---- Layout ----
+  // Aspect ratios (the costly part) are measured/cached separately; positioning
+  // for a given width is cheap arithmetic so it can run every animation frame.
 
   void _computeLayout(double availableWidth) {
-    if (!_needsLayout(availableWidth)) return;
+    final measureChanged =
+        _needsMeasure ||
+        _cardHOverW.length != widget.games.length ||
+        _lastIsFanart != _isFanart ||
+        _needsDimReload;
+
+    if (!measureChanged &&
+        _lastLayoutWidth == availableWidth &&
+        _lastLayoutCols == _cols) {
+      return;
+    }
+
+    // A fanart↔box2d switch is only observable here (card style is read from
+    // the config provider, not passed as a prop) — recentre on the selected card
+    // once relaid. Never on the first layout (_lastIsFanart == null).
+    if (_lastIsFanart != null && _lastIsFanart != _isFanart) {
+      _recenterAfterLayout = true;
+    }
+
+    if (measureChanged) {
+      _measureCards();
+      _needsDimReload = false;
+    }
+
     _lastLayoutWidth = availableWidth;
     _lastLayoutCols = _cols;
-    _lastLayoutGameCount = widget.games.length;
     _lastIsFanart = _isFanart;
-    _needsDimReload = false;
 
+    _positionCards(availableWidth);
+  }
+
+  /// Cheap positioning pass: turns cached aspect ratios + a target width into
+  /// card rects and row bounds. No image reads, one allocation per card.
+  void _positionCards(double availableWidth) {
     final spX = 6.0.r;
     final spY = 6.0.r;
     _spX = spX;
@@ -296,64 +449,63 @@ class _GamesGridState extends State<GamesGrid> {
     final totalWidth = availableWidth - 32;
     _cardWidth = (totalWidth - (_cols - 1) * spX) / _cols;
     final n = widget.games.length;
-    _cardRects = List.generate(
-      n,
-      (_) => _CardRect(left: 0, top: 0, width: _cardWidth, height: _cardWidth),
-    ); // placeholder
-    _loadedDims.clear();
+    final rowCount = _cols > 0 ? (n + _cols - 1) ~/ _cols : 0;
 
-    if (_isFanart) {
-      double y = 0;
-      final rows = <_RowInfo>[];
-      for (int i = 0; i < n; i += _cols) {
-        final end = (i + _cols).clamp(0, n);
-        final count = end - i;
-        rows.add(
-          _RowInfo(topY: y, height: _cardWidth, startIndex: i, count: count),
-        );
-        for (int idx = i; idx < end; idx++) {
-          final col = idx % _cols;
-          _cardRects[idx] = _CardRect(
-            left: col * (_cardWidth + spX),
-            top: y + spY / 2,
-            width: _cardWidth,
-            height: _cardWidth,
-          );
-        }
-        y += _cardWidth + spY;
-      }
-      _rows = rows;
-      return; // fanart path done
+    // Reuse the existing buffers when the counts are unchanged (the common case
+    // while the reflow animates), mutating rects in place so a width change
+    // allocates nothing.
+    if (_cardRects.length != n) {
+      _cardRects = List.generate(
+        n,
+        (_) => _CardRect(left: 0, top: 0, width: 0, height: 0),
+      );
+    }
+    if (_rows.length != rowCount) {
+      _rows = List.generate(
+        rowCount,
+        (_) => _RowInfo(topY: 0, height: 0, startIndex: 0, count: 0),
+      );
     }
 
-    // First pass: use the static cache to get known dimensions fast
     double y = 0;
     int i = 0;
-    final rows = <_RowInfo>[];
+    int r = 0;
     while (i < n) {
-      double maxH = 0;
       final end = (i + _cols).clamp(0, n);
-      final count = end - i;
+      double maxH = 0;
       for (int idx = i; idx < end; idx++) {
-        final h = _cardHeightFor(idx);
+        final h = _cardHOverW[idx] * _cardWidth;
         if (h > maxH) maxH = h;
       }
-      rows.add(_RowInfo(topY: y, height: maxH, startIndex: i, count: count));
+      final row = _rows[r];
+      row.topY = y;
+      row.height = maxH;
+      row.startIndex = i;
+      row.count = end - i;
       for (int idx = i; idx < end; idx++) {
         final col = idx % _cols;
-        final h = _cardHeightFor(idx);
-        _cardRects[idx] = _CardRect(
-          left: col * (_cardWidth + spX),
-          top: y + (maxH + spY - h) / 2,
-          width: _cardWidth,
-          height: h,
-        );
-        if (_imageSizeCache.containsKey(_box2dPath(idx))) _loadedDims.add(idx);
+        final h = _cardHOverW[idx] * _cardWidth;
+        final rect = _cardRects[idx];
+        rect.left = col * (_cardWidth + spX);
+        rect.top = y + (maxH + spY - h) / 2;
+        rect.width = _cardWidth;
+        rect.height = h;
       }
       y += maxH + spY;
       i = end;
+      r++;
     }
-    _rows = rows;
+    // Exact total height of all rows (each rendered as SizedBox(maxH + spY)).
+    // Used to clamp centre-scroll targets against the REAL content height rather
+    // than the SliverList's row-count estimate, which under-reports right after
+    // a relayout and would otherwise clamp a far jump short (selection off-screen).
+    _contentHeight = y;
+
+    // Card rects/rows just changed → any memoized row widgets are stale.
+    // Bumping the generation invalidates the row cache on the next build (see
+    // _rowCache). This runs on every reflow frame (intended) but NOT during a
+    // steady scroll, where _computeLayout early-returns without calling us.
+    _layoutGen++;
   }
 
   // Lazy dimension loading for newly visible cards
@@ -383,8 +535,10 @@ class _GamesGridState extends State<GamesGrid> {
       0,
       (widget.games.length - 1).clamp(0, 999999),
     );
+    _settledIndex = _selectedIndex;
     _updateCrossAxisCount();
     _initializeGamepad();
+    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -395,6 +549,7 @@ class _GamesGridState extends State<GamesGrid> {
           onDeactivate: () => _gamepadNav.deactivate(),
         );
         _ensureSelectedVisible();
+        _loadAchievementsForSelectedGame();
       }
     });
   }
@@ -426,6 +581,9 @@ class _GamesGridState extends State<GamesGrid> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Theme / MediaQuery / ScreenUtil may have changed; drop the memoized
+    // chrome so it rebuilds with fresh sizing on the next build.
+    _chromeSig = null;
     _updateCrossAxisCount();
   }
 
@@ -438,14 +596,14 @@ class _GamesGridState extends State<GamesGrid> {
       final newIndex = (currentIndex + delta).clamp(0, sizes.length - 1);
       if (newIndex != currentIndex) {
         final newSize = sizes[newIndex];
+        // Recentre after relayout (pinch changes cols locally, so didUpdateWidget
+        // won't see a cols delta — set the flag here instead).
+        _recenterAfterLayout = true;
         provider.updateGameGridColumns(newSize);
         _updateCrossAxisCount();
         _lastLayoutWidth = null;
         _showCardSizeLabel(newSize);
         setState(() {});
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _ensureSelectedVisible();
-        });
       }
     } catch (_) {}
   }
@@ -503,14 +661,41 @@ class _GamesGridState extends State<GamesGrid> {
     super.didUpdateWidget(oldWidget);
     final prevCols = _crossAxisCount;
     _updateCrossAxisCount();
+    if (_crossAxisCount != prevCols) {
+      // Card-size cycled via the dropdown (cols changed) — recentre on the
+      // selected card after the relayout so the view follows the cursor.
+      _recenterAfterLayout = true;
+    }
     if (widget.games != oldWidget.games || _crossAxisCount != prevCols) {
       _lastLayoutWidth = null;
+      // Aspect-ratio cache is keyed by index; a changed game set (even at the
+      // same length) must be re-measured.
+      if (widget.games != oldWidget.games) _needsMeasure = true;
+    }
+    // Row memoization depends on per-card favorite/scrape state, which arrives
+    // via these props. Any change means the cached rows may be stale, so drop
+    // them (a changed game set / cols also invalidates via _layoutGen, but the
+    // scrape props do not touch layout — clear explicitly).
+    if (widget.games != oldWidget.games ||
+        widget.artworkVersion != oldWidget.artworkVersion ||
+        widget.scrapingGameRomnames != oldWidget.scrapingGameRomnames ||
+        widget.scrapeProgress != oldWidget.scrapeProgress) {
+      _rowCache.clear();
+    }
+    // A scrape can add a preview video to the settled game, which changes
+    // whether the footer's mute pill applies. Drop the stat cache and the
+    // chrome signature so the footer is rebuilt against the new media.
+    if (widget.artworkVersion != oldWidget.artworkVersion) {
+      _videoExistsCache.clear();
+      _chromeSig = null;
     }
     if (widget.selectedIndex != oldWidget.selectedIndex) {
       _selectedIndex = widget.selectedIndex.clamp(
         0,
         (widget.games.length - 1).clamp(0, 999999),
       );
+      // External selection change: the cursor overlay glides to the new card's
+      // rect on rebuild; just bring it into view.
       if (mounted && _scrollController.hasClients) {
         _ensureSelectedVisible();
       }
@@ -532,15 +717,86 @@ class _GamesGridState extends State<GamesGrid> {
         } catch (_) {}
       },
       onLeftStickClick: widget.onRandom,
-      onSelectButton: widget.onScrape,
+      onSelectButton: _toggleVideoMute, // Select tap - Mute preview video.
+      onSelectModifierA: widget.onScrape, // Select + A - Scrape.
+      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
+      onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
+    );
+  }
+
+  /// Select tap — toggles global video sound. The preview plays on the
+  /// secondary display in this view; the config mutator propagates the new
+  /// mute state to it, so there is nothing local to re-apply.
+  void _toggleVideoMute() {
+    if (!mounted) return;
+    context.read<SqliteConfigProvider>().toggleVideoSound();
+  }
+
+  /// Select + B — toggles the (session-global) vertical action-button legend.
+  /// When hidden the legend slides off the left edge and the grid reflows into
+  /// the 60.r gutter.
+  void _toggleLegend() {
+    SfxService().playNavSound();
+    GameLegendVisibility.toggle();
+  }
+
+  /// Reacts to any change of the shared legend flag (this view's chord or a
+  /// future external/DB update). Rebuilds so the grid reflows in one frame, then
+  /// the view recentres on the selected card (see build) so the cursor stays in
+  /// view.
+  void _onLegendVisibilityChanged() {
+    if (!mounted) return;
+    _recenterAfterLayout = true;
+    setState(() {});
+  }
+
+  /// Scroll offset that centres the selected card in the viewport, clamped to
+  /// the EXACT content height (12 top pad + rows + 80 bottom pad). Using our own
+  /// height instead of the SliverList's estimate is what makes a far jump land:
+  /// right after a size/mode relayout the sliver hasn't built the distant rows,
+  /// so its maxScrollExtent under-reports and would clamp the target short —
+  /// leaving the selection off-screen. jumpTo force-sets the offset here, and the
+  /// sliver then builds around it and its extent catches up.
+  double _centerTargetFor(_CardRect rect, double viewportH) {
+    final maxScroll = (12 + _contentHeight + 80 - viewportH).clamp(
+      0.0,
+      double.infinity,
+    );
+    return (12 + rect.top + rect.height / 2 - viewportH / 2).clamp(
+      0.0,
+      maxScroll,
+    );
+  }
+
+  /// Smoothly scrolls so the selected card sits at the vertical centre of the
+  /// viewport. Used after any non-scroll layout change (legend toggle, card-size
+  /// cycle, pinch, fanart↔box2d switch).
+  ///
+  /// The target comes straight from the layout model (`_centerTargetFor`). This
+  /// is only correct because the list is a [SliverVariedExtentList] fed exact
+  /// per-row extents, so its absolute offsets match the model exactly — no lazy
+  /// estimate to diverge from. A single animateTo always lands.
+  void _centerOnSelected() {
+    if (!_scrollController.hasClients || _cardRects.isEmpty) return;
+    final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
+    final pos = _scrollController.position;
+    final target = _centerTargetFor(rect, pos.viewportDimension);
+    if ((pos.pixels - target).abs() <= 1.0) return;
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
     );
   }
 
   @override
   void dispose() {
     _cardSizeLabelTimer?.cancel();
+    _achievementsDebounce?.cancel();
+    _settleTimer?.cancel();
     _cardSizeLabel.dispose();
+    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     GamepadNavigationManager.popLayer('games_grid');
     _gamepadNav.dispose();
     _scrollController.dispose();
@@ -617,6 +873,130 @@ class _GamesGridState extends State<GamesGrid> {
     if (_selectedIndex < widget.games.length) {
       widget.onGameSelected(widget.games[_selectedIndex]);
     }
+    _scheduleAchievementsLoad();
+    _scheduleChromeSettle();
+  }
+
+  /// Advances the footer/legend's settled selection. A single (slow) move
+  /// updates it immediately; during a fast-nav burst it is deferred until
+  /// navigation settles, so the expensive chrome isn't rebuilt every frame.
+  void _scheduleChromeSettle() {
+    _settleTimer?.cancel();
+    if (!_isNavigatingFast) {
+      if (_settledIndex != _selectedIndex) {
+        setState(() => _settledIndex = _selectedIndex);
+      }
+      return;
+    }
+    _settleTimer = Timer(_chromeSettleDelay, () {
+      if (mounted && _settledIndex != _selectedIndex) {
+        setState(() => _settledIndex = _selectedIndex);
+      }
+    });
+  }
+
+  bool get _isAllMode =>
+      widget.system.folderName == SystemFolderNames.all ||
+      widget.system.folderName == SystemFolderNames.favorites;
+
+  SystemModel _effectiveSystemFor(GameModel game) {
+    final systemFolderName = game.systemFolderName;
+    if (systemFolderName == null || !_isAllMode) return widget.system;
+    try {
+      final detectedSystems = context
+          .read<SqliteConfigProvider>()
+          .detectedSystems;
+      return detectedSystems.firstWhere(
+        (s) => s.folderName == systemFolderName,
+        orElse: () => widget.system,
+      );
+    } catch (e) {
+      return widget.system;
+    }
+  }
+
+  bool _hasRetroAchievementsFor(GameModel game) {
+    final system = _effectiveSystemFor(game);
+    return system.raId != null && system.raId != '0' && system.raId!.isNotEmpty;
+  }
+
+  /// Debounced entry point for the navigation hot path — coalesces rapid moves
+  /// into a single load once the user stops on a game.
+  void _scheduleAchievementsLoad() {
+    // Reflect the new selection in the footer's RA indicator immediately so
+    // fast navigation never shows the previous game's counts while the
+    // (debounced) load is pending.
+    final selectedRomname = widget.games.isEmpty
+        ? null
+        : widget
+              .games[_selectedIndex.clamp(0, widget.games.length - 1)]
+              .romname;
+    if (selectedRomname != _achievementsTargetRomname) {
+      _achievementsTargetRomname = selectedRomname;
+      _currentGameInfo = null;
+      _isLoadingAchievements = true;
+    }
+    _achievementsDebounce?.cancel();
+    _achievementsDebounce = Timer(_achievementsSettleDelay, () {
+      if (mounted) _loadAchievementsForSelectedGame();
+    });
+  }
+
+  Future<void> _loadAchievementsForSelectedGame() async {
+    if (widget.games.isEmpty) return;
+    final game = widget.games[_selectedIndex.clamp(0, widget.games.length - 1)];
+
+    if (!_hasRetroAchievementsFor(game)) {
+      if (mounted) {
+        setState(() {
+          _currentGameInfo = null;
+          _isLoadingAchievements = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _isLoadingAchievements = true);
+    _achievementsTargetRomname = game.romname;
+
+    try {
+      final provider = context.read<RetroAchievementsProvider>();
+      final info = await RetroAchievementsHelper.loadGameInfo(
+        game: game,
+        provider: provider,
+        effectiveSystem: _effectiveSystemFor(game),
+        isAllMode: _isAllMode,
+      );
+      if (mounted && _achievementsTargetRomname == game.romname) {
+        setState(() {
+          _currentGameInfo = info;
+          _isLoadingAchievements = false;
+        });
+      }
+    } catch (e) {
+      if (mounted && _achievementsTargetRomname == game.romname) {
+        setState(() {
+          _currentGameInfo = null;
+          _isLoadingAchievements = false;
+        });
+      }
+    }
+  }
+
+  void _showAchievementsDialog() {
+    if (widget.games.isEmpty) return;
+    final game = widget.games[_selectedIndex.clamp(0, widget.games.length - 1)];
+    if (!_hasRetroAchievementsFor(game)) return;
+
+    SfxService().playNavSound();
+    showDialog(
+      context: context,
+      builder: (_) => GameAchievementsDialog(
+        game: game,
+        system: _effectiveSystemFor(game),
+        retroAchievementsProvider: context.read<RetroAchievementsProvider>(),
+      ),
+    );
   }
 
   void _updateFastNav() {
@@ -630,14 +1010,20 @@ class _GamesGridState extends State<GamesGrid> {
   void _ensureSelectedVisible() {
     if (!_scrollController.hasClients || _cardRects.isEmpty) return;
     final rect = _cardRects[_selectedIndex.clamp(0, _cardRects.length - 1)];
-    final viewportH = _scrollController.position.viewportDimension;
-    final target = (rect.top - viewportH / 2 + rect.height / 2).clamp(
-      0.0,
-      _scrollController.position.maxScrollExtent,
-    );
+    final pos = _scrollController.position;
+    final target = _centerTargetFor(rect, pos.viewportDimension);
+    // During a fast-nav burst, jump instantly rather than firing a fresh
+    // animateTo per keypress. Overlapping animations let the viewport trail the
+    // selection by many rows; a synchronous jump keeps the selected card centred
+    // every frame. The trailing (settled) move still animates smoothly.
+    // Exact model offsets (SliverVariedExtentList) make both land correctly.
+    if (_isNavigatingFast) {
+      _scrollController.jumpTo(target);
+      return;
+    }
     _scrollController.animateTo(
       target,
-      duration: Duration(milliseconds: _isNavigatingFast ? 220 : 500),
+      duration: const Duration(milliseconds: 500),
       curve: Curves.easeOutQuart,
     );
   }
@@ -671,164 +1057,288 @@ class _GamesGridState extends State<GamesGrid> {
       );
     }
 
+    _buildSettledChrome();
+
     return Stack(
       children: [
         Column(
           children: [
-            SizedBox(height: 36.r),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _computeLayout(constraints.maxWidth);
+              // Indent the grid to clear the vertical legend on the left. Select
+              // + B toggles the legend; the indent flips 60.r↔0 in a single frame
+              // (no animation) so there's no moving target to chase — the grid
+              // reflows once and the selected card is pinned in place by the
+              // scroll restore below. The reduced width makes the cards slightly
+              // smaller when the legend is shown.
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: GameLegendVisibility.hidden.value ? 0 : 60.r,
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    _computeLayout(constraints.maxWidth);
 
-                  final theme = Theme.of(context);
-                  final fp = widget.fileProvider;
-                  final targetWidth = (_cardWidth * 1.5).toInt();
-
-                  final selRect = _selectedIndex < _cardRects.length
-                      ? _cardRects[_selectedIndex]
-                      : _cardRects.first;
-                  final hlDuration = Duration(
-                    milliseconds: _isNavigatingFast ? 120 : 300,
-                  );
-
-                  Widget buildRow(BuildContext ctx, int rowIndex) {
-                    final row = _rows[rowIndex];
-                    final cards = <Widget>[];
-                    for (int j = 0; j < row.count; j++) {
-                      final idx = row.startIndex + j;
-                      final rect = _cardRects[idx];
-                      _ensureDims(idx);
-                      final card = _buildCard(
-                        idx,
-                        rect,
-                        fp,
-                        targetWidth,
-                        theme,
-                      );
-                      cards.add(
-                        SizedBox(
-                          width: rect.width,
-                          height: rect.height,
-                          child: card,
-                        ),
-                      );
+                    // The layout just changed for a non-scroll reason (legend
+                    // toggle, size cycle, fanart↔box2d). Once this new layout is
+                    // painted, scroll so the selected card is centred — the view
+                    // follows the cursor.
+                    if (_recenterAfterLayout) {
+                      _recenterAfterLayout = false;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _centerOnSelected();
+                      });
                     }
-                    return SizedBox(
-                      height: row.height + _spY,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: _interleaveSpacing(cards, _spX),
-                      ),
-                    );
-                  }
 
-                  return Listener(
-                    onPointerDown: _handlePointerDown,
-                    onPointerMove: _handlePointerMove,
-                    onPointerUp: _handlePointerUp,
-                    onPointerCancel: _handlePointerCancel,
-                    behavior: HitTestBehavior.translucent,
-                    child: Stack(
-                      children: [
-                        CustomScrollView(
-                          controller: _scrollController,
-                          slivers: [
-                            SliverPadding(
-                              padding: EdgeInsets.only(
-                                top: 12,
-                                bottom: 80,
-                                left: 16,
-                                right: 16,
-                              ),
-                              sliver: SliverList.builder(
-                                itemCount: _rows.length,
-                                itemBuilder: buildRow,
-                              ),
-                            ),
-                          ],
-                        ),
-                        AnimatedPositioned(
-                          key: const ValueKey('game_selector'),
-                          duration: hlDuration,
-                          curve: Curves.easeOutQuart,
-                          left: selRect.left + 16,
-                          top: selRect.top + 12,
-                          width: selRect.width,
-                          height: selRect.height,
-                          child: ListenableBuilder(
-                            listenable: _scrollController,
-                            builder: (_, child) {
-                              final offset = _scrollController.hasClients
-                                  ? _scrollController.offset
-                                  : 0.0;
-                              return Transform.translate(
-                                offset: Offset(0, -offset),
+                    final theme = Theme.of(context);
+                    final fp = widget.fileProvider;
+                    // Quantize the decode resolution into buckets so the tiny
+                    // per-frame card-width changes during the legend reflow don't
+                    // thrash _GameCardImage into re-decoding every card each frame
+                    // (it reloads whenever targetWidth changes). Also a general win
+                    // for any width change (window resize, card-size cycling).
+                    const decodeBucket = 64;
+                    final bucketed =
+                        ((_cardWidth * 1.5) / decodeBucket).ceil() *
+                        decodeBucket;
+                    final targetWidth = bucketed < decodeBucket
+                        ? decodeBucket
+                        : bucketed;
+
+                    final borderColor = theme.colorScheme.secondary;
+
+                    // Row-cache gate: when the layout/decode/theme signature is
+                    // unchanged, buildRow returns the exact same Row instances it
+                    // built last time, so a selection/settle/RA/legend setState
+                    // that re-runs build() does NOT rebuild the ~50 visible cards
+                    // (Flutter short-circuits identical child widgets). Any real
+                    // change (reflow bumps _layoutGen, width change moves
+                    // targetWidth, theme flips) rotates the signature and rebuilds.
+                    final rowSig =
+                        '$_layoutGen|$targetWidth|${theme.brightness.index}';
+                    if (rowSig != _rowCacheSig) {
+                      _rowCacheSig = rowSig;
+                      _rowCache.clear();
+                    }
+
+                    Widget buildRow(BuildContext ctx, int rowIndex) {
+                      final row = _rows[rowIndex];
+                      // The selection cursor is a border drawn INSIDE the selected
+                      // card's cell, so it's part of the card's own coordinate
+                      // space — always pixel-exact on the card through scroll,
+                      // resize, mode switch and legend toggle, with no offset math
+                      // and no animation to lag. The one row holding the selection
+                      // therefore can't be memoized (its border must appear/vanish
+                      // with the selection), so we skip the cache for just that
+                      // row; every other row stays cached and the fast-scroll perf
+                      // is preserved.
+                      final hasSelection =
+                          _selectedIndex >= row.startIndex &&
+                          _selectedIndex < row.startIndex + row.count;
+                      if (!hasSelection) {
+                        final cached = _rowCache[rowIndex];
+                        if (cached != null) return cached;
+                      }
+                      final cards = <Widget>[];
+                      for (int j = 0; j < row.count; j++) {
+                        final idx = row.startIndex + j;
+                        final rect = _cardRects[idx];
+                        _ensureDims(idx);
+                        Widget cell = _buildCard(
+                          idx,
+                          rect,
+                          fp,
+                          targetWidth,
+                          theme,
+                        );
+                        if (idx == _selectedIndex) {
+                          cell = Stack(
+                            children: [
+                              cell,
+                              Positioned.fill(
                                 child: IgnorePointer(
-                                  child: Container(
+                                  child: DecoratedBox(
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: theme.colorScheme.secondary,
+                                        color: borderColor,
                                         width: 4.r,
                                       ),
                                       borderRadius: BorderRadius.circular(12.r),
                                     ),
                                   ),
                                 ),
-                              );
-                            },
+                              ),
+                            ],
+                          );
+                        }
+                        cards.add(
+                          SizedBox(
+                            width: rect.width,
+                            height: rect.height,
+                            child: cell,
                           ),
+                        );
+                      }
+                      final built = SizedBox(
+                        height: row.height + _spY,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: _interleaveSpacing(cards, _spX),
                         ),
-                        ValueListenableBuilder<String?>(
-                          valueListenable: _cardSizeLabel,
-                          builder: (context, label, child) => AnimatedOpacity(
-                            opacity: label != null ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: IgnorePointer(
-                              child: Center(
-                                child: label != null
-                                    ? Container(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 20.r,
-                                          vertical: 10.r,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.primary
-                                              .withValues(alpha: 0.9),
-                                          borderRadius: BorderRadius.circular(
-                                            24.r,
+                      );
+                      if (!hasSelection) _rowCache[rowIndex] = built;
+                      return built;
+                    }
+
+                    return Listener(
+                      onPointerDown: _handlePointerDown,
+                      onPointerMove: _handlePointerMove,
+                      onPointerUp: _handlePointerUp,
+                      onPointerCancel: _handlePointerCancel,
+                      behavior: HitTestBehavior.translucent,
+                      child: Stack(
+                        children: [
+                          CustomScrollView(
+                            controller: _scrollController,
+                            slivers: [
+                              SliverPadding(
+                                padding: EdgeInsets.only(
+                                  top: 12,
+                                  bottom: 80,
+                                  left: 16,
+                                  right: 16,
+                                ),
+                                // Exact per-row extents (known from
+                                // _positionCards) let the sliver compute exact
+                                // absolute offsets and maxScrollExtent for the
+                                // WHOLE list without building rows — no lazy
+                                // estimate, so model-based centring
+                                // (_centerTargetFor) always lands. This is what
+                                // fixes the "selection off-screen after resize /
+                                // fast-scroll" divergence while keeping lazy row
+                                // rendering.
+                                sliver: SliverVariedExtentList.builder(
+                                  itemCount: _rows.length,
+                                  itemExtentBuilder: (index, _) {
+                                    if (index < 0 || index >= _rows.length) {
+                                      return 0;
+                                    }
+                                    return _rows[index].height + _spY;
+                                  },
+                                  itemBuilder: buildRow,
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Selection cursor is drawn in-cell (see buildRow).
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _cardSizeLabel,
+                            builder: (context, label, child) => AnimatedOpacity(
+                              opacity: label != null ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: label != null
+                                      ? Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 20.r,
+                                            vertical: 10.r,
                                           ),
-                                        ),
-                                        child: Text(
-                                          label,
-                                          style: TextStyle(
-                                            color: theme.colorScheme.onPrimary,
-                                            fontSize: 18.r,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 2.r,
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary
+                                                .withValues(alpha: 0.9),
+                                            borderRadius: BorderRadius.circular(
+                                              24.r,
+                                            ),
                                           ),
-                                        ),
-                                      )
-                                    : const SizedBox.shrink(),
+                                          child: Text(
+                                            label,
+                                            style: TextStyle(
+                                              color:
+                                                  theme.colorScheme.onPrimary,
+                                              fontSize: 18.r,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 2.r,
+                                            ),
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-            GameViewFooter(
-              game: widget
-                  .games[_selectedIndex.clamp(0, widget.games.length - 1)],
-              onPlay: widget.onPlay,
-            ),
+            // Footer pill is driven by the debounced settled selection and
+            // memoized (see _buildSettledChrome) so it is not rebuilt on every
+            // fast-nav frame.
+            _chromeFooter!,
           ],
         ),
-        Positioned(top: 0, left: 0, right: 0, child: _buildGridHeader()),
+        // Vertical action-button legend (shared with the game list view);
+        // also memoized on the settled selection. Select + B slides it off the
+        // left edge (in sync with the grid's Transform slide).
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          top: 12.r,
+          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 250),
+            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
+            child: _chromeLegend!,
+          ),
+        ),
+        // Touch: swipe-right from the left edge reveals a hidden legend.
+        const LegendEdgeReshowZone(),
       ],
+    );
+  }
+
+  /// (Re)builds the footer pill + action-button legend only when the settled
+  /// selection or its achievement/favorite state changes. During a fast-nav
+  /// burst the signature is stable, so build() reuses the same widget
+  /// instances and Flutter skips these (relatively expensive) subtrees.
+  void _buildSettledChrome() {
+    final settledGame =
+        widget.games[_settledIndex.clamp(0, widget.games.length - 1)];
+    final hasRa = _hasRetroAchievementsFor(settledGame);
+    final sig =
+        '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
+        '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
+    if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
+      return;
+    }
+    _chromeSig = sig;
+    _chromeFooter = GameViewFooter(
+      game: settledGame,
+      onPlay: widget.onPlay,
+      hasRetroAchievements: hasRa,
+      isLoadingAchievements: _isLoadingAchievements,
+      currentGameInfo: _currentGameInfo,
+      onShowAchievements: _showAchievementsDialog,
+      onToggleMute: _toggleVideoMute,
+      hasVideo: _hasVideoFor(settledGame),
+    );
+    // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
+    // so Select + B can animate it without invalidating this memoized subtree.
+    _chromeLegend = Consumer<SyncManager>(
+      builder: (context, syncManager, child) => GameActionButtons(
+        system: widget.system,
+        selectedGame: settledGame,
+        syncProvider: syncManager.active,
+        onBack: widget.onBack,
+        onFavorite: widget.onFavorite,
+        onViewMode: () =>
+            GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+        onSettings: widget.onSettings ?? () {},
+        onRandom: widget.onRandom,
+        onScrape: widget.onScrape,
+      ),
     );
   }
 
@@ -864,8 +1374,21 @@ class _GamesGridState extends State<GamesGrid> {
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
-        setState(() => _selectedIndex = index);
+        // Second tap on the already-selected card plays it — touch users have
+        // no A button, so the footer's Play is an affordance, not a step.
+        if (index == _selectedIndex) {
+          SfxService().playEnterSound();
+          widget.onPlay();
+          return;
+        }
+
+        setState(() {
+          _selectedIndex = index;
+          _settledIndex = index; // discrete tap: update chrome immediately
+        });
+        _settleTimer?.cancel();
         widget.onGameSelected(game);
+        _scheduleAchievementsLoad();
         SfxService().playNavSound();
       },
       child: RepaintBoundary(
@@ -884,7 +1407,7 @@ class _GamesGridState extends State<GamesGrid> {
               ),
               clipBehavior: Clip.antiAlias,
               child: _GameCardImage(
-                key: ValueKey('img_${game.romname}'),
+                key: ValueKey('img_${game.romname}_${widget.artworkVersion}'),
                 box2dPath: box2dPath,
                 game: game,
                 targetWidth: targetWidth,
@@ -976,8 +1499,21 @@ class _GamesGridState extends State<GamesGrid> {
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
       onTap: () {
-        setState(() => _selectedIndex = index);
+        // Second tap on the already-selected card plays it — touch users have
+        // no A button, so the footer's Play is an affordance, not a step.
+        if (index == _selectedIndex) {
+          SfxService().playEnterSound();
+          widget.onPlay();
+          return;
+        }
+
+        setState(() {
+          _selectedIndex = index;
+          _settledIndex = index; // discrete tap: update chrome immediately
+        });
+        _settleTimer?.cancel();
         widget.onGameSelected(game);
+        _scheduleAchievementsLoad();
         SfxService().playNavSound();
       },
       child: RepaintBoundary(
@@ -1085,21 +1621,31 @@ class _GamesGridState extends State<GamesGrid> {
     // mosaic matches the surrounding cards. Cached per folder+style.
     final imageType = _isFanart ? 'fanarts' : 'box2d';
     final cacheKey = '${folder.relPath}|$imageType';
-    final covers =
-        _folderCoverCache[cacheKey] ??=
-            widget.folderCoverResolver?.call(
-              folder.relPath,
-              max: 4,
-              imageType: imageType,
-            ) ??
-            const [];
+    final covers = _folderCoverCache[cacheKey] ??=
+        widget.folderCoverResolver?.call(
+          folder.relPath,
+          max: 4,
+          imageType: imageType,
+        ) ??
+        const [];
 
     return GestureDetector(
       key: ValueKey('folder_${folder.relPath}'),
       onTap: () {
-        setState(() => _selectedIndex = index);
+        // Same touch contract as the game cards: the first tap selects the
+        // folder, a second tap on the selected one descends into it.
+        if (index == _selectedIndex) {
+          SfxService().playEnterSound();
+          widget.onFolderActivated?.call(index);
+          return;
+        }
+        setState(() {
+          _selectedIndex = index;
+          _settledIndex = index; // discrete tap: update chrome immediately
+        });
+        _settleTimer?.cancel();
+        widget.onGameSelected(widget.games[index]);
         SfxService().playNavSound();
-        widget.onFolderActivated?.call(index);
       },
       child: RepaintBoundary(
         child: ClipRRect(
@@ -1133,9 +1679,8 @@ class _GamesGridState extends State<GamesGrid> {
       errorBuilder: (_, _, _) => const SizedBox.shrink(),
     );
 
-    Widget row(List<File> files) => Row(
-      children: [for (final f in files) Expanded(child: tile(f))],
-    );
+    Widget row(List<File> files) =>
+        Row(children: [for (final f in files) Expanded(child: tile(f))]);
 
     if (covers.length == 1) return tile(covers.first);
     if (covers.length == 2) return row(covers);
@@ -1181,138 +1726,6 @@ class _GamesGridState extends State<GamesGrid> {
       ),
     );
   }
-
-  Widget _buildGridHeader() {
-    final dropdownState = GameViewModeDropdown.globalKey.currentState;
-    final viewModeKey = GlobalKey();
-    final shortName =
-        (widget.system.shortName != null && widget.system.shortName!.isNotEmpty)
-        ? widget.system.shortName!
-        : widget.system.realName;
-    return Container(
-      padding: EdgeInsets.only(left: 8.r, right: 8.r, top: 8.r, bottom: 4.r),
-      color: Scaffold.of(context).widget.backgroundColor,
-      child: Row(
-        children: [
-          _buildIconButton(
-            iconPath: 'assets/images/gamepad/Xbox_B_button.png',
-            symbol: Symbols.arrow_back_rounded,
-            color: Theme.of(context).colorScheme.error,
-            foregroundColor: Theme.of(context).colorScheme.onError,
-            onTap: widget.onBack,
-          ),
-          SizedBox(width: 6.r),
-          _buildIconButton(
-            key: viewModeKey,
-            iconPath: 'assets/images/gamepad/Xbox_X_button.png',
-            symbol: Symbols.grid_view_rounded,
-            color: Theme.of(context).colorScheme.tertiary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            onTap: () {
-              SfxService().playNavSound();
-              dropdownState?.showDropdownFrom(viewModeKey);
-            },
-          ),
-          SizedBox(width: 6.r),
-          _buildIconButton(
-            iconPath: 'assets/images/gamepad/Left Stick Click.png',
-            symbol: Symbols.casino_rounded,
-            color: Theme.of(context).colorScheme.tertiary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            onTap: widget.onRandom,
-          ),
-          SizedBox(width: 6.r),
-          _buildIconButton(
-            iconPath: 'assets/images/gamepad/Xbox_View_button.png',
-            symbol: Symbols.search_rounded,
-            color: Theme.of(context).colorScheme.tertiary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            onTap: () => widget.onScrape?.call(),
-          ),
-          SizedBox(width: 6.r),
-          _buildIconButton(
-            iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
-            symbol: Symbols.favorite_rounded,
-            color: Theme.of(context).colorScheme.tertiary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            onTap: widget.onFavorite,
-          ),
-          SizedBox(width: 10.r),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.4),
-                width: 1.r,
-              ),
-            ),
-            child: Text(
-              shortName,
-              style: TextStyle(
-                fontSize: 12.r,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.primary,
-                letterSpacing: 0.5.r,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIconButton({
-    Key? key,
-    required String iconPath,
-    required IconData symbol,
-    required Color color,
-    Color? foregroundColor,
-    required VoidCallback onTap,
-  }) {
-    final fg = foregroundColor ?? Colors.white;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: key,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6.r),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 5.r, vertical: 4.r),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(6.r),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 2.r,
-                offset: Offset(1.r, 1.r),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                iconPath,
-                width: 16.r,
-                height: 16.r,
-                color: fg,
-                colorBlendMode: BlendMode.srcIn,
-              ),
-              SizedBox(width: 4.r),
-              Icon(symbol, size: 16.r, color: fg),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ---- Card image with lazy loading ----
@@ -1331,6 +1744,13 @@ class _GameCardImage extends StatefulWidget {
 }
 
 class _GameCardImageState extends State<_GameCardImage> {
+  // Process-wide cache of box2d-path existence. Fast dpad scroll recreates a
+  // card's `_GameCardImage` every time it re-enters the viewport (keyed by
+  // romname), and each creation used to fire a synchronous `existsSync()`
+  // syscall on the UI thread. Caching the boolean keeps re-scroll off the
+  // filesystem entirely.
+  static final Map<String, bool> _existsCache = {};
+
   ImageProvider? _imageProvider;
   bool _exists = false;
   bool _checked = false;
@@ -1338,7 +1758,8 @@ class _GameCardImageState extends State<_GameCardImage> {
   @override
   void initState() {
     super.initState();
-    _resolve();
+    // Pre-first-build: resolve synchronously without a redundant setState.
+    _computeResolve();
   }
 
   @override
@@ -1353,21 +1774,28 @@ class _GameCardImageState extends State<_GameCardImage> {
     }
   }
 
+  /// Populate `_exists`/`_imageProvider` for the current box2d path. Returns
+  /// true if any field changed. Callers decide whether a setState is needed
+  /// (initState resolves before the first build, so it skips setState).
+  bool _computeResolve() {
+    if (_checked) return false;
+    final path = widget.box2dPath;
+    final exists = _existsCache[path] ??= File(path).existsSync();
+    _checked = true;
+    _exists = exists;
+    if (exists) {
+      _imageProvider = ResizeImage(
+        FileImage(File(path)),
+        width: widget.targetWidth,
+        allowUpscaling: false,
+      );
+    }
+    return true;
+  }
+
   void _resolve() {
-    if (_checked) return;
-    final exists = File(widget.box2dPath).existsSync();
-    if (!mounted) return;
-    setState(() {
-      _checked = true;
-      _exists = exists;
-      if (exists) {
-        _imageProvider = ResizeImage(
-          FileImage(File(widget.box2dPath)),
-          width: widget.targetWidth,
-          allowUpscaling: false,
-        );
-      }
-    });
+    if (!_computeResolve() || !mounted) return;
+    setState(() {});
   }
 
   @override
@@ -1439,12 +1867,14 @@ class _Placeholder extends StatelessWidget {
   }
 }
 
+// Mutable so [_positionCards] can update a reused buffer in place — a width
+// change (the Select+B reflow) then allocates nothing per frame.
 class _RowInfo {
-  final double topY;
-  final double height;
-  final int startIndex;
-  final int count;
-  const _RowInfo({
+  double topY;
+  double height;
+  int startIndex;
+  int count;
+  _RowInfo({
     required this.topY,
     required this.height,
     required this.startIndex,
@@ -1453,8 +1883,8 @@ class _RowInfo {
 }
 
 class _CardRect {
-  final double left, top, width, height;
-  const _CardRect({
+  double left, top, width, height;
+  _CardRect({
     required this.left,
     required this.top,
     required this.width,

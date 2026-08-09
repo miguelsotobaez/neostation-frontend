@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "intv",
+    "multidisc": false,
     "name": "Intellivision",
     "short_name": "INTV",
     "details": {
@@ -71,6 +72,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L freeintv_libretro.so \"{file.path}\""
         },
         "macos": {

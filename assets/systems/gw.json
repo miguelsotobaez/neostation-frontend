@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gw",
+    "multidisc": false,
     "name": "Game & Watch",
     "short_name": "G&W",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "gw",
       "gameandwatch",
-      "Game & Watch"
+      "Game & Watch",
+      "g-and-w"
     ],
     "colors": [
       "#BDBDBD",
@@ -80,6 +82,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L gw_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -103,6 +107,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mamemess_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'logger_service.dart';
@@ -51,6 +52,9 @@ class SafDirectoryService {
       return hasPermission ?? false;
     } on PlatformException catch (e) {
       _log.e('Error checking SAF permission: ${e.message}');
+      return false;
+    } on MissingPluginException catch (e) {
+      _log.e('SAF permission check is unavailable: $e');
       return false;
     }
   }
@@ -122,6 +126,8 @@ class SafDirectoryService {
     }
 
     try {
+      // One MethodChannel round trip per directory: the scan recurses in Dart,
+      // so a deep system costs one native call per subfolder.
       final List<dynamic>? files = await platform.invokeMethod(
         'listSafDirectory',
         {'uri': uri},
@@ -135,6 +141,125 @@ class SafDirectoryService {
     } on PlatformException catch (e) {
       _log.e('Error listing SAF files: ${e.message}');
       return [];
+    }
+  }
+
+  /// Whether the native fast walk is usable, latched for the current scan.
+  ///
+  /// Null means "not yet probed". Once the native side declines, every further
+  /// call in the same scan would decline for the same reason, so the channel
+  /// round trip is skipped — without this, a library the fast path cannot serve
+  /// pays one futile probe per directory.
+  static bool? _fastWalkAvailable;
+
+  /// Clears the latched fast-walk verdict so the next call re-probes.
+  ///
+  /// Called at the start of each scan: MANAGE_EXTERNAL_STORAGE can be granted or
+  /// revoked between scans, and latching for the process lifetime would ignore
+  /// that until restart.
+  static void resetFastWalkAvailability() => _fastWalkAvailable = null;
+
+  /// Recursively walks a SAF tree using direct filesystem I/O, returning every
+  /// matching file in one round trip.
+  ///
+  /// This is a fast path for the common case of a ROM library on primary
+  /// external storage: it skips the per-directory DocumentsProvider query, which
+  /// dominates scan time, while producing the same document URIs. Filtering
+  /// happens natively so only matching files cross the channel.
+  ///
+  /// Returns null when the fast path does not apply — a non-primary volume (SD
+  /// card, USB OTG), MANAGE_EXTERNAL_STORAGE not held, or an unreadable path.
+  /// Callers must fall back to [listFiles]; null never means "no files".
+  static Future<List<Map<String, dynamic>>?> fastWalkTree(
+    String uri, {
+    required bool recursive,
+    required Set<String> extensions,
+    required bool ignoreHiddenFiles,
+  }) async {
+    if (!Platform.isAndroid) return null;
+    if (_fastWalkAvailable == false) return null;
+
+    try {
+      final List<dynamic>? files = await platform
+          .invokeMethod('fastWalkSafTree', {
+            'uri': uri,
+            'recursive': recursive,
+            'extensions': extensions.toList(),
+            'ignoreHiddenFiles': ignoreHiddenFiles,
+          });
+
+      if (files == null) {
+        _fastWalkAvailable = false;
+        return null;
+      }
+
+      _fastWalkAvailable = true;
+      return files
+          .map((file) => Map<String, dynamic>.from(file as Map))
+          .toList();
+    } on PlatformException catch (e) {
+      // Fall back rather than reporting an empty directory: an empty result
+      // would be read as "every ROM deleted". Not latched — this is a
+      // per-directory failure, not a statement about the whole library.
+      _log.e('Error in fast SAF walk, falling back: ${e.message}');
+      return null;
+    } on MissingPluginException catch (_) {
+      _fastWalkAvailable = false;
+      return null;
+    }
+  }
+
+  /// Creates a directory below a SAF directory and returns its URI.
+  static Future<String?> createDirectory(String parentUri, String name) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await platform.invokeMethod<String>('createSafDirectory', {
+        'uri': parentUri,
+        'name': name,
+      });
+    } on PlatformException catch (e) {
+      _log.e('Error creating SAF directory: ${e.message}');
+      return null;
+    }
+  }
+
+  /// Copies a SAF file into a directory and removes the original.
+  static Future<bool> moveFile(
+    String sourceUri,
+    String targetDirectoryUri,
+    String name,
+  ) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await platform.invokeMethod('moveSafFile', {
+        'sourceUri': sourceUri,
+        'targetUri': targetDirectoryUri,
+        'name': name,
+      });
+      return result == true;
+    } on PlatformException catch (e) {
+      _log.e('Error moving SAF file: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Writes UTF-8 text to a new file below a SAF directory.
+  static Future<bool> writeTextFile(
+    String parentUri,
+    String name,
+    String contents,
+  ) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await platform.invokeMethod('writeSafFile', {
+        'uri': parentUri,
+        'name': name,
+        'contents': utf8.encode(contents),
+      });
+      return result == true;
+    } on PlatformException catch (e) {
+      _log.e('Error writing SAF file: ${e.message}');
+      return false;
     }
   }
 

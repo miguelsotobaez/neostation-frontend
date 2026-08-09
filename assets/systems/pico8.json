@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pico8",
+    "multidisc": false,
     "name": "PICO-8",
     "short_name": "PICO-8",
     "details": {

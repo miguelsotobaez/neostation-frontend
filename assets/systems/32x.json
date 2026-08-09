@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "32x",
+    "multidisc": false,
     "name": "Sega 32X",
     "short_name": "32X",
     "details": {
@@ -19,7 +20,8 @@
       "Sega 32X",
       "THIRTYTWOX",
       "sega32xjp",
-      "sega32xna"
+      "sega32xna",
+      "sega32"
     ],
     "colors": [
       "#212121",
@@ -61,6 +63,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L picodrive_libretro.so \"{file.path}\""
         },
         "macos": {

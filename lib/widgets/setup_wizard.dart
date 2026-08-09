@@ -10,7 +10,12 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
+import 'package:neostation/providers/neo_assets_provider.dart';
+import 'package:neostation/services/neo_assets_service.dart';
+import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/services/esde_import_service.dart';
+import 'package:neostation/services/global_notification_service.dart';
 import '../providers/sqlite_config_provider.dart';
 import '../utils/gamepad_nav.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -29,14 +34,22 @@ class SetupWizard extends StatefulWidget {
   State<SetupWizard> createState() => _SetupWizardState();
 }
 
-class _SetupWizardState extends State<SetupWizard>
-    with WidgetsBindingObserver {
+class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   int _currentStep = 0;
   bool _isSelectingFolder = false;
   bool _isSelectingUserDataFolder = false;
   String? _selectedFolder;
   String? _selectedUserDataPath;
   SecondaryDisplayState? _secondaryDisplayState;
+
+  // --- ES-DE import step state (optional step after scanning) ---
+  bool _isImportingEsde = false;
+  double _esdeProgress = 0.0;
+  String _esdeLabel = '';
+  EsdeImportResult? _esdeResult;
+
+  // --- Art-pack step state (optional final step) ---
+  bool _isDownloadingArt = false;
 
   /// Whether All-Files (storage) access is currently granted.
   bool _storageGranted = false;
@@ -57,6 +70,10 @@ class _SetupWizardState extends State<SetupWizard>
   /// or it doesn't apply on this device.
   bool get _accessibilityDone => !_needsAccessibility || _accessibilityGranted;
 
+  /// True once setup is being finalised, so the per-frame secondary-display
+  /// push stops re-asserting `setupWizardActive` and the dock can come in.
+  bool _finishing = false;
+
   static final _log = LoggerService.instance;
 
   GamepadNavigation? _gamepadNav;
@@ -64,14 +81,20 @@ class _SetupWizardState extends State<SetupWizard>
   // Step indices. Android has two extra steps (Permissions + Accessibility)
   // that don't exist on desktop; the getters resolve to -1 there so a
   // comparison against a real (>= 0) step never matches.
-  //   Android: 0=UserData, 1=Permissions, 2=Folder, 3=Scanning
-  //   Desktop: 0=UserData, 1=Folder, 2=Scanning
+  //   Android: 0=UserData, 1=Permissions, 2=Folder, 3=Scanning,
+  //            4=EsdeImport, 5=ArtPack
+  //   Desktop: 0=UserData, 1=Folder, 2=Scanning, 3=EsdeImport, 4=ArtPack
   // The Permissions step covers both All-Files access and the accessibility
   // (Screen Return) service.
   int get _stepUserData => 0;
   int get _stepPermissions => Platform.isAndroid ? 1 : -1;
   int get _stepFolder => Platform.isAndroid ? 2 : 1;
   int get _stepScanning => Platform.isAndroid ? 3 : 2;
+  int get _stepEsde => Platform.isAndroid ? 4 : 3;
+  int get _stepArtPack => Platform.isAndroid ? 5 : 4;
+
+  /// The art-pack step is always the final step of the wizard.
+  bool get _isLastStep => _currentStep == _stepArtPack;
 
   @override
   void initState() {
@@ -128,14 +151,30 @@ class _SetupWizardState extends State<SetupWizard>
       onSelectItem: () {
         if (_isSelectingFolder || _isSelectingUserDataFolder) return;
 
+        if (_isImportingEsde || _isDownloadingArt) return;
+        // Mirror the on-screen button's disabled state on the final step: while
+        // the theme manifest is still in flight we can't tell whether a pack is
+        // available, and letting A through would finish setup with no art.
+        if (_isLastStep) {
+          final neoAssets = context.read<NeoAssetsProvider>();
+          if (neoAssets.loading &&
+              !neoAssets.hasActiveTheme &&
+              neoAssets.themes.isEmpty) {
+            return;
+          }
+        }
         if (_currentStep == _stepScanning) {
-          // Last step: A finishes when scan is done.
+          // A advances to the ES-DE step once the scan is done.
           final provider = Provider.of<SqliteConfigProvider>(
             context,
             listen: false,
           );
-          if (provider.scanCompleted) _finishSetup();
+          if (provider.scanCompleted) _handleMainAction();
         } else {
+          // Every step — including the final art-pack one — goes through the
+          // same primary action as the on-screen button. Shortcutting the last
+          // step to _finishSetup() here meant an A press completed setup
+          // without ever downloading/applying the art pack.
           _handleMainAction();
         }
       },
@@ -159,6 +198,11 @@ class _SetupWizardState extends State<SetupWizard>
   void _updateSecondaryScreen(int bgColor, bool isOled) {
     if (_secondaryDisplayState == null) return;
     _secondaryDisplayState!.updateState(
+      // Re-asserted on every push: the shared state is written by both engines
+      // and the secondary's own pushes copyWith from a snapshot that may
+      // predate the flag, so a single push can be echoed away (same hazard as
+      // `appReady`). Stops once we're finishing so it can't undo the clear.
+      setupWizardActive: !_finishing,
       systemName: AppLocale.welcomeNeoStation.getString(context),
       useFluidShader: true,
       backgroundColor: bgColor,
@@ -196,6 +240,19 @@ class _SetupWizardState extends State<SetupWizard>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.scanSystems();
       });
+      return;
+    }
+
+    // Both trailing steps (ES-DE import, art pack) are optional — skipping
+    // the ES-DE step advances to the art-pack step; skipping the art-pack
+    // step finishes setup.
+    if (_currentStep == _stepEsde) {
+      setState(() => _currentStep = _stepArtPack);
+      return;
+    }
+    if (_currentStep == _stepArtPack) {
+      _finishSetup();
+      return;
     }
   }
 
@@ -207,14 +264,16 @@ class _SetupWizardState extends State<SetupWizard>
   }
 
   // Step layout:
-  // Android: 0=UserData, 1=Permissions, 2=FolderSelect, 3=Scanning (4 steps)
-  // Desktop: 0=UserData, 1=FolderSelect, 2=Scanning (3 steps)
-  int get _totalSteps => Platform.isAndroid ? 4 : 3;
+  // Android: 0=UserData, 1=Permissions, 2=FolderSelect, 3=Scanning,
+  //          4=EsdeImport, 5=ArtPack (6 steps)
+  // Desktop: 0=UserData, 1=FolderSelect, 2=Scanning, 3=EsdeImport,
+  //          4=ArtPack (5 steps)
+  int get _totalSteps => Platform.isAndroid ? 6 : 5;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final themeProvider = Provider.of<PaletteProvider>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
     final orientation = MediaQuery.of(context).orientation;
     final isLandscape = orientation == Orientation.landscape;
     final isOled = themeProvider.isOled;
@@ -366,8 +425,14 @@ class _SetupWizardState extends State<SetupWizard>
 
                   SizedBox(height: 16.r),
 
-                  // Progress indicator vertical
-                  _buildVerticalProgressIndicator(theme),
+                  // Progress indicator vertical — scaled to fit the remaining
+                  // card height so it never overflows regardless of step count.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _buildVerticalProgressIndicator(theme),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -473,61 +538,65 @@ class _SetupWizardState extends State<SetupWizard>
   }
 
   Widget _buildProgressIndicator(ThemeData theme) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_totalSteps, (index) {
-        final isCompleted = index < _currentStep;
-        final isCurrent = index == _currentStep;
+    // Scale down to fit the screen width so the extra steps don't overflow.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(_totalSteps, (index) {
+          final isCompleted = index < _currentStep;
+          final isCurrent = index == _currentStep;
 
-        return Row(
-          children: [
-            Container(
-              width: 40.r,
-              height: 40.r,
-              decoration: BoxDecoration(
-                color: isCompleted || isCurrent
-                    ? theme.colorScheme.primary
-                    : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isCompleted || isCurrent
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.primary.withValues(alpha: 0.3),
-                  width: 2.r,
-                ),
-              ),
-              child: Center(
-                child: isCompleted
-                    ? Icon(
-                        Symbols.check_rounded,
-                        color: Colors.white,
-                        size: 24.r,
-                      )
-                    : Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          fontSize: 18.r,
-                          fontWeight: FontWeight.bold,
-                          color: isCurrent
-                              ? Colors.white
-                              : theme.colorScheme.primary.withValues(
-                                  alpha: 0.5,
-                                ),
-                        ),
-                      ),
-              ),
-            ),
-            if (index < _totalSteps - 1)
+          return Row(
+            children: [
               Container(
                 width: 40.r,
-                height: 2.r,
-                color: isCompleted
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.primary.withValues(alpha: 0.2),
+                height: 40.r,
+                decoration: BoxDecoration(
+                  color: isCompleted || isCurrent
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isCompleted || isCurrent
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.primary.withValues(alpha: 0.3),
+                    width: 2.r,
+                  ),
+                ),
+                child: Center(
+                  child: isCompleted
+                      ? Icon(
+                          Symbols.check_rounded,
+                          color: Colors.white,
+                          size: 24.r,
+                        )
+                      : Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 18.r,
+                            fontWeight: FontWeight.bold,
+                            color: isCurrent
+                                ? Colors.white
+                                : theme.colorScheme.primary.withValues(
+                                    alpha: 0.5,
+                                  ),
+                          ),
+                        ),
+                ),
               ),
-          ],
-        );
-      }),
+              if (index < _totalSteps - 1)
+                Container(
+                  width: 40.r,
+                  height: 2.r,
+                  color: isCompleted
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.primary.withValues(alpha: 0.2),
+                ),
+            ],
+          );
+        }),
+      ),
     );
   }
 
@@ -543,6 +612,12 @@ class _SetupWizardState extends State<SetupWizard>
     }
     if (_currentStep == _stepScanning) {
       return _buildScanningStep(theme);
+    }
+    if (_currentStep == _stepEsde) {
+      return _buildEsdeStep(theme);
+    }
+    if (_currentStep == _stepArtPack) {
+      return _buildArtPackStep(theme);
     }
     return Container();
   }
@@ -955,7 +1030,7 @@ class _SetupWizardState extends State<SetupWizard>
 
               Text(
                 provider.scanCompleted
-                    ? AppLocale.setupComplete.getString(context)
+                    ? AppLocale.wizardScanComplete.getString(context)
                     : AppLocale.scanningRoms.getString(context),
                 style: TextStyle(
                   fontSize: titleSize,
@@ -1050,7 +1125,7 @@ class _SetupWizardState extends State<SetupWizard>
                       SizedBox(width: 12.r),
                       Expanded(
                         child: Text(
-                          '${AppLocale.foundSystemsWithGames.getString(context).replaceFirst('{count}', provider.detectedRealSystems.length.toString())}\n${AppLocale.tapFinishToStart.getString(context)}',
+                          '${AppLocale.foundSystemsWithGames.getString(context).replaceFirst('{count}', provider.detectedRealSystems.length.toString())}\n${AppLocale.wizardTapNextToContinue.getString(context)}',
                           style: TextStyle(
                             fontSize: textSize,
                             color: Colors.green[700],
@@ -1068,8 +1143,471 @@ class _SetupWizardState extends State<SetupWizard>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // ES-DE import step (optional)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildEsdeStep(ThemeData theme) {
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+    final iconSize = isLandscape ? 48.r : 80.r;
+    final titleSize = isLandscape ? 16.r : 24.r;
+    final textSize = isLandscape ? 12.r : 14.r;
+    final result = _esdeResult;
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            result != null
+                ? Symbols.check_circle_rounded
+                : Symbols.download_for_offline_rounded,
+            size: iconSize,
+            color: result != null ? Colors.green : theme.colorScheme.primary,
+          ),
+          SizedBox(height: isLandscape ? 16.r : 24.r),
+
+          Text(
+            AppLocale.wizardEsdeStepTitle.getString(context),
+            style: TextStyle(
+              fontSize: titleSize,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: isLandscape ? 8.r : 16.r),
+
+          Text(
+            AppLocale.wizardEsdeStepDesc.getString(context),
+            style: TextStyle(
+              fontSize: textSize,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              height: 1.3,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          // Live progress while importing.
+          if (_isImportingEsde) ...[
+            SizedBox(height: isLandscape ? 12.r : 28.r),
+            SizedBox(
+              width: 220.r,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.r),
+                child: LinearProgressIndicator(
+                  value: _esdeProgress > 0 ? _esdeProgress : null,
+                  minHeight: 8.r,
+                  backgroundColor: theme.colorScheme.primary.withValues(
+                    alpha: 0.1,
+                  ),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ),
+            if (_esdeLabel.isNotEmpty) ...[
+              SizedBox(height: 8.r),
+              Text(
+                _esdeLabel,
+                style: TextStyle(
+                  fontSize: textSize - 2.r,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+
+          // Import result summary.
+          if (result != null) ...[
+            SizedBox(height: isLandscape ? 12.r : 28.r),
+            Container(
+              padding: EdgeInsets.all(isLandscape ? 12.r : 16.r),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(
+                  color: Colors.green.withValues(alpha: 0.3),
+                  width: 1.r,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Symbols.check_circle_rounded,
+                    color: Colors.green,
+                    size: isLandscape ? 20.r : 24.r,
+                  ),
+                  SizedBox(width: 12.r),
+                  Flexible(
+                    child: Text(
+                      '${AppLocale.esdeImportComplete.getString(context)}\n'
+                      '${result.gamesImported} '
+                      '${AppLocale.esdeSummaryGames.getString(context)}, '
+                      '${result.systemsMatched} '
+                      '${AppLocale.esdeSummarySystems.getString(context)}',
+                      style: TextStyle(
+                        fontSize: textSize,
+                        color: Colors.green[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // System art pack step (optional, heavily recommended)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildArtPackStep(ThemeData theme) {
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+    final iconSize = isLandscape ? 48.r : 80.r;
+    final titleSize = isLandscape ? 16.r : 24.r;
+    final textSize = isLandscape ? 12.r : 14.r;
+
+    return Consumer<NeoAssetsProvider>(
+      builder: (context, neoAssets, child) {
+        final hasTheme = neoAssets.hasActiveTheme;
+        final unavailable = neoAssets.themes.isEmpty;
+        return SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Smaller icon + tighter spacing so the compact thumbnail below
+              // fits without scrolling.
+              Icon(
+                hasTheme
+                    ? Symbols.check_circle_rounded
+                    : Symbols.palette_rounded,
+                size: iconSize * 0.7,
+                color: hasTheme ? Colors.green : theme.colorScheme.primary,
+              ),
+              SizedBox(height: isLandscape ? 10.r : 16.r),
+
+              Text(
+                AppLocale.wizardArtPackTitle.getString(context),
+                style: TextStyle(
+                  fontSize: titleSize,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: isLandscape ? 6.r : 12.r),
+
+              Text(
+                hasTheme
+                    ? AppLocale.wizardArtPackInstalled.getString(context)
+                    : unavailable
+                    ? AppLocale.wizardArtPackUnavailable.getString(context)
+                    : AppLocale.wizardArtPackDesc.getString(context),
+                style: TextStyle(
+                  fontSize: textSize,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  height: 1.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              // Small preview thumbnail of the recommended pack.
+              if (!hasTheme && !unavailable && !neoAssets.downloading) ...[
+                Builder(
+                  builder: (context) {
+                    final recommended = neoAssets.themes.firstWhere(
+                      (t) => !t.isAi,
+                      orElse: () => neoAssets.themes.first,
+                    );
+                    final previewUrl = NeoAssetsTheme.normalizePreviewUrl(
+                      recommended.previewUrl,
+                    );
+                    if (previewUrl.isEmpty) return const SizedBox.shrink();
+                    final thumbWidth = isLandscape ? 120.r : 150.r;
+                    return Padding(
+                      padding: EdgeInsets.only(top: isLandscape ? 10.r : 16.r),
+                      child: Container(
+                        width: thumbWidth,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10.r),
+                          border: Border.all(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.3,
+                            ),
+                            width: 1.r,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(9.r),
+                          child: AspectRatio(
+                            aspectRatio: 4 / 3,
+                            child: Image.network(
+                              previewUrl,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (_, child, progress) =>
+                                  progress == null
+                                  ? child
+                                  : Container(color: theme.colorScheme.surface),
+                              errorBuilder: (_, _, _) => Container(
+                                color: theme.colorScheme.surface,
+                                child: Icon(
+                                  Symbols.image_rounded,
+                                  size: 24.r,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+
+              // Live download progress.
+              if (neoAssets.downloading) ...[
+                SizedBox(height: isLandscape ? 12.r : 28.r),
+                SizedBox(
+                  width: 220.r,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8.r),
+                    child: LinearProgressIndicator(
+                      value: neoAssets.downloadProgress > 0
+                          ? neoAssets.downloadProgress
+                          : null,
+                      minHeight: 8.r,
+                      backgroundColor: theme.colorScheme.primary.withValues(
+                        alpha: 0.1,
+                      ),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 8.r),
+                Text(
+                  '${(neoAssets.downloadProgress * 100).toInt()}%',
+                  style: TextStyle(
+                    fontSize: textSize,
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Combined ES-DE folder pick + import for the wizard step. Picks the ES-DE
+  /// root, persists it, runs the import with progress, and surfaces the result.
+  Future<void> _runWizardEsdeImport() async {
+    if (_isImportingEsde) return;
+
+    // Pick the ES-DE root folder (platform-branched, mirrors the Directories
+    // settings picker).
+    String? selected;
+    _gamepadNav?.deactivate();
+    try {
+      if (Platform.isAndroid) {
+        final isTV = await PermissionService.isTelevision();
+        if (!mounted) return;
+        if (isTV) {
+          selected = await TvDirectoryPicker.show(context);
+        } else {
+          try {
+            final uri = await PermissionService.requestFolderAccess();
+            if (uri != null) {
+              final uriStr = uri.toString();
+              final hasFiles = await PermissionService.hasAllFilesAccess();
+              selected =
+                  await UserDataLocationService.resolveAndroidUserDataPath(
+                    uriStr,
+                    hasAllFilesAccess: hasFiles,
+                  ) ??
+                  UserDataLocationService.safUriToRealPath(uriStr);
+            }
+          } on PlatformException catch (e) {
+            if (e.code == 'PICKER_FAILED' && mounted) {
+              selected = await TvDirectoryPicker.show(context);
+            }
+          }
+        }
+      } else {
+        selected = await FilePicker.getDirectoryPath(
+          dialogTitle: AppLocale.esdeSelectFolder.getString(context),
+        );
+      }
+    } finally {
+      _gamepadNav?.activate();
+    }
+
+    if (selected == null || !mounted) return;
+    if (selected.endsWith(Platform.pathSeparator)) {
+      selected = selected.substring(0, selected.length - 1);
+    }
+
+    // Resolve ES-DE strings before the async import so progress callbacks can
+    // use them without a BuildContext.
+    final localeEsdeImporting = AppLocale.esdeImporting.getString(context);
+    final localeEsdeImportNotEsdeFolder = AppLocale.esdeImportNotEsdeFolder
+        .getString(context);
+    final localeEsdeImportNothingFound = AppLocale.esdeImportNothingFound
+        .getString(context);
+    final localeEsdeImportComplete = AppLocale.esdeImportComplete.getString(
+      context,
+    );
+    final localeEsdeSummaryGames = AppLocale.esdeSummaryGames.getString(
+      context,
+    );
+    final localeEsdeSummarySystems = AppLocale.esdeSummarySystems.getString(
+      context,
+    );
+
+    await context.read<SqliteConfigProvider>().updateEsdeFolderPath(selected);
+
+    setState(() {
+      _isImportingEsde = true;
+      _esdeProgress = 0.0;
+      _esdeLabel = '';
+    });
+
+    const notificationId = 'esde_import_progress';
+    GlobalNotificationService().show(
+      id: notificationId,
+      message: localeEsdeImporting,
+      type: GlobalNotificationType.info,
+      progress: 0,
+    );
+
+    EsdeImportResult? result;
+    String? error;
+    try {
+      result = await EsdeImportService.import(
+        selected,
+        onProgress: (p, label) {
+          if (mounted) {
+            setState(() {
+              _esdeProgress = p;
+              _esdeLabel = label;
+            });
+          }
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: label.isEmpty
+                ? localeEsdeImporting
+                : '$localeEsdeImporting: $label',
+            type: GlobalNotificationType.info,
+            progress: p,
+          );
+        },
+      );
+      // Rebuild the artwork fallback map now esde_media_dir rows exist.
+      if (mounted) await context.read<FileProvider>().refreshEsde();
+    } catch (e) {
+      error = e.toString();
+      _log.e('Wizard ES-DE import failed: $e');
+    }
+
+    if (!mounted) return;
+
+    final matched =
+        error == null &&
+        result != null &&
+        result.gamelistsDirFound &&
+        (result.gamesImported > 0 || result.systemsMatched > 0);
+
+    setState(() {
+      _isImportingEsde = false;
+      _esdeResult = matched ? result : null;
+    });
+
+    if (error != null) {
+      GlobalNotificationService().update(
+        id: notificationId,
+        message: error,
+        type: GlobalNotificationType.error,
+        progress: null,
+      );
+    } else if (result != null && !result.gamelistsDirFound) {
+      GlobalNotificationService().update(
+        id: notificationId,
+        message: localeEsdeImportNotEsdeFolder,
+        type: GlobalNotificationType.error,
+        progress: null,
+      );
+    } else if (!matched) {
+      GlobalNotificationService().update(
+        id: notificationId,
+        message: localeEsdeImportNothingFound,
+        type: GlobalNotificationType.info,
+        progress: null,
+      );
+    } else {
+      final importResult = result;
+      GlobalNotificationService().update(
+        id: notificationId,
+        message:
+            '$localeEsdeImportComplete: '
+            '${importResult.gamesImported} $localeEsdeSummaryGames, '
+            '${importResult.systemsMatched} $localeEsdeSummarySystems',
+        type: GlobalNotificationType.success,
+        progress: null,
+      );
+    }
+  }
+
+  /// Downloads and applies the recommended NeoStation art pack (the first
+  /// non-AI theme in the manifest) for the wizard's art-pack step.
+  Future<void> _downloadWizardArtPack() async {
+    if (_isDownloadingArt) return;
+    final neoAssets = context.read<NeoAssetsProvider>();
+    final themes = neoAssets.themes;
+    if (themes.isEmpty) return;
+
+    // Recommended pack: first non-AI theme, falling back to the first theme.
+    final recommended = themes.firstWhere(
+      (t) => !t.isAi,
+      orElse: () => themes.first,
+    );
+
+    final systemFolders = context
+        .read<SqliteConfigProvider>()
+        .availableSystems
+        .where((s) => s.folderName != 'all-background')
+        .map((s) => s.folderName)
+        .toList();
+
+    setState(() => _isDownloadingArt = true);
+    try {
+      await neoAssets.downloadAndApplyTheme(recommended.folder, systemFolders);
+    } catch (e) {
+      _log.e('Wizard art pack download failed: $e');
+    }
+    if (!mounted) return;
+    setState(() => _isDownloadingArt = false);
+    // Downloading the pack is the final action — finish setup directly instead
+    // of making the user press Finish on a redundant "installed" screen.
+    await _finishSetup();
+  }
+
   Widget _buildNavigationButtons(ThemeData theme) {
-    // The last step is always the scanning step
+    // The scanning step advances to the optional ES-DE step once complete.
     final isInScanningStep = _currentStep == _stepScanning;
 
     if (isInScanningStep) {
@@ -1078,9 +1616,11 @@ class _SetupWizardState extends State<SetupWizard>
           return Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              // Finish button only when scan completes
+              // Next button only when scan completes
               ElevatedButton(
-                onPressed: provider.scanCompleted ? () => _finishSetup() : null,
+                onPressed: provider.scanCompleted
+                    ? () => _handleMainAction()
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: theme.colorScheme.primary,
                   foregroundColor: theme.colorScheme.onPrimary,
@@ -1108,7 +1648,7 @@ class _SetupWizardState extends State<SetupWizard>
                     ),
                     SizedBox(width: 8.r),
                     Text(
-                      AppLocale.finish.getString(context),
+                      AppLocale.next.getString(context),
                       style: TextStyle(
                         fontSize: 14.r,
                         fontWeight: FontWeight.bold,
@@ -1123,95 +1663,127 @@ class _SetupWizardState extends State<SetupWizard>
       );
     }
 
-    // For other steps, use normal logic
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // Skip button on the optional steps: the folder step, and the
-        // permissions step once storage is granted (only accessibility, which
-        // is optional, remains).
-        if (Platform.isAndroid &&
+    // For other steps, use normal logic.
+    // Skip is offered on the optional steps: the folder step and the
+    // permissions step once storage is granted (Android only), plus the two
+    // trailing optional steps (ES-DE import, art pack) on every platform.
+    final showSkip =
+        _currentStep == _stepEsde ||
+        _currentStep == _stepArtPack ||
+        (Platform.isAndroid &&
             (_currentStep == _stepFolder ||
                 (_currentStep == _stepPermissions &&
                     _storageGranted &&
                     _needsAccessibility &&
-                    !_accessibilityGranted)))
-          TextButton(
-            onPressed: () => _handleSkip(),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 8.r),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'assets/images/gamepad/Xbox_B_button.png',
-                  width: 20.r,
-                  height: 20.r,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-                SizedBox(width: 8.r),
-                Text(
-                  AppLocale.skipForNow.getString(context),
-                  style: TextStyle(
-                    fontSize: 12.r,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    !_accessibilityGranted)));
+    // Wrapped in a NeoAssets consumer so the art-pack step's button label
+    // (Download vs Finish) stays in sync with the live theme/download state —
+    // otherwise a non-reactive read can show "Finish" while the action still
+    // triggers a download.
+    return Consumer<NeoAssetsProvider>(
+      builder: (context, neoAssets, child) {
+        // On the art-pack step, block the primary action while the theme
+        // manifest is still loading: otherwise the button reads "Finish" (no
+        // themes yet) and a press would silently complete setup with no art
+        // pack even though one is about to become available.
+        final artLoading =
+            _currentStep == _stepArtPack &&
+            !neoAssets.hasActiveTheme &&
+            neoAssets.themes.isEmpty &&
+            neoAssets.loading;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (showSkip)
+              TextButton(
+                onPressed: () => _handleSkip(),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.r,
+                    vertical: 8.r,
                   ),
                 ),
-              ],
-            ),
-          )
-        else
-          SizedBox(width: 64.r),
-
-        // Main action button
-        ElevatedButton(
-          onPressed: _isSelectingFolder ? null : () => _handleMainAction(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: theme.colorScheme.primary,
-            foregroundColor: theme.colorScheme.onPrimary,
-            padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 12.r),
-            elevation: 4,
-            shadowColor: theme.colorScheme.primary.withValues(alpha: 0.4),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16.r),
-            ),
-            disabledBackgroundColor: theme.colorScheme.primary.withValues(
-              alpha: 0.3,
-            ),
-          ),
-          child: _isSelectingFolder
-              ? SizedBox(
-                  width: 20.r,
-                  height: 20.r,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.r,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      theme.colorScheme.onPrimary,
-                    ),
-                  ),
-                )
-              : Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Image.asset(
-                      'assets/images/gamepad/Xbox_A_button.png',
+                      'assets/images/gamepad/Xbox_B_button.png',
                       width: 20.r,
                       height: 20.r,
-                      color: theme.colorScheme.onPrimary,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                     SizedBox(width: 8.r),
                     Text(
-                      _getButtonText(),
+                      AppLocale.skipForNow.getString(context),
                       style: TextStyle(
-                        fontSize: 14.r,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 12.r,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ],
                 ),
-        ),
-      ],
+              )
+            else
+              SizedBox(width: 64.r),
+
+            // Main action button
+            ElevatedButton(
+              onPressed:
+                  (_isSelectingFolder ||
+                      _isImportingEsde ||
+                      _isDownloadingArt ||
+                      artLoading)
+                  ? null
+                  : () => _handleMainAction(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+                padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 12.r),
+                elevation: 4,
+                shadowColor: theme.colorScheme.primary.withValues(alpha: 0.4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.r),
+                ),
+                disabledBackgroundColor: theme.colorScheme.primary.withValues(
+                  alpha: 0.3,
+                ),
+              ),
+              child: (_isSelectingFolder || artLoading)
+                  ? SizedBox(
+                      width: 20.r,
+                      height: 20.r,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.r,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          theme.colorScheme.onPrimary,
+                        ),
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/gamepad/Xbox_A_button.png',
+                          width: 20.r,
+                          height: 20.r,
+                          color: theme.colorScheme.onPrimary,
+                        ),
+                        SizedBox(width: 8.r),
+                        Text(
+                          _getButtonText(),
+                          style: TextStyle(
+                            fontSize: 14.r,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1226,6 +1798,22 @@ class _SetupWizardState extends State<SetupWizard>
     }
     if (_currentStep == _stepFolder) {
       return AppLocale.selectFolder.getString(context);
+    }
+    if (_currentStep == _stepEsde) {
+      // Once an import has run, the primary action becomes "Next".
+      return _esdeResult != null
+          ? AppLocale.next.getString(context)
+          : AppLocale.esdeRunImport.getString(context);
+    }
+    if (_currentStep == _stepArtPack) {
+      // Offer download until a theme is installed (or none are available),
+      // then the primary action finishes setup.
+      final neoAssets = context.read<NeoAssetsProvider>();
+      final canDownload =
+          !neoAssets.hasActiveTheme && neoAssets.themes.isNotEmpty;
+      return canDownload
+          ? AppLocale.wizardDownloadArtPack.getString(context)
+          : AppLocale.finish.getString(context);
     }
     return AppLocale.next.getString(context);
   }
@@ -1255,6 +1843,35 @@ class _SetupWizardState extends State<SetupWizard>
 
     if (_currentStep == _stepFolder) {
       await _selectFolder();
+      return;
+    }
+
+    if (_currentStep == _stepScanning) {
+      // Scan finished → advance to the optional ES-DE import step.
+      setState(() => _currentStep = _stepEsde);
+      return;
+    }
+
+    if (_currentStep == _stepEsde) {
+      // Run the import, or advance once one has already been run.
+      if (_esdeResult != null) {
+        setState(() => _currentStep = _stepArtPack);
+      } else {
+        await _runWizardEsdeImport();
+      }
+      return;
+    }
+
+    if (_currentStep == _stepArtPack) {
+      final neoAssets = context.read<NeoAssetsProvider>();
+      final canDownload =
+          !neoAssets.hasActiveTheme && neoAssets.themes.isNotEmpty;
+      if (canDownload) {
+        await _downloadWizardArtPack();
+      } else {
+        await _finishSetup();
+      }
+      return;
     }
   }
 
@@ -1362,6 +1979,11 @@ class _SetupWizardState extends State<SetupWizard>
   }
 
   Future<void> _finishSetup() async {
+    // Stop pinning the secondary display's dock/launcher off-screen. Set before
+    // any await so a rebuild racing the save can't re-assert the flag; the
+    // wrapper pushes the clear once completeSetup() lands.
+    _finishing = true;
+
     // Verificar que la configuración está guardada
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,

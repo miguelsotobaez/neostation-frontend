@@ -1,21 +1,28 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:flutter_localization/flutter_localization.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
-import 'package:neostation/providers/neo_assets_provider.dart';
-import 'package:neostation/providers/sqlite_config_provider.dart';
-import 'package:neostation/responsive.dart';
-import 'package:neostation/services/logger_service.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:neostation/utils/adaptive_scroll.dart';
-import 'package:neostation/utils/gamepad_nav.dart';
-import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
+import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/widgets/theme_card.dart';
+import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/confirm_action_dialog.dart';
+import 'package:neostation/widgets/tv_directory_picker.dart';
+import 'package:neostation/responsive.dart';
+import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'settings_title.dart';
 
-final _log = LoggerService.instance;
-
+/// A specialized content panel for selecting application color themes and visual themes.
+///
+/// Implements a responsive grid layout with hardware-mapped gamepad navigation
+/// (Up/Down/Left/Right) and real-time theme application via ThemeProvider.
 class ThemesSettingsContent extends StatefulWidget {
   final bool isContentFocused;
   final int selectedContentIndex;
@@ -33,138 +40,27 @@ class ThemesSettingsContent extends StatefulWidget {
 }
 
 class ThemesSettingsContentState extends State<ThemesSettingsContent> {
+  final _log = LoggerService.instance;
   final ScrollController _scrollController = ScrollController();
+
+  /// Keys used for calculating viewport alignment during grid-based navigation.
   final List<GlobalKey> _itemKeys = [];
 
-  /// Snaps during rapid D-pad navigation, animates on a single move.
-  final AdaptiveScroller _scroller = AdaptiveScroller();
+  @override
+  void initState() {
+    super.initState();
+    _initializeKeys();
+  }
 
-  int get _gridColumns => Responsive.getThemesCrossAxisCount(context);
-
-  int getItemCount() => _itemKeys.length;
-
-  void _initKeys(int count) {
+  /// Populates the key list based on the total number of available themes.
+  void _initializeKeys() {
     _itemKeys.clear();
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    // Total Items: Native System Theme + Registered Theme Variants + Import tile.
+    final count = themeProvider.getThemeList().length + 2;
     for (int i = 0; i < count; i++) {
       _itemKeys.add(GlobalKey());
     }
-  }
-
-  void _ensureSelectedItemVisible(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final ctx = _itemKeys[index].currentContext;
-      if (ctx != null) {
-        _scroller.ensureVisible(ctx);
-      }
-    }
-  }
-
-  void navigateUp() {
-    final newIndex = GridNavUtils.navigateUp(
-      currentIndex: widget.selectedContentIndex,
-      crossAxisCount: _gridColumns,
-      maxItems: getItemCount(),
-    );
-    widget.onSelectionChanged?.call(newIndex);
-    _ensureSelectedItemVisible(newIndex);
-  }
-
-  void navigateDown() {
-    final newIndex = GridNavUtils.navigateDown(
-      currentIndex: widget.selectedContentIndex,
-      crossAxisCount: _gridColumns,
-      maxItems: getItemCount(),
-    );
-    widget.onSelectionChanged?.call(newIndex);
-    _ensureSelectedItemVisible(newIndex);
-  }
-
-  bool navigateLeft() {
-    final currentCol = widget.selectedContentIndex % _gridColumns;
-    if (currentCol == 0) return true; // return to menu
-
-    final newIndex = GridNavUtils.navigateLeft(
-      currentIndex: widget.selectedContentIndex,
-      crossAxisCount: _gridColumns,
-      maxItems: getItemCount(),
-    );
-    widget.onSelectionChanged?.call(newIndex);
-    _ensureSelectedItemVisible(newIndex);
-    return false;
-  }
-
-  void navigateRight() {
-    final newIndex = GridNavUtils.navigateRight(
-      currentIndex: widget.selectedContentIndex,
-      crossAxisCount: _gridColumns,
-      maxItems: getItemCount(),
-    );
-    widget.onSelectionChanged?.call(newIndex);
-    _ensureSelectedItemVisible(newIndex);
-  }
-
-  void scrollToIndex(int index) => _ensureSelectedItemVisible(index);
-
-  void selectItem(int index) {
-    _onItemTapped(index);
-  }
-
-  List<String> _getSystemFolderNames() {
-    final sqliteProvider = context.read<SqliteConfigProvider>();
-    return sqliteProvider.availableSystems
-        .where((s) => s.folderName != 'all-background')
-        .map((s) => s.folderName)
-        .toList();
-  }
-
-  void _onItemTapped(int index) async {
-    final neoAssets = context.read<NeoAssetsProvider>();
-    final themes = neoAssets.themes;
-
-    String targetFolder;
-    String targetName;
-
-    if (index == 0) {
-      targetFolder = '';
-      targetName = AppLocale.neoThemesNone.getString(context);
-    } else {
-      final themeIndex = index - 1;
-      if (themeIndex < 0 || themeIndex >= themes.length) return;
-      targetFolder = themes[themeIndex].folder;
-      targetName = themes[themeIndex].name;
-    }
-
-    if (neoAssets.activeThemeFolder == targetFolder) return;
-
-    final confirmed = await _showConfirmDialog(
-      targetName,
-      targetFolder.isEmpty,
-    );
-    if (!confirmed) return;
-    if (!mounted) return;
-
-    widget.onSelectionChanged?.call(index);
-
-    if (targetFolder.isEmpty) {
-      await neoAssets.clearTheme();
-    } else {
-      final systemFolders = _getSystemFolderNames();
-      await neoAssets.downloadAndApplyTheme(targetFolder, systemFolders);
-    }
-  }
-
-  Future<bool> _showConfirmDialog(String themeName, bool isNone) async {
-    final body = isNone
-        ? '"$themeName"'
-        : '"$themeName"\n\n${AppLocale.neoThemesApplyBody.getString(context)}';
-    return ConfirmActionDialog.show(
-      context,
-      title: AppLocale.neoThemesApplyTitle.getString(context),
-      body: body,
-      confirmLabel: AppLocale.apply.getString(context),
-      icon: Symbols.image_rounded,
-      accentColor: Theme.of(context).colorScheme.primary,
-    );
   }
 
   @override
@@ -173,30 +69,212 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
     super.dispose();
   }
 
+  /// Resolves the total theme count.
+  int getItemCount(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    // System theme + registered variants + Import tile.
+    return themeProvider.getThemeList().length + 2;
+  }
+
+  /// Dynamic Grid Resolution: Column count based on display geometry.
+  int get _gridColumns => Responsive.getThemesCrossAxisCount(context);
+
+  /// Vertical Progression: Moves focus to the element above in the grid.
+  void navigateUp() {
+    final newIndex = GridNavUtils.navigateUp(
+      currentIndex: widget.selectedContentIndex,
+      crossAxisCount: _gridColumns,
+      maxItems: getItemCount(context),
+    );
+    widget.onSelectionChanged?.call(newIndex);
+    _ensureSelectedItemVisible(newIndex);
+  }
+
+  /// Vertical Progression: Moves focus to the element below in the grid.
+  void navigateDown() {
+    final newIndex = GridNavUtils.navigateDown(
+      currentIndex: widget.selectedContentIndex,
+      crossAxisCount: _gridColumns,
+      maxItems: getItemCount(context),
+    );
+    widget.onSelectionChanged?.call(newIndex);
+    _ensureSelectedItemVisible(newIndex);
+  }
+
+  /// Horizontal Progression: Moves focus left or exits to the master menu if at boundary.
+  bool navigateLeft() {
+    final currentCol = widget.selectedContentIndex % _gridColumns;
+    if (currentCol == 0) {
+      return true; // Boundary reached: Return focus to the master menu.
+    }
+
+    final newIndex = GridNavUtils.navigateLeft(
+      currentIndex: widget.selectedContentIndex,
+      crossAxisCount: _gridColumns,
+      maxItems: getItemCount(context),
+    );
+    widget.onSelectionChanged?.call(newIndex);
+    _ensureSelectedItemVisible(newIndex);
+    return false;
+  }
+
+  /// Horizontal Progression: Moves focus to the next element on the right.
+  void navigateRight() {
+    final newIndex = GridNavUtils.navigateRight(
+      currentIndex: widget.selectedContentIndex,
+      crossAxisCount: _gridColumns,
+      maxItems: getItemCount(context),
+    );
+    widget.onSelectionChanged?.call(newIndex);
+    _ensureSelectedItemVisible(newIndex);
+  }
+
+  /// Orchestrates visual alignment to ensure the focused theme card is within the viewport.
+  void _ensureSelectedItemVisible(int index) {
+    if (index >= 0 && index < _itemKeys.length) {
+      final context = _itemKeys[index].currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          alignment: 0.5,
+        );
+      }
+    }
+  }
+
+  /// Persistence Protocol: Updates the active application theme.
+  void selectItem(int index) async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final themes = themeProvider.getThemeList();
+
+    if (index == 0) {
+      // Index 0: Native System/Dynamic theme resolution.
+      await themeProvider.setTheme('system');
+    } else if (index - 1 < themes.length) {
+      // Indices >0: Specific registered theme variants.
+      await themeProvider.setTheme(themes[index - 1]['name']!);
+    } else {
+      // Last item: the "Import theme" tile.
+      await _importTheme();
+      return;
+    }
+    if (mounted) setState(() {});
+    widget.onSelectionChanged?.call(index);
+  }
+
+  /// Opens a file picker, imports the selected daisyUI theme JSON, and applies
+  /// it. Surfaces success/failure via [AppNotification].
+  Future<void> _importTheme() async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final pickerTitle = AppLocale.importTheme.getString(context);
+    try {
+      String? filePath;
+
+      if (Platform.isAndroid && await PermissionService.isTelevision()) {
+        // Android TV has no system file picker; use the in-app one.
+        if (mounted) {
+          filePath = await TvDirectoryPicker.showFilePicker(
+            context,
+            extensions: ['json'],
+          );
+        }
+      } else {
+        final result = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          dialogTitle: pickerTitle,
+        );
+        filePath = result?.files.single.path;
+      }
+
+      if (filePath == null) return;
+
+      final result = await themeProvider.importTheme(File(filePath));
+      if (mounted) setState(() {});
+      if (mounted) {
+        final name = result.theme.name;
+        AppNotification.showNotification(
+          context,
+          (result.created
+                  ? AppLocale.importThemeSuccess
+                  : AppLocale.importThemeExists)
+              .getString(context)
+              .replaceAll('%s', name),
+          type: result.created
+              ? NotificationType.success
+              : NotificationType.info,
+        );
+      }
+    } on FormatException catch (e) {
+      _log.e('Theme import failed (malformed): $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.importThemeError.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } catch (e) {
+      _log.e('Theme import failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.importThemeError.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    }
+  }
+
+  /// Gamepad entry point: deletes the theme at [index] if it is a custom
+  /// (imported) one. No-op for built-ins, 'system', or the Import tile.
+  void deleteFocusedTheme(int index) {
+    if (index <= 0) return;
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final themes = themeProvider.getThemeList();
+    final themeIndex = index - 1;
+    if (themeIndex >= themes.length) return; // Import tile.
+    final t = themes[themeIndex];
+    if (!themeProvider.isCustomTheme(t['name']!)) return;
+    _deleteTheme(t['name']!, t['displayName']!);
+  }
+
+  /// Confirms and deletes a user-imported theme.
+  Future<void> _deleteTheme(String themeName, String displayName) async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: AppLocale.deleteThemeTitle.getString(context),
+      body: AppLocale.deleteThemeConfirm
+          .getString(context)
+          .replaceAll('%s', displayName),
+      confirmLabel: AppLocale.delete.getString(context),
+      icon: Symbols.delete_rounded,
+    );
+    if (!confirmed) return;
+
+    await themeProvider.deleteTheme(themeName);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    final neoAssets = context.watch<NeoAssetsProvider>();
-    final theme = Theme.of(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
 
-    final List<_ThemeItem> items = [
-      _ThemeItem(
-        label: AppLocale.neoThemesNone.getString(context),
-        folder: '',
-        previewUrl: '',
-        isAi: false,
-      ),
-      ...neoAssets.themes.map(
-        (t) => _ThemeItem(
-          label: t.name,
-          folder: t.folder,
-          previewUrl: t.previewUrl,
-          isAi: t.isAi,
-        ),
-      ),
+    // Contextual Theme Model construction.
+    final List<Map<String, String>> allThemes = [
+      {
+        'name': 'system',
+        'displayName': AppLocale.systemTheme.getString(context),
+      },
+      ...themeProvider.getThemeList(),
     ];
 
-    if (_itemKeys.length != items.length) {
-      _initKeys(items.length);
+    // Synchronization of GlobalKeys with the dynamic theme list (+1 = Import tile).
+    if (_itemKeys.length != allThemes.length + 1) {
+      _initializeKeys();
     }
 
     return SingleChildScrollView(
@@ -207,372 +285,75 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SettingsTitle(
-            title: AppLocale.neoThemes.getString(context),
-            subtitle: AppLocale.neoThemesSubtitle.getString(context),
+            title: AppLocale.themes.getString(context),
+            subtitle: AppLocale.themesSubtitle.getString(context),
           ),
           SizedBox(height: 12.r),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: allThemes.length + 1,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: _gridColumns,
+              crossAxisSpacing: 8.r,
+              mainAxisSpacing: 8.r,
+              childAspectRatio: 1.05,
+            ),
+            itemBuilder: (context, index) {
+              // Focus Resolution: Determines if the item is currently highlighted via gamepad.
+              final isFocused =
+                  widget.isContentFocused &&
+                  widget.selectedContentIndex == index;
 
-          if (neoAssets.downloading)
-            _buildDownloadProgress(neoAssets, theme)
-          else if (neoAssets.loading)
-            _buildLoadingIndicator(theme)
-          else
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: items.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _gridColumns,
-                crossAxisSpacing: 8.r,
-                mainAxisSpacing: 8.r,
-                childAspectRatio: 1.05,
-              ),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final isSelected = neoAssets.activeThemeFolder == item.folder;
-                final isFocused =
-                    widget.isContentFocused &&
-                    widget.selectedContentIndex == index;
-
+              // Last item: the "Import theme" tile.
+              if (index == allThemes.length) {
                 return Container(
                   key: _itemKeys[index],
-                  child: _NeoThemeCard(
-                    item: item,
-                    isSelected: isSelected,
+                  child: ImportThemeCard(
+                    label: AppLocale.importTheme.getString(context),
                     isFocused: isFocused,
                     onTap: () {
                       SfxService().playNavSound();
-                      _onItemTapped(index);
+                      widget.onSelectionChanged?.call(index);
+                      selectItem(index);
                     },
                   ),
                 );
-              },
-            ),
-        ],
-      ),
-    );
-  }
+              }
 
-  Widget _buildLoadingIndicator(ThemeData theme) {
-    return Padding(
-      padding: EdgeInsets.all(32.r),
-      child: Center(
-        child: Column(
-          children: [
-            SizedBox(
-              width: 24.r,
-              height: 24.r,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            SizedBox(height: 12.r),
-            Text(
-              AppLocale.neoThemesLoading.getString(context),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: 11.r,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              final t = allThemes[index];
 
-  Widget _buildDownloadProgress(NeoAssetsProvider neoAssets, ThemeData theme) {
-    final primary = theme.colorScheme.primary;
-    final pct = (neoAssets.downloadProgress * 100).toInt();
+              // State Resolution: Determines if the theme is currently active.
+              final isSelected =
+                  themeProvider.currentThemeName == t['name'] ||
+                  (index == 0 && themeProvider.currentThemeName == 'system');
 
-    return Padding(
-      padding: EdgeInsets.all(32.r),
-      child: Center(
-        child: Column(
-          children: [
-            SizedBox(
-              width: 48.r,
-              height: 48.r,
-              child: CircularProgressIndicator(
-                value: neoAssets.downloadProgress,
-                strokeWidth: 3,
-                color: primary,
-                backgroundColor: primary.withValues(alpha: 0.15),
-              ),
-            ),
-            SizedBox(height: 16.r),
-            Text(
-              AppLocale.neoThemesDownloading.getString(context),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: 12.r,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-              ),
-            ),
-            SizedBox(height: 4.r),
-            Text(
-              '$pct%',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontSize: 14.r,
-                fontWeight: FontWeight.w600,
-                color: primary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+              final isCustom = themeProvider.isCustomTheme(t['name']!);
 
-class _ThemeItem {
-  final String label;
-  final String folder;
-  final String previewUrl;
-  final bool isAi;
-
-  const _ThemeItem({
-    required this.label,
-    required this.folder,
-    required this.previewUrl,
-    required this.isAi,
-  });
-}
-
-class _NeoThemeCard extends StatelessWidget {
-  static final Set<String> _loggedPreviewNormalizations = <String>{};
-
-  final _ThemeItem item;
-  final bool isSelected;
-  final bool isFocused;
-  final VoidCallback onTap;
-
-  const _NeoThemeCard({
-    required this.item,
-    required this.isSelected,
-    required this.isFocused,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AspectRatio(
-            aspectRatio: 4 / 3,
-            child: Container(
-              margin: EdgeInsets.symmetric(vertical: 4.h),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color: isFocused ? primary : Colors.transparent,
-                  width: 2.r,
+              return Container(
+                key: _itemKeys[index],
+                child: ThemeCard(
+                  themeName: t['name']!,
+                  displayName: t['displayName']!,
+                  isSelected: isSelected,
+                  isFocused: isFocused,
+                  onTap: () {
+                    SfxService().playNavSound();
+                    widget.onSelectionChanged?.call(index);
+                    selectItem(index);
+                  },
+                  onLongPress: isCustom
+                      ? () => _deleteTheme(t['name']!, t['displayName']!)
+                      : null,
+                  onDelete: isCustom
+                      ? () => _deleteTheme(t['name']!, t['displayName']!)
+                      : null,
                 ),
-                boxShadow: isFocused
-                    ? [
-                        BoxShadow(
-                          color: primary.withValues(alpha: 0.3),
-                          blurRadius: 8.r,
-                          spreadRadius: 1.r,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6.r),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Preview image or placeholder
-                    _buildPreview(context, theme),
-
-                    // Selection indicator: centered checkmark, only when selected
-                    if (isSelected)
-                      Center(
-                        child: Container(
-                          width: 36.r,
-                          height: 36.r,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.greenAccent,
-                          ),
-                          child: Icon(
-                            Symbols.check_rounded,
-                            color: Colors.black,
-                            size: 24.r,
-                          ),
-                        ),
-                      ),
-
-                    if (item.isAi)
-                      Positioned(
-                        top: 8.r,
-                        left: 8.r,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6.r,
-                            vertical: 2.r,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.62),
-                            borderRadius: BorderRadius.circular(999.r),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.35),
-                              width: 1.r,
-                            ),
-                          ),
-                          child: Text(
-                            'AI',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 8.r,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Tap layer
-                    Positioned.fill(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          canRequestFocus: false,
-                          focusColor: Colors.transparent,
-                          hoverColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          splashColor: Colors.transparent,
-                          onTap: onTap,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          SizedBox(height: 4.r),
-          Text(
-            item.label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: isFocused || isSelected
-                  ? theme.colorScheme.onSurface
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 11.r,
-            ),
+              );
+            },
           ),
         ],
       ),
     );
   }
-
-  Widget _buildPreview(BuildContext context, ThemeData theme) {
-    final normalizedPreviewUrl = _normalizePreviewUrl(item.previewUrl);
-
-    if (normalizedPreviewUrl.isNotEmpty) {
-      final normalizationKey =
-          '${item.folder}|${item.previewUrl}|$normalizedPreviewUrl';
-      if (item.previewUrl != normalizedPreviewUrl &&
-          _loggedPreviewNormalizations.add(normalizationKey)) {
-        _log.i(
-          'Theme preview URL normalized for "${item.folder}": '
-          'original="${item.previewUrl}" resolved="$normalizedPreviewUrl"',
-        );
-      }
-
-      return Image.network(
-        normalizedPreviewUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (_, error, stackTrace) {
-          _log.w(
-            'Theme preview failed for "${item.folder}" '
-            '(label="${item.label}") url="$normalizedPreviewUrl" error="$error"',
-          );
-          if (stackTrace != null) {
-            _log.d('Theme preview stackTrace: $stackTrace');
-          }
-          return _buildPlaceholder(theme);
-        },
-        loadingBuilder: (_, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return _buildPlaceholder(theme);
-        },
-      );
-    }
-    return _buildPlaceholder(theme);
-  }
-
-  String _normalizePreviewUrl(String value) {
-    var url = value.trim();
-    if (url.isEmpty) return '';
-
-    // Handle legacy malformed URLs like:
-    // https://raw.../https://github.com/owner/repo/blob/main/file.webp
-    final embeddedGithub = RegExp(
-      r'https?://github\.com/[^\s]+',
-    ).firstMatch(url);
-    if (embeddedGithub != null) {
-      url = embeddedGithub.group(0)!;
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) return url;
-
-    if (uri.host == 'github.com' &&
-        uri.pathSegments.length >= 5 &&
-        uri.pathSegments[2] == 'blob') {
-      final owner = uri.pathSegments[0];
-      final repo = uri.pathSegments[1];
-      final branch = uri.pathSegments[3];
-      final filePath = uri.pathSegments.sublist(4).join('/');
-      return _forceWebpPreviewUrl(
-        'https://raw.githubusercontent.com/$owner/$repo/$branch/$filePath',
-      );
-    }
-
-    return _forceWebpPreviewUrl(url);
-  }
-
-  String _forceWebpPreviewUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) return url;
-
-    final path = uri.path;
-    final lowerPath = path.toLowerCase();
-    if (!lowerPath.endsWith('.jpg') &&
-        !lowerPath.endsWith('.jpeg') &&
-        !lowerPath.endsWith('.png')) {
-      return url;
-    }
-
-    final webpPath = path.replaceFirst(
-      RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false),
-      '.webp',
-    );
-    return uri.replace(path: webpPath).toString();
-  }
-
-  Widget _buildPlaceholder(ThemeData theme) {
-    return Container(
-      color: theme.colorScheme.surface,
-      child: Center(
-        child: Icon(
-          item.folder.isEmpty ? Symbols.block_rounded : Symbols.image_rounded,
-          size: 28.r,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-        ),
-      ),
-    );
-  }
 }
-

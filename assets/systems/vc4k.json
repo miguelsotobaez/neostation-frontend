@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "vc4k",
+    "multidisc": false,
     "name": "Interton VC 4000",
     "short_name": "VC4K",
     "details": {
@@ -17,7 +18,9 @@
       "vc4k",
       "Interton VC 4000",
       "VC 4000",
-      "vc4000"
+      "vc4000",
+      "interton-vc-4000",
+      "vc-4000"
     ],
     "colors": [
       "#FB8C00",

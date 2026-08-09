@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ps1",
+    "multidisc": true,
     "name": "Sony PlayStation",
     "short_name": "PS1",
     "details": {
@@ -54,15 +55,17 @@
         },
         "windows": {
           "executable": "duckstation.exe",
-          "args": "{file.path}"
+          "args": "-batch {file.path}"
         },
         "linux": {
           "executable": "duckstation",
-          "args": "{file.path}"
+          "flatpak": "org.duckstation.DuckStation",
+          "emudeck_launcher": "duckstation.sh",
+          "args": "-batch {file.path}"
         },
         "macos": {
           "executable": "duckstation",
-          "args": "{file.path}"
+          "args": "-batch {file.path}"
         }
       }
     },
@@ -108,6 +111,17 @@
         "macos": {
           "executable": "epsxe",
           "args": "{file.path}"
+        }
+      }
+    },
+    {
+      "name": "Standalone ARMSX1",
+      "unique_id": "ps1.com.nanodata.armsx",
+      "description": "Supported extensions: bin, chd, cue, ecm, exe, img, iso, m3u, mds, pbp, psexe, psf.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.nanodata.armsx/com.armsx2.Main -a android.intent.action.VIEW -d \"{file.uri}\""
         }
       }
     },
@@ -239,6 +253,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_psx_hw_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -262,6 +278,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_psx_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -285,6 +303,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L duckstation_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -308,6 +328,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx_rearmed_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -331,6 +353,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L swanstation_libretro.so \"{file.path}\""
         },
         "macos": {

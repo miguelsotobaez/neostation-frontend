@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "3do",
+    "multidisc": true,
     "name": "Panasonic 3DO",
     "short_name": "3DO",
     "details": {
@@ -48,6 +49,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L opera_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "music",
+    "multidisc": false,
     "name": "Music",
     "short_name": "Music",
     "details": {

@@ -4,6 +4,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/themes/corner_radii.dart';
 import '../../../../models/retro_achievements_game_info.dart';
 
 /// An overlay component that renders RetroAchievements progress, stats, and a navigable grid.
@@ -14,12 +15,22 @@ class GameDetailsAchievementsTab extends StatefulWidget {
   final GameInfoAndUserProgress? gameInfo;
   final bool isLoading;
   final VoidCallback onRefresh;
+  final double topOffset;
+  final double bottomOffset;
+  final double leftOffset;
+  final double rightOffset;
+  final Widget? headerAction;
 
   const GameDetailsAchievementsTab({
     super.key,
     this.gameInfo,
     required this.isLoading,
     required this.onRefresh,
+    this.topOffset = 55.0,
+    this.bottomOffset = 110.0,
+    this.leftOffset = 12.0,
+    this.rightOffset = 12.0,
+    this.headerAction,
   });
 
   @override
@@ -122,18 +133,26 @@ class GameDetailsAchievementsTabState
 
   @override
   Widget build(BuildContext context) {
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
+
     // Scenario 1: Metadata is being fetched.
     if (widget.gameInfo == null) {
       if (widget.isLoading) {
         return Positioned(
-          left: 12.r,
-          right: 12.r,
-          top: 55.r,
-          bottom: 98.r,
+          left: widget.leftOffset.r,
+          right: widget.rightOffset.r,
+          top: widget.topOffset.r,
+          bottom: widget.bottomOffset.r,
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(8.r),
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.9),
+              borderRadius: radii.radiusExternal,
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline,
+                width: 1.r,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.25),
@@ -164,14 +183,14 @@ class GameDetailsAchievementsTabState
 
       // Scenario 2: Data is missing or system is unsupported.
       return Positioned(
-        left: 12.r,
-        right: 12.r,
-        top: 55.r,
-        bottom: 98.r,
+        left: widget.leftOffset.r,
+        right: widget.rightOffset.r,
+        top: widget.topOffset.r,
+        bottom: widget.bottomOffset.r,
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(8.r),
+            borderRadius: radii.radiusExternal,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.25),
@@ -215,17 +234,19 @@ class GameDetailsAchievementsTabState
         : '0';
 
     return Positioned(
-      left: 12.r,
-      right: 12.r,
-      top: 55.r,
-      bottom: 98.r,
+      left: widget.leftOffset.r,
+      right: widget.rightOffset.r,
+      top: widget.topOffset.r,
+      bottom: widget.bottomOffset.r,
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8.r),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+          borderRadius: radii.radiusExternal,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.25),
               blurRadius: 2.r,
               offset: Offset(2.0.r, 2.0.r),
             ),
@@ -270,7 +291,7 @@ class GameDetailsAchievementsTabState
                             ),
                             decoration: BoxDecoration(
                               color: Theme.of(context).colorScheme.onSurface,
-                              borderRadius: BorderRadius.circular(4.r),
+                              borderRadius: radii.radiusInternal,
                             ),
                             child: Text(
                               '$unlocked / $total ($percentage%)',
@@ -282,9 +303,9 @@ class GameDetailsAchievementsTabState
                             ),
                           ),
                           SizedBox(width: 6.r),
-                          _HeaderActionButton(
+                          HeaderActionButton(
                             icon: Image.asset(
-                              'assets/images/gamepad/Xbox_Menu_button.png',
+                              'assets/images/gamepad/Xbox_View_button.png',
                               width: 12.r,
                               height: 12.r,
                             ),
@@ -299,6 +320,10 @@ class GameDetailsAchievementsTabState
                               context,
                             ).colorScheme.onPrimary,
                           ),
+                          if (widget.headerAction != null) ...[
+                            SizedBox(width: 6.r),
+                            widget.headerAction!,
+                          ],
                         ],
                       ),
                     ],
@@ -356,14 +381,15 @@ class GameDetailsAchievementsTabState
 }
 
 /// A compact button styled for the achievement header.
-class _HeaderActionButton extends StatelessWidget {
+class HeaderActionButton extends StatelessWidget {
   final Widget icon;
   final String label;
   final VoidCallback onTap;
   final Color backgroundColor;
   final Color foregroundColor;
 
-  const _HeaderActionButton({
+  const HeaderActionButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
@@ -373,12 +399,13 @@ class _HeaderActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
     return Material(
       color: backgroundColor,
-      borderRadius: BorderRadius.circular(4.r),
+      borderRadius: radii.radiusInternal,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4.r),
+        borderRadius: radii.radiusInternal,
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 3.r),
           child: Row(
@@ -414,6 +441,7 @@ class _SelectedAchievementInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
     if (achievements.isEmpty) return const SizedBox.shrink();
     final safeIndex = selectedIndex.clamp(0, achievements.length - 1);
     final achievement = achievements[safeIndex];
@@ -456,7 +484,7 @@ class _SelectedAchievementInfo extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 2.r),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.secondary,
-              borderRadius: BorderRadius.circular(4.r),
+              borderRadius: radii.radiusInternal,
             ),
             child: Text(
               '${achievement.points} ${AppLocale.points.getString(context)}',
@@ -500,6 +528,7 @@ class _AchievementsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
     return GridView.builder(
       controller: scrollController,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -529,10 +558,10 @@ class _AchievementsGrid extends StatelessWidget {
                           : Colors.transparent),
                 width: isSelected ? 2.r : 1.r,
               ),
-              borderRadius: BorderRadius.circular(6.r),
+              borderRadius: radii.radiusInternal,
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(4.r),
+              borderRadius: radii.radiusInternal,
               child: Image.network(
                 // Use the standard RA Badge CDN protocol for locked vs unlocked icons.
                 isUnlocked

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "steam",
+    "multidisc": false,
     "name": "Steam",
     "neosync": {
       "sync": false,

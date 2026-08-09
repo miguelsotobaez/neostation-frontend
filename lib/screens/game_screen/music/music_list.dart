@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:provider/provider.dart';
 import '../../../models/game_model.dart';
 import '../../../services/music_player_service.dart';
 import '../../../utils/game_utils.dart';

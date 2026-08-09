@@ -49,7 +49,6 @@ class _MusicNotificationListenerState extends State<MusicNotificationListener> {
         imageBytes: _service.activePicture,
         icon: Symbols.music_note_rounded,
         notificationId: 'music_change',
-        duration: const Duration(seconds: 4),
       );
     }
   }

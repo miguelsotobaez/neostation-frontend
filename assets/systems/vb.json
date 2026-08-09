@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "vb",
+    "multidisc": false,
     "name": "Virtual Boy",
     "short_name": "VB",
     "details": {
@@ -83,6 +84,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_vb_libretro.so \"{file.path}\""
         },
         "macos": {

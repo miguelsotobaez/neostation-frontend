@@ -1,54 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'dart:isolate';
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
-import 'package:http/io_client.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../repositories/scraper_repository.dart';
-import '../repositories/system_repository.dart';
-import 'config_service.dart';
-import 'game_service.dart';
-import '../utils/gamepad_nav.dart';
-import '../utils/optimized_md5_utils.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'screenscraper/region_config.dart';
+import 'screenscraper/rom_hasher.dart';
+import 'screenscraper/media_resolver.dart';
+import 'screenscraper/screenscraper_client.dart';
+import 'screenscraper/media_downloader.dart';
+import 'screenscraper/screenscraper_exceptions.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
-
-/// Simple semaphore to control concurrency for HTTP requests and background tasks.
-class _Semaphore {
-  final int maxCount;
-  int _currentCount = 0;
-  final List<Completer<void>> _waitQueue = [];
-
-  _Semaphore(this.maxCount);
-
-  /// Acquires a slot in the semaphore, waiting if the [maxCount] is reached.
-  Future<void> acquire() async {
-    if (_currentCount < maxCount) {
-      _currentCount++;
-      return;
-    }
-
-    final completer = Completer<void>();
-    _waitQueue.add(completer);
-    await completer.future;
-  }
-
-  /// Releases a slot in the semaphore and notifies the next waiting task.
-  void release() {
-    if (_waitQueue.isNotEmpty) {
-      final completer = _waitQueue.removeAt(0);
-      completer.complete();
-    } else {
-      _currentCount--;
-    }
-  }
-}
+import '../widgets/scraping_summary_dialog.dart';
 
 /// Service responsible for scraping game metadata and media from the
 /// ScreenScraper.fr API.
@@ -62,34 +27,6 @@ class _Semaphore {
 class ScreenScraperService {
   static const String _baseUrl = 'https://api.screenscraper.fr/api2';
   static final _log = LoggerService.instance;
-
-  static const List<String> _defaultRegionOrder = [
-    'wor',
-    'us',
-    'eu',
-    'jp',
-    'sp',
-    'fr',
-    'de',
-    'it',
-    'kr',
-    'cn',
-  ];
-
-  static Map<String, int> _buildRegionPriorityMap(List<String> orderedRegions) {
-    return {
-      for (var i = 0; i < orderedRegions.length; i++)
-        orderedRegions[i]: (orderedRegions.length - i) * 10,
-    };
-  }
-
-  static Future<Map<String, int>> _getRegionPriority() async {
-    try {
-      final regions = await ScraperRepository.getRegionPriority();
-      if (regions.isNotEmpty) return _buildRegionPriorityMap(regions);
-    } catch (_) {}
-    return _buildRegionPriorityMap(_defaultRegionOrder);
-  }
 
   // Developer credentials — provided at build time via --dart-define
   // or at runtime via environment variables.
@@ -105,218 +42,8 @@ class ScreenScraperService {
     return Platform.environment['SCREENSCRAPER_DEV_PASSWORD'] ?? '';
   }
 
-  static String? _appVersion;
-
-  /// Retrieves the application version and platform to identify requests to the API.
-  static Future<String> _getSoftname() async {
-    if (_appVersion != null) return _appVersion!;
-
-    try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final name = packageInfo.appName.isNotEmpty
-          ? packageInfo.appName
-          : 'neostation';
-      final version = packageInfo.version;
-
-      String platform = '';
-      if (Platform.isAndroid) {
-        platform = 'android';
-      } else if (Platform.isIOS) {
-        platform = 'ios';
-      } else if (Platform.isWindows) {
-        platform = 'windows';
-      } else if (Platform.isLinux) {
-        platform = 'linux';
-      } else if (Platform.isMacOS) {
-        platform = 'macos';
-      }
-      _appVersion = '$name-$version-$platform';
-      return _appVersion!;
-    } catch (e) {
-      _appVersion = 'neostation';
-      return _appVersion!;
-    }
-  }
-
-  /// Persistent HTTP client with SSL certificate validation bypass for legacy compatibility.
-  static final http.Client _httpClient = () {
-    final client = HttpClient()
-      ..badCertificateCallback =
-          ((X509Certificate cert, String host, int port) => true);
-    return IOClient(client);
-  }();
-
-  static _Semaphore _requestSemaphore = _Semaphore(5);
-
-  static int _dailyRequestsCount = 0;
-  static DateTime? _lastRequestDate;
-
-  static String? _cachedMediaDirectory;
   static Map<String, dynamic>? _cachedCredentials;
   static bool _isMetadataScrapingRunning = false;
-
-  /// Updates the request semaphore concurrency limit.
-  static void _updateRequestSemaphore(int maxThreads) {
-    if (_requestSemaphore.maxCount != maxThreads) {
-      _requestSemaphore = _Semaphore(maxThreads);
-    }
-  }
-
-  /// Resets or initializes the daily request counter based on the current date.
-  static void _initializeDailyCounter(int currentRequests) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    if (_lastRequestDate == null ||
-        !_lastRequestDate!.isAtSameMomentAs(today)) {
-      _dailyRequestsCount = currentRequests;
-      _lastRequestDate = today;
-    }
-  }
-
-  /// Performs an HTTP GET request with exponential backoff and timeout management.
-  static Future<http.Response> _httpGetWithRetry(
-    Uri url, {
-    Map<String, String>? headers,
-    int maxRetries = 2,
-    Duration timeout = const Duration(seconds: 40),
-    int? maxDailyRequests,
-  }) async {
-    if (maxDailyRequests != null && maxDailyRequests > 0) {
-      if (!await _canMakeRequest(_dailyRequestsCount, maxDailyRequests)) {
-        throw Exception(
-          'Daily request limit reached: $_dailyRequestsCount/$maxDailyRequests',
-        );
-      }
-    }
-
-    int attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        await _requestSemaphore.acquire();
-
-        final response = await _httpClient
-            .get(url, headers: headers)
-            .timeout(timeout);
-
-        _requestSemaphore.release();
-
-        if (response.statusCode == 200 || response.statusCode == 403) {
-          _dailyRequestsCount++;
-          return response;
-        } else if (response.statusCode >= 500) {
-          if (attempt < maxRetries - 1) {
-            final delay = Duration(milliseconds: 500 * (attempt + 1));
-            _log.w(
-              'Server error ${response.statusCode}, retrying in ${delay.inMilliseconds}ms...',
-            );
-            await Future.delayed(delay);
-            attempt++;
-            continue;
-          }
-        }
-
-        return response;
-      } on TimeoutException {
-        _requestSemaphore.release();
-        if (attempt < maxRetries - 1) {
-          final delay = Duration(milliseconds: 500 * (attempt + 1));
-          await Future.delayed(delay);
-          attempt++;
-          continue;
-        }
-        rethrow;
-      } catch (e) {
-        _requestSemaphore.release();
-        if (attempt < maxRetries - 1) {
-          final delay = Duration(milliseconds: 500 * (attempt + 1));
-          _log.e(
-            'Request failed, retrying in ${delay.inMilliseconds}ms... (${e.toString()})',
-          );
-          await Future.delayed(delay);
-          attempt++;
-          continue;
-        }
-        rethrow;
-      }
-    }
-
-    throw Exception('HTTP request failed after $maxRetries attempts');
-  }
-
-  /// Computes the file MD5 hash in a background isolate to keep the UI responsive.
-  static Future<String> _calculateMd5InIsolate(String filePath) async {
-    return await Isolate.run(() async {
-      return await OptimizedMd5Utils.calculateFileMd5(filePath);
-    });
-  }
-
-  /// Validates if a new request can be made based on user's daily quota limits.
-  static Future<bool> _canMakeRequest(
-    int currentRequests,
-    int maxDailyRequests,
-  ) async {
-    if (maxDailyRequests <= 0) return true;
-
-    final bufferLimit = (maxDailyRequests * 0.9).round();
-
-    if (currentRequests >= bufferLimit) {
-      _log.e(
-        'Daily limit reached: $currentRequests/$maxDailyRequests (buffer: $bufferLimit)',
-      );
-      return false;
-    }
-
-    return true;
-  }
-
-  /// Retrieves the directory path for downloaded media assets.
-  static Future<String> _getMediaDirectory() async {
-    if (_cachedMediaDirectory != null) {
-      return _cachedMediaDirectory!;
-    }
-
-    final mediaPath = await ConfigService.getMediaPath();
-    final mediaDir = Directory(mediaPath);
-    if (!await mediaDir.exists()) {
-      await mediaDir.create(recursive: true);
-    }
-    _cachedMediaDirectory = mediaDir.path;
-
-    return _cachedMediaDirectory!;
-  }
-
-  /// Sanitizes a ROM filename by removing system-specific extensions.
-  static Future<String> _getCleanRomName(
-    String romName,
-    String? appSystemId,
-  ) async {
-    if (appSystemId != null) {
-      try {
-        final extensions = await SystemRepository.getExtensionsForSystem(
-          appSystemId,
-        );
-        for (final ext in extensions) {
-          final dotExt = '.$ext';
-          if (romName.toLowerCase().endsWith(dotExt.toLowerCase())) {
-            return romName.substring(0, romName.length - dotExt.length);
-          }
-        }
-      } catch (e) {
-        _log.w('Error getting extensions for app system $appSystemId: $e');
-      }
-    }
-
-    final lastDot = romName.lastIndexOf('.');
-    if (lastDot != -1) {
-      final ext = romName.substring(lastDot + 1);
-      if (!ext.contains(' ') && ext.length <= 10) {
-        return romName.substring(0, lastDot);
-      }
-    }
-
-    return romName;
-  }
 
   /// Authenticates user credentials against the ScreenScraper API.
   static Future<Map<String, dynamic>?> verifyCredentials(
@@ -324,7 +51,7 @@ class ScreenScraperService {
     String password,
   ) async {
     try {
-      final softname = await _getSoftname();
+      final softname = await ScreenscraperClient.getSoftname();
       final url = Uri.parse('$_baseUrl/ssuserInfos.php').replace(
         queryParameters: {
           'devid': _devId,
@@ -336,7 +63,7 @@ class ScreenScraperService {
         },
       );
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         url,
         headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
       );
@@ -478,7 +205,7 @@ class ScreenScraperService {
         return null;
       }
 
-      final softname = await _getSoftname();
+      final softname = await ScreenscraperClient.getSoftname();
       final url = Uri.parse('$_baseUrl/systemesListe.php').replace(
         queryParameters: {
           'devid': _devId,
@@ -490,7 +217,7 @@ class ScreenScraperService {
         },
       );
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         url,
         headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
       );
@@ -598,7 +325,7 @@ class ScreenScraperService {
       }
 
       _cachedCredentials ??= credentials;
-      final softname = await _getSoftname();
+      final softname = await ScreenscraperClient.getSoftname();
 
       String? targetAppSystemId = appSystemId;
       if (targetAppSystemId == null) {
@@ -609,7 +336,7 @@ class ScreenScraperService {
         } catch (_) {}
       }
 
-      final cleanRomName = await _getCleanRomName(
+      final cleanRomName = await ScreenscraperRomHasher.getCleanRomName(
         gameName ?? romName,
         targetAppSystemId,
       );
@@ -639,7 +366,7 @@ class ScreenScraperService {
         '$_baseUrl/jeuInfos.php',
       ).replace(queryParameters: queryParameters);
 
-      final response = await _httpGetWithRetry(
+      final response = await ScreenscraperClient.httpGetWithRetry(
         url,
         headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
         maxDailyRequests: maxDailyRequests,
@@ -660,6 +387,8 @@ class ScreenScraperService {
         _log.e('HTTP Error ${response.statusCode}: ${response.body}');
         return null;
       }
+    } on ScreenscraperQuotaExceededException {
+      rethrow;
     } catch (e) {
       _log.e('Error getting game information: $e');
       return null;
@@ -676,7 +405,7 @@ class ScreenScraperService {
     Map<String, dynamic> gameInfo, {
     String? preferredLanguage,
   }) async {
-    final regionPriority = await _getRegionPriority();
+    final regionPriority = await ScreenscraperRegionConfig.getRegionPriority();
     final metadata = <String, dynamic>{};
     metadata['filename'] = filename;
 
@@ -837,250 +566,6 @@ class ScreenScraperService {
     }
   }
 
-  /// Maps API media type names to NeoStation folder names.
-  static String _mapMediaTypeToFolder(String mediaType) {
-    switch (mediaType) {
-      case 'fanart':
-        return 'fanarts';
-      case 'ss':
-        return 'screenshots';
-      case 'video':
-        return 'videos';
-      case 'wheel':
-        return 'wheels';
-      case 'box2D':
-        return 'box2d';
-      default:
-        return mediaType;
-    }
-  }
-
-  /// Selects the best media asset from a list based on region and language priority.
-  ///
-  /// Priority: World > US > EU > Others > Asia.
-  static Map<String, dynamic>? _selectBestMedia(
-    List<dynamic> medias,
-    String mediaType, {
-    String? preferredLanguage,
-    Map<String, int> regionPriority = const {},
-  }) {
-    if (medias.isEmpty) return null;
-
-    final typesToSearch = mediaType == 'wheel'
-        ? ['wheel-hd', 'wheel']
-        : (mediaType == 'ss'
-              ? ['ss-hd', 'ss']
-              : (mediaType == 'box2D' ? ['box-2D'] : [mediaType]));
-
-    const defaultLanguageHierarchy = ['en', 'es', 'fr', 'de', 'it', 'pt', 'jp'];
-
-    Map<String, dynamic>? bestMedia;
-    int bestPriority = -1;
-
-    final candidates = medias
-        .where((m) => typesToSearch.contains(m['type']))
-        .toList();
-
-    for (final media in candidates) {
-      final region = media['region']?.toString() ?? '';
-      final regionValue = regionPriority[region] ?? 5;
-
-      int languageBonus = 0;
-      final mediaLang = media['langue']?.toString() ?? '';
-
-      if (preferredLanguage != null && preferredLanguage.isNotEmpty) {
-        if (mediaLang == preferredLanguage) languageBonus = 200;
-      } else {
-        final langIndex = defaultLanguageHierarchy.indexOf(mediaLang);
-        if (langIndex != -1) {
-          languageBonus = (defaultLanguageHierarchy.length - langIndex) * 10;
-        }
-      }
-
-      final bool isHD = (media['type']?.toString() ?? '').endsWith('-hd');
-      final int totalPriority = regionValue + languageBonus + (isHD ? 1 : 0);
-
-      if (totalPriority > bestPriority) {
-        bestPriority = totalPriority;
-        bestMedia = media as Map<String, dynamic>;
-      }
-    }
-
-    return bestMedia;
-  }
-
-  /// Verifies if a specific media asset exists in the local cache.
-  static Future<bool> _checkFileExists(
-    String relativePath,
-    String userDataDir,
-  ) async {
-    try {
-      final fullPath = path.join(userDataDir, relativePath);
-      return await File(fullPath).exists();
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Downloads and caches a media file.
-  static Future<bool> _downloadMediaFileSmart(
-    String url,
-    String relativePath,
-    String userDataDir, {
-    bool forceOverwrite = false,
-    int? maxDailyRequests,
-  }) async {
-    try {
-      final fullPath = path.join(userDataDir, relativePath);
-      final file = File(fullPath);
-      if (await file.exists() && !forceOverwrite) {
-        return true;
-      }
-
-      final response = await _httpGetWithRetry(
-        Uri.parse(url),
-        timeout: const Duration(seconds: 60),
-        maxRetries: 2,
-        maxDailyRequests: maxDailyRequests,
-      );
-      if (response.statusCode == 200) {
-        await file.create(recursive: true);
-        await file.writeAsBytes(response.bodyBytes);
-        return true;
-      } else {
-        _log.e('Error downloading media (${response.statusCode}): $url');
-        return false;
-      }
-    } catch (e) {
-      _log.e('Error downloading media: $e');
-      return false;
-    }
-  }
-
-  /// Downloads multiple media assets for a game, managing concurrency.
-  static Future<Map<String, dynamic>> _downloadGameMedia(
-    String systemFolder,
-    String romName,
-    List<dynamic> medias,
-    int maxThreads, {
-    String? appSystemId,
-    String? preferredLanguage,
-    bool Function()? shouldCancel,
-    Function(double progress)? onProgress,
-    List<String>? allowedMediaTypes,
-    bool forceOverwrite = false,
-    int? maxDailyRequests,
-  }) async {
-    if (medias.isEmpty) {
-      return {
-        'success': true,
-        'downloadedTypes': <String>[],
-        'cancelled': false,
-      };
-    }
-
-    final userDataDir = await _getMediaDirectory();
-    final regionPriority = await _getRegionPriority();
-    final mediaTypes =
-        allowedMediaTypes ?? ['fanart', 'ss', 'video', 'wheel', 'box2D'];
-
-    final downloadTasks = <Map<String, dynamic>>[];
-    for (final mediaType in mediaTypes) {
-      final bestMedia = _selectBestMedia(
-        medias,
-        mediaType,
-        preferredLanguage: preferredLanguage,
-        regionPriority: regionPriority,
-      );
-      if (bestMedia != null) {
-        final folderName = _mapMediaTypeToFolder(mediaType);
-        final romBaseName = await _getCleanRomName(romName, appSystemId);
-        final fileName =
-            '$romBaseName.${bestMedia['format']?.toString() ?? 'png'}';
-        final relativePath = '$systemFolder/$folderName/$fileName';
-
-        downloadTasks.add({
-          'url': bestMedia['url'].toString(),
-          'relativePath': relativePath,
-          'mediaType': mediaType,
-        });
-      }
-    }
-
-    if (downloadTasks.isEmpty) {
-      return {
-        'success': true,
-        'downloadedTypes': <String>[],
-        'cancelled': false,
-      };
-    }
-
-    final batches = <List<Map<String, dynamic>>>[];
-    for (var i = 0; i < downloadTasks.length; i += maxThreads) {
-      final end = (i + maxThreads < downloadTasks.length)
-          ? i + maxThreads
-          : downloadTasks.length;
-      batches.add(downloadTasks.sublist(i, end));
-    }
-
-    final downloadedTypes = <String>[];
-    final existingTypes = <String>[];
-    bool wasCancelled = false;
-
-    int completedTasks = 0;
-    for (final batch in batches) {
-      if (shouldCancel != null && shouldCancel()) {
-        wasCancelled = true;
-        break;
-      }
-
-      final futures = batch.map((task) async {
-        final success = await _downloadMediaFileSmart(
-          task['url'],
-          task['relativePath'],
-          userDataDir,
-          forceOverwrite: forceOverwrite,
-          maxDailyRequests: maxDailyRequests,
-        );
-        return {
-          'mediaType': task['mediaType'],
-          'success': success,
-          'wasExisting':
-              !forceOverwrite &&
-              success &&
-              await _checkFileExists(task['relativePath'], userDataDir),
-        };
-      });
-
-      final results = await Future.wait(futures);
-
-      for (final result in results) {
-        if (result['success'] == true) {
-          if (result['wasExisting'] as bool) {
-            existingTypes.add(result['mediaType'] as String);
-          } else {
-            downloadedTypes.add(result['mediaType'] as String);
-          }
-        }
-      }
-
-      completedTasks += batch.length;
-      if (onProgress != null) onProgress(completedTasks / downloadTasks.length);
-
-      if (batches.length > 1) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-    }
-
-    final totalAvailable = downloadedTypes.length + existingTypes.length;
-    return {
-      'success': totalAvailable == downloadTasks.length && !wasCancelled,
-      'downloadedTypes': downloadedTypes,
-      'existingTypes': existingTypes,
-      'cancelled': wasCancelled,
-    };
-  }
-
   /// Scrapes a single game by its filename and updates its local state.
   static Future<Map<String, dynamic>> scrapeSingleGame({
     required String appSystemId,
@@ -1158,19 +643,20 @@ class ScreenScraperService {
       }
 
       final medias = gameInfo['medias'] as List<dynamic>? ?? [];
-      final downloadResult = await _downloadGameMedia(
-        systemFolder,
-        romName,
-        medias,
-        1,
-        appSystemId: appSystemId,
-        preferredLanguage: preferredLanguage,
-        allowedMediaTypes: allowedMediaTypes,
-        forceOverwrite: forceOverwrite,
-        maxDailyRequests: null,
-        onProgress: (p) =>
-            onProgress?.call(AppLocale.downloadingImages, 0.2 + (p * 0.8)),
-      );
+      final downloadResult =
+          await ScreenscraperMediaDownloader.downloadGameMedia(
+            systemFolder,
+            romName,
+            medias,
+            1,
+            appSystemId: appSystemId,
+            preferredLanguage: preferredLanguage,
+            allowedMediaTypes: allowedMediaTypes,
+            forceOverwrite: forceOverwrite,
+            maxDailyRequests: null,
+            onProgress: (p) =>
+                onProgress?.call(AppLocale.downloadingImages, 0.2 + (p * 0.8)),
+          );
 
       return {
         'success': downloadResult['success'] == true,
@@ -1178,6 +664,8 @@ class ScreenScraperService {
             ? AppLocale.scrapeSuccessful
             : AppLocale.scrapeMediaDownloadsFailed,
       };
+    } on ScreenscraperQuotaExceededException {
+      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
     } catch (e) {
       _log.e('Error scraping single game: $e');
       return {'success': false, 'message': AppLocale.scrapeUnexpectedError};
@@ -1201,9 +689,9 @@ class ScreenScraperService {
       final credentials = await getSavedCredentials();
       if (credentials == null) return false;
 
-      _initializeDailyCounter(0);
+      ScreenscraperClient.initializeDailyCounter(0);
       final maxThreads = int.tryParse(credentials['maxthreads'] ?? '4') ?? 4;
-      _updateRequestSemaphore(maxThreads);
+      ScreenscraperClient.updateRequestSemaphore(maxThreads);
 
       final preferredLanguage = credentials['preferred_language'] ?? 'en';
       final scraperConfig = await getScraperConfig();
@@ -1344,6 +832,10 @@ class ScreenScraperService {
 
       scrapingProvider.stopScraping();
       return true;
+    } on ScreenscraperQuotaExceededException {
+      _log.e('Daily scraping quota exceeded; stopping scraping session.');
+      scrapingProvider.stopScraping();
+      rethrow;
     } catch (e) {
       _log.e('Error during scraping process: $e');
       scrapingProvider.stopScraping();
@@ -1421,7 +913,9 @@ class ScreenScraperService {
       if (gameInfo == null &&
           systemFolder != 'android' &&
           File(romPath).existsSync()) {
-        final hash = await _calculateMd5InIsolate(romPath);
+        final hash = await ScreenscraperRomHasher.calculateMd5InIsolate(
+          romPath,
+        );
         final resWithHash = await fetchGameInfo(
           screenscraperSystemId.toString(),
           filename,
@@ -1456,7 +950,7 @@ class ScreenScraperService {
             currentStep: ThreadProcessingStep.downloadingImages,
             progress: 0.66,
           );
-          final res = await _downloadGameMedia(
+          final res = await ScreenscraperMediaDownloader.downloadGameMedia(
             systemFolder,
             filename,
             gameInfo['medias'] ?? [],
@@ -1466,6 +960,7 @@ class ScreenScraperService {
             shouldCancel: shouldCancel,
             allowedMediaTypes: allowedTypes,
             maxDailyRequests: maxDailyRequests,
+            forceOverwrite: scraperConfig['scrape_mode'].toString() == 'all',
           );
           if (res['cancelled'] == true) {
             return {
@@ -1491,6 +986,8 @@ class ScreenScraperService {
         return {'success': true, 'cancelled': false, 'requests': requestsMade};
       }
       return {'success': false, 'cancelled': false, 'requests': requestsMade};
+    } on ScreenscraperQuotaExceededException {
+      rethrow;
     } catch (e) {
       return {'success': false, 'cancelled': false, 'requests': 0};
     }
@@ -1508,7 +1005,7 @@ class ScreenScraperService {
       if (systemFolder == null) {
         return {'hasAllMedia': false, 'error': 'System not found'};
       }
-      final userDataDir = await _getMediaDirectory();
+      final userDataDir = await ScreenscraperMediaResolver.getMediaDirectory();
       const expectedTypes = [
         'fanarts',
         'screenshots',
@@ -1516,7 +1013,10 @@ class ScreenScraperService {
         'box2d',
         'videos',
       ];
-      final romBaseName = await _getCleanRomName(romName, appSystemId);
+      final romBaseName = await ScreenscraperRomHasher.getCleanRomName(
+        romName,
+        appSystemId,
+      );
       final missing = <String>[];
       final existing = <String>[];
 
@@ -1556,209 +1056,12 @@ class ScreenScraperService {
     await showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (BuildContext context) => _ScrapingSummaryDialogContent(
+      builder: (BuildContext context) => ScrapingSummaryDialog(
         totalGames: totalGames,
         successfulGames: successfulGames,
         failedGames: failedGames,
         elapsedTime: elapsedTime,
       ),
-    );
-  }
-}
-
-/// Specialized dialog content providing gamepad-friendly navigation for
-/// scraping session summaries.
-class _ScrapingSummaryDialogContent extends StatefulWidget {
-  final int totalGames;
-  final int successfulGames;
-  final int failedGames;
-  final String elapsedTime;
-
-  const _ScrapingSummaryDialogContent({
-    required this.totalGames,
-    required this.successfulGames,
-    required this.failedGames,
-    required this.elapsedTime,
-  });
-
-  @override
-  State<_ScrapingSummaryDialogContent> createState() =>
-      _ScrapingSummaryDialogContentState();
-}
-
-class _ScrapingSummaryDialogContentState
-    extends State<_ScrapingSummaryDialogContent> {
-  late GamepadNavigation _gamepadNav;
-
-  @override
-  void initState() {
-    super.initState();
-    _gamepadNav = GamepadNavigation(
-      onSelectItem: () => Navigator.of(context).pop(),
-      onBack: () => Navigator.of(context).pop(),
-    );
-    _gamepadNav.initialize();
-    GamepadNavigationManager.pushLayer(
-      'scraping_summary_dialog',
-      onActivate: () => _gamepadNav.activate(),
-      onDeactivate: () => _gamepadNav.deactivate(),
-    );
-  }
-
-  @override
-  void dispose() {
-    GamepadNavigationManager.popLayer('scraping_summary_dialog');
-    _gamepadNav.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final rate = widget.totalGames > 0
-        ? ((widget.successfulGames / widget.totalGames) * 100).toStringAsFixed(
-            1,
-          )
-        : '0.0';
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-      child: Container(
-        constraints: BoxConstraints(maxWidth: 240.w),
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-            width: 1.r,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.6),
-              blurRadius: 10.r,
-              spreadRadius: 1.r,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(vertical: 8.h),
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).scaffoldBackgroundColor.withValues(alpha: 0.2),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outline.withValues(alpha: 0.1),
-                      width: 1.r,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Symbols.check_circle_rounded,
-                      size: 16.r,
-                      color: Colors.green,
-                    ),
-                    SizedBox(width: 6.w),
-                    Text(
-                      'Scraping Finished',
-                      style: TextStyle(
-                        fontSize: 13.r,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
-                child: Column(
-                  children: [
-                    _buildCompactStatRow('Games', widget.totalGames.toString()),
-                    SizedBox(height: 4.h),
-                    _buildCompactStatRow(
-                      'Success',
-                      '${widget.successfulGames} ($rate%)',
-                      valueColor: Colors.green,
-                    ),
-                    SizedBox(height: 4.h),
-                    _buildCompactStatRow(
-                      'Failed',
-                      widget.failedGames.toString(),
-                      valueColor: widget.failedGames > 0
-                          ? Colors.orange
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    SizedBox(height: 4.h),
-                    _buildCompactStatRow(
-                      'Duration',
-                      widget.elapsedTime,
-                      valueColor: Theme.of(context).colorScheme.primary,
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.only(left: 12.r, right: 12.r, bottom: 10.r),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 32.h,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                    ),
-                    child: Text(
-                      'OK',
-                      style: TextStyle(
-                        fontSize: 12.r,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCompactStatRow(String label, String value, {Color? valueColor}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.r,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 11.r,
-            fontWeight: FontWeight.bold,
-            color: valueColor ?? Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-      ],
     );
   }
 }

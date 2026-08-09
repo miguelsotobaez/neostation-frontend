@@ -82,7 +82,22 @@ class SqliteConfigService {
   static Future<ConfigModel> loadConfig() async {
     try {
       final userConfig = await SqliteService.getUserConfig();
-      final romFolders = await SqliteService.getUserRomFolders();
+      var romFolders = await SqliteService.getUserRomFolders();
+      if (Platform.isAndroid && romFolders.isEmpty) {
+        final recoveredFolders =
+            await SqliteService.recoverRomFoldersFromStoredRoms();
+        if (recoveredFolders.isNotEmpty) {
+          // Keep the existing library intact after a legacy-path migration (or
+          // an interrupted save) has removed its folder table. Persist the
+          // recovered roots immediately so the next startup uses the same
+          // configured folders instead of treating the library as folderless.
+          romFolders = recoveredFolders;
+          await SqliteService.saveUserRomFolders(romFolders);
+          _log.w(
+            'Recovered ${romFolders.length} ROM folder(s) from stored games',
+          );
+        }
+      }
       final detectedEmulators = await SqliteService.getUserDetectedEmulators();
       final detectedSystems = await SqliteService.getUserDetectedSystems();
 
@@ -95,7 +110,7 @@ class SqliteConfigService {
         emulators: detectedEmulators,
         gameViewMode: userConfig?['game_view_mode']?.toString() ?? 'list',
         systemViewMode: userConfig?['system_view_mode']?.toString() ?? 'grid',
-        paletteName: userConfig?['palette_name']?.toString() ?? 'system',
+        themeName: userConfig?['theme_name']?.toString() ?? 'system',
         showGameInfo:
             (int.tryParse(userConfig?['show_game_info']?.toString() ?? '0') ??
                 0) ==
@@ -158,6 +173,34 @@ class SqliteConfigService {
             (int.tryParse(userConfig?['hide_recent_card']?.toString() ?? '0') ??
                 0) ==
             1,
+        legendHidden:
+            (int.tryParse(userConfig?['legend_hidden']?.toString() ?? '0') ??
+                0) ==
+            1,
+        // Missing column/row => the wheel tab (see migration v110).
+        gameDetailsTab:
+            userConfig?['game_details_tab']?.toString().isNotEmpty == true
+            ? userConfig!['game_details_tab'].toString()
+            : 'wheel',
+        // Missing column/row => '0' => tab visible (see migration v106).
+        hideTabSync:
+            (int.tryParse(userConfig?['hide_tab_sync']?.toString() ?? '0') ??
+                0) ==
+            1,
+        hideTabAchievements:
+            (int.tryParse(
+                  userConfig?['hide_tab_achievements']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
+        hideTabScraper:
+            (int.tryParse(userConfig?['hide_tab_scraper']?.toString() ?? '0') ??
+                0) ==
+            1,
+        hideTabSearch:
+            (int.tryParse(userConfig?['hide_tab_search']?.toString() ?? '0') ??
+                0) ==
+            1,
         activeSyncProvider:
             userConfig?['active_sync_provider']?.toString() ?? 'neosync',
         autoUpdateApp:
@@ -204,6 +247,7 @@ class SqliteConfigService {
                     ) ??
                     25)
                 .clamp(0, 100),
+        esdeFolderPath: userConfig?['esde_folder_path']?.toString() ?? '',
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -220,8 +264,6 @@ class SqliteConfigService {
         lastScan: config.lastScan?.toIso8601String(),
         gameViewMode: config.gameViewMode,
         systemViewMode: config.systemViewMode,
-        // paletteName intentionally omitted: managed exclusively by
-        // PaletteProvider via ConfigRepository.updatePaletteName().
         showGameInfo: config.showGameInfo ? 1 : 0,
         isFullscreen: config.isFullscreen ? 1 : 0,
         bartopExitPoweroff: config.bartopExitPoweroff ? 1 : 0,
@@ -236,7 +278,14 @@ class SqliteConfigService {
         systemSortBy: config.systemSortBy,
         systemSortOrder: config.systemSortOrder,
         appLanguage: config.appLanguage,
+        themeName: config.themeName,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
+        legendHidden: config.legendHidden ? 1 : 0,
+        gameDetailsTab: config.gameDetailsTab,
+        hideTabSync: config.hideTabSync ? 1 : 0,
+        hideTabAchievements: config.hideTabAchievements ? 1 : 0,
+        hideTabScraper: config.hideTabScraper ? 1 : 0,
+        hideTabSearch: config.hideTabSearch ? 1 : 0,
         activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
         autoUpdateSystems: config.autoUpdateSystems ? 1 : 0,
@@ -249,6 +298,7 @@ class SqliteConfigService {
         nowPlayingDimDelay: config.nowPlayingDimDelay,
         nowPlayingDimLevel: config.nowPlayingDimLevel,
         fanartDimLevel: config.fanartDimLevel,
+        esdeFolderPath: config.esdeFolderPath,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

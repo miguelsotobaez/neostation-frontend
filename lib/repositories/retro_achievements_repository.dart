@@ -6,7 +6,17 @@ import '../models/retro_achievements_dashboard_models.dart';
 /// Repository for RetroAchievements data access.
 class RetroAchievementsRepository {
   static const String _raApiKeyStorageKey = 'ra_api_key';
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  // Do not let a transient Android Keystore error erase credentials. This can
+  // happen during cold boot on some launchers, and the default resetOnError
+  // behaviour turns a temporary read failure into a permanent logout.
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: false, migrateWithBackup: true),
+    // NeoStation's macOS builds are also distributed outside the App Store.
+    // The classic Keychain remains encrypted by macOS without requiring the
+    // restricted Keychain Sharing entitlement used by the data-protection
+    // Keychain, so ad-hoc-signed builds can persist the API key securely.
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
 
   /// Returns local ROM counts: total and RA-compatible (has ra_hash).
   static Future<({int totalRoms, int raCompatibleRoms})>
@@ -90,15 +100,38 @@ class RetroAchievementsRepository {
   // ── ROM RA-data update ─────────────────────────────────────────────────────
 
   /// Finds a matching entry in app_ra_game_list by [consoleName] LIKE and
-  /// [titleLikePattern] LIKE. Returns {hash, gameId} or null.
+  /// [titleLikePattern] LIKE. Normal games are preferred over subsets and
+  /// hacks, unless [preferHackMatches] is true. Returns {hash, gameId} or null.
   static Future<({String hash, int? gameId})?> findRAHashByConsoleName(
     String consoleName,
-    String titleLikePattern,
-  ) async {
+    String titleLikePattern, {
+    bool preferHackMatches = false,
+  }) async {
     final db = await SqliteService.getDatabase();
     final results = await db.rawQuery(
-      'SELECT hash, game_id FROM app_ra_game_list WHERE console_name LIKE ? AND title LIKE ? LIMIT 1',
-      ['%$consoleName%', titleLikePattern],
+      '''
+      SELECT hash, game_id
+      FROM app_ra_game_list
+      WHERE console_name LIKE ? AND title LIKE ?
+      ORDER BY
+        CASE
+          WHEN ? = 1 AND title LIKE '~Hack~%' THEN 0
+          WHEN ? = 1 THEN 1
+          WHEN ? = 0 AND title LIKE '~Hack~%' THEN 1
+          ELSE 0
+        END,
+        CASE WHEN title LIKE '%[Subset%' THEN 1 ELSE 0 END,
+        LENGTH(title) ASC,
+        title ASC
+      LIMIT 1
+      ''',
+      [
+        '%$consoleName%',
+        titleLikePattern,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+      ],
     );
     if (results.isEmpty) return null;
     return (
@@ -175,6 +208,7 @@ class RetroAchievementsRepository {
     // LIKE match with normalized search pattern
     final searchPattern =
         '%${filenameWithoutExt.replaceAll(' - ', ' ').replaceAll(':', '').replaceAll(' ', '%').trim()}%';
+    final preferHackMatches = filenameWithoutExt.toLowerCase().contains('hack');
 
     final likeResults = await db.rawQuery(
       '''
@@ -184,14 +218,23 @@ class RetroAchievementsRepository {
         AND g.title LIKE ? 
       ORDER BY
         CASE
-          WHEN g.title LIKE '~Hack~%' THEN 1
-          WHEN g.title LIKE '%Subset%' THEN 1
+          WHEN ? = 1 AND g.title LIKE '~Hack~%' THEN 0
+          WHEN ? = 1 THEN 1
+          WHEN ? = 0 AND g.title LIKE '~Hack~%' THEN 1
           ELSE 0
         END,
+        CASE WHEN g.title LIKE '%[Subset%' THEN 1 ELSE 0 END,
+        LENGTH(g.title) ASC,
         g.title ASC
       LIMIT 1
       ''',
-      [systemFolderName, searchPattern],
+      [
+        systemFolderName,
+        searchPattern,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+        preferHackMatches ? 1 : 0,
+      ],
     );
     if (likeResults.isNotEmpty) {
       return int.tryParse(likeResults.first['game_id']?.toString() ?? '0') ?? 0;

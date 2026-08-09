@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:provider/provider.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/widgets/theme_card.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/responsive.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-/// A specialized configuration screen for selecting application-wide color palettes and visual themes.
+/// A specialized configuration screen for selecting application-wide color themes and visual themes.
 ///
 /// Implements a responsive grid layout with hardware-mapped gamepad navigation
-/// (Up/Down/Left/Right) and real-time palette application via PaletteProvider.
+/// (Up/Down/Left/Right) and real-time theme application via ThemeProvider.
 class ThemeSelectionScreen extends StatefulWidget {
   const ThemeSelectionScreen({super.key});
 
@@ -25,31 +25,35 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
   final ScrollController _scrollController = ScrollController();
 
   /// Constructs a unified list of available themes including the native system resolver.
-  List<Map<String, String>> _getCombinedThemes(
-    PaletteProvider paletteProvider,
-  ) {
+  List<Map<String, String>> _getCombinedThemes(ThemeProvider themeProvider) {
     return [
       {
         'name': 'system',
         'displayName':
-            PaletteProvider.paletteDisplayNames['system'] ?? 'System',
-        'logoPath': paletteProvider.getCurrentLogoPath(),
+            (ThemeProvider.availableThemes['system'] as Map<String, dynamic>?)
+                ?.cast<String, String>()['displayName'] ??
+            'System',
       },
-      ...paletteProvider.getPaletteList(),
+      ...ThemeProvider.availableThemes.keys.map(
+        (name) => {
+          'name': name,
+          'displayName':
+              (ThemeProvider.availableThemes[name] as Map<String, dynamic>?)
+                  ?.cast<String, String>()['displayName'] ??
+              name,
+        },
+      ),
     ];
   }
 
   @override
   void initState() {
     super.initState();
-    final paletteProvider = Provider.of<PaletteProvider>(
-      context,
-      listen: false,
-    );
-    final combinedThemes = _getCombinedThemes(paletteProvider);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final combinedThemes = _getCombinedThemes(themeProvider);
 
-    // Synchronize the selection index with the active palette state.
-    final currentThemeName = paletteProvider.currentPaletteName;
+    // Synchronize the selection index with the active theme state.
+    final currentThemeName = themeProvider.currentThemeName;
     final initialIndex = combinedThemes.indexWhere(
       (t) => t['name'] == currentThemeName,
     );
@@ -88,11 +92,8 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
     })
     navFunc,
   ) {
-    final paletteProvider = Provider.of<PaletteProvider>(
-      context,
-      listen: false,
-    );
-    final combined = _getCombinedThemes(paletteProvider);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final combined = _getCombinedThemes(themeProvider);
     final crossAxisCount = Responsive.getThemesCrossAxisCount(context);
 
     if (mounted) {
@@ -109,20 +110,17 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
 
   /// Viewport alignment protocol (placeholder for GlobalKey implementation).
   void _ensureSelectedItemVisible(int index) {
-    // GridView padding provides sufficient boundary visibility for the current palette set.
+    // GridView padding provides sufficient boundary visibility for the current theme set.
   }
 
   /// Persistent state protocol: Applies the selected theme to the application.
   Future<void> _selectThemeByIndex() async {
-    final paletteProvider = Provider.of<PaletteProvider>(
-      context,
-      listen: false,
-    );
-    final combined = _getCombinedThemes(paletteProvider);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final combined = _getCombinedThemes(themeProvider);
 
     if (_selectedIndex < combined.length) {
       final selected = combined[_selectedIndex];
-      await paletteProvider.setPalette(selected['name']!);
+      await themeProvider.setTheme(selected['name']!);
       if (mounted) setState(() {});
     }
   }
@@ -136,8 +134,8 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final paletteProvider = Provider.of<PaletteProvider>(context);
-    final combined = _getCombinedThemes(paletteProvider);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final combined = _getCombinedThemes(themeProvider);
     final crossAxisCount = Responsive.getThemesCrossAxisCount(context);
 
     return Scaffold(
@@ -181,21 +179,20 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
                 itemBuilder: (context, index) {
                   final t = combined[index];
 
-                  // Resolution: Determines if the palette is active in the current session.
+                  // Resolution: Determines if the theme is active in the current session.
                   final isSelected =
-                      paletteProvider.currentPaletteName == t['name'] ||
+                      themeProvider.currentThemeName == t['name'] ||
                       (t['name'] == 'system' &&
-                          paletteProvider.currentPaletteName == 'system');
+                          themeProvider.currentThemeName == 'system');
 
                   return ThemeCard(
                     themeName: t['name']!,
                     displayName: t['displayName']!,
-                    logoPath: t['logoPath']!,
                     isFocused: _selectedIndex == index,
                     isSelected: isSelected,
                     onTap: () async {
                       SfxService().playNavSound();
-                      await paletteProvider.setPalette(t['name']!);
+                      await themeProvider.setTheme(t['name']!);
                       if (mounted) {
                         setState(() {
                           _selectedIndex = index;

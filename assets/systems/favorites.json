@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "favorites",
+    "multidisc": false,
     "name": "Favorites",
     "short_name": "Fav",
     "details": {

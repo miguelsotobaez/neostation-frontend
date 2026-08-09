@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "lynx",
+    "multidisc": false,
     "name": "Atari Lynx",
     "short_name": "Lynx",
     "details": {
@@ -124,6 +125,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_lynx_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -148,6 +151,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L handy_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -171,6 +176,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L holani_libretro.so \"{file.path}\""
         },
         "macos": {

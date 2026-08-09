@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "epic",
+    "multidisc": false,
     "name": "Epic Games",
     "neosync": {
       "sync": false,

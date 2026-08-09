@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "scummvm",
+    "multidisc": false,
     "name": "ScummVM",
     "short_name": "ScummVM",
     "details": {
@@ -88,6 +89,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L scummvm_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "jagcd",
+    "multidisc": true,
     "name": "Atari Jaguar CD",
     "short_name": "JCD",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "jagcd",
       "atarijaguarcd",
-      "Atari Jaguar CD"
+      "Atari Jaguar CD",
+      "atari-jaguar-cd"
     ],
     "colors": [
       "#424242",
@@ -41,6 +43,7 @@
         },
         "linux": {
           "executable": "bigpemu",
+          "emudeck_launcher": "bigpemu.sh",
           "args": "\"{file.path}\""
         }
       }

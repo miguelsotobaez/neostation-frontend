@@ -1,16 +1,14 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
-import 'package:neostation/services/game_service.dart';
-import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
+import 'package:neostation/widgets/delete_game_dialog.dart';
+import 'package:neostation/widgets/settings_rows.dart';
 import 'package:provider/provider.dart';
 import '../../../../models/system_model.dart';
 import '../../../../providers/file_provider.dart';
@@ -19,7 +17,7 @@ import '../../../../models/core_emulator_model.dart';
 import '../../../../sync/i_sync_provider.dart';
 import '../../../../providers/neo_sync_provider.dart';
 import '../../../../repositories/game_repository.dart';
-import '../../../../repositories/emulator_repository.dart';
+import '../../../../utils/emulator_loader.dart';
 import '../../../../utils/game_utils.dart';
 
 /// A tab component that manages per-game configuration, including emulator overrides and synchronization.
@@ -177,64 +175,13 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
     }
   }
 
-  /// Hydrates the list of supported emulators, performing package verification on Android hosts.
+  /// Hydrates the list of supported emulators via the shared loader.
   Future<void> _loadEmulators() async {
-    final systemId = widget.system.id;
-    if (systemId == null) return;
-    try {
-      var emulators = await EmulatorRepository.getEmulatorsForSystemCurrentOs(
-        systemId,
-      );
-      if (Platform.isAndroid) {
-        // Verification Protocol: Check native package presence via platform channel.
-        final updated = <CoreEmulatorModel>[];
-        for (final e in emulators) {
-          if (e.androidPackageName != null &&
-              e.androidPackageName!.isNotEmpty) {
-            try {
-              const ch = MethodChannel('com.neogamelab.neostation/game');
-              final installed = await ch.invokeMethod<bool>(
-                'isPackageInstalled',
-                {'packageName': e.androidPackageName},
-              );
-              updated.add(e.copyWith(isInstalled: installed ?? false));
-            } catch (_) {
-              updated.add(e);
-            }
-          } else {
-            updated.add(e);
-          }
-        }
-        emulators = updated;
-      } else {
-        // Desktop: RetroArch cores are considered installed when the global
-        // RetroArch executable has been detected/configured by the user.
-        final retroArchPath =
-            await EmulatorRepository.getRetroArchExecutablePath();
-        if (retroArchPath != null && retroArchPath.isNotEmpty) {
-          final updated = <CoreEmulatorModel>[];
-          for (final e in emulators) {
-            final uid = e.uniqueId;
-            final isRaCore =
-                uid.contains('.ra.') ||
-                uid.contains('.ra32.') ||
-                uid.contains('.ra64.');
-            if (isRaCore && !e.isInstalled) {
-              updated.add(e.copyWith(isInstalled: true));
-            } else {
-              updated.add(e);
-            }
-          }
-          emulators = updated;
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _availableEmulators = emulators;
-        });
-      }
-    } catch (e) {
-      _log.e('Emulator enumeration failed: \$e');
+    final emulators = await loadEmulatorsForSystem(widget.system);
+    if (mounted) {
+      setState(() {
+        _availableEmulators = emulators;
+      });
     }
   }
 
@@ -288,7 +235,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) =>
-          _DeleteGameDialog(gameName: _game.name, romName: _game.romname),
+          DeleteGameDialog(gameName: _game.name, romName: _game.romname),
     );
     if (confirmed == true && mounted) {
       _deleteGame();
@@ -464,7 +411,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                     children: [
                       // Cloud Synchronization Option.
                       if (_settingsShowCloudSync)
-                        _SettingsRow(
+                        SettingsRow(
                           key: _settingsKey(_settingsCloudSyncIdx),
                           isSelected:
                               _settingsSelectedIndex == _settingsCloudSyncIdx,
@@ -507,7 +454,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                       SizedBox(height: 4.r),
 
                       // Play-time Statistics & Reset Option.
-                      _SettingsRow(
+                      SettingsRow(
                         key: _settingsKey(_settingsPlayTimeIdx),
                         isSelected:
                             _settingsSelectedIndex == _settingsPlayTimeIdx,
@@ -543,7 +490,9 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                                         !_isResettingPlayTime;
                                     final theme = Theme.of(context);
                                     return GestureDetector(
-                                      onTap: canReset ? _confirmResetPlayTime : null,
+                                      onTap: canReset
+                                          ? _confirmResetPlayTime
+                                          : null,
                                       child: Container(
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 8.r,
@@ -586,7 +535,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                       ),
 
                       // Delete Game Option.
-                      _SettingsRow(
+                      SettingsRow(
                         key: _settingsKey(_settingsDeleteGameIdx),
                         isSelected:
                             _settingsSelectedIndex == _settingsDeleteGameIdx,
@@ -672,7 +621,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                           ),
                         ),
                         // Global System Default Option.
-                        _EmulatorRow(
+                        EmulatorRow(
                           key: _settingsKey(_settingsEmulatorStartIdx),
                           isSelected:
                               _settingsSelectedIndex ==
@@ -696,7 +645,7 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
                         ..._availableEmulators.asMap().entries.map((entry) {
                           final i = entry.key;
                           final e = entry.value;
-                          return _EmulatorRow(
+                          return EmulatorRow(
                             key: _settingsKey(
                               _settingsEmulatorStartIdx + 1 + i,
                             ),
@@ -726,419 +675,6 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Generic settings row with icon, label, and custom trailing widget.
-class _SettingsRow extends StatelessWidget {
-  final bool isSelected;
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final Widget trailing;
-  final VoidCallback? onTap;
-
-  const _SettingsRow({
-    super.key,
-    required this.isSelected,
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.trailing,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: EdgeInsets.only(bottom: 4.r),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.secondary.withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6.r),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
-          child: Row(
-            children: [
-              Container(
-                width: 18.r,
-                height: 18.r,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? theme.colorScheme.secondary.withValues(alpha: 0.2)
-                      : theme.colorScheme.secondary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4.r),
-                ),
-                child: Icon(
-                  icon,
-                  color: isSelected
-                      ? theme.colorScheme.secondary
-                      : theme.colorScheme.onSurface,
-                  size: 11.r,
-                ),
-              ),
-              SizedBox(width: 8.r),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: isSelected
-                            ? theme.colorScheme.secondary
-                            : theme.colorScheme.onSurface,
-                        fontSize: 12.r,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 1.r),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.7,
-                        ),
-                        fontSize: 10.r,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              trailing,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Specialized row for emulator selection, including installation and compatibility status.
-class _EmulatorRow extends StatelessWidget {
-  final bool isSelected;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-  final CoreEmulatorModel? emulator;
-
-  const _EmulatorRow({
-    super.key,
-    required this.isSelected,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-    this.emulator,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final raCompatible = emulator?.isretroAchievementsCompatible ?? false;
-    final installed = emulator?.isInstalled ?? true;
-    final disabled = emulator != null && !installed;
-
-    return GestureDetector(
-      onTap: disabled ? null : onTap,
-      child: Opacity(
-        opacity: disabled ? 0.4 : 1.0,
-        child: Container(
-          margin: EdgeInsets.only(bottom: 4.r),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? theme.colorScheme.secondary.withValues(alpha: 0.15)
-                : theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.1,
-                  ),
-            borderRadius: BorderRadius.circular(6.r),
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
-            child: Row(
-              children: [
-                // Branding Icon: Defaults to RetroArch but supports extensibility.
-                Container(
-                  width: 22.r,
-                  height: 22.r,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? theme.colorScheme.secondary.withValues(alpha: 0.2)
-                        : theme.colorScheme.secondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4.r),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.all(3.r),
-                    child: Image.asset(
-                      'assets/images/emulators/retroarch.webp',
-                      color: isSelected
-                          ? theme.colorScheme.secondary
-                          : theme.colorScheme.onSurface,
-                      colorBlendMode: BlendMode.srcIn,
-                      errorBuilder: (_, _, _) => Icon(
-                        Symbols.gamepad_rounded,
-                        size: 12.r,
-                        color: isSelected
-                            ? theme.colorScheme.secondary
-                            : theme.colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 8.r),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12.r,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected
-                              ? theme.colorScheme.secondary
-                              : theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      SizedBox(height: 1.r),
-                      Row(
-                        children: [
-                          // Compatibility Indicator: RetroAchievements support.
-                          if (raCompatible)
-                            Container(
-                              margin: EdgeInsets.only(right: 5.r),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 4.r,
-                                vertical: 1.r,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFD700),
-                                borderRadius: BorderRadius.circular(3.r),
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFF00387D,
-                                  ).withValues(alpha: 0.2),
-                                  width: 0.5.r,
-                                ),
-                              ),
-                              child: Icon(
-                                Symbols.emoji_events_rounded,
-                                size: 9.r,
-                                color: const Color(0xFF00387D),
-                              ),
-                            ),
-                          // Installation Status Indicator.
-                          if (emulator != null)
-                            Row(
-                              children: [
-                                Icon(
-                                  installed
-                                      ? Symbols.check_circle_rounded
-                                      : Symbols.error_outline_rounded,
-                                  size: 10.r,
-                                  color: installed
-                                      ? const Color(0xFF56C288)
-                                      : const Color(0xFFFDAF1E),
-                                ),
-                                SizedBox(width: 3.r),
-                                Text(
-                                  installed ? 'Ready' : 'Not configured',
-                                  style: TextStyle(
-                                    fontSize: 10.r,
-                                    color: isSelected
-                                        ? theme.colorScheme.secondary
-                                        : theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Active Override Indicator.
-                if (isActive)
-                  Icon(
-                    Symbols.check_circle_rounded,
-                    size: 14.r,
-                    color: theme.colorScheme.secondary,
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A gamepad-friendly confirmation dialog that warns about permanent game deletion.
-class _DeleteGameDialog extends StatefulWidget {
-  final String gameName;
-  final String romName;
-
-  const _DeleteGameDialog({required this.gameName, required this.romName});
-
-  @override
-  State<_DeleteGameDialog> createState() => _DeleteGameDialogState();
-}
-
-class _DeleteGameDialogState extends State<_DeleteGameDialog> {
-  late final GamepadNavigation _gamepadNav;
-
-  @override
-  void initState() {
-    super.initState();
-    _gamepadNav = GamepadNavigation(
-      onSelectItem: () {
-        if (mounted) Navigator.of(context).pop(true);
-      },
-      onBack: () {
-        if (mounted) Navigator.of(context).pop(false);
-      },
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _gamepadNav.initialize();
-      GamepadNavigationManager.pushLayer(
-        'delete_game_dialog',
-        onActivate: () => _gamepadNav.activate(),
-        onDeactivate: () => _gamepadNav.deactivate(),
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    GamepadNavigationManager.popLayer('delete_game_dialog');
-    _gamepadNav.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final errorColor = theme.colorScheme.error;
-
-    return AlertDialog(
-      backgroundColor: theme.cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12.r),
-        side: BorderSide(color: errorColor.withValues(alpha: 0.3)),
-      ),
-      title: Row(
-        children: [
-          Icon(Symbols.delete_rounded, color: errorColor, size: 20.r),
-          SizedBox(width: 8.r),
-          Flexible(
-            child: Text(
-              AppLocale.deleteGame.getString(context),
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontSize: 14.r,
-                color: errorColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '"${widget.gameName}"',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontSize: 13.r,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: 2.r),
-          Text(
-            widget.romName,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontSize: 11.r,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-          ),
-          SizedBox(height: 8.r),
-          Text(
-            AppLocale.deleteGameConfirmBody.getString(context),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontSize: 11.r,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 18.r,
-                height: 18.r,
-                child: Image.asset(
-                  'assets/images/gamepad/Xbox_B_button.png',
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  colorBlendMode: BlendMode.srcIn,
-                ),
-              ),
-              SizedBox(width: 4.r),
-              Text(
-                AppLocale.cancel.getString(context),
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  fontSize: 12.r,
-                ),
-              ),
-            ],
-          ),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: errorColor,
-            foregroundColor: theme.colorScheme.onError,
-            padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 8.r),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6.r),
-            ),
-          ),
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 18.r,
-                height: 18.r,
-                child: Image.asset(
-                  'assets/images/gamepad/Xbox_A_button.png',
-                  color: theme.colorScheme.onError,
-                  colorBlendMode: BlendMode.srcIn,
-                ),
-              ),
-              SizedBox(width: 4.r),
-              Text(
-                AppLocale.deleteGameConfirm.getString(context),
-                style: TextStyle(
-                  color: theme.colorScheme.onError,
-                  fontSize: 12.r,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

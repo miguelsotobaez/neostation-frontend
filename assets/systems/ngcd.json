@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ngcd",
+    "multidisc": false,
     "name": "Neo Geo CD",
     "short_name": "NGCD",
     "details": {
@@ -17,7 +18,8 @@
       "ngcd",
       "neogeocd",
       "Neo Geo CD",
-      "neogeocdjp"
+      "neogeocdjp",
+      "neo-geo-cd"
     ],
     "colors": [
       "#E0E0E0",
@@ -69,6 +71,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L neocd_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -92,6 +96,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

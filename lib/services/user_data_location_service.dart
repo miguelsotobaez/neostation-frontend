@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
 class UserDataLocationService {
@@ -17,11 +18,15 @@ class UserDataLocationService {
   static Future<void> setCustomPath(String customPath) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(customPathKey, customPath);
+    // A new location invalidates any "storage unavailable" verdict cached for
+    // the previous one, which would otherwise fail fast for the whole session.
+    ConfigService.resetStorageAvailability();
   }
 
   static Future<void> clearCustomPath() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(customPathKey);
+    ConfigService.resetStorageAvailability();
   }
 
   /// Counts top-level entries in [dirPath].

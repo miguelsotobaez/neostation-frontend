@@ -131,6 +131,9 @@ class ScrapingProvider extends ChangeNotifier {
   /// Fixed list of worker threads available for the session.
   List<ThreadProgress> _threads = [];
 
+  /// Increments after a completed scrape writes new artwork to disk.
+  int _artworkRevision = 0;
+
   bool get isScraping => _isScraping;
   int get totalRequests => _totalRequests;
   int get maxDailyRequests => _maxDailyRequests;
@@ -141,6 +144,12 @@ class ScrapingProvider extends ChangeNotifier {
   int get maxThreads => _maxThreads;
   List<ThreadProgress> get threads => _threads;
   Duration? get estimatedTimeRemaining => _estimatedTimeRemaining;
+  int get artworkRevision => _artworkRevision;
+
+  void markArtworkUpdated() {
+    _artworkRevision++;
+    notifyListeners();
+  }
 
   /// Initializes and starts a new scraping session.
   ///

@@ -1,8 +1,6 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
-import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/screenscraper_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -12,6 +10,7 @@ import '../../services/game_service.dart' show GamepadNavigationManager;
 import '../app_screen.dart' show AppNavigation;
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import '../../utils/login_form_selection.dart';
 
 class ScraperLoginScreen extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
@@ -22,10 +21,9 @@ class ScraperLoginScreen extends StatefulWidget {
   State<ScraperLoginScreen> createState() => _ScraperLoginScreenState();
 }
 
-class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
+class _ScraperLoginScreenState extends State<ScraperLoginScreen>
+    with LoginFormSelection<ScraperLoginScreen> {
   GamepadNavigation? _gamepadNav;
-  int _selectedFieldIndex = 0; // 0: username, 1: password, 2: login button
-  bool _isTelevision = false;
 
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -36,17 +34,16 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
   bool _isLoading = false;
 
   @override
+  List<FocusNode?> get selectionSlots => [_usernameFocus, _passwordFocus, null];
+
+  @override
   void initState() {
     super.initState();
-    _initTvMode();
+    attachFocusSelectionListeners();
+    _initControllerNavigation();
   }
 
-  Future<void> _initTvMode() async {
-    if (!Platform.isAndroid) return;
-    final isTV = await PermissionService.isTelevision();
-    if (!mounted) return;
-    setState(() => _isTelevision = isTV);
-    if (!isTV) return;
+  void _initControllerNavigation() {
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
@@ -55,6 +52,9 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
       onRightBumper: AppNavigation.nextTab,
+      allowRepeat: false,
+      isTextFieldFocused: isAnyFieldFocused,
+      onBack: exitTextEntry,
     );
     _gamepadNav!.initialize();
     GamepadNavigationManager.pushLayer(
@@ -68,6 +68,7 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
   void dispose() {
     GamepadNavigationManager.popLayer('scraper_login_screen');
     _gamepadNav?.dispose();
+    detachFocusSelectionListeners();
     _usernameController.dispose();
     _passwordController.dispose();
     _usernameFocus.dispose();
@@ -75,38 +76,14 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
     super.dispose();
   }
 
-  bool _isAnyFieldFocused() =>
-      _usernameFocus.hasFocus || _passwordFocus.hasFocus;
+  bool _navigateUp() => moveSelection(-1);
 
-  void _navigateUp() {
-    if (_isAnyFieldFocused()) return;
-    setState(() {
-      _selectedFieldIndex = (_selectedFieldIndex - 1 + 3) % 3;
-    });
-  }
-
-  void _navigateDown() {
-    if (_isAnyFieldFocused()) return;
-    setState(() {
-      _selectedFieldIndex = (_selectedFieldIndex + 1) % 3;
-    });
-  }
+  bool _navigateDown() => moveSelection(1);
 
   void _selectCurrentField() {
-    switch (_selectedFieldIndex) {
-      case 0:
-        _usernameFocus.requestFocus();
-        break;
-      case 1:
-        _passwordFocus.requestFocus();
-        break;
-      case 2:
-        _performLogin();
-        break;
-    }
+    if (focusSelectedField()) return;
+    _performLogin();
   }
-
-  bool _isTvSelected(int slot) => _isTelevision && _selectedFieldIndex == slot;
 
   Future<void> _performLogin() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -403,7 +380,7 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
           // Username field
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
-            decoration: _isTvSelected(0)
+            decoration: isSelected(0)
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(8.r),
                     boxShadow: [
@@ -449,10 +426,10 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.r),
                     borderSide: BorderSide(
-                      color: _isTvSelected(0)
+                      color: isSelected(0)
                           ? theme.colorScheme.primary
                           : theme.colorScheme.primary.withValues(alpha: 0.1),
-                      width: _isTvSelected(0) ? 2.r : 1.r,
+                      width: isSelected(0) ? 2.r : 1.r,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -475,7 +452,7 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
           // Password field
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
-            decoration: _isTvSelected(1)
+            decoration: isSelected(1)
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(8.r),
                     boxShadow: [
@@ -527,10 +504,10 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.r),
                     borderSide: BorderSide(
-                      color: _isTvSelected(1)
+                      color: isSelected(1)
                           ? theme.colorScheme.primary
                           : theme.colorScheme.primary.withValues(alpha: 0.1),
-                      width: _isTvSelected(1) ? 2.r : 1.r,
+                      width: isSelected(1) ? 2.r : 1.r,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -567,7 +544,7 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen> {
           // Login button
           Container(
             constraints: BoxConstraints(maxWidth: 320.r),
-            decoration: _isTvSelected(2)
+            decoration: isSelected(submitSlot)
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(8.r),
                     boxShadow: [

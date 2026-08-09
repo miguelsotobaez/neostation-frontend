@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../services/macos_application_service.dart';
+
 /// Represents an emulator installation or a target application for launching ROMs.
 class EmulatorModel {
   /// The human-readable name of the emulator (e.g., 'RetroArch', 'DuckStation').
@@ -93,6 +95,20 @@ class EmulatorModel {
             lastDetection: DateTime.now(),
           );
         }
+      }
+    }
+
+    if (platform == 'macos') {
+      final executable = await MacOsApplicationService.findInstalledApplication(
+        applicationNames: [name],
+        bundleIdentifierHint: uniqueId,
+      );
+      if (executable != null) {
+        return copyWith(
+          path: executable,
+          detected: true,
+          lastDetection: DateTime.now(),
+        );
       }
     }
 

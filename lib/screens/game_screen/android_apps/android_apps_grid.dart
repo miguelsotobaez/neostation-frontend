@@ -10,7 +10,7 @@ import '../../../models/system_model.dart';
 import '../../../models/game_model.dart';
 import '../../../services/game_service.dart';
 import '../../../utils/gamepad_nav.dart';
-import '../../../providers/palette_provider.dart';
+import '../../../providers/theme_provider.dart';
 import '../../../widgets/android_apps_footer.dart';
 import 'android_app_card.dart';
 
@@ -224,8 +224,8 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final paletteProvider = context.watch<PaletteProvider>();
-    final isOled = paletteProvider.isOled;
+    final themeProvider = context.watch<ThemeProvider>();
+    final isOled = themeProvider.isOled;
 
     return PopScope(
       canPop: _canPop,
@@ -374,6 +374,14 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
                       app: _apps[index],
                       isSelected: _selectedIndex == index,
                       onTap: () {
+                        // Touch users have no A button: tapping the app that is
+                        // already selected launches it. (_launchSelectedApp
+                        // plays the enter sound itself.)
+                        if (index == _selectedIndex) {
+                          _launchSelectedApp();
+                          return;
+                        }
+                        SfxService().playNavSound();
                         setState(() {
                           _selectedIndex = index;
                           _ensureSelectedItemVisible();

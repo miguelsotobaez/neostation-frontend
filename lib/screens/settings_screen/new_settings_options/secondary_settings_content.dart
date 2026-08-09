@@ -9,6 +9,10 @@ import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:provider/provider.dart';
 
 import '../../../widgets/custom_toggle_switch.dart';
+import 'settings_title.dart';
+import 'widgets/setting_row.dart';
+import 'widgets/setting_value_chip.dart';
+import 'widgets/settings_section_header.dart';
 
 /// Settings detail panel for secondary-display options. Only reachable while a
 /// secondary display is active (the menu entry is hidden otherwise), so it
@@ -49,6 +53,11 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
   /// Whether the screenshot accessibility service is currently granted.
   bool _screenshotAccessEnabled = false;
 
+  /// Left inset applied to option rows so they read as nested under their
+  /// section header (mirrors how Directories' icon-cards sit indented below
+  /// each subheader).
+  double get _rowIndent => 16.r;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +65,16 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
       _itemKeys.add(GlobalKey());
     }
     WidgetsBinding.instance.addObserver(this);
+    // Seed from the last-known value the provider already holds so the toggle
+    // renders in its correct position on the first frame instead of flashing
+    // off→on once the async check below resolves.
+    _screenshotAccessEnabled =
+        context
+            .read<SqliteConfigProvider>()
+            .secondaryDisplayState
+            ?.value
+            ?.screenshotAccessEnabled ??
+        false;
     _refreshScreenshotAccess();
   }
 
@@ -184,76 +203,27 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
     required VoidCallback onTap,
     bool enabled = true,
   }) {
-    final theme = Theme.of(context);
-    final focused =
-        widget.isContentFocused && widget.selectedContentIndex == index;
-    final row = Container(
-      key: _itemKeys[index],
-      padding: EdgeInsets.only(left: 12.r, right: 12.r, top: 6.r, bottom: 6.r),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8.r),
-        border: Border.all(
-          color: focused ? theme.colorScheme.primary : Colors.transparent,
-          width: 2,
+    // When disabled (e.g. delay is Never), grey the row out and ignore input.
+    return Padding(
+      padding: EdgeInsets.only(left: _rowIndent),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? onTap : null,
+        child: Opacity(
+          opacity: enabled ? 1.0 : 0.4,
+          child: SettingRow(
+            key: _itemKeys[index],
+            focused:
+                widget.isContentFocused && widget.selectedContentIndex == index,
+            title: title,
+            subtitle: subtitle,
+            trailing: SettingValueChip(text: valueText),
+          ),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    fontSize: 12.r,
-                    fontWeight: FontWeight.w500,
-                    color: focused
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(height: 4.r),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 9.r,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 12.r),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 6.r),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6.r),
-            ),
-            child: Text(
-              valueText,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontSize: 12.r,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    // When disabled (e.g. delay is Never), grey the row out and ignore input.
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
-      child: Opacity(opacity: enabled ? 1.0 : 0.4, child: row),
     );
   }
 
-  /// Toggle row for screenshot access, styled like the All Files Access row.
   /// A labelled row with a trailing on/off switch, for boolean settings.
   Widget _buildToggleRow({
     required int index,
@@ -262,54 +232,19 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    final theme = Theme.of(context);
-    final focused =
-        widget.isContentFocused && widget.selectedContentIndex == index;
-    return Container(
-      key: _itemKeys[index],
-      padding: EdgeInsets.only(left: 12.r, right: 12.r, top: 6.r, bottom: 6.r),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8.r),
-        border: Border.all(
-          color: focused ? theme.colorScheme.primary : Colors.transparent,
-          width: 2,
+    return Padding(
+      padding: EdgeInsets.only(left: _rowIndent),
+      child: SettingRow(
+        key: _itemKeys[index],
+        focused:
+            widget.isContentFocused && widget.selectedContentIndex == index,
+        title: title,
+        subtitle: subtitle,
+        trailing: CustomToggleSwitch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: Theme.of(context).colorScheme.primary,
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    fontSize: 12.r,
-                    fontWeight: FontWeight.w500,
-                    color: focused
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(height: 4.r),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 9.r,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          CustomToggleSwitch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: theme.colorScheme.primary,
-          ),
-        ],
       ),
     );
   }
@@ -318,85 +253,19 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
   /// flipped programmatically) opens Android's accessibility settings.
   Widget _buildScreenshotAccessRow() {
     const index = 1;
-    final theme = Theme.of(context);
-    final focused =
-        widget.isContentFocused && widget.selectedContentIndex == index;
-    return Container(
-      key: _itemKeys[index],
-      padding: EdgeInsets.only(left: 12.r, right: 12.r, top: 6.r, bottom: 6.r),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8.r),
-        border: Border.all(
-          color: focused ? theme.colorScheme.primary : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  AppLocale.screenshotAccess.getString(context),
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    fontSize: 12.r,
-                    fontWeight: FontWeight.w500,
-                    color: focused
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(height: 4.r),
-                Text(
-                  AppLocale.screenshotAccessSubtitle.getString(context),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 9.r,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          CustomToggleSwitch(
-            value: _screenshotAccessEnabled,
-            onChanged: (_) => ScreenshotService.openAccessSettings(),
-            activeColor: theme.colorScheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Non-navigable group heading (a small primary bar + bold label), matching
-  /// the section headers used elsewhere in Settings.
-  Widget _buildSectionHeader(String label) {
-    final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.only(bottom: 8.r, top: 4.r, left: 2.r),
-      child: Row(
-        children: [
-          Container(
-            width: 3.r,
-            height: 14.r,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(2.r),
-            ),
-          ),
-          SizedBox(width: 8.r),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.r,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
+      padding: EdgeInsets.only(left: _rowIndent),
+      child: SettingRow(
+        key: _itemKeys[index],
+        focused:
+            widget.isContentFocused && widget.selectedContentIndex == index,
+        title: AppLocale.screenshotAccess.getString(context),
+        subtitle: AppLocale.screenshotAccessSubtitle.getString(context),
+        trailing: CustomToggleSwitch(
+          value: _screenshotAccessEnabled,
+          onChanged: (_) => ScreenshotService.openAccessSettings(),
+          activeColor: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -406,68 +275,88 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
     final provider = context.watch<SqliteConfigProvider>();
     final config = provider.config;
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      padding: EdgeInsets.symmetric(horizontal: 24.r, vertical: 24.r),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader(AppLocale.general.getString(context)),
-          _buildValueRow(
-            index: 0,
-            title: AppLocale.nowPlayingFanartDim.getString(context),
-            subtitle: AppLocale.nowPlayingFanartDimSubtitle.getString(context),
-            valueText: _fanartDimLabel(config.fanartDimLevel),
-            onTap: () => _cycleFanartDim(provider),
-          ),
-          SizedBox(height: 12.r),
-          _buildScreenshotAccessRow(),
-          SizedBox(height: 24.r),
-          _buildSectionHeader(
-            AppLocale.secondarySectionNowPlaying.getString(context),
-          ),
-          _buildValueRow(
-            index: 2,
-            title: AppLocale.nowPlayingDimAfter.getString(context),
-            subtitle: AppLocale.nowPlayingDimAfterSubtitle.getString(context),
-            valueText: _dimDelayLabel(config.nowPlayingDimDelay),
-            onTap: () => _cycleDimDelay(provider),
-          ),
-          SizedBox(height: 12.r),
-          _buildValueRow(
-            index: 3,
-            title: AppLocale.nowPlayingDimDarkness.getString(context),
-            subtitle: AppLocale.nowPlayingDimDarknessSubtitle.getString(
-              context,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Pinned header — stays put while the settings list scrolls beneath it.
+        SettingsTitle(title: AppLocale.secondaryDisplay.getString(context)),
+        SizedBox(height: 12.r),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: EdgeInsets.only(bottom: 24.r),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsSectionHeader(
+                  label: AppLocale.general.getString(context),
+                ),
+                _buildValueRow(
+                  index: 0,
+                  title: AppLocale.nowPlayingFanartDim.getString(context),
+                  subtitle: AppLocale.nowPlayingFanartDimSubtitle.getString(
+                    context,
+                  ),
+                  valueText: _fanartDimLabel(config.fanartDimLevel),
+                  onTap: () => _cycleFanartDim(provider),
+                ),
+                SizedBox(height: 12.r),
+                _buildScreenshotAccessRow(),
+                SizedBox(height: 24.r),
+                SettingsSectionHeader(
+                  label: AppLocale.secondarySectionNowPlaying.getString(
+                    context,
+                  ),
+                ),
+                _buildValueRow(
+                  index: 2,
+                  title: AppLocale.nowPlayingDimAfter.getString(context),
+                  subtitle: AppLocale.nowPlayingDimAfterSubtitle.getString(
+                    context,
+                  ),
+                  valueText: _dimDelayLabel(config.nowPlayingDimDelay),
+                  onTap: () => _cycleDimDelay(provider),
+                ),
+                SizedBox(height: 12.r),
+                _buildValueRow(
+                  index: 3,
+                  title: AppLocale.nowPlayingDimDarkness.getString(context),
+                  subtitle: AppLocale.nowPlayingDimDarknessSubtitle.getString(
+                    context,
+                  ),
+                  valueText: '${config.nowPlayingDimLevel}%',
+                  enabled: config.nowPlayingDimDelay > 0,
+                  onTap: () => _cycleDimLevel(provider),
+                ),
+                SizedBox(height: 24.r),
+                SettingsSectionHeader(
+                  label: AppLocale.secondarySectionDock.getString(context),
+                ),
+                _buildToggleRow(
+                  index: 4,
+                  title: AppLocale.nowPlayingDockEnabled.getString(context),
+                  subtitle: AppLocale.nowPlayingDockEnabledSubtitle.getString(
+                    context,
+                  ),
+                  value: config.dockEnabled,
+                  onChanged: (v) => provider.updateDockEnabled(v),
+                ),
+                SizedBox(height: 12.r),
+                _buildValueRow(
+                  index: 5,
+                  title: AppLocale.nowPlayingDockSlots.getString(context),
+                  subtitle: AppLocale.nowPlayingDockSlotsSubtitle.getString(
+                    context,
+                  ),
+                  valueText: '${config.dockSlotCount}',
+                  enabled: config.dockEnabled,
+                  onTap: () => _cycleDockSlotCount(provider),
+                ),
+              ],
             ),
-            valueText: '${config.nowPlayingDimLevel}%',
-            enabled: config.nowPlayingDimDelay > 0,
-            onTap: () => _cycleDimLevel(provider),
           ),
-          SizedBox(height: 24.r),
-          _buildSectionHeader(
-            AppLocale.secondarySectionDock.getString(context),
-          ),
-          _buildToggleRow(
-            index: 4,
-            title: AppLocale.nowPlayingDockEnabled.getString(context),
-            subtitle: AppLocale.nowPlayingDockEnabledSubtitle.getString(
-              context,
-            ),
-            value: config.dockEnabled,
-            onChanged: (v) => provider.updateDockEnabled(v),
-          ),
-          SizedBox(height: 12.r),
-          _buildValueRow(
-            index: 5,
-            title: AppLocale.nowPlayingDockSlots.getString(context),
-            subtitle: AppLocale.nowPlayingDockSlotsSubtitle.getString(context),
-            valueText: '${config.dockSlotCount}',
-            enabled: config.dockEnabled,
-            onTap: () => _cycleDockSlotCount(provider),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

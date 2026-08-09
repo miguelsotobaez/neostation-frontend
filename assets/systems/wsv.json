@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wsv",
+    "multidisc": false,
     "name": "Watara Supervision",
     "short_name": "WSV",
     "details": {
@@ -71,6 +72,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L potator_libretro.so \"{file.path}\""
         },
         "macos": {

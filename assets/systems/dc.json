@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "dc",
+    "multidisc": true,
     "name": "Sega Dreamcast",
     "short_name": "DC",
     "details": {
@@ -110,6 +111,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L flycast_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "naomigd",
+    "multidisc": false,
     "name": "Sega Naomi GD-ROM",
     "short_name": "Naomi GD",
     "details": {
@@ -82,6 +83,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L flycast_libretro.so \"{file.path}\""
         },
         "macos": {

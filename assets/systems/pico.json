@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pico",
+    "multidisc": false,
     "name": "Sega Pico",
     "short_name": "Pico",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "pico",
-      "Sega Pico"
+      "Sega Pico",
+      "sega-pico"
     ],
     "colors": [
       "#FFEB3B",
@@ -68,6 +70,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L picodrive_libretro.so \"{file.path}\""
         },
         "macos": {

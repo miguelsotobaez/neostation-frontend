@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "fds",
+    "multidisc": false,
     "name": "Famicom Disk System",
     "short_name": "FDS",
     "details": {
@@ -148,6 +149,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L nestopia_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -172,6 +175,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fceumm_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -195,6 +200,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mesen_libretro.so \"{file.path}\""
         },
         "macos": {

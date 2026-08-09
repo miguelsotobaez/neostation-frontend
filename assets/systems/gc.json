@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gc",
+    "multidisc": true,
     "name": "Nintendo GameCube",
     "short_name": "GC",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "gc",
       "GameCube",
-      "Nintendo GameCube"
+      "Nintendo GameCube",
+      "ngc"
     ],
     "colors": [
       "#7E57C2",
@@ -94,15 +96,17 @@
         },
         "windows": {
           "executable": "dolphin.exe",
-          "launch_arguments": "-e \"{file.path}\""
+          "args": "-e \"{file.path}\""
         },
         "linux": {
           "executable": "dolphin",
-          "launch_arguments": "-e \"{file.path}\""
+          "flatpak": "org.DolphinEmu.dolphin-emu",
+          "emudeck_launcher": "dolphin-emu.sh",
+          "args": "-e \"{file.path}\""
         },
         "macos": {
           "executable": "dolphin",
-          "launch_arguments": "-e \"{file.path}\""
+          "args": "-e \"{file.path}\""
         }
       }
     },
@@ -145,6 +149,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L dolphin_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "a2001",
+    "multidisc": false,
     "name": "Emerson Arcadia 2001",
     "short_name": "A2001",
     "details": {
@@ -17,7 +18,8 @@
       "a2001",
       "arcadia",
       "Emerson Arcadia 2001",
-      "Arcadia 2001"
+      "Arcadia 2001",
+      "arcadia-2001"
     ],
     "colors": [
       "#BDBDBD",
@@ -46,6 +48,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mamemess_libretro.so \"{file.path}\""
         },
         "macos": {

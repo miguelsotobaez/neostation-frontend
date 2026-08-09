@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "rpgmaker",
+    "multidisc": false,
     "name": "RPG Maker",
     "short_name": "RPGM",
     "details": {

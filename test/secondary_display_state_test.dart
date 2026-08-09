@@ -86,6 +86,11 @@ void main() {
       dockEditTrigger: 3,
       dockEnabled: false,
       dockSlotCount: 4,
+      // Both non-default so a field dropped from toJson/fromJson actually fails
+      // the round-trip — at their `false` defaults a missing key restores to the
+      // same value and the comparison passes regardless.
+      appReady: true,
+      setupWizardActive: true,
     );
 
     test('round-trips every field through toJson/fromJson', () {
@@ -129,10 +134,17 @@ void main() {
       expect(restored.deviceScreenOn, isTrue);
       expect(restored.nowPlayingDimDelay, 5);
       expect(restored.nowPlayingDimLevel, 100);
-      expect(restored.fanartDimLevel, 0);
+      // Mirrors the config default (fanart_dim_level DEFAULT 25) so the 25% dim
+      // applies from the first-launch WELCOME seed, not just after a relaunch.
+      expect(restored.fanartDimLevel, 25);
       expect(restored.dockEnabled, isTrue);
       expect(restored.dockSlotCount, 3);
       expect(restored.dockApps, const ['', '', '', '', '']);
+      // Both latches start off: the main engine hasn't painted, and the dock is
+      // only withheld once the wizard says so. A payload predating either field
+      // must not read as "wizard running" — that would park the dock forever.
+      expect(restored.appReady, isFalse);
+      expect(restored.setupWizardActive, isFalse);
     });
 
     test('coerces numeric fields delivered as doubles', () {
@@ -202,6 +214,37 @@ void main() {
       expect(launched.isGameLaunching, isTrue);
       expect(launched.nowPlayingActive, isTrue);
       expect(launched.gameTitle, 'Silent Hill');
+    });
+
+    test('a partial update that omits setupWizardActive preserves it', () {
+      // The wizard parks the secondary display's dock and launcher by holding
+      // this flag true. Both engines write the shared state, so any push that
+      // doesn't mention the flag — a mute toggle, an isSecondaryActive update —
+      // must not clear it, or the dock slides up mid-setup.
+      final inWizard = SecondaryDisplayStateData(
+        systemName: 'WELCOME',
+        setupWizardActive: true,
+        appReady: true,
+      );
+
+      final next = inWizard.copyWith(isSecondaryActive: true, isOled: true);
+
+      expect(next.setupWizardActive, isTrue);
+      expect(next.appReady, isTrue);
+    });
+
+    test('an explicit setupWizardActive: false clears it (setup complete)', () {
+      // How the dock is released: the wrapper pushes the clear once setup
+      // completes, and the reveal tween brings the dock in.
+      final inWizard = SecondaryDisplayStateData(
+        systemName: 'WELCOME',
+        setupWizardActive: true,
+      );
+
+      expect(
+        inWizard.copyWith(setupWizardActive: false).setupWizardActive,
+        isFalse,
+      );
     });
   });
 }

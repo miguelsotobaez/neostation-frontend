@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "amazon",
+    "multidisc": false,
     "name": "Amazon",
     "neosync": {
       "sync": false,

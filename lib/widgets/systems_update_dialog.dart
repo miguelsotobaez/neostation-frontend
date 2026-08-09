@@ -12,10 +12,24 @@ import '../data/datasources/sqlite_service.dart';
 import 'custom_notification.dart';
 import 'core_footer.dart';
 
+/// Signature of [SystemsUpdateService.checkAndUpdate], so tests can drive the
+/// dialog's download states without touching the network.
+typedef SystemsUpdateRunner =
+    Future<SystemsUpdateResult?> Function({
+      SystemsUpdateInfo? knownUpdate,
+      void Function(double progress, String status)? onProgress,
+      bool Function()? shouldCancel,
+    });
+
 class SystemsUpdateDialog extends StatefulWidget {
   final SystemsUpdateInfo updateInfo;
 
-  const SystemsUpdateDialog({super.key, required this.updateInfo});
+  /// Overrides the download call. Defaults to the real service; exists so the
+  /// progress, cancel and layout states can be tested deterministically.
+  @visibleForTesting
+  final SystemsUpdateRunner? runner;
+
+  const SystemsUpdateDialog({super.key, required this.updateInfo, this.runner});
 
   @override
   State<SystemsUpdateDialog> createState() => _SystemsUpdateDialogState();
@@ -23,6 +37,10 @@ class SystemsUpdateDialog extends StatefulWidget {
 
 class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
   bool _isDownloading = false;
+  bool _cancelRequested = false;
+  // The DB sync that follows a completed download is past the point of no
+  // return, so the cancel affordance is withdrawn for it.
+  bool _isSyncing = false;
   double _downloadProgress = 0.0;
   String _downloadStatus = '';
   late final GamepadNavigation _gamepadNav;
@@ -40,10 +58,15 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
     );
     _gamepadNav.initialize();
     _gamepadNav.activate();
+    // Modal: this dialog is shown during startup, while the initial ROM scan
+    // is still running. The systems grid mounts when that scan finishes and
+    // would otherwise push its layer on top of this one, so A would open a
+    // system behind the dialog instead of starting the update.
     GamepadNavigationManager.pushLayer(
       'systems_update_dialog',
       onActivate: () => _gamepadNav.activate(),
       onDeactivate: () => _gamepadNav.deactivate(),
+      modal: true,
     );
   }
 
@@ -58,10 +81,23 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
     _gamepadNav.dispose();
   }
 
+  /// B during a download requests cancellation rather than doing nothing; the
+  /// in-flight batch tears itself down and `_startUpdate` pops the dialog.
   void _closeDialog() {
-    if (_isDownloading) return;
+    if (_isDownloading) {
+      _requestCancel();
+      return;
+    }
     _cleanupGamepad();
     Navigator.of(context).pop(false);
+  }
+
+  void _requestCancel() {
+    if (_cancelRequested || _isSyncing) return;
+    setState(() {
+      _cancelRequested = true;
+      _downloadStatus = AppLocale.systemsUpdateCancelling.getString(context);
+    });
   }
 
   @override
@@ -221,6 +257,17 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
                                 ),
                               ],
                             ),
+                            if (!_isSyncing) ...[
+                              SizedBox(height: 12.r),
+                              GamepadControl(
+                                iconPath:
+                                    'assets/images/gamepad/Xbox_B_button.png',
+                                label: AppLocale.cancel.getString(context),
+                                onTap: _cancelRequested ? null : _requestCancel,
+                                backgroundColor: theme.colorScheme.tertiary,
+                                textColor: theme.colorScheme.onSurface,
+                              ),
+                            ],
                           ],
                         ),
                       ] else ...[
@@ -265,21 +312,28 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
   Future<void> _startUpdate() async {
     setState(() {
       _isDownloading = true;
+      _cancelRequested = false;
       _downloadProgress = 0.0;
       _downloadStatus = '';
     });
 
     SystemsUpdateResult? result;
+    final run = widget.runner ?? SystemsUpdateService.checkAndUpdate;
     try {
-      result = await SystemsUpdateService.checkAndUpdate(
+      result = await run(
+        // checkForUpdate already resolved these to open this dialog.
+        knownUpdate: widget.updateInfo,
         onProgress: (progress, status) {
-          if (mounted) {
+          // Once cancellation is requested the status line belongs to the
+          // cancelling message — don't let trailing progress overwrite it.
+          if (mounted && !_cancelRequested) {
             setState(() {
               _downloadProgress = progress;
               _downloadStatus = status;
             });
           }
         },
+        shouldCancel: () => _cancelRequested,
       );
     } catch (e) {
       _log.e('SystemsUpdateDialog: download failed', error: e);
@@ -287,8 +341,16 @@ class _SystemsUpdateDialogState extends State<SystemsUpdateDialog> {
 
     if (!mounted) return;
 
+    // A cancel is a deliberate user action, not a failure — close quietly.
+    if (_cancelRequested) {
+      _cleanupGamepad();
+      Navigator.of(context).pop(false);
+      return;
+    }
+
     if (result != null) {
       setState(() {
+        _isSyncing = true;
         _downloadStatus = AppLocale.systemsUpdateSyncing.getString(context);
       });
       await SqliteService.loadAndSyncSystems();

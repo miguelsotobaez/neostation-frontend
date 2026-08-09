@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "dos",
+    "multidisc": true,
     "name": "MS-DOS",
     "short_name": "DOS",
     "details": {
@@ -126,6 +127,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L dosbox_pure_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -149,6 +152,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L dosbox_svn_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -172,6 +177,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L dosbox_core_libretro.so \"{file.path}\""
         },
         "macos": {

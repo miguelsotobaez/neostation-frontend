@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "triforce",
+    "multidisc": false,
     "name": "Triforce",
     "short_name": "Triforce",
     "details": {

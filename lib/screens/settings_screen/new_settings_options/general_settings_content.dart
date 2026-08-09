@@ -10,13 +10,14 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:neostation/services/logger_service.dart';
-import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
-import 'package:neostation/services/game_service.dart';
-import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/nav_tabs.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
+import 'widgets/setting_row.dart';
+import 'widgets/setting_value_chip.dart';
+import 'widgets/language_picker_overlay.dart';
 import '../../../services/permission_service.dart';
 
 /// A specialized content panel for system-wide configuration, including platform-specific orchestration (Windows/Android/Linux).
@@ -60,8 +61,9 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     _loadFullscreenState();
     _checkDefaultLauncher();
 
-    // Pre-allocate keys for maximum theoretical setting items.
-    for (int i = 0; i < 14; i++) {
+    // Pre-allocate keys for maximum theoretical setting items (the fixed rows
+    // plus one per navigation tab that can be toggled).
+    for (int i = 0; i < 14 + NavTab.values.length; i++) {
       _itemKeys.add(GlobalKey());
     }
   }
@@ -175,6 +177,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // SFX Sounds
     count++; // 12-Hour Clock
     count++; // Global Subfolder View Default
+    count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -254,6 +257,18 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     }
     currentItemIndex++;
 
+    // Protocol: Navigation Tab Visibility (one entry per hidable tab, in the
+    // same order the rows are built below).
+    for (final tab in hidableNavTabs()) {
+      if (index == currentItemIndex) {
+        final hidden =
+            navTabSpec(tab).hidden?.call(configProvider.config) ?? false;
+        configProvider.updateNavTabHidden(tab, !hidden);
+        return;
+      }
+      currentItemIndex++;
+    }
+
     // Protocol: Localization Selection.
     if (index == currentItemIndex) {
       _showLanguagePicker(context, _itemKeys[currentItemIndex]);
@@ -325,725 +340,289 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     final config = provider.config;
     int currentItemIdx = 0;
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      physics: const ClampingScrollPhysics(),
-      padding: EdgeInsets.only(bottom: 24.r),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SettingsTitle(title: AppLocale.generalSettings.getString(context)),
-          SizedBox(height: 12.r),
-
-          // Setting: Scan on Startup.
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.scanOnStartup.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.scanOnStartupSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.scanOnStartup,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateScanOnStartup(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: Ignore hidden files in scan.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.ignoreHiddenFiles.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.ignoreHiddenFilesSubtitle.getString(
-                            context,
-                          ),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.ignoreHiddenFiles,
-                    onChanged: (value) {
-                      context
-                          .read<SqliteConfigProvider>()
-                          .updateIgnoreHiddenFiles(value);
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: Auto-update App.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.autoUpdateApp.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.autoUpdateAppSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.autoUpdateApp,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateAutoUpdateApp(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: Auto-update Systems & Emulators.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.autoUpdateSystems.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.autoUpdateSystemsSubtitle.getString(
-                            context,
-                          ),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.autoUpdateSystems,
-                    onChanged: (value) {
-                      context
-                          .read<SqliteConfigProvider>()
-                          .updateAutoUpdateSystems(value);
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: SFX Feedback.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.sfxSounds.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.sfxSoundsSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.sfxEnabled,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateSfxEnabled(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: 12-Hour Clock Format.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.use12HourClock.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.use12HourClockSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.use12HourClock,
-                    onChanged: (value) {
-                      context.read<SqliteConfigProvider>().updateUse12HourClock(
-                        value,
-                      );
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: Global Subfolder View Default.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.subfolderViewDefault.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.subfolderViewDefaultSubtitle.getString(
-                            context,
-                          ),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  CustomToggleSwitch(
-                    value: config.subfolderViewDefault,
-                    onChanged: (value) {
-                      context
-                          .read<SqliteConfigProvider>()
-                          .updateSubfolderViewDefault(value);
-                    },
-                    activeColor: theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: Localization & Language.
-          SizedBox(height: 12.r),
-          () {
-            final index = currentItemIdx++;
-            return Container(
-              key: _itemKeys[index],
-              padding: EdgeInsets.only(
-                left: 12.r,
-                right: 12.r,
-                top: 6.r,
-                bottom: 6.r,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8.r),
-                border: Border.all(
-                  color:
-                      widget.isContentFocused &&
-                          widget.selectedContentIndex == index
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.language.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.languageSub.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _showLanguagePicker(context, _itemKeys[index]),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 10.r,
-                        vertical: 6.r,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: 0.15,
-                        ),
-                        borderRadius: BorderRadius.circular(6.r),
-                        border: Border.all(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.4,
-                          ),
-                          width: 0.5.r,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocale.supportedLanguages[config.appLanguage] ??
-                                config.appLanguage,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              fontWeight: FontWeight.w400,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          SizedBox(width: 2.r),
-                          Icon(
-                            Symbols.arrow_drop_down_rounded,
-                            size: 14.r,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }(),
-
-          // Setting: Native Fullscreen (Desktop Platforms).
-          if (!kIsWeb &&
-              (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) ...[
-            SizedBox(height: 12.r),
-            () {
-              final index = currentItemIdx++;
-              return Container(
-                key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Pinned header — stays put while the settings list scrolls beneath it.
+        SettingsTitle(title: AppLocale.generalSettings.getString(context)),
+        SizedBox(height: 12.r),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.only(bottom: 24.r),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Setting: Scan on Startup.
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
                         widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppLocale.fullscreenMode.getString(context),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontSize: 12.r,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                widget.isContentFocused &&
-                                    widget.selectedContentIndex == index
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          AppLocale.fullscreenModeSubtitle.getString(context),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        ),
-                      ],
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.scanOnStartup.getString(context),
+                    subtitle: AppLocale.scanOnStartupSubtitle.getString(
+                      context,
                     ),
-                    CustomToggleSwitch(
-                      value: provider.isFullscreen,
-                      onChanged: _toggleFullscreen,
+                    trailing: CustomToggleSwitch(
+                      value: config.scanOnStartup,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateScanOnStartup(value);
+                      },
                       activeColor: theme.colorScheme.primary,
                     ),
-                  ],
-                ),
-              );
-            }(),
-          ],
+                  );
+                }(),
 
-          // Setting: Filesystem Access & Launcher (Android).
-          if (Platform.isAndroid) ...[
-            SizedBox(height: 12.r),
-            () {
-              final index = currentItemIdx++;
-              return Container(
-                key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
+                // Setting: Ignore hidden files in scan.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
                         widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.ignoreHiddenFiles.getString(context),
+                    subtitle: AppLocale.ignoreHiddenFilesSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.ignoreHiddenFiles,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateIgnoreHiddenFiles(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Auto-update App.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.autoUpdateApp.getString(context),
+                    subtitle: AppLocale.autoUpdateAppSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.autoUpdateApp,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateAutoUpdateApp(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Auto-update Systems & Emulators.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.autoUpdateSystems.getString(context),
+                    subtitle: AppLocale.autoUpdateSystemsSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.autoUpdateSystems,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateAutoUpdateSystems(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: SFX Feedback.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.sfxSounds.getString(context),
+                    subtitle: AppLocale.sfxSoundsSubtitle.getString(context),
+                    trailing: CustomToggleSwitch(
+                      value: config.sfxEnabled,
+                      onChanged: (value) {
+                        context.read<SqliteConfigProvider>().updateSfxEnabled(
+                          value,
+                        );
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: 12-Hour Clock Format.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.use12HourClock.getString(context),
+                    subtitle: AppLocale.use12HourClockSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.use12HourClock,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateUse12HourClock(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Global Subfolder View Default.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.subfolderViewDefault.getString(context),
+                    subtitle: AppLocale.subfolderViewDefaultSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.subfolderViewDefault,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateSubfolderViewDefault(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Navigation Tab Visibility — one row per hidable tab,
+                // so a future tab gets its toggle from its NavTabSpec alone.
+                for (final tab in hidableNavTabs()) ...[
+                  SizedBox(height: 12.r),
+                  () {
+                    final index = currentItemIdx++;
+                    final spec = navTabSpec(tab);
+                    final titleKey = spec.settingsTitleKey;
+                    final hidden = spec.hidden?.call(config) ?? false;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: (titleKey ?? spec.labelKey).getString(context),
+                      subtitle:
+                          spec.settingsSubtitleKey?.getString(context) ?? '',
+                      // The switch reads as "shown"; the config stores "hidden".
+                      trailing: CustomToggleSwitch(
+                        value: !hidden,
+                        onChanged: (value) {
+                          context
+                              .read<SqliteConfigProvider>()
+                              .updateNavTabHidden(tab, !value);
+                        },
+                        activeColor: theme.colorScheme.primary,
+                      ),
+                    );
+                  }(),
+                ],
+
+                // Setting: Localization & Language.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.language.getString(context),
+                    subtitle: AppLocale.languageSub.getString(context),
+                    trailing: GestureDetector(
+                      onTap: () =>
+                          _showLanguagePicker(context, _itemKeys[index]),
+                      child: SettingValueChip(
+                        text:
+                            AppLocale.supportedLanguages[config.appLanguage] ??
+                            config.appLanguage,
+                        trailingIcon: Symbols.arrow_drop_down_rounded,
+                      ),
+                    ),
+                  );
+                }(),
+
+                // Setting: Native Fullscreen (Desktop Platforms).
+                if (!kIsWeb &&
+                    (Platform.isWindows ||
+                        Platform.isLinux ||
+                        Platform.isMacOS)) ...[
+                  SizedBox(height: 12.r),
+                  () {
+                    final index = currentItemIdx++;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      expandTitle: false,
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.fullscreenMode.getString(context),
+                      subtitle: AppLocale.fullscreenModeSubtitle.getString(
+                        context,
+                      ),
+                      trailing: CustomToggleSwitch(
+                        value: provider.isFullscreen,
+                        onChanged: _toggleFullscreen,
+                        activeColor: theme.colorScheme.primary,
+                      ),
+                    );
+                  }(),
+                ],
+
+                // Setting: Filesystem Access & Launcher (Android).
+                if (Platform.isAndroid) ...[
+                  SizedBox(height: 12.r),
+                  () {
+                    final index = currentItemIdx++;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.allFilesAccess.getString(context),
+                      subtitle: '',
+                      subtitleWidget: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            AppLocale.allFilesAccess.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
                           Text(
                             provider.hasAllFilesAccess
                                 ? AppLocale.permissionGranted.getString(context)
@@ -1070,237 +649,97 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                           ),
                         ],
                       ),
-                    ),
-                    CustomToggleSwitch(
-                      value: provider.hasAllFilesAccess,
-                      onChanged: (value) => _handlePermissionToggle(provider),
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
-                ),
-              );
-            }(),
-            SizedBox(height: 12.r),
-
-            () {
-              final index = currentItemIdx++;
-              return Container(
-                key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.defaultLauncher.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            _isDefaultLauncher
-                                ? AppLocale.isDefaultLauncher.getString(context)
-                                : AppLocale.setAsDefaultLauncher.getString(
-                                    context,
-                                  ),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
+                      trailing: CustomToggleSwitch(
+                        value: provider.hasAllFilesAccess,
+                        onChanged: (value) => _handlePermissionToggle(provider),
+                        activeColor: theme.colorScheme.primary,
                       ),
-                    ),
-                    CustomToggleSwitch(
-                      value: _isDefaultLauncher,
-                      onChanged: _toggleLauncher,
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
-                ),
-              );
-            }(),
-            SizedBox(height: 12.r),
-          ],
+                    );
+                  }(),
+                  SizedBox(height: 12.r),
 
-          // Setting: Secondary Display Suppression (Android Multi-Display).
-          if (Platform.isAndroid) ...[
-            () {
-              final index = currentItemIdx++;
-              return Container(
-                key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.disableSecondaryScreen.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            AppLocale.disableSecondaryScreenSub.getString(
-                              context,
-                            ),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
+                  () {
+                    final index = currentItemIdx++;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.defaultLauncher.getString(context),
+                      subtitle: _isDefaultLauncher
+                          ? AppLocale.isDefaultLauncher.getString(context)
+                          : AppLocale.setAsDefaultLauncher.getString(context),
+                      trailing: CustomToggleSwitch(
+                        value: _isDefaultLauncher,
+                        onChanged: _toggleLauncher,
+                        activeColor: theme.colorScheme.primary,
                       ),
-                    ),
-                    CustomToggleSwitch(
-                      value: config.hideBottomScreen,
-                      onChanged: (value) {
-                        provider.updateHideBottomScreen(
-                          value,
-                          backgroundColor: theme.scaffoldBackgroundColor
-                              .toARGB32(),
-                        );
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
-                ),
-              );
-            }(),
-          ],
+                    );
+                  }(),
+                  SizedBox(height: 12.r),
+                ],
 
-          // Setting: BarTOP Shutdown (Windows/Linux Power Management).
-          if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) ...[
-            SizedBox(height: 12.r),
-            () {
-              final index = currentItemIdx++;
-              return Container(
-                key: _itemKeys[index],
-                padding: EdgeInsets.only(
-                  left: 12.r,
-                  right: 12.r,
-                  top: 6.r,
-                  bottom: 6.r,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color:
-                        widget.isContentFocused &&
-                            widget.selectedContentIndex == index
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
-                    strokeAlign: BorderSide.strokeAlignInside,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocale.bartopShutdown.getString(context),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 12.r,
-                              fontWeight: FontWeight.w500,
-                              color:
-                                  widget.isContentFocused &&
-                                      widget.selectedContentIndex == index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: 4.r),
-                          Text(
-                            AppLocale.bartopShutdownSubtitle.getString(context),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: 9.r,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                        ],
+                // Setting: Secondary Display Suppression (Android Multi-Display).
+                if (Platform.isAndroid) ...[
+                  () {
+                    final index = currentItemIdx++;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.disableSecondaryScreen.getString(
+                        context,
                       ),
-                    ),
-                    CustomToggleSwitch(
-                      value: config.bartopExitPoweroff,
-                      onChanged: (value) {
-                        context
-                            .read<SqliteConfigProvider>()
-                            .updateBartopExitPoweroff(value);
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  ],
-                ),
-              );
-            }(),
-          ],
-        ],
-      ),
+                      subtitle: AppLocale.disableSecondaryScreenSub.getString(
+                        context,
+                      ),
+                      trailing: CustomToggleSwitch(
+                        value: config.hideBottomScreen,
+                        onChanged: (value) {
+                          provider.updateHideBottomScreen(
+                            value,
+                            backgroundColor: theme.scaffoldBackgroundColor
+                                .toARGB32(),
+                          );
+                        },
+                        activeColor: theme.colorScheme.primary,
+                      ),
+                    );
+                  }(),
+                ],
+
+                // Setting: BarTOP Shutdown (Windows/Linux Power Management).
+                if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) ...[
+                  SizedBox(height: 12.r),
+                  () {
+                    final index = currentItemIdx++;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.bartopShutdown.getString(context),
+                      subtitle: AppLocale.bartopShutdownSubtitle.getString(
+                        context,
+                      ),
+                      trailing: CustomToggleSwitch(
+                        value: config.bartopExitPoweroff,
+                        onChanged: (value) {
+                          context
+                              .read<SqliteConfigProvider>()
+                              .updateBartopExitPoweroff(value);
+                        },
+                        activeColor: theme.colorScheme.primary,
+                      ),
+                    );
+                  }(),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1322,7 +761,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
       pageBuilder: (context, animation, _) {
         return FadeTransition(
           opacity: animation,
-          child: _LanguagePickerOverlay(
+          child: LanguagePickerOverlay(
             anchorOffset: offset + Offset(size.width, size.height / 2),
             currentLang: currentLang,
           ),
@@ -1333,232 +772,5 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     if (result != null && mounted) {
       context.read<SqliteConfigProvider>().updateAppLanguage(result);
     }
-  }
-}
-
-/// An autonomous gamepad-navigable overlay for language selection.
-class _LanguagePickerOverlay extends StatefulWidget {
-  final Offset anchorOffset;
-  final String currentLang;
-
-  const _LanguagePickerOverlay({
-    required this.anchorOffset,
-    required this.currentLang,
-  });
-
-  @override
-  State<_LanguagePickerOverlay> createState() => _LanguagePickerOverlayState();
-}
-
-class _LanguagePickerOverlayState extends State<_LanguagePickerOverlay> {
-  late GamepadNavigation _gamepadNav;
-  int _selectedIndex = 0;
-
-  static final _languages = AppLocale.supportedLanguages.entries
-      .map((e) => (e.key, e.value))
-      .toList();
-
-  final List<GlobalKey> _itemKeys = List.generate(
-    _languages.length,
-    (_) => GlobalKey(),
-  );
-  final GlobalKey _colKey = GlobalKey();
-  double _indicatorTop = -1;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedIndex = _languages.indexWhere((l) => l.$1 == widget.currentLang);
-    if (_selectedIndex < 0) _selectedIndex = 0;
-
-    _gamepadNav = GamepadNavigation(
-      onNavigateUp: () {
-        setState(() {
-          _selectedIndex =
-              (_selectedIndex - 1 + _languages.length) % _languages.length;
-        });
-        _updateIndicator();
-        SfxService().playNavSound();
-      },
-      onNavigateDown: () {
-        setState(() {
-          _selectedIndex = (_selectedIndex + 1) % _languages.length;
-        });
-        _updateIndicator();
-        SfxService().playNavSound();
-      },
-      onSelectItem: _handleSelection,
-      onBack: () => Navigator.pop(context),
-    );
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _gamepadNav.initialize();
-      GamepadNavigationManager.pushLayer(
-        'language_picker_overlay',
-        onActivate: () => _gamepadNav.activate(),
-        onDeactivate: () => _gamepadNav.deactivate(),
-      );
-      _updateIndicator();
-    });
-  }
-
-  @override
-  void dispose() {
-    GamepadNavigationManager.popLayer('language_picker_overlay');
-    _gamepadNav.dispose();
-    super.dispose();
-  }
-
-  /// Calculates the visual position of the selection indicator.
-  void _updateIndicator() {
-    if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final key = _itemKeys[_selectedIndex];
-      final RenderBox? box =
-          key.currentContext?.findRenderObject() as RenderBox?;
-      final RenderBox? colBox =
-          _colKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && colBox != null) {
-        final pos = box.localToGlobal(Offset.zero, ancestor: colBox);
-        setState(() => _indicatorTop = pos.dy);
-      }
-    });
-  }
-
-  void _handleSelection() {
-    SfxService().playEnterSound();
-    Navigator.pop(context, _languages[_selectedIndex].$1);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final screenSize = MediaQuery.of(context).size;
-    final overlayWidth = 180.r;
-    final itemHeight = 24;
-    final overlayHeight = itemHeight * _languages.length + 16;
-
-    // Anchor: Right-aligned relative to the trigger button, clamped to viewport boundaries.
-    double left = widget.anchorOffset.dx - overlayWidth;
-    double top = widget.anchorOffset.dy - overlayHeight.r / 1.5;
-    left = left.clamp(8.0, screenSize.width - overlayWidth - 8);
-    top = top.clamp(8.0, screenSize.height - overlayHeight - 8);
-
-    return Stack(
-      children: [
-        Positioned(
-          left: left,
-          top: top,
-          width: overlayWidth,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              padding: EdgeInsets.symmetric(vertical: 8.r),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Stack(
-                key: _colKey,
-                children: [
-                  if (_indicatorTop >= 0)
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 150),
-                      curve: Curves.easeInOut,
-                      top: _indicatorTop,
-                      left: 6.r,
-                      right: 4.r,
-                      height: itemHeight.r,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.15,
-                          ),
-                          borderRadius: BorderRadius.circular(8.r),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.3,
-                            ),
-                            width: 0.5.r,
-                          ),
-                        ),
-                      ),
-                    ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _languages.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final lang = entry.value;
-                      final isSelected = lang.$1 == widget.currentLang;
-                      return SizedBox(
-                        key: _itemKeys[i],
-                        height: itemHeight.r,
-                        child: InkWell(
-                          onTap: () {
-                            setState(() => _selectedIndex = i);
-                            _handleSelection();
-                          },
-                          onHover: (v) {
-                            if (v) {
-                              setState(() => _selectedIndex = i);
-                              _updateIndicator();
-                            }
-                          },
-                          focusColor: Colors.transparent,
-                          hoverColor: Colors.transparent,
-                          splashColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          borderRadius: BorderRadius.circular(8.r),
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12.r),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    lang.$2,
-                                    style: TextStyle(
-                                      fontSize: 10.r,
-                                      color: isSelected
-                                          ? theme.colorScheme.secondary
-                                          : theme.colorScheme.onSurface,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                                if (isSelected)
-                                  Icon(
-                                    Symbols.check_rounded,
-                                    size: 12.r,
-                                    color: theme.colorScheme.secondary,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }

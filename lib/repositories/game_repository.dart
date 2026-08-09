@@ -86,10 +86,39 @@ class GameRepository {
       log.w('deleteGame: romPath is null, skipping ROM file deletion');
     }
 
-    final mediaDir = fileProvider?.getMediaDirectoryPath();
+    final deletedMedia = await deleteNeoStationScrapedMedia(
+      systemFolderName: systemFolderName,
+      filename: filename,
+      romBaseName: romBaseName,
+      fileProvider: fileProvider,
+    );
+
+    if (deletedMedia > 0) {
+      log.i(
+        'deleteGame: Deleted $deletedMedia scraped media files for $filename',
+      );
+    }
+  }
+
+  /// Deletes scraped media files owned by NeoStation under the configured
+  /// [media/] directory. ES-DE [downloaded_media/] files are never touched.
+  ///
+  /// Returns the number of files deleted. Media is matched by the ROM base
+  /// name (with and without extension) and the original filename so playlists
+  /// created by the multi-disc organizer are handled correctly.
+  static Future<int> deleteNeoStationScrapedMedia({
+    required String systemFolderName,
+    required String filename,
+    required String romBaseName,
+    FileProvider? fileProvider,
+    String? mediaDirectoryPath,
+  }) async {
+    final log = LoggerService.instance;
+    final mediaDir =
+        mediaDirectoryPath ?? fileProvider?.getMediaDirectoryPath();
     if (mediaDir == null) {
-      log.w('deleteGame: mediaDir is null, skipping scraped media deletion');
-      return;
+      log.w('deleteNeoStationScrapedMedia: mediaDir is null, skipping');
+      return 0;
     }
 
     // Media files are stored using the ROM name WITHOUT extension
@@ -126,15 +155,13 @@ class GameRepository {
           }
         }
       } catch (e) {
-        log.e('deleteGame: Error deleting $type media for $filename: $e');
+        log.e(
+          'deleteNeoStationScrapedMedia: Error deleting $type media for $filename: $e',
+        );
       }
     }
 
-    if (deletedMedia > 0) {
-      log.i(
-        'deleteGame: Deleted $deletedMedia scraped media files for $filename',
-      );
-    }
+    return deletedMedia;
   }
 
   // ── Single ROM operations ─────────────────────────────────────────────────

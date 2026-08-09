@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -22,13 +24,19 @@ import 'package:flutter/services.dart';
 import '../widgets/tv_directory_picker.dart';
 import '../constants/system_folder_names.dart';
 import '../services/game_session_persistence.dart';
+import '../utils/nav_tabs.dart';
+import '../services/saf_directory_service.dart';
+
+part 'sqlite_config_provider/mutators.dart';
+part 'sqlite_config_provider/scanning.dart';
+part 'sqlite_config_provider/secondary_display.dart';
 
 /// Provider responsible for managing application configuration and system detection using SQLite as the backend.
 ///
 /// Coordinates filesystem scanning for ROMs, system metadata synchronization,
 /// user preferences persistence, and secondary display state management.
 /// Replaces the legacy JSON-based configuration provider.
-class SqliteConfigProvider extends ChangeNotifier {
+class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   ConfigModel _config = ConfigModel.empty;
   List<SystemModel> _detectedSystems = [];
   List<SystemModel> _availableSystems = [];
@@ -47,9 +55,14 @@ class SqliteConfigProvider extends ChangeNotifier {
   bool _isFastScan = false;
   bool _initialized = false;
   SecondaryDisplayState? _secondaryDisplayState;
+  bool _lifecycleObserverAdded = false;
   int _lastMuteToggleTrigger = 0;
   int _lastScreenshotTrigger = 0;
   int _lastDockEditTrigger = 0;
+  // Latched once the main UI paints its first frame; re-pushed to the secondary
+  // display so the app dock slides in as the app settles instead of popping in
+  // during cold-boot. See [markAppReady].
+  bool _appReady = false;
   bool _hasAllFilesAccess = false;
   Set<String> _hiddenSystems = {};
 
@@ -112,6 +125,7 @@ class SqliteConfigProvider extends ChangeNotifier {
   bool consumeStartupScan() {
     final v = _pendingStartupScan;
     _pendingStartupScan = false;
+    _log.i('consumeStartupScan: wasPending=$v');
     return v;
   }
 
@@ -162,6 +176,28 @@ class SqliteConfigProvider extends ChangeNotifier {
     _error = null;
 
     try {
+      if (Platform.isAndroid) {
+        // The secondary display's engine persists across a main-engine restart
+        // (its cached engine group survives), so the second screen keeps showing
+        // the LAST session's system artwork. Clear it FIRST — before the DB open,
+        // system-JSON sync, data load and permission checks below — so the stale
+        // art is gone within a frame of the restart instead of lingering while
+        // those finish. Must run after initialSync so we overwrite the retained
+        // shared state rather than racing it; every later seed/dock push
+        // copyWith's from this cleared state, so the art stays cleared until the
+        // systems carousel/grid settles on 'All'.
+        _secondaryDisplayState = SecondaryDisplayState.instance;
+        if (_secondaryDisplayState!.value == null) {
+          await _secondaryDisplayState!.initialSync;
+        }
+        _secondaryDisplayState!.updateState(
+          systemName: 'WELCOME',
+          clearSystemBackground: true,
+          clearSystemLogo: true,
+          useShader: true,
+        );
+      }
+
       // Initialize SQLite
       await SqliteService.getDatabase(); // This initializes the DB
 
@@ -188,12 +224,41 @@ class SqliteConfigProvider extends ChangeNotifier {
 
       if (Platform.isAndroid) {
         _secondaryDisplayState = SecondaryDisplayState.instance;
+        // Seed the edge-trigger baselines from the restored state BEFORE the
+        // listener is attached. The secondary display's shared state (including
+        // the screenshot/mute/dock triggers) survives a main-engine restart via
+        // the native shared-state store, but these baselines reset to 0 each
+        // launch. Without this seed, the first _onSecondaryStateChanged after a
+        // restart sees the restored trigger (> 0) as an increment and fires the
+        // action unprompted — most visibly an automatic screenshot on every
+        // relaunch. The earlier clear-stale-art block already awaited
+        // initialSync, so value holds the restored triggers here; only genuine
+        // NEW increments after launch should fire.
+        final restored = _secondaryDisplayState!.value;
+        if (restored != null) {
+          _lastScreenshotTrigger = restored.screenshotTrigger;
+          _lastMuteToggleTrigger = restored.muteToggleTrigger;
+          _lastDockEditTrigger = restored.dockEditTrigger;
+        }
         // Idempotent: reinitialize() can re-run initialize() (first-launch
         // custom data dir). Since the state is now a shared singleton that is
         // never disposed, remove any prior registration before re-adding so a
         // second init can't accumulate a duplicate listener.
         _secondaryDisplayState!.removeListener(_onSecondaryStateChanged);
         _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
+
+        // Observe app lifecycle so we can neutralise the secondary display's
+        // persisted system artwork on the way OUT (see didChangeAppLifecycleState).
+        // The secondary engine's cached engine group and the native shared-state
+        // store both survive a main-engine restart, so clearing on teardown is
+        // what actually gives a stale-art-free relaunch — the on-launch early
+        // clear can only fire ~half a second after the secondary re-attaches and
+        // has already read the retained art. Guard against a duplicate add since
+        // reinitialize() can re-run this block on the same singleton provider.
+        if (!_lifecycleObserverAdded) {
+          WidgetsBinding.instance.addObserver(this);
+          _lifecycleObserverAdded = true;
+        }
 
         _secondaryDisplayChannel.setMethodCallHandler(
           _handleSecondaryDisplayCall,
@@ -230,29 +295,19 @@ class SqliteConfigProvider extends ChangeNotifier {
         );
       }
 
-      // Automatically scan if there are ROM folders configured AND we have permissions
+      // Defer the startup scan whenever it is enabled. The actual permission
+      // and folder-access checks live inside scanSystems(), so a transient
+      // permission denial at provider init can no longer silently skip the
+      // scan on Android. Fast-scan mode is kept for folder-less configs.
       _isFastScan = _config.romFolders.isEmpty;
-      if (_config.romFolders.isNotEmpty) {
-        // Initial detection of systems based on ROM folders is handled by _loadDetectedSystems
-        // and scanSystems if scanOnStartup is true.
-        // Redundant loadAndSyncSystems removed here.
-
-        // Verify permissions in Android before scanning
-        bool canScan = true;
-        if (Platform.isAndroid) {
-          canScan = await PermissionService.hasStoragePermissions();
-        }
-
-        if (canScan && _config.scanOnStartup) {
-          // Defer scan — AppScreen triggers it after update checks complete,
-          // so updates and scan happen in one pass instead of two.
-          _pendingStartupScan = true;
-        } else {
-          _scanCompleted = true;
-        }
+      if (_config.scanOnStartup) {
+        _pendingStartupScan = true;
+        _log.i(
+          'Startup scan pending (scanOnStartup=true, romFolders=${_config.romFolders.length})',
+        );
       } else {
-        // No ROM folders, but we might have detected systems like Android Apps
         _scanCompleted = true;
+        _log.i('Startup scan skipped (scanOnStartup=false)');
       }
 
       // SELF-HEALING: If we have detected systems (from ROMs) but they aren't in uds table
@@ -276,6 +331,30 @@ class SqliteConfigProvider extends ChangeNotifier {
       _log.e('$_error');
     } finally {
       _setLoading(false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (!Platform.isAndroid) return;
+    // Neutralise the secondary display's persisted system artwork when the
+    // activity is being torn down (explicit exit, SystemNavigator.pop, or the
+    // OS reclaiming the activity). The native shared-state store survives a
+    // main-engine restart, so writing the cleared state here means the next
+    // launch's secondary re-attach reads neutral art instead of the last
+    // session's — eliminating the stale-art flash on a warm relaunch.
+    //
+    // Only `detached` (not `paused`/`inactive`) triggers this: launching a game
+    // backgrounds the app with the activity still alive (paused), and we must
+    // keep the current system art so it's still there on resume.
+    if (state == AppLifecycleState.detached) {
+      _secondaryDisplayState?.updateState(
+        systemName: 'WELCOME',
+        clearSystemBackground: true,
+        clearSystemLogo: true,
+        useShader: true,
+      );
     }
   }
 
@@ -320,617 +399,6 @@ class SqliteConfigProvider extends ChangeNotifier {
     }
   }
 
-  /// Registers a new filesystem directory as a ROM source.
-  ///
-  /// Automatically triggers a system detection scan unless [scan] is set to false.
-  Future<void> addRomFolder(String folderPath, {bool scan = true}) async {
-    if (folderPath.isEmpty) return;
-    if (_config.romFolders.contains(folderPath)) return;
-    if (_config.romFolders.length >= 5) return;
-
-    try {
-      _setLoading(true);
-      final newList = [..._config.romFolders, folderPath];
-      _config = _config.copyWith(
-        romFolders: newList,
-        lastScan: DateTime.now(),
-        setupCompleted: true,
-      );
-      await SqliteConfigService.saveConfig(_config);
-      if (scan) {
-        await scanSystems();
-      }
-      notifyListeners();
-    } catch (e) {
-      _error = 'Error adding ROM folder: $e';
-      _log.e('$_error');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Removes a registered ROM directory and purges associated ROM entries from the database.
-  Future<void> removeRomFolder(String folderPath) async {
-    try {
-      _setLoading(true);
-
-      // 1. Surgical cleanup in the DB before updating the config
-      await GameRepository.deleteRomsByFolderPath(folderPath);
-
-      // 2. Update local and persistent configuration
-      final newList = _config.romFolders.where((p) => p != folderPath).toList();
-      _config = _config.copyWith(romFolders: newList, lastScan: DateTime.now());
-      await SqliteConfigService.saveConfig(_config);
-
-      // 3. Decide whether to scan or just finish
-      if (newList.isNotEmpty) {
-        // Folders still remain, scan to ensure consistency
-        await scanSystems();
-      } else {
-        await SystemRepository.updateDetectedSystems([]);
-        await _loadDetectedSystems(); // Reload local list (now filtered)
-      }
-
-      notifyListeners();
-    } catch (e) {
-      _error = 'Error removing ROM folder: $e';
-      _log.e('$_error');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Scans the registered ROM folders to detect supported emulation systems.
-  ///
-  /// Orchestrates permission checks, platform identification, and background
-  /// ROM file scanning. Supports special handling for Android-specific
-  /// virtual systems (e.g., 'Android Apps').
-  Future<void> scanSystems() async {
-    // Allow scanning even if there are no folders (to clean systems or inject Android Apps)
-    // if (_config.romFolders.isEmpty) return;
-
-    // Protection against concurrent calls
-    if (_isScanning) {
-      _log.w('Already scanning, ignoring duplicate call...');
-      return;
-    }
-
-    _setScanning(true);
-    _error = null;
-
-    // Verify permissions in Android BEFORE scanning
-    if (Platform.isAndroid) {
-      // On Android 13+, hasBroadPermissions returns true (simulated).
-      // For older versions, we check if we have broad permissions OR if we use SAF.
-      final hasBroadPermissions =
-          await PermissionService.hasStoragePermissions();
-      final hasSafFolders = _config.romFolders.any(
-        (f) => f.startsWith('content://'),
-      );
-
-      // Only block if no ONE has access and we have folders configured.
-      if (!hasBroadPermissions &&
-          !hasSafFolders &&
-          _config.romFolders.isNotEmpty) {
-        _error =
-            'Storage access required. Please select a ROM folder using the file picker.';
-        _log.e('$_error');
-        _setScanning(false);
-        notifyListeners();
-        return;
-      }
-
-      // Verify access to directories
-      for (final path in _config.romFolders) {
-        // On Android 13+ with SAF, canAccessDirectory now returns true for content://
-        final canAccess = await PermissionService.canAccessDirectory(path);
-        if (!canAccess) {
-          _error =
-              'Cannot access ROM folder: $path. Please check storage permissions.';
-          _log.e('$_error');
-          _setScanning(false);
-          notifyListeners();
-          return;
-        }
-      }
-    }
-
-    // Initialize progress
-    _totalSystemsToScan = 0;
-    _scannedSystemsCount = 0;
-    _scanProgress = 0.0;
-    _scanStatus = 'Please Wait...';
-
-    try {
-      // Reload from synchronized database during initialization
-      await _loadAvailableSystems();
-
-      // Detect if we are in "Fast Scan" mode (without ROM folders)
-      _isFastScan = _config.romFolders.isEmpty;
-      final bool isFastScan = _isFastScan;
-
-      // Detect systems
-      List<SystemModel> detectedSystems;
-
-      if (Platform.isAndroid) {
-        // On Android, do NOT use File IO based detection
-        // Systems will be detected automatically during SAF scanning
-        detectedSystems = [];
-      } else {
-        // On Desktop, use File IO based detection
-        detectedSystems = await SqliteConfigService.detectSystems(
-          romFolders: _config.romFolders,
-          availableSystems: _availableSystems,
-        );
-      }
-
-      // Determine the systems to use for initial detection
-      List<SystemModel> systemsForMapping = _availableSystems;
-
-      // Filter systems if it's a Fast Scan for instant progress
-      if (isFastScan) {
-        // Only include those that auto-detect or are virtual depending on platform
-        final List<String> fastScanFolders = Platform.isAndroid
-            ? ['android']
-            : [];
-
-        systemsForMapping = _availableSystems.where((s) {
-          return fastScanFolders.contains(s.folderName);
-        }).toList();
-
-        // Also ensure that detectedSystems only contains these if we were on desktop
-        detectedSystems = detectedSystems
-            .where((s) => fastScanFolders.contains(s.folderName))
-            .toList();
-      }
-
-      // On Android, inject virtual systems (Android Apps/Games) if not detected by folders
-      if (Platform.isAndroid) {
-        final androidSystems = [
-          {'folder': 'android'},
-          {'folder': 'all'},
-        ];
-
-        for (final sysInfo in androidSystems) {
-          final sysFolder = sysInfo['folder']?.toString() ?? 'android';
-
-          // If the system was not detected by folder
-          if (!detectedSystems.any((s) => s.folderName == sysFolder)) {
-            try {
-              // Search in available systems (only by folder name to avoid corrupt ID collisions)
-              final system = _availableSystems.firstWhere(
-                (s) => s.folderName == sysFolder,
-                orElse: () =>
-                    throw StateError('System not found in available list'),
-              );
-
-              // Add it to the list of detected so that it is scanned
-              // CRITICAL: Force the correct folder name to ensure asset resolution works
-              // even if the database has an old name (like 'android')
-              final systemToInject = system.copyWith(folderName: sysFolder);
-
-              detectedSystems = [...detectedSystems, systemToInject];
-            } catch (e) {
-              _log.e('Failed to inject $sysFolder: $e');
-              // If it doesn't exist in available (shouldn't happen), ignore
-            }
-          }
-        }
-      }
-
-      // Update last scan timestamp surgically to avoid wiping detectedSystems in DB
-      final now = DateTime.now();
-      await ConfigRepository.saveUserConfig(lastScan: now.toIso8601String());
-
-      final systemNames = detectedSystems.map((s) => s.folderName).toList();
-      _config = _config.copyWith(
-        lastScan: now,
-        // On Android, keep existing detectedSystems while scanning in background
-        // to maintain UI stability and persistence.
-        detectedSystems: Platform.isAndroid
-            ? _config.detectedSystems
-            : systemNames,
-      );
-
-      // CRITICAL: On Android, pre-filter systems based on existing physical folders
-      // to avoid scanning all 72 systems if the user only has a few.
-      if (Platform.isAndroid) {
-        final Map<String, Map<String, String>> existingFoldersMap =
-            await SqliteDatabaseService.getExistingSubdirectories(
-              _config.romFolders,
-            );
-
-        // Use lowercase for case-insensitive matching
-        final Set<String> allExistingFolders = existingFoldersMap.values
-            .expand((m) => m.keys.map((k) => k.toLowerCase()))
-            .toSet();
-
-        final filteredSystems = systemsForMapping.where((system) {
-          // A system exists if its primary folder or any of its alternatives exists
-          final lowerPrimary = system.folderName.toLowerCase();
-          if (allExistingFolders.contains(lowerPrimary)) return true;
-
-          for (final altFolder in system.folders) {
-            if (allExistingFolders.contains(altFolder.toLowerCase())) {
-              return true;
-            }
-          }
-
-          // Special case: Android and ALL are always included for scanning
-          if (system.folderName == 'android' || system.folderName == 'all') {
-            return true;
-          }
-
-          return false;
-        }).toList();
-
-        // Android Fix: Combine filtered systems with legacy systems from DB
-        // so that deleted systems get a chance to be pruned.
-        final legacySystems = await SystemRepository.getDetectedSystems();
-        final Map<String, SystemModel> combinedMap = {};
-
-        for (final s in filteredSystems) {
-          combinedMap[s.id!] = s;
-        }
-
-        for (final s in legacySystems) {
-          if (!combinedMap.containsKey(s.id)) {
-            combinedMap[s.id!] = s;
-          }
-        }
-
-        _detectedSystems = combinedMap.values.toList();
-      } else {
-        // On Desktop, combine systems detected by folder with systems
-        // that are already in the database (legacy) to ensure they are pruned
-        // if their folder was moved or deleted.
-        final legacySystems = await SystemRepository.getDetectedSystems();
-        final Map<String, SystemModel> combinedMap = {};
-
-        // Add systems detected now
-        for (final s in detectedSystems) {
-          combinedMap[s.id!] = s;
-        }
-
-        // Add systems that were already there (if not already added)
-        for (final s in legacySystems) {
-          if (!combinedMap.containsKey(s.id)) {
-            combinedMap[s.id!] = s;
-          }
-        }
-
-        _detectedSystems = combinedMap.values.toList();
-      }
-
-      // If app was killed by OS while an emulator was running, skip ROM
-      // scanning so the user can return to the system browser without delay.
-      final skipScan = await GameSessionPersistence.consumeSkipStartupScan();
-      if (!skipScan) {
-        _totalSystemsToScan = _detectedSystems.length;
-        _scanStatus = 'Scanning ROMs...';
-        await _scanRomsInBackground();
-      }
-
-      // Apply preferred order
-      _sortDetectedSystems();
-
-      _scanCompleted = true;
-    } catch (e) {
-      _error = 'Error scanning ROMs: $e';
-      _log.e('$_error');
-    } finally {
-      _setScanning(false);
-      notifyListeners();
-    }
-  }
-
-  /// Executes a full ROM scan across all detected systems in the background.
-  ///
-  /// This multi-phase process identifies new ROMs, prunes missing entries,
-  /// and updates system-level statistics while maintaining UI responsiveness
-  /// via batch processing.
-  Future<void> _scanRomsInBackground() async {
-    // Protection against concurrent executions
-    if (_isScanningRoms) {
-      return;
-    }
-
-    _isScanningRoms = true;
-
-    try {
-      // Snapshot of systems to scan to avoid concurrent modification issues
-      // as refreshSystem might remove empty systems from _detectedSystems
-      final systemsToScan = List<SystemModel>.from(_detectedSystems);
-
-      // Pre-fetch subdirectories map to optimize scanning (avoids re-listing root)
-      final rootFoldersMap =
-          await SqliteDatabaseService.getExistingSubdirectories(
-            _config.romFolders,
-          );
-
-      const batchSize = 1; // Process 1 system at a time for better granularity
-
-      // The scan has two phases:
-      // Phase 1: Scan ROMs (95% of progress: 0.0 - 0.95)
-      // Phase 2: Update DB (5% of progress: 0.95 - 1.0)
-      const scanPhaseWeight = 0.95;
-
-      for (int i = 0; i < systemsToScan.length; i += batchSize) {
-        final endIndex = (i + batchSize < systemsToScan.length)
-            ? i + batchSize
-            : systemsToScan.length;
-
-        final batch = systemsToScan.sublist(i, endIndex);
-
-        // Update progress state
-        _scanStatus = '${batch.map((s) => s.realName).join(', ')}...';
-        notifyListeners();
-
-        // Process batch in parallel
-        await Future.wait(
-          batch.map(
-            (system) => _scanSystemRoms(system, rootFoldersMap: rootFoldersMap),
-          ),
-        );
-
-        // Update progress of the scanning phase (0.0 - 0.95)
-        _scannedSystemsCount += batch.length;
-        final scanPhaseProgress = _scannedSystemsCount / _totalSystemsToScan;
-        _scanProgress = (scanPhaseProgress * scanPhaseWeight).clamp(
-          0.0,
-          scanPhaseWeight,
-        );
-
-        notifyListeners();
-
-        // Small pause to avoid overloading
-        if (endIndex < _detectedSystems.length) {
-          await Future.delayed(Duration(milliseconds: 100));
-        }
-      }
-
-      // Phase 2: Update the systems list (0.95 - 1.0)
-      _scanStatus = 'Updating systems list...';
-      _scanProgress = scanPhaseWeight; // 95%
-      notifyListeners();
-
-      // Update user_detected_systems table: only keep systems with compatible ROMs.
-      // Query actual ROM counts instead of reading stale user_detected_systems.
-      final allSystems = await SystemRepository.getAllSystems();
-      final systemsToKeep = <SystemModel>[];
-
-      // Count systems with games, excluding virtual/media systems for 'all' logic
-      int emulatorSystemsWithGamesCount = 0;
-      final virtualSystems = ['android', 'music', 'all', 'steam'];
-
-      // Build the set of existing folders once for efficient lookup.
-      final allExistingFolders = rootFoldersMap.values
-          .expand((m) => m.keys.map((k) => k.toLowerCase()))
-          .toSet();
-
-      // First pass: collect all systems except 'all'
-      for (final system in allSystems) {
-        if (system.folderName == 'all') continue;
-
-        final romCount = await SystemRepository.getRomCountForSystem(
-          system.id!,
-        );
-
-        bool hasFolderWhenNonRecursive = false;
-        if (!system.recursiveScan) {
-          final lowerPrimary = system.folderName.toLowerCase();
-          if (allExistingFolders.contains(lowerPrimary)) {
-            hasFolderWhenNonRecursive = true;
-          } else {
-            for (final altFolder in system.folders) {
-              if (allExistingFolders.contains(altFolder.toLowerCase())) {
-                hasFolderWhenNonRecursive = true;
-                break;
-              }
-            }
-          }
-        }
-
-        final bool isAndroidVirtual =
-            (system.folderName == 'android' && Platform.isAndroid);
-
-        if (romCount > 0 || hasFolderWhenNonRecursive || isAndroidVirtual) {
-          systemsToKeep.add(system.copyWith(romCount: romCount));
-
-          // Increment count for 'all' logic if it's a real emulator system with games
-          if (romCount > 0 && !virtualSystems.contains(system.folderName)) {
-            emulatorSystemsWithGamesCount++;
-          }
-        }
-      }
-
-      // Second pass: decide if we add 'all'
-      if (emulatorSystemsWithGamesCount > 0) {
-        final allSystem = allSystems.firstWhere((s) => s.folderName == 'all');
-        final romCount = await SystemRepository.getRomCountForSystem(
-          allSystem.id!,
-        );
-        systemsToKeep.add(allSystem.copyWith(romCount: romCount));
-      }
-
-      // Third pass: add 'favorites' virtual system if there are favorite games (excluding music)
-      final db = await SqliteService.getDatabase();
-      final favResult = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM user_roms WHERE is_favorite = 1 AND app_system_id != 'music'",
-      );
-      final hasFavorites =
-          (int.tryParse(favResult.first['count'].toString()) ?? 0) > 0;
-      if (hasFavorites) {
-        try {
-          final favSystem = allSystems.firstWhere(
-            (s) => s.folderName == SystemFolderNames.favorites,
-          );
-          systemsToKeep.add(favSystem);
-        } catch (_) {
-          // favorites system not found in available systems, ignore
-        }
-      }
-
-      final folderNames = systemsToKeep.map((s) => s.folderName).toList();
-      await SystemRepository.updateDetectedSystems(folderNames);
-
-      await _refreshDetectedSystemsFromDatabase();
-
-      // Completar al 100%
-      _scanStatus = 'ROMs Scanned';
-      _scanProgress = 1.0;
-      notifyListeners();
-    } catch (e) {
-      _log.e('Error scanning ROMs: $e');
-      _scanStatus = 'Error scanning ROMs';
-      notifyListeners();
-    } finally {
-      _isScanningRoms = false; // Liberar el lock
-    }
-  }
-
-  /// Performs an isolated scan for a specific system.
-  Future<ScanSummary> _scanSystemRoms(
-    SystemModel system, {
-    Map<String, Map<String, String>>? rootFoldersMap,
-  }) async {
-    try {
-      // Allow scanning for Android system even if no ROM folders are selected
-      if (_config.romFolders.isEmpty && system.folderName != 'android') {
-        return ScanSummary(
-          added: 0,
-          removed: 0,
-          total: 0,
-          systemName: system.realName,
-        );
-      }
-
-      final summary = await SqliteDatabaseService.scanSystemRoms(
-        system,
-        _config.romFolders,
-        ignoreHiddenFiles: _config.ignoreHiddenFiles,
-        rootFoldersMap: rootFoldersMap,
-      );
-
-      // Update ROM count in system
-      await refreshSystem(system, rootFoldersMap: rootFoldersMap);
-
-      // Trigger Steam scraper if it's the Steam system
-      if (system.folderName == 'steam') {
-        // We don't pass 'provider' here because SqliteConfigProvider is not SqliteDatabaseProvider
-        // The service will handle UI refreshes independently if needed, or we can look into passing a callback
-        SteamScraperService.scrapeSteamGames();
-      }
-
-      return summary;
-    } catch (e) {
-      _log.e('Error scanning ${system.realName}: $e');
-      return ScanSummary(
-        added: 0,
-        removed: 0,
-        total: 0,
-        systemName: system.realName,
-      );
-    }
-  }
-
-  /// Refreshes the metadata and detection status for a specific system.
-  ///
-  /// Implements "incremental persistence" to ensure systems remain visible
-  /// if they have ROMs or physical directories, while pruning empty systems.
-  Future<void> refreshSystem(
-    SystemModel system, {
-    Map<String, Map<String, String>>? rootFoldersMap,
-  }) async {
-    try {
-      // Reload the full system from the DB to ensure we have the most recent
-      // configuration (such as recursiveScan) and the correct romCount.
-      final updatedSystem = await SystemRepository.getSystemByFolderName(
-        system.folderName,
-      );
-      if (updatedSystem == null) {
-        _log.w('System ${system.folderName} not found in DB during refresh');
-        return;
-      }
-
-      // Determine whether the system's folder still physically exists.
-      // We only need this when recursive scan is OFF: if the folder exists but
-      // romCount == 0 it means all ROMs live in sub-folders and the user must
-      // stay able to re-enable recursive scan from the system settings dialog.
-      bool hasFolderWhenNonRecursive = false;
-      if (!updatedSystem.recursiveScan) {
-        final effectiveRootFoldersMap =
-            rootFoldersMap ??
-            await SqliteDatabaseService.getExistingSubdirectories(
-              _config.romFolders,
-            );
-        final allExistingFolders = effectiveRootFoldersMap.values
-            .expand((m) => m.keys.map((k) => k.toLowerCase()))
-            .toSet();
-        final lowerPrimary = updatedSystem.folderName.toLowerCase();
-        if (allExistingFolders.contains(lowerPrimary)) {
-          hasFolderWhenNonRecursive = true;
-        } else {
-          for (final altFolder in updatedSystem.folders) {
-            if (allExistingFolders.contains(altFolder.toLowerCase())) {
-              hasFolderWhenNonRecursive = true;
-              break;
-            }
-          }
-        }
-      }
-
-      // INCREMENTAL PERSISTENCE: Keep a system when it has ROMs, when its
-      // folder exists and recursive scan is explicitly OFF (user can re-enable),
-      // or when it is a virtual system (android / all).
-      final bool shouldKeep =
-          updatedSystem.romCount > 0 ||
-          hasFolderWhenNonRecursive ||
-          (updatedSystem.folderName == 'android' && Platform.isAndroid) ||
-          updatedSystem.folderName == 'all' ||
-          updatedSystem.folderName == SystemFolderNames.favorites;
-
-      if (shouldKeep) {
-        await SystemRepository.addDetectedSystem(
-          updatedSystem.id!,
-          updatedSystem.folderName,
-        );
-      } else {
-        // SYSTEM PRUNING: romCount == 0 and not a virtual system → remove
-        // from DB and from the in-memory list so it disappears from the UI.
-        await SystemRepository.removeDetectedSystem(updatedSystem.id!);
-      }
-
-      // Update in the local list
-      final index = _detectedSystems.indexWhere(
-        (s) => s.folderName == system.folderName,
-      );
-
-      if (index != -1) {
-        if (shouldKeep) {
-          // Increment the image version from the current in-memory instance
-          // to force UI elements (images) to discard cache/rebuild
-          final currentSystem = _detectedSystems[index];
-          final newVersion = (currentSystem.imageVersion) + 1;
-
-          _detectedSystems[index] = updatedSystem.copyWith(
-            imageVersion: newVersion,
-          );
-        } else {
-          // Surgical removal from the in-memory list so it disappears from the UI
-          _detectedSystems.removeAt(index);
-        }
-        notifyListeners();
-      } else if (shouldKeep) {
-        // If not found in memory but it should exist, load from DB to sync UI
-        await _refreshDetectedSystemsFromDatabase();
-        notifyListeners();
-      }
-    } catch (e) {
-      _log.e('Error updating system state for ${system.realName}: $e');
-    }
-  }
-
   /// Persists the current in-memory configuration state to the SQLite database.
   Future<void> saveConfig() async {
     if (_config.romFolders.isNotEmpty) {
@@ -938,560 +406,14 @@ class SqliteConfigProvider extends ChangeNotifier {
     }
   }
 
-  /// Updates the entire list of ROM folders and triggers a configuration save.
-  Future<void> updateRomFolders(List<String> romFolders) async {
-    _config = _config.copyWith(
-      romFolders: romFolders,
-      lastScan: DateTime.now(),
-    );
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Displays a platform-appropriate directory picker to select a ROM root folder.
-  ///
-  /// On Android, uses Scoped Storage (SAF) or a custom TV-optimized picker.
-  Future<void> selectRomFolder({
-    bool scan = true,
-    BuildContext? context,
-  }) async {
-    try {
-      String? result;
-
-      if (Platform.isAndroid) {
-        final isTV = await PermissionService.isTelevision();
-        if (isTV && context != null && context.mounted) {
-          result = await TvDirectoryPicker.show(context);
-        } else {
-          try {
-            final uri = await PermissionService.requestFolderAccess();
-            result = uri?.toString();
-          } on PlatformException catch (e) {
-            if (e.code == 'PICKER_FAILED' &&
-                context != null &&
-                context.mounted) {
-              result = await TvDirectoryPicker.show(context);
-            }
-          }
-        }
-      } else {
-        // Desktop: Use standard file picker
-        result = await FilePicker.getDirectoryPath(
-          dialogTitle: 'Select ROM Folder',
-        );
-      }
-
-      if (result != null) {
-        await addRomFolder(result, scan: scan);
-      }
-    } catch (e) {
-      _log.e('Error selecting rom folder: $e');
-    }
-  }
-
-  /// Convenience method to update the primary ROM folder.
-  Future<void> updateRomFolder(String path) async {
-    if (_config.romFolders.isNotEmpty) {
-      final newList = List<String>.from(_config.romFolders);
-      newList[0] = path;
-      await updateRomFolders(newList);
-    } else {
-      await addRomFolder(path);
-    }
-  }
-
-  /// Updates the preferred UI layout mode for game lists.
-  Future<void> updateGameViewMode(String gameViewMode) async {
-    _config = _config.copyWith(gameViewMode: gameViewMode);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred UI layout mode for system carousels/grids.
-  Future<void> updateSystemViewMode(String systemViewMode) async {
-    _config = _config.copyWith(systemViewMode: systemViewMode);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred grid column density for the systems grid.
-  Future<void> updateSystemGridColumns(String systemGridColumns) async {
-    _config = _config.copyWith(systemGridColumns: systemGridColumns);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred grid column density for the games grid.
-  Future<void> updateGameGridColumns(String gameGridColumns) async {
-    _config = _config.copyWith(gameGridColumns: gameGridColumns);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the preferred card style for the game carousel ('fanart' or 'box').
-  Future<void> updateGameCarouselCardStyle(String cardStyle) async {
-    _config = _config.copyWith(gameCarouselCardStyle: cardStyle);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Toggles the application's fullscreen state.
-  Future<void> updateIsFullscreen(bool value) async {
-    _config = _config.copyWith(isFullscreen: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Manually triggers a re-scan for a specific system's ROMs.
-  Future<void> rescanSystem(SystemModel system) async {
-    if (_config.romFolders.isEmpty) return;
-
-    try {
-      _setLoading(true);
-      await _scanSystemRoms(system);
-    } catch (e) {
-      _error = 'Error rescanning ${system.realName}: $e';
-      _log.e('$_error');
-    } finally {
-      _setLoading(false);
-      notifyListeners();
-    }
-  }
-
-  /// Synchronizes the internal permission state with the Android OS.
-  Future<void> refreshAllFilesAccess() async {
-    if (!Platform.isAndroid) return;
-
-    try {
-      final hasAccess = await PermissionService.hasAllFilesAccess();
-      if (hasAccess != _hasAllFilesAccess) {
-        _hasAllFilesAccess = hasAccess;
-        notifyListeners();
-      }
-    } catch (e) {
-      _log.e('Error refreshing all files access in provider: $e');
-    }
-  }
-
-  /// Performs a background scan for a system without blocking UI notifications.
-  Future<ScanSummary> rescanSystemSilent(SystemModel system) async {
-    if (_config.romFolders.isEmpty) {
-      return ScanSummary(
-        added: 0,
-        removed: 0,
-        total: 0,
-        systemName: system.realName,
-      );
-    }
-
-    try {
-      _isSilentScanning = true;
-      _silentScannedSystem = system;
-      _lastScanSummary = null;
-      notifyListeners();
-
-      final summary = await _scanSystemRoms(system);
-      _lastScanSummary = summary;
-
-      return summary;
-    } catch (e) {
-      _log.e('Error rescanning silent ${system.realName}: $e');
-      return ScanSummary(
-        added: 0,
-        removed: 0,
-        total: 0,
-        systemName: system.realName,
-      );
-    } finally {
-      _isSilentScanning = false;
-      _silentScannedSystem = null;
-      notifyListeners();
-    }
-  }
-
-  /// Resets all user configurations and purges detected system metadata.
-  Future<void> clearConfig() async {
-    try {
-      _setLoading(true);
-
-      await SqliteConfigService.clearUserConfig();
-
-      _config = ConfigModel.empty;
-      _detectedSystems = [];
-      _scanCompleted = false;
-
-      // Reset progress
-      _totalSystemsToScan = 0;
-      _scannedSystemsCount = 0;
-      _scanProgress = 0.0;
-      _scanStatus = '';
-    } catch (e) {
-      _error = 'Error clearing config: $e';
-      _log.e('$_error');
-    } finally {
-      _setLoading(false);
-      notifyListeners();
-    }
-  }
-
-  /// Retrieves aggregate statistics (e.g., total systems, total games) from the database.
-  Future<Map<String, int>> getQuickStats() async {
-    try {
-      return await SystemRepository.getSystemStats();
-    } catch (e) {
-      _log.e('Error getting stats: $e');
-      return {};
-    }
-  }
-
   // Private data loading methods
 
-  Future<void> _loadConfig() async {
-    _config = await SqliteConfigService.loadConfig();
-    if (_detectedSystems.isNotEmpty) {
-      _sortDetectedSystems();
-    }
-  }
-
-  Future<void> _loadAvailableSystems() async {
-    _availableSystems = await SqliteConfigService.loadAvailableSystems();
-  }
-
-  /// Reloads system and emulator definitions from the DB into memory.
-  /// Must be called after external DB updates (e.g., systems update download)
-  /// so the next scan uses the latest definitions.
-  Future<void> reloadSystemDefinitions() async {
-    await Future.wait([_loadAvailableSystems(), _loadAvailableEmulators()]);
-    notifyListeners();
-  }
-
-  Future<void> _loadHiddenSystems() async {
-    try {
-      _hiddenSystems = await SystemRepository.getHiddenSystems();
-    } catch (e) {
-      _log.e('Error loading hidden systems: $e');
-      _hiddenSystems = {};
-    }
-  }
-
-  Future<void> toggleSystemHidden(String folderName) async {
-    final isNowHidden = !_hiddenSystems.contains(folderName);
-    if (isNowHidden) {
-      _hiddenSystems = {..._hiddenSystems, folderName};
-    } else {
-      _hiddenSystems = _hiddenSystems.where((f) => f != folderName).toSet();
-    }
-    await SystemRepository.setSystemHidden(folderName, isNowHidden);
-    notifyListeners();
-  }
-
-  Future<void> updateHideRecentCard(bool value) async {
-    _config = _config.copyWith(hideRecentCard: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  Future<void> updateActiveSyncProvider(String providerId) async {
-    _config = _config.copyWith(activeSyncProvider: providerId);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  Future<void> _loadAvailableEmulators() async {
-    _availableEmulators = await SqliteConfigService.loadAvailableEmulators();
-  }
-
-  Future<void> _loadDetectedSystems() async {
-    // We always attempt to load detected systems from the database.
-    // This ensures that even if _config.detectedSystems is stale or empty in memory,
-    // we fetch the source of truth from the 'user_detected_systems' table.
-    try {
-      final systems = await SystemRepository.getDetectedSystems();
-      _detectedSystems = systems;
-      _sortDetectedSystems();
-      _log.i('Detected systems loaded from DB: ${systems.length}');
-      for (var s in systems) {
-        _log.d(' - ${s.folderName}: ${s.romCount} ROMs');
-      }
-
-      // DEFENSIVE: Update _config if it differs from what was just loaded from DB
-      final systemNames = systems.map((s) => s.folderName).toList();
-      if (_config.detectedSystems.length != systemNames.length) {
-        _config = _config.copyWith(detectedSystems: systemNames);
-      }
-      notifyListeners();
-    } catch (e) {
-      _log.e('Error loading detected systems: $e');
-    }
-  }
-
-  /// Public method to refresh detected systems from the database.
+  /// Bridge exposing [notifyListeners] to same-library extensions (parts).
   ///
-  /// Called after external changes (e.g., toggling a favorite) that may affect
-  /// the presence of virtual systems like 'favorites'.
-  Future<void> refreshDetectedSystems() async {
-    await _loadDetectedSystems();
-  }
-
-  /// Synchronizes the list of detected systems with the current state of the database.
-  Future<void> _refreshDetectedSystemsFromDatabase() async {
-    try {
-      // Obtener sistemas que realmente tienen ROMs desde la base de datos
-      _detectedSystems = await SystemRepository.getDetectedSystems();
-      _sortDetectedSystems();
-    } catch (e) {
-      _log.e('Error updating systems from DB: $e');
-    }
-  }
-
-  /// Toggles the visibility of detailed game metadata in the UI.
-  Future<void> updateShowGameInfo(bool show) async {
-    _config = _config.copyWith(showGameInfo: show);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Configures whether the application should shut down the host OS upon exit (Arcade/Cabinet mode).
-  Future<void> updateBartopExitPoweroff(bool value) async {
-    _config = _config.copyWith(bartopExitPoweroff: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether startup scan is enabled
-  Future<void> updateScanOnStartup(bool value) async {
-    _config = _config.copyWith(scanOnStartup: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether hidden files/folders are ignored during ROM scans.
-  Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
-    _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates whether the header clock uses a 12-hour (AM/PM) format.
-  Future<void> updateUse12HourClock(bool value) async {
-    _config = _config.copyWith(use12HourClock: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Master switch for showing ROM subfolders as navigable folders. Persists
-  /// its own state and stamps the value onto every system, which can then be
-  /// adjusted individually from each system's settings.
-  Future<void> updateSubfolderViewDefault(bool value) async {
-    _config = _config.copyWith(subfolderViewDefault: value);
-    await SqliteConfigService.saveConfig(_config);
-    await SystemRepository.setSubfolderViewForAllSystems(value);
-    notifyListeners();
-  }
-
-  /// Updates whether UI navigation SFX sounds are enabled
-  Future<void> updateSfxEnabled(bool value) async {
-    _config = _config.copyWith(sfxEnabled: value);
-    await SqliteConfigService.saveConfig(_config);
-    // Apply immediately to the running service — no restart needed.
-    SfxService().setEnabled(value);
-    notifyListeners();
-  }
-
-  /// Updates the app display language and applies it immediately
-  Future<void> updateAppLanguage(String langCode) async {
-    _config = _config.copyWith(appLanguage: langCode);
-    await SqliteConfigService.saveConfig(_config);
-    FlutterLocalization.instance.translate(langCode);
-    notifyListeners();
-  }
-
-  /// Updates the global audio mute state for game preview videos.
-  ///
-  /// Automatically synchronizes the mute state with the secondary display if connected.
-  Future<void> updateVideoSound(bool value) async {
-    if (_config.videoSound == value) return;
-    _config = _config.copyWith(videoSound: value);
-    // ignore: unawaited_futures
-    SqliteConfigService.saveConfig(_config); // No await to avoid lag
-
-    // Sincronizar con pantalla secundaria si está activa
-    if (_secondaryDisplayState != null) {
-      final current = _secondaryDisplayState!.value;
-      if (current != null) {
-        _secondaryDisplayState!.updateState(isVideoMuted: !value);
-      }
-    }
-
-    notifyListeners();
-  }
-
-  /// Toggles the current video audio mute state.
-  Future<void> toggleVideoSound() async {
-    await updateVideoSound(!_config.videoSound);
-  }
-
-  /// Sets the inactivity delay (seconds) before the secondary Now Playing panel
-  /// dims; `0` disables dimming. Persists and pushes the value to the secondary
-  /// display.
-  Future<void> updateNowPlayingDimDelay(int seconds) async {
-    _config = _config.copyWith(nowPlayingDimDelay: seconds);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(nowPlayingDimDelay: seconds);
-    notifyListeners();
-  }
-
-  /// Sets how dark the secondary Now Playing panel goes when dimmed (0–100%).
-  /// Persists and pushes the value to the secondary display.
-  Future<void> updateNowPlayingDimLevel(int percent) async {
-    final clamped = percent.clamp(0, 100);
-    _config = _config.copyWith(nowPlayingDimLevel: clamped);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(nowPlayingDimLevel: clamped);
-    notifyListeners();
-  }
-
-  /// Sets how much the game fanart/background art is dimmed behind the logo on
-  /// the secondary screen (percentage 0–100, 0 = off). Persists and pushes it.
-  Future<void> updateFanartDimLevel(int percent) async {
-    final clamped = percent.clamp(0, 100);
-    _config = _config.copyWith(fanartDimLevel: clamped);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(fanartDimLevel: clamped);
-    notifyListeners();
-  }
-
-  /// Persists the secondary app-dock slot assignments (one package name per
-  /// slot, empty string = free) and pushes them to the secondary display.
-  Future<void> updateDockApps(List<String> apps) async {
-    final normalized = ConfigModel.normalizeDock(apps);
-    _config = _config.copyWith(dockApps: normalized);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(dockApps: normalized);
-    notifyListeners();
-  }
-
-  /// Enables or disables the secondary Now Playing app dock. Persists and
-  /// pushes the value to the secondary display.
-  Future<void> updateDockEnabled(bool enabled) async {
-    _config = _config.copyWith(dockEnabled: enabled);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(dockEnabled: enabled);
-    notifyListeners();
-  }
-
-  /// Sets how many secondary dock slots are visible, clamped to
-  /// [ConfigModel.dockMinSlotCount]–[ConfigModel.dockMaxSlotCount]. Persists and
-  /// pushes the value to the secondary display.
-  Future<void> updateDockSlotCount(int count) async {
-    final clamped = count.clamp(
-      ConfigModel.dockMinSlotCount,
-      ConfigModel.dockMaxSlotCount,
-    );
-    _config = _config.copyWith(dockSlotCount: clamped);
-    await SqliteConfigService.saveConfig(_config);
-    _secondaryDisplayState?.updateState(dockSlotCount: clamped);
-    notifyListeners();
-  }
-
-  /// Marks the initial application onboarding as completed.
-  Future<void> completeSetup() async {
-    _config = _config.copyWith(setupCompleted: true);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Toggles the visibility of the secondary display on dual-screen hardware.
-  Future<void> updateHideBottomScreen(
-    bool value, {
-    int? backgroundColor,
-  }) async {
-    _config = _config.copyWith(hideBottomScreen: value);
-    await SqliteConfigService.saveConfig(_config);
-
-    if (Platform.isAndroid && _secondaryDisplayState != null) {
-      final current = _secondaryDisplayState!.value;
-      if (current != null) {
-        _secondaryDisplayState!.updateState(
-          systemName: current.systemName,
-          gameFanart: current.gameFanart,
-          gameWheel: current.gameWheel,
-          gameVideo: current.gameVideo,
-          isGameSelected: current.isGameSelected,
-          isVideoMuted: current.isVideoMuted,
-          hideBottomScreen: value,
-          backgroundColor: backgroundColor ?? current.backgroundColor,
-          muteToggleTrigger: current.muteToggleTrigger,
-          // Hiding deactivates the secondary; un-hiding reactivates it. Mirror
-          // the toggle directly — preserving the prior value would leave it
-          // stuck inactive, since hiding has already forced it false.
-          isSecondaryActive: !value,
-        );
-        if (!value) {
-          // ignore: unawaited_futures
-          refreshSecondaryScreenshotAccess();
-        }
-      }
-    }
-
-    if (Platform.isAndroid) {
-      _secondaryDisplayChannel.invokeMethod('setSecondaryDisplayVisible', {
-        'visible': !value,
-      });
-    }
-
-    notifyListeners();
-  }
-
-  /// Handles native→Dart method calls for secondary display events.
-  Future<dynamic> _handleSecondaryDisplayCall(MethodCall call) async {
-    switch (call.method) {
-      case 'onSecondaryDisplayConnected':
-        if (_config.hideBottomScreen) {
-          _log.i('Secondary display connected but hidden by user preference');
-        } else {
-          _log.i('Secondary display connected, activating');
-        }
-        _onSecondaryDisplayChanged(
-          connected: call.method == 'onSecondaryDisplayConnected',
-        );
-        break;
-      case 'onSecondaryDisplayDisconnected':
-        _log.i('Secondary display disconnected');
-        _onSecondaryDisplayChanged(connected: false);
-        break;
-      case 'onAccessibilityConnected':
-        // The user just enabled the Screen Return service (e.g. via the in-game
-        // launcher nudge). Re-push access state so the secondary display clears
-        // the launcher warning badge and reveals the screenshot button — this
-        // fires even while a game keeps the main engine backgrounded.
-        // ignore: unawaited_futures
-        refreshSecondaryScreenshotAccess();
-        break;
-    }
-  }
-
-  /// Updates secondary display state when a physical display is connected or disconnected.
-  void _onSecondaryDisplayChanged({required bool connected}) {
-    if (_secondaryDisplayState == null) return;
-
-    if (connected && !_config.hideBottomScreen) {
-      _secondaryDisplayState!.updateState(
-        isSecondaryActive: true,
-        nowPlayingDimDelay: _config.nowPlayingDimDelay,
-        nowPlayingDimLevel: _config.nowPlayingDimLevel,
-        fanartDimLevel: _config.fanartDimLevel,
-        dockApps: _config.dockApps,
-        dockEnabled: _config.dockEnabled,
-        dockSlotCount: _config.dockSlotCount,
-      );
-      // ignore: unawaited_futures
-      refreshSecondaryScreenshotAccess();
-    } else {
-      _secondaryDisplayState!.updateState(isSecondaryActive: false);
-    }
-    notifyListeners();
-  }
+  /// [notifyListeners] is `@protected`/`@visibleForTesting`, so an extension
+  /// (e.g. [SqliteConfigMutators]) can't call it directly. Mirrors the `notify()`
+  /// bridge in [neo_sync_provider]. Behaviourally identical to a direct call.
+  void _notify() => notifyListeners();
 
   void _setLoading(bool loading) {
     _isLoading = loading;
@@ -1509,178 +431,5 @@ class SqliteConfigProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
-  }
-
-  void _onSecondaryStateChanged() {
-    final state = _secondaryDisplayState?.value;
-    if (state != null) {
-      if (state.muteToggleTrigger > _lastMuteToggleTrigger) {
-        _lastMuteToggleTrigger = state.muteToggleTrigger;
-        // ignore: unawaited_futures
-        toggleVideoSound();
-      }
-      if (state.screenshotTrigger > _lastScreenshotTrigger) {
-        _lastScreenshotTrigger = state.screenshotTrigger;
-        // ignore: unawaited_futures
-        _handleSecondaryScreenshotRequest();
-      }
-      if (state.dockEditTrigger > _lastDockEditTrigger) {
-        _lastDockEditTrigger = state.dockEditTrigger;
-        // The secondary already shows the new layout; persist it on the main
-        // engine (the source of truth for SQLite).
-        // ignore: unawaited_futures
-        updateDockApps(state.dockApps);
-      }
-    }
-  }
-
-  /// Responds to a screenshot request from the secondary display: fires a system
-  /// screenshot of the main screen, or opens accessibility settings if the user
-  /// hasn't granted screenshot access yet.
-  Future<void> _handleSecondaryScreenshotRequest() async {
-    final taken = await ScreenshotService.takeScreenshot();
-    if (!taken) {
-      await ScreenshotService.openAccessSettings();
-    }
-  }
-
-  /// Clears any stale in-game state on the secondary display. Used when the app
-  /// regains focus without an active game (e.g. after quitting mid-game and
-  /// relaunching), so the Now Playing panel doesn't linger.
-  void resetSecondaryInGameState() {
-    _secondaryDisplayState?.updateState(
-      nowPlayingActive: false,
-      showAchievementPanel: false,
-    );
-  }
-
-  /// Pushes a known screenshot-access state to the secondary display so it can
-  /// show or hide the in-game screenshot button.
-  void pushScreenshotAccess(bool enabled) {
-    _secondaryDisplayState?.updateState(screenshotAccessEnabled: enabled);
-  }
-
-  /// Checks current screenshot access and pushes it to the secondary display.
-  Future<void> refreshSecondaryScreenshotAccess() async {
-    if (_secondaryDisplayState == null) return;
-    final enabled = await ScreenshotService.isAccessEnabled();
-    _secondaryDisplayState!.updateState(screenshotAccessEnabled: enabled);
-  }
-
-  /// Re-applies the persisted secondary display visibility setting to the native
-  /// side. Used as a safety net when the app resumes after a display reconnection
-  /// event that may have auto-created the subscreen before our native gate could
-  /// intercept it.
-  void reapplySecondaryDisplay() {
-    if (!Platform.isAndroid) return;
-    if (_config.hideBottomScreen) {
-      // ignore: unawaited_futures
-      _secondaryDisplayChannel.invokeMethod('setSecondaryDisplayVisible', {
-        'visible': false,
-      });
-      _onSecondaryDisplayChanged(connected: false);
-    }
-  }
-
-  Future<void> updateAutoUpdateApp(bool value) async {
-    _config = _config.copyWith(autoUpdateApp: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  Future<void> updateAutoUpdateSystems(bool value) async {
-    _config = _config.copyWith(autoUpdateSystems: value);
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the sorting criteria for the system list.
-  Future<void> updateSystemSortBy(String sortBy) async {
-    if (_config.systemSortBy == sortBy) return;
-    _config = _config.copyWith(systemSortBy: sortBy);
-    _sortDetectedSystems();
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Updates the sorting direction (ascending or descending) for the system list.
-  Future<void> updateSystemSortOrder(String order) async {
-    if (_config.systemSortOrder == order) return;
-    _config = _config.copyWith(systemSortOrder: order);
-    _sortDetectedSystems();
-    await SqliteConfigService.saveConfig(_config);
-    notifyListeners();
-  }
-
-  /// Re-orders the detected systems list based on current sorting preferences.
-  ///
-  /// Implements special "float-to-top" logic for priority systems like 'All Games'
-  /// and 'Android Apps'.
-  void _sortDetectedSystems() {
-    if (_detectedSystems.isEmpty) return;
-
-    final sortBy = _config.systemSortBy;
-    final isAsc = _config.systemSortOrder == 'asc';
-
-    // Map priority folders that should NEVER be sorted
-    final priorityMap = <String, int>{
-      'all': 1,
-      'favorites': 2,
-      'music': 3,
-      'android': 4,
-    };
-
-    _detectedSystems.sort((a, b) {
-      final pA = priorityMap[a.folderName] ?? 999;
-      final pB = priorityMap[b.folderName] ?? 999;
-
-      if (pA != pB) {
-        return pA.compareTo(pB); // Priority objects always float to the top
-      }
-
-      // If both are normal systems (999), sort them
-      if (pA != 999) {
-        return 0; // Both are special and have same priority somehow
-      }
-
-      int comparison = 0;
-
-      if (sortBy == 'year') {
-        // Sort by year (launchDate). If no date is available, it goes to the end.
-        final dateA = a.launchDate ?? '9999';
-        final dateB = b.launchDate ?? '9999';
-        comparison = dateA.compareTo(dateB);
-      } else if (sortBy == 'manufacturer') {
-        final mA = (a.manufacturer ?? '').toLowerCase();
-        final mB = (b.manufacturer ?? '').toLowerCase();
-        comparison = mA.compareTo(mB);
-        if (comparison == 0) {
-          final dateA = a.launchDate ?? '9999';
-          final dateB = b.launchDate ?? '9999';
-          comparison = dateA.compareTo(dateB);
-        }
-      } else if (sortBy == 'manufacturer_type') {
-        final mA = (a.manufacturer ?? '').toLowerCase();
-        final mB = (b.manufacturer ?? '').toLowerCase();
-        comparison = mA.compareTo(mB);
-        if (comparison == 0) {
-          final tA = (a.type ?? '').toLowerCase();
-          final tB = (b.type ?? '').toLowerCase();
-          comparison = tA.compareTo(tB);
-        }
-        if (comparison == 0) {
-          final dateA = a.launchDate ?? '9999';
-          final dateB = b.launchDate ?? '9999';
-          comparison = dateA.compareTo(dateB);
-        }
-      } else {
-        // Default: Alphabetical by real name
-        comparison = a.realName.toLowerCase().compareTo(
-          b.realName.toLowerCase(),
-        );
-      }
-
-      return isAsc ? comparison : -comparison;
-    });
   }
 }

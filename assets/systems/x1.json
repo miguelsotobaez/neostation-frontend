@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "x1",
+    "multidisc": false,
     "name": "Sharp X1",
     "short_name": "X1",
     "details": {
@@ -78,6 +79,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L x1_libretro.so \"{file.path}\""
         },
         "macos": {

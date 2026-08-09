@@ -18,6 +18,12 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.download: 'Unduh',
   AppLocale.stop: 'Berhenti',
   AppLocale.reset: 'Atur Ulang',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation tidak dapat mengakses folder tempat data Anda disimpan. Pastikan kartu SD atau drive terpasang.',
+  AppLocale.startupStorageRetry: 'Coba lagi',
+  AppLocale.startupStorageUseDefault: 'Lanjutkan tanpa itu',
+  AppLocale.startupLoading:
+      'Menyiapkan NeoStation. Menunggu penyimpanan dan layanan...',
 
   AppLocale.play: 'Main',
   AppLocale.playButton: 'MAIN',
@@ -35,17 +41,18 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.general: 'Umum',
   AppLocale.secondaryDisplay: 'Layar Sekunder',
   AppLocale.directories: 'Direktori',
-  AppLocale.palettes: 'Palet',
-  AppLocale.neoThemes: 'Tema',
-  AppLocale.neoThemesSubtitle: 'Sesuaikan latar belakang dan logo kartu sistem',
-  AppLocale.neoThemesNone: 'Tidak Ada',
-  AppLocale.neoThemesNoneSubtitle: 'Tampilan default',
-  AppLocale.neoThemesLoading: 'Memuat tema...',
-  AppLocale.neoThemesError: 'Tidak dapat memuat tema',
-  AppLocale.neoThemesApplyTitle: 'Terapkan tema?',
-  AppLocale.neoThemesApplyBody:
-      'Aset tema akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
-  AppLocale.neoThemesDownloading: 'Mengunduh aset tema...',
+  AppLocale.themes: 'Tema',
+  AppLocale.systemArt: 'System Art',
+  AppLocale.systemArtSubtitle:
+      'Sesuaikan latar belakang dan logo kartu sistem dengan paket System Art',
+  AppLocale.systemArtNone: 'Tidak Ada',
+  AppLocale.systemArtNoneSubtitle: 'Tampilan default',
+  AppLocale.systemArtLoading: 'Memuat System Art...',
+  AppLocale.systemArtError: 'Tidak dapat memuat System Art',
+  AppLocale.systemArtApplyTitle: 'Terapkan System Art?',
+  AppLocale.systemArtApplyBody:
+      'Paket System Art akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
+  AppLocale.systemArtDownloading: 'Mengunduh paket System Art...',
   AppLocale.about: 'Tentang',
   AppLocale.exit: 'Keluar',
   AppLocale.launcher: 'Launcher',
@@ -57,8 +64,14 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.hideRecentCard: 'Kartu Terbaru',
   AppLocale.hideRecentCardSubtitle:
       'Tampilkan kartu game terbaru di grid sistem',
-  AppLocale.palettesSubtitle: 'Personalisasi tampilan NeoStation',
+  AppLocale.themesSubtitle: 'Personalisasi tampilan NeoStation',
   AppLocale.systemTheme: 'Tema Sistem',
+  AppLocale.importTheme: 'Impor Tema',
+  AppLocale.importThemeSuccess: 'Tema "%s" diimpor',
+  AppLocale.importThemeExists: 'Tema "%s" sudah diimpor',
+  AppLocale.importThemeError: 'Tidak dapat mengimpor tema — file tidak valid',
+  AppLocale.deleteThemeTitle: 'Hapus Tema?',
+  AppLocale.deleteThemeConfirm: 'Hapus tema impor "%s"?',
 
   AppLocale.generalSettings: 'Pengaturan Umum',
   AppLocale.alwaysShowRomName: 'Selalu tampilkan nama ROM',
@@ -117,7 +130,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.nowPlayingDimNever: 'Jangan Pernah',
   AppLocale.nowPlayingDockEnabled: 'Dock aplikasi',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Tampilkan dock aplikasi di panel Now Playing sekunder',
+      'Tampilkan dock aplikasi di layar sekunder',
   AppLocale.nowPlayingDockSlots: 'Slot dock',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Berapa banyak slot aplikasi yang ditampilkan dock (1-5)',
@@ -162,6 +175,19 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.bartopShutdown: 'Matikan BarTOP saat keluar',
   AppLocale.bartopShutdownSubtitle: 'Mematikan komputer saat menutup aplikasi',
 
+  AppLocale.showSyncTab: 'Tampilkan tab Sinkronisasi',
+  AppLocale.showSyncTabSubtitle:
+      'Menampilkan tab sinkronisasi cloud di bilah navigasi',
+  AppLocale.showAchievementsTab: 'Tampilkan tab Pencapaian',
+  AppLocale.showAchievementsTabSubtitle:
+      'Menampilkan tab RetroAchievements di bilah navigasi',
+  AppLocale.showScraperTab: 'Tampilkan tab Scraper',
+  AppLocale.showScraperTabSubtitle:
+      'Menampilkan tab scraping di bilah navigasi',
+  AppLocale.showSearchTab: 'Tampilkan tab Cari',
+  AppLocale.showSearchTabSubtitle:
+      'Menampilkan tab pencarian di bilah navigasi',
+
   AppLocale.configureDirectories: 'Konfigurasi Direktori',
   AppLocale.configureRomsFolder: 'Konfigurasi Folder ROM',
   AppLocale.cannotAccessFolder: 'Tidak dapat mengakses folder',
@@ -178,6 +204,39 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.confirmExit: 'Konfirmasi Keluar',
   AppLocale.rescanAllFolders: 'Pindai ulang semua folder ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Cari sistem dan ROM baru secara manual',
+  AppLocale.organizeMultiDiscGames: 'Atur game multi-disk',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Secara otomatis membuat file .m3u untuk game multi-disk dan mengaturnya ke dalam folder',
+  AppLocale.organizeMultiDiscScanning:
+      'Memindai folder ROM untuk game multi-disk...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'Belum ada folder ROM yang dikonfigurasi.',
+  AppLocale.organizeMultiDiscSkippedSuffix: ' ({count} jalur folder dilewati)',
+  AppLocale.organizeMultiDiscDone:
+      'Selesai: {groups} set diatur, {files} file dipindahkan, {playlists} playlist dibuat{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'Tidak ada set multi-disk yang ditemukan untuk diatur{skipped}.',
+  AppLocale.organizeMultiDiscFailed: 'Gagal mengatur game multi-disk: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'Ini akan memindahkan file ROM yang cocok ke folder game baru dan membuat playlist .m3u di penyimpanan Anda. Tindakan ini tidak dapat dibatalkan secara otomatis.',
+  AppLocale.cleanOrphanedMetadata: 'Bersihkan Metadata Yatim',
+  AppLocale.cleanOrphanedMetadataSubtitle:
+      'Hapus metadata dan media yang tertinggal dari ROM yang dihapus',
+  AppLocale.cleanOrphanedMetadataWarning:
+      'Ini akan menghapus permanen baris metadata dan file media untuk ROM yang tidak lagi ada di perpustakaan Anda. Entri yang diimpor dari ES-DE tidak akan dihapus.',
+  AppLocale.cleanOrphanedMetadataScanning: 'Membersihkan metadata yatim...',
+  AppLocale.cleanOrphanedMetadataCleaningItem: 'Membersihkan {filename}...',
+  AppLocale.cleanOrphanedMetadataNothingFound:
+      'Tidak ditemukan metadata yatim.',
+  AppLocale.cleanOrphanedMetadataDone:
+      'Dibersihkan {entries} entri metadata dan {files} file media.',
+  AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
+      '{count} entri yang diimpor dari ES-DE dibiarkan tidak terubah.',
+  AppLocale.cleanOrphanedMetadataFailed:
+      'Gagal membersihkan metadata yatim: {error}',
+  AppLocale.notifications: 'Notifikasi',
+  AppLocale.clearAll: 'Hapus semua',
+  AppLocale.noActiveNotifications: 'Tidak ada notifikasi aktif',
   AppLocale.romsFolderSubtitle: 'Tambahkan folder yang berisi file ROM Anda',
   AppLocale.pressToRemoveFolder: 'Tekan Konfirmasi untuk menghapus folder ini',
   AppLocale.maxRomFoldersReached: 'Maksimal 5 folder ROM diizinkan',
@@ -407,6 +466,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.stoppingScraping: 'Menghentikan proses scraping...',
   AppLocale.syncError: 'Kesalahan saat menyinkronkan ID sistem',
   AppLocale.metadataError: 'Kesalahan selama proses scraping',
+  AppLocale.scrapeQuotaExceeded:
+      'Kuota harian scraping ScreenScraper terlampaui',
   AppLocale.start: 'Mulai',
   AppLocale.systemsSub: 'Pilih sistem yang akan di-scrape',
   AppLocale.disableAll: 'Nonaktifkan Semua',
@@ -438,6 +499,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.hintRefresh: 'Segarkan',
   AppLocale.hintViewMode: 'Tampilan',
   AppLocale.hintScrape: 'Ambil',
+  AppLocale.hintMoreActions: 'Lainnya',
 
   AppLocale.error: 'Kesalahan',
   AppLocale.loading: 'Memuat...',
@@ -492,6 +554,21 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scrape: 'Scraping',
   AppLocale.noAchievements: 'Tidak Ada Pencapaian',
   AppLocale.gameInfo: 'Info Game',
+  AppLocale.manage: 'Kelola',
+  AppLocale.forceRescrape: 'Paksa Rescrape',
+  AppLocale.scrapingData: 'Data Scraping',
+  AppLocale.scrapingMedia: 'Media Scraping',
+  AppLocale.gameTitle: 'Judul',
+  AppLocale.publisher: 'Penerbit',
+  AppLocale.genre: 'Genre',
+  AppLocale.description: 'Deskripsi',
+  AppLocale.screenshot: 'Tangkapan layar',
+  AppLocale.fanart: 'Fanart',
+  AppLocale.wheel: 'Wheel',
+  AppLocale.boxart: 'Boxart',
+  AppLocale.change: 'Ubah',
+  AppLocale.metadataSaved: 'Metadata tersimpan',
+  AppLocale.imageUpdated: 'Gambar diperbarui',
   AppLocale.unlocked: 'Terbuka!',
   AppLocale.points: 'poin',
   AppLocale.scanningRomsRA: 'Mencari ROM untuk RetroAchievements',
@@ -760,6 +837,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemsUpdateCurrentVersion: 'Versi saat ini: {version}',
   AppLocale.systemsUpdateNewVersion: 'Versi baru: {version}',
   AppLocale.systemsUpdateDownloading: 'Mengunduh konfigurasi sistem...',
+  AppLocale.systemsUpdateCancelling: 'Membatalkan...',
   AppLocale.systemsUpdateSyncing: 'Menyinkronkan database sistem...',
   AppLocale.systemsUpdateComplete: 'Sistem berhasil diperbarui!',
   AppLocale.systemsUpdateError: 'Gagal memperbarui sistem. Coba lagi nanti.',
@@ -779,7 +857,7 @@ const Map<String, dynamic> appLocaleId = {
 
   AppLocale.userDataLocation: 'Lokasi Data',
   AppLocale.userDataLocationSubtitle:
-      'Pilih di mana media, tema, dan data aplikasi disimpan',
+      'Pilih di mana media, paket System Art, dan data aplikasi disimpan',
   AppLocale.userDataLocationDefault: 'Lokasi default',
   AppLocale.selectUserDataFolder: 'Pilih Folder Data',
   AppLocale.folderNotEmptyTitle: 'Folder Tidak Kosong',
@@ -802,8 +880,25 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.userDataLocationUpdated: 'Lokasi data diperbarui',
   AppLocale.resetToDefault: 'Setel Ulang ke Default',
   AppLocale.romDirectories: 'Direktori ROM',
+  AppLocale.tools: 'Alat',
+  AppLocale.toolsSubtitle: 'Alat untuk membantu mengatur ROM Anda',
   AppLocale.addRomFolder: 'Tambah Folder ROM',
   AppLocale.removeRomFolder: 'Hapus',
+  AppLocale.searchTitle: 'Cari',
+  AppLocale.searchNameHint: 'Cari...',
+  AppLocale.searchNoResults: 'Tidak ada gim ditemukan',
+  AppLocale.searchResultsCount: '{count} hasil',
+  AppLocale.searchClearFilters: 'Hapus filter',
+  AppLocale.searchFilters: 'Filter',
+  AppLocale.searchViewResults: 'Lihat hasil',
+  AppLocale.searchOpen: 'Cari',
+  AppLocale.searchGoToGame: 'Buka di daftar',
+  AppLocale.filterPlatform: 'Platform',
+  AppLocale.filterDeveloper: 'Pengembang',
+  AppLocale.filterGenre: 'Genre',
+  AppLocale.filterRating: 'Peringkat',
+  AppLocale.filterYear: 'Tahun',
+  AppLocale.filterAny: 'Semua',
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',
   AppLocale.resetPlayTimeConfirmBody:
       'Ini akan mengatur ulang waktu bermain yang tercatat untuk game ini menjadi nol secara permanen. Tindakan ini tidak dapat dibatalkan.',
@@ -848,8 +943,61 @@ const Map<String, dynamic> appLocaleId = {
       'RetroAchievements sedang sibuk saat ini. Tunggu sebentar lalu coba lagi.',
   AppLocale.raApiKey: 'Kunci API',
   AppLocale.raEnterApiKey: 'Masukkan kunci API Anda',
+  AppLocale.raGetApiKey: 'Dapatkan Kunci API',
+  AppLocale.raApiKeyHelp:
+      'Buka panel kontrol RetroAchievements untuk menyalin kunci API Web pribadi Anda.',
   AppLocale.raNoRecentUnlocks:
       'Tidak ada pembukaan baru dalam 30 hari terakhir',
   AppLocale.raRecentlyPlayedTitle: 'Baru Dimainkan',
   AppLocale.raNoRecentlyPlayed: 'Tidak ada game yang baru dimainkan',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Sistem cocok',
+  AppLocale.esdeSummaryUnmatched: 'tidak cocok',
+  AppLocale.esdeSummarySkipped: 'dilewati (tidak terbaca)',
+  AppLocale.esdeSummaryGamesImported: 'Gim diimpor',
+  AppLocale.esdeSummaryNoRomMatch: 'tidak ada ROM cocok',
+  AppLocale.esdeSummaryStatsUpdated: 'Favorit / statistik diperbarui',
+  AppLocale.esdeSummaryGames: 'gim',
+  AppLocale.esdeSummarySystems: 'sistem',
+  AppLocale.wizardScanComplete: 'Pemindaian selesai',
+  AppLocale.wizardTapNextToContinue: 'Ketuk Berikutnya untuk melanjutkan',
+  AppLocale.wizardEsdeStepTitle: 'Impor dari ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      'Sudah menggunakan ES-DE? Impor metadata dan gambar game Anda. Pilih '
+      'folder utama ES-DE yang berisi folder "gamelists" dan "downloaded_media" '
+      'Anda. Opsional; Anda dapat menjalankannya nanti dari Pengaturan.',
+  AppLocale.wizardArtPackTitle: 'Dapatkan Paket Gambar NeoStation',
+  AppLocale.wizardArtPackDesc:
+      'Kami sangat menyarankan untuk mengunduh paket gambar sistem NeoStation '
+      'agar latar belakang konsol tampil indah di seluruh koleksi Anda. Ini '
+      'dapat diubah nanti di Pengaturan.',
+  AppLocale.wizardDownloadArtPack: 'Unduh Paket Gambar',
+  AppLocale.wizardArtPackInstalled:
+      'Paket gambar terpasang! Anda dapat menjelajahi lebih banyak tema nanti '
+      'di Pengaturan.',
+  AppLocale.wizardArtPackUnavailable:
+      'Paket gambar tidak dapat dijangkau saat ini. Anda dapat memasangnya '
+      'nanti dari Pengaturan setelah online.',
 };

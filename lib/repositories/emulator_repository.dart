@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import '../models/core_emulator_model.dart';
+import '../services/macos_application_service.dart';
 import '../models/emulator_model.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../services/android_service.dart';
 
 /// Repository for emulator configuration data access.
 class EmulatorRepository {
@@ -64,15 +68,44 @@ class EmulatorRepository {
   static Future<void> setStandaloneEmulatorPath(
     String emulatorUniqueId,
     String path,
-  ) => SqliteService.setStandaloneEmulatorPath(emulatorUniqueId, path);
+  ) async {
+    final resolvedPath = await _resolveMacOsPath(
+      path,
+      bundleIdentifierHint: emulatorUniqueId,
+    );
+    await SqliteService.setStandaloneEmulatorPath(
+      emulatorUniqueId,
+      resolvedPath,
+    );
+  }
 
   static Future<void> saveDetectedEmulatorPath({
     required String emulatorName,
     required String emulatorPath,
-  }) => SqliteService.saveDetectedEmulatorPath(
-    emulatorName: emulatorName,
-    emulatorPath: emulatorPath,
-  );
+  }) async {
+    final resolvedPath = await _resolveMacOsPath(
+      emulatorPath,
+      applicationName: emulatorName,
+    );
+    await SqliteService.saveDetectedEmulatorPath(
+      emulatorName: emulatorName,
+      emulatorPath: resolvedPath,
+    );
+  }
+
+  static Future<String> _resolveMacOsPath(
+    String configuredPath, {
+    String? applicationName,
+    String? bundleIdentifierHint,
+  }) async {
+    if (!Platform.isMacOS) return configuredPath;
+    return await MacOsApplicationService.resolveExecutable(
+          configuredPath,
+          applicationName: applicationName,
+          bundleIdentifierHint: bundleIdentifierHint,
+        ) ??
+        configuredPath;
+  }
 
   // ── Default emulator resolution ───────────────────────────────────────────
 
@@ -80,8 +113,51 @@ class EmulatorRepository {
     String systemId,
   ) => SqliteService.getDefaultEmulatorForSystem(systemId);
 
+  static Future<CoreEmulatorModel?> getUserDefaultEmulatorForSystem(
+    String systemId,
+  ) => SqliteService.getUserDefaultEmulatorForSystem(systemId);
+
+  /// Every RetroArch package the database knows about, installed or not.
+  ///
+  /// Prefer [getInstalledAndroidRetroArchPackages] anywhere the result is used
+  /// to actually launch something: this list is seeded data, and picking from
+  /// it directly is how an intent ends up addressed to a variant the user does
+  /// not have.
   static Future<List<String>> getAndroidRetroArchPackages() =>
       SqliteService.getAndroidRetroArchPackages();
+
+  /// The RetroArch variants that are genuinely installed, best first.
+  ///
+  /// Ordered by [CoreEmulatorModel.retroArchPackagePriority] rather than by
+  /// database order, so `.first` is always a safe thing to launch. Returns an
+  /// empty list when no variant is installed — which is a real answer, not a
+  /// reason to guess.
+  static Future<List<String>> getInstalledAndroidRetroArchPackages() async {
+    final known = (await SqliteService.getAndroidRetroArchPackages()).toSet();
+    final installed = <String>[];
+    for (final pkg in CoreEmulatorModel.retroArchPackagePriority) {
+      if (known.contains(pkg) && await AndroidService.isPackageInstalled(pkg)) {
+        installed.add(pkg);
+      }
+    }
+    // Any variant the priority list does not name yet (a future package) still
+    // counts if it is installed; it just sorts after the known ones.
+    for (final pkg in known) {
+      if (!CoreEmulatorModel.retroArchPackagePriority.contains(pkg) &&
+          await AndroidService.isPackageInstalled(pkg)) {
+        installed.add(pkg);
+      }
+    }
+    return installed;
+  }
+
+  /// Whether [packageName] is an installed RetroArch variant.
+  static Future<bool> isRetroArchVariantInstalled(String packageName) async {
+    if (!packageName.startsWith(CoreEmulatorModel.retroArchPackagePrefix)) {
+      return false;
+    }
+    return AndroidService.isPackageInstalled(packageName);
+  }
 
   static Future<void> fixRetroArchDefaultForAndroid(String preferredPackage) =>
       SqliteService.fixRetroArchDefaultForAndroid(preferredPackage);

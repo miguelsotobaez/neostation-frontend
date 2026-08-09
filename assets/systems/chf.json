@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "chf",
+    "multidisc": false,
     "name": "Fairchild Channel F",
     "short_name": "CHF",
     "details": {
@@ -17,7 +18,8 @@
       "chf",
       "channelf",
       "FAIRCHILD",
-      "Fairchild Channel F"
+      "Fairchild Channel F",
+      "fairchild-channel-f"
     ],
     "colors": [
       "#F5F5F5",
@@ -71,6 +73,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L freechaf_libretro.so \"{file.path}\""
         },
         "macos": {

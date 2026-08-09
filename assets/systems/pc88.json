@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pc88",
+    "multidisc": false,
     "name": "NEC PC-8801",
     "short_name": "PC88",
     "details": {
@@ -19,7 +20,8 @@
       "pc8000",
       "pc8800",
       "NEC PC-8000/8800",
-      "NEC PC-8801"
+      "NEC PC-8801",
+      "pc-8800-series"
     ],
     "colors": [
       "#F5F5DC",
@@ -48,6 +50,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L quasi88_libretro.so \"{file.path}\""
         },
         "macos": {

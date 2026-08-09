@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "vic20",
+    "multidisc": false,
     "name": "VIC-20",
     "short_name": "VIC-20",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "vic20",
       "Commodore VIC-20",
-      "VIC-20"
+      "VIC-20",
+      "vic-20"
     ],
     "colors": [
       "#F5F5F5",
@@ -102,6 +104,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vice_xvic_libretro.so \"{file.path}\""
         },
         "macos": {

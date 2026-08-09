@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "3ds",
+    "multidisc": false,
     "name": "Nintendo 3DS",
     "short_name": "3DS",
     "details": {
@@ -51,6 +52,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L citra_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -74,6 +77,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L citra2018_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -97,6 +102,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L citra_canary_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -188,6 +195,8 @@
         },
         "linux": {
           "executable": "azahar.AppImage",
+          "flatpak": "org.azahar_emu.Azahar",
+          "emudeck_launcher": "azahar.sh",
           "args": "\"{file.path}\""
         },
         "macos": {

@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "xbox360",
+    "multidisc": true,
     "name": "Microsoft - XBox 360",
     "short_name": "XB360",
     "details": {
@@ -24,6 +25,7 @@
       "#FFFFFF"
     ],
     "extensions": [
+      "xex",
       "iso"
     ]
   },
@@ -52,6 +54,28 @@
       }
     },
     {
+      "name": "Xendroid",
+      "unique_id": "xbox360.xendroid.composee",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n xendroid.compose/.EmulatorHostActivity --es game_uri \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "X360 Mobile",
+      "unique_id": "xbox360.emu.x360.mobile",
+      "description": "Supported extensions: iso, xex.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n emu.x360.mobile/.X360MobileGameLaunchActivity -d \"{file.uri}\""
+        }
+      }
+    },
+    {
       "name": "Xenia",
       "unique_id": "xbox360.xenia",
       "description": "Supported extensions: iso.",
@@ -63,6 +87,7 @@
         },
         "linux": {
           "executable": "Xenia.AppImage",
+          "emudeck_launcher": "xenia.sh",
           "args": "\"{file.path}\""
         }
       }

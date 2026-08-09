@@ -11,6 +11,8 @@ import 'package:neostation/widgets/core_footer.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 
+import '../themes/corner_radii.dart';
+
 class HeaderSortDropdown extends StatefulWidget {
   static final GlobalKey<HeaderSortDropdownState> globalKey =
       GlobalKey<HeaderSortDropdownState>();
@@ -45,7 +47,7 @@ class HeaderSortDropdownState extends State<HeaderSortDropdown> {
           opacity: animation,
           child: SortDropdownOverlay(
             offset: offset + Offset(0, size.height + 6.r),
-            width: 170.r,
+            width: 180.r,
           ),
         );
       },
@@ -88,8 +90,8 @@ class HeaderSortDropdownState extends State<HeaderSortDropdown> {
           SfxService().playNavSound();
           _showDropdown(context);
         },
-        backgroundColor: Theme.of(context).colorScheme.tertiary,
-        textColor: Theme.of(context).colorScheme.onTertiary,
+        backgroundColor: Theme.of(context).colorScheme.tertiaryFixed,
+        textColor: Theme.of(context).colorScheme.onTertiaryFixed,
       ),
     );
   }
@@ -343,9 +345,7 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
             Divider(
               height: 4.r,
               thickness: 1,
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withValues(alpha: 0.1),
+              color: Theme.of(context).colorScheme.outline,
             ),
           );
         }
@@ -356,11 +356,10 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
               opt.group,
               style: TextStyle(
                 fontSize: 10.r,
-                fontWeight: FontWeight.w800,
                 letterSpacing: 1.r,
                 color: Theme.of(
                   context,
-                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                ).colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ),
           ),
@@ -382,7 +381,9 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
             hoverColor: Colors.transparent,
             splashColor: Colors.transparent,
             highlightColor: Colors.transparent,
-            borderRadius: BorderRadius.circular(8.r),
+            borderRadius:
+                Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+                BorderRadius.circular(8.r),
             child: Container(
               height: 28.r,
               margin: EdgeInsets.symmetric(horizontal: 4.r, vertical: 2.r),
@@ -393,7 +394,11 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                         context,
                       ).colorScheme.primary.withValues(alpha: 0.15)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(8.r),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(8.r),
                 border: isFocused
                     ? Border.all(
                         color: Theme.of(
@@ -410,7 +415,7 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                     size: 14.r,
                     color: Theme.of(
                       context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.9),
+                    ).colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                   SizedBox(width: 8.r),
                   Expanded(
@@ -435,7 +440,11 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                           hoverColor: Colors.transparent,
                           splashColor: Colors.transparent,
                           highlightColor: Colors.transparent,
-                          borderRadius: BorderRadius.circular(4.r),
+                          borderRadius:
+                              Theme.of(
+                                context,
+                              ).extension<CornerRadii>()?.radiusInternal ??
+                              BorderRadius.circular(4.r),
                           child: Container(
                             padding: EdgeInsets.symmetric(
                               horizontal: 6.r,
@@ -443,9 +452,13 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                             ),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? Theme.of(context).colorScheme.secondary
+                                  ? Theme.of(context).colorScheme.primary
                                   : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4.r),
+                              borderRadius:
+                                  Theme.of(
+                                    context,
+                                  ).extension<CornerRadii>()?.radiusInternal ??
+                                  BorderRadius.circular(4.r),
                             ),
                             child: Text(
                               size,
@@ -453,7 +466,7 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                                 fontSize: 11.r,
                                 fontWeight: FontWeight.w700,
                                 color: isSelected
-                                    ? Theme.of(context).colorScheme.onSecondary
+                                    ? Theme.of(context).colorScheme.onPrimary
                                     : Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
@@ -532,10 +545,8 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                     opt.icon,
                     size: 14.r,
                     color: isSelected
-                        ? Theme.of(context).colorScheme.secondary
-                        : Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.9),
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface,
                   ),
                   SizedBox(width: 8.r),
                   Expanded(
@@ -545,7 +556,7 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                       style: TextStyle(
                         fontSize: 12.r,
                         color: isSelected
-                            ? Theme.of(context).colorScheme.secondary
+                            ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).colorScheme.onSurface,
                         fontWeight: isSelected
                             ? FontWeight.w700
@@ -557,7 +568,7 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
                     Icon(
                       Symbols.check_rounded,
                       size: 14.r,
-                      color: Theme.of(context).colorScheme.secondary,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                 ],
               ),
@@ -590,18 +601,22 @@ class _SortDropdownOverlayState extends State<SortDropdownOverlay> {
               padding: EdgeInsets.symmetric(vertical: 8.r),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(12.r),
                 border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.2),
-                  width: 1,
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 1.r,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.5),
+                    blurRadius: 4.r,
+                    offset: Offset(2.r, 2.r),
                   ),
                 ],
               ),

@@ -240,14 +240,7 @@ class SystemsContentState extends State<SystemsContent> {
     final success = await _saveSystemConfig(systemId, newState);
 
     if (mounted) {
-      if (success) {
-        final system = _availableSystems.firstWhere((s) => s['id'] == systemId);
-        AppNotification.showNotification(
-          context,
-          '${system['name']}: ${newState ? AppLocale.enabled.getString(context) : AppLocale.disabled.getString(context)}',
-          type: NotificationType.success,
-        );
-      } else {
+      if (!success) {
         // Revertir el cambio si falló
         setState(() {
           _selectedSystems[systemId] = currentState;
@@ -279,16 +272,6 @@ class SystemsContentState extends State<SystemsContent> {
         _availableSystems.map((s) => s['id'].toString()).toList(),
         shouldEnable,
       );
-
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          shouldEnable
-              ? AppLocale.allSystemsEnabled.getString(context)
-              : AppLocale.allSystemsDisabled.getString(context),
-          type: NotificationType.success,
-        );
-      }
     } catch (e) {
       _log.e('Error toggling all systems: $e');
       // Revertir cambios

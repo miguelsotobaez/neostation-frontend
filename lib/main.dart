@@ -2,7 +2,7 @@ import 'package:neostation/providers/menu_app_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/providers/file_provider.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
@@ -14,15 +14,19 @@ import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/sync/providers/neo_sync_adapter.dart';
 import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
+import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
+import 'package:neostation/services/startup_theme_cache.dart';
+import 'package:neostation/widgets/shimmering_logo.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +35,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:fvp/fvp.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
@@ -173,14 +178,30 @@ Future<void> _configureImageCache() async {
   }
 }
 
+/// Global navigator key so overlay notifications can outlive the widget that
+/// created them. Used by [AppNotification] for progress notifications.
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Render immediately. Cold boots can wait for removable storage before the
+  // database opens, and without this lightweight root Android shows only a
+  // blank launch surface for that entire interval.
+  runApp(const StartupLoadingApp());
+  await WidgetsBinding.instance.endOfFrame;
 
   await _configureImageCache();
 
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
+
+  // Resolve the user-data location before anything reads it, so the cold-boot
+  // wait happens once (behind the loading screen) rather than once per caller.
+  if (Platform.isAndroid) {
+    await _awaitUserDataStorage();
+  }
 
   // Inicializar window_manager para desktop con tamano minimo 640x480
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
@@ -285,6 +306,7 @@ void main() async {
       MapLocale('it', AppLocale.it),
       MapLocale('id', AppLocale.id),
       MapLocale('ja', AppLocale.ja),
+      MapLocale('ko', AppLocale.ko),
     ],
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
@@ -300,6 +322,13 @@ void main() async {
   try {
     // 1. Inicializar ConfigProvider primero (sincroniza sistemas)
     await sqliteConfigProvider.initialize();
+
+    // Seed the game legend visibility from persisted config and wire its
+    // persistence sink so the Select + B toggle survives restarts/upgrades.
+    GameLegendVisibility.bind(
+      initialHidden: sqliteConfigProvider.config.legendHidden,
+      persist: sqliteConfigProvider.updateLegendHidden,
+    );
 
     // 2. Inicializar DatabaseProvider (carga juegos basandose en sistemas sincronizados)
     await sqliteDatabaseProvider.initialize(
@@ -324,6 +353,12 @@ void main() async {
     }
   }
 
+  // Resolve the saved theme before the first themed frame. Created lazily,
+  // ThemeProvider would paint its platform-brightness fallback until the
+  // database read returned — a white flash on any platform that reports a
+  // light brightness (the Steam Deck does) for a user on a dark theme.
+  final themeProvider = await ThemeProvider.create();
+
   // Build NeoSync provider graph before runApp so SyncManager can register it.
   final neoSyncService = NeoSyncService();
   final neoSyncProvider = NeoSyncProvider(neoSyncService);
@@ -346,6 +381,7 @@ void main() async {
       sqliteDatabaseProvider: sqliteDatabaseProvider,
       neoSyncService: neoSyncService,
       neoSyncProvider: neoSyncProvider,
+      themeProvider: themeProvider,
     ),
   );
 
@@ -358,6 +394,339 @@ void main() async {
   });
 }
 
+/// Startup strings for the current device locale.
+///
+/// The startup screens run before [FlutterLocalization] is initialized (the
+/// saved app language lives in the database, which may still be on a mounting
+/// SD card), so they read the raw locale maps directly. Unsupported device
+/// locales fall back to English — the same default the app itself uses — and
+/// missing keys degrade to an empty string rather than crashing the very
+/// first frame.
+Map<String, dynamic> _startupStrings() {
+  final locale = WidgetsBinding.instance.platformDispatcher.locale;
+  final languageTag = locale.toLanguageTag().replaceAll('-', '_');
+  const translations = <String, Map<String, dynamic>>{
+    'en': appLocaleEn,
+    'es': appLocaleEs,
+    'pt': appLocalePt,
+    'ru': appLocaleRu,
+    'zh': appLocaleZh,
+    'zh_Hant': appLocaleZhHant,
+    'fr': appLocaleFr,
+    'de': appLocaleDe,
+    'it': appLocaleIt,
+    'id': appLocaleId,
+    'ja': appLocaleJa,
+    'ko': appLocaleKo,
+  };
+  return translations[languageTag] ??
+      translations[locale.languageCode] ??
+      appLocaleEn;
+}
+
+String _startupString(String key) {
+  final value = _startupStrings()[key];
+  return value is String ? value : '';
+}
+
+/// Shared chrome for the pre-initialization screens: logo, wordmark and a
+/// caller-supplied status area.
+///
+/// These screens run before the database is readable, so they cannot ask
+/// [ThemeProvider] for the selected theme. They read the palette mirrored into
+/// [StartupThemeCache] on the last theme change instead, which keeps the whole
+/// intro in the user's theme rather than always-dark chrome.
+class _StartupScaffold extends StatefulWidget {
+  const _StartupScaffold({
+    required this.childrenBuilder,
+    this.onKeyEvent,
+    this.animatedLogo = false,
+  });
+
+  /// Builds the status area, given the resolved startup palette.
+  final List<Widget> Function(StartupThemeColors colors) childrenBuilder;
+
+  /// Show the shimmering logo instead of the static one. Used by the loading
+  /// screen, where the shine doubles as the activity indicator; the error
+  /// screen keeps the static logo (a shine would imply progress).
+  final bool animatedLogo;
+
+  /// Raw key handler used by the error screen. The gamepad navigation manager
+  /// is not running this early, so gamepad buttons are read straight from the
+  /// key events instead.
+  final KeyEventResult Function(KeyEvent)? onKeyEvent;
+
+  @override
+  State<_StartupScaffold> createState() => _StartupScaffoldState();
+}
+
+class _StartupScaffoldState extends State<_StartupScaffold> {
+  /// Starts on the dark chrome — the same color the Android splash hands over
+  /// — and is replaced once the cache read returns. That read is a fast
+  /// preferences lookup, so on a light theme the handoff lands within the
+  /// first frames rather than being visible as a change of screen.
+  StartupThemeColors _colors = StartupThemeColors.fallback;
+
+  @override
+  void initState() {
+    super.initState();
+    StartupThemeCache.load().then((colors) {
+      if (mounted) setState(() => _colors = colors);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final children = widget.childrenBuilder(_colors);
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: _colors.themeData,
+      home: Scaffold(
+        // Matches the selected theme's scaffold color so the handoff into the
+        // themed splash doesn't read as a background jump.
+        backgroundColor: _colors.background,
+        body: Focus(
+          autofocus: widget.onKeyEvent != null,
+          onKeyEvent: widget.onKeyEvent == null
+              ? null
+              : (_, event) => widget.onKeyEvent!(event),
+          // Animated mode pins the logo at the exact screen centre — the same
+          // spot the Android 12+ splash icon occupies — with the status text
+          // hung below centre, so the native→Flutter handoff and the later
+          // screens never move the logo. The error screen keeps the simpler
+          // centred column with the wordmark.
+          child: widget.animatedLogo
+              ? Stack(
+                  children: [
+                    const Center(child: ShimmeringLogo()),
+                    Align(
+                      // Same offset as the scan splash's progress detail so
+                      // the text/progress zone is one fixed place all intro.
+                      alignment: const Alignment(0, 0.55),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: children,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/logo_transparent.png',
+                          width: 112,
+                          height: 112,
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'NeoStation',
+                          style: TextStyle(
+                            color: _colors.foreground,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ...children,
+                      ],
+                    ),
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lightweight root displayed while the app waits for its persisted data.
+class StartupLoadingApp extends StatefulWidget {
+  const StartupLoadingApp({super.key});
+
+  @override
+  State<StartupLoadingApp> createState() => _StartupLoadingAppState();
+}
+
+class _StartupLoadingAppState extends State<StartupLoadingApp> {
+  /// On a healthy device this screen lasts well under a second, so the
+  /// "waiting for storage" line would only ever flash. Keep it invisible
+  /// (but laid out, so nothing shifts) and fade it in once the wait has
+  /// gone on long enough to actually be a wait.
+  static const _textDelay = Duration(milliseconds: 1500);
+
+  bool _showText = false;
+  Timer? _textTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _textTimer = Timer(_textDelay, () {
+      if (mounted) setState(() => _showText = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _textTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _StartupScaffold(
+      animatedLogo: true,
+      childrenBuilder: (colors) => [
+        AnimatedOpacity(
+          opacity: _showText ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 400),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Text(
+              _startupString(AppLocale.startupLoading),
+              textAlign: TextAlign.center,
+              // Same voice as the splash's status line: the app font (Anta),
+              // small and dimmed. GoogleFonts falls back gracefully for the
+              // first frames if the font isn't warmed up yet.
+              style: GoogleFonts.anta(
+                color: colors.foreground.withValues(alpha: 0.6),
+                fontSize: 17,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown when the configured user-data volume never appeared. Without this the
+/// failure was swallowed by the catch-alls in `main()` and the app booted onto
+/// an empty database, looking freshly installed.
+class StartupStorageErrorApp extends StatelessWidget {
+  const StartupStorageErrorApp({
+    super.key,
+    required this.storagePath,
+    required this.onRetry,
+    required this.onUseDefault,
+  });
+
+  final String? storagePath;
+  final VoidCallback onRetry;
+  final VoidCallback onUseDefault;
+
+  KeyEventResult _handleKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.gameButtonA ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      onRetry();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.gameButtonB ||
+        key == LogicalKeyboardKey.escape) {
+      onUseDefault();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _StartupScaffold(
+      onKeyEvent: _handleKey,
+      childrenBuilder: (colors) => [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _startupString(AppLocale.startupStorageUnavailable),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.foreground.withValues(alpha: 0.8),
+                  fontSize: 16,
+                ),
+              ),
+              if (storagePath != null && storagePath!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  storagePath!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: colors.foreground.withValues(alpha: 0.55),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    onPressed: onRetry,
+                    child: Text(_startupString(AppLocale.startupStorageRetry)),
+                  ),
+                  const SizedBox(width: 16),
+                  TextButton(
+                    onPressed: onUseDefault,
+                    child: Text(
+                      _startupString(AppLocale.startupStorageUseDefault),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Resolves the user-data location once, up front, while the loading screen is
+/// on screen.
+///
+/// [ConfigService.getUserDataPath] has a dozen call sites; before this, each
+/// one could serially block for the full cold-boot timeout. Doing it here means
+/// the wait happens exactly once and its failure is visible to the user
+/// instead of being degraded into an empty library by downstream catch-alls.
+Future<void> _awaitUserDataStorage() async {
+  while (!await ConfigService.ensureUserDataStorageReady()) {
+    final decision = Completer<void>();
+    var useDefault = false;
+    runApp(
+      StartupStorageErrorApp(
+        storagePath: ConfigService.unavailableStoragePath,
+        onRetry: () {
+          ConfigService.resetStorageAvailability();
+          if (!decision.isCompleted) decision.complete();
+        },
+        onUseDefault: () {
+          useDefault = true;
+          if (!decision.isCompleted) decision.complete();
+        },
+      ),
+    );
+    await decision.future;
+    runApp(const StartupLoadingApp());
+    if (useDefault) {
+      ConfigService.continueWithDefaultUserDataPath();
+      return;
+    }
+  }
+}
+
 @pragma('vm:entry-point')
 Future<void> subDisplay() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -367,13 +736,18 @@ Future<void> subDisplay() async {
   // localization independently — otherwise AppLocale.getString() falls back to
   // raw keys here. Mirror the persisted-language init done in main().
   String initLang = 'en';
+  // The main engine only pushes the theme name once it has state to share, so
+  // without this the display would open on the brightness fallback (black)
+  // even for a user on a light theme. Read it from the same config row.
+  String? initThemeName;
   try {
     final rawConfig = await ConfigRepository.getUserConfig();
     if (rawConfig != null && rawConfig['app_language'] != null) {
       initLang = rawConfig['app_language'].toString();
     }
+    initThemeName = rawConfig?['theme_name']?.toString();
   } catch (e) {
-    debugPrint('Secondary display could not load saved language: $e');
+    debugPrint('Secondary display could not load saved config: $e');
   }
   await FlutterLocalization.instance.ensureInitialized();
   FlutterLocalization.instance.init(
@@ -389,11 +763,12 @@ Future<void> subDisplay() async {
       MapLocale('it', AppLocale.it),
       MapLocale('id', AppLocale.id),
       MapLocale('ja', AppLocale.ja),
+      MapLocale('ko', AppLocale.ko),
     ],
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
 
-  runApp(const SecondaryScreen());
+  runApp(SecondaryScreen(initialThemeName: initThemeName));
 }
 
 /// Provides MaterialLocalizations as a fallback for locales that Flutter's
@@ -425,6 +800,10 @@ class MyApp extends StatefulWidget {
   final NeoSyncService neoSyncService;
   final NeoSyncProvider neoSyncProvider;
 
+  /// Built in `main()` with the saved theme already resolved, so the first
+  /// frame paints in the user's theme rather than the brightness fallback.
+  final ThemeProvider themeProvider;
+
   const MyApp({
     super.key,
     required this.fileProvider,
@@ -433,6 +812,7 @@ class MyApp extends StatefulWidget {
     required this.sqliteDatabaseProvider,
     required this.neoSyncService,
     required this.neoSyncProvider,
+    required this.themeProvider,
   });
 
   @override
@@ -449,6 +829,12 @@ class _MyAppState extends State<MyApp> {
     FlutterLocalization.instance.onTranslatedLanguage = (Locale? locale) {
       if (mounted) setState(() => _locale = locale);
     };
+    // Once the main UI has painted its first frame, tell the secondary display
+    // the app is ready so it can slide the app dock into place (rather than
+    // showing it fully-formed while the app is still cold-starting).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.sqliteConfigProvider.markAppReady();
+    });
   }
 
   @override
@@ -465,7 +851,7 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider.value(value: SyncManager.instance),
         ChangeNotifierProvider(create: (context) => BillingService()),
         ChangeNotifierProvider(create: (context) => NotificationService()),
-        ChangeNotifierProvider(create: (context) => PaletteProvider()),
+        ChangeNotifierProvider.value(value: widget.themeProvider),
         ChangeNotifierProvider(create: (context) => ScrapingProvider()),
         ChangeNotifierProvider(
           // Eager (not lazy): auto-login must run at startup so RA is connected
@@ -477,11 +863,19 @@ class _MyAppState extends State<MyApp> {
         ),
         ChangeNotifierProvider(create: (context) => SystemBackgroundProvider()),
         ChangeNotifierProvider(
+          // Eager: the theme manifest is a network fetch, and during first-run
+          // setup the wizard's art-pack step is the ONLY consumer of this
+          // provider. A lazy create would not start loadThemes() until that
+          // final step renders, leaving `themes` empty if the user advances
+          // before the fetch resolves — the art pack then silently fails to
+          // apply. Starting at launch gives the fetch the whole wizard to
+          // complete.
+          lazy: false,
           create: (context) => NeoAssetsProvider()..init(),
         ),
       ],
-      child: Consumer<PaletteProvider>(
-        builder: (context, paletteProvider, child) {
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
           return ScreenUtilInit(
             designSize: const Size(640, 480),
             minTextAdapt: true,
@@ -499,6 +893,7 @@ class _MyAppState extends State<MyApp> {
                   child: Actions(
                     actions: {ToggleFullscreenIntent: ToggleFullscreenAction()},
                     child: MaterialApp(
+                      navigatorKey: rootNavigatorKey,
                       debugShowCheckedModeBanner: false,
                       title: 'NeoStation',
                       locale: _locale,
@@ -524,9 +919,9 @@ class _MyAppState extends State<MyApp> {
                           child: child!,
                         );
                       },
-                      theme: paletteProvider.currentPalette.copyWith(
+                      theme: themeProvider.currentTheme.copyWith(
                         textTheme: GoogleFonts.antaTextTheme(
-                          paletteProvider.currentPalette.textTheme,
+                          themeProvider.currentTheme.textTheme,
                         ),
                         iconTheme: const IconThemeData(fill: 1.0),
                         visualDensity: VisualDensity.adaptivePlatformDensity,

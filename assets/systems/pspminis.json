@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pspminis",
+    "multidisc": false,
     "name": "PlayStation Portable Minis",
     "short_name": "PSPM",
     "details": {

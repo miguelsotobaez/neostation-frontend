@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pcfx",
+    "multidisc": false,
     "name": "NEC PC-FX",
     "short_name": "PC-FX",
     "details": {
@@ -11,11 +12,12 @@
     },
     "ids": {
       "screenscraper": 72,
-      "retroachievements": null
+      "retroachievements": 49
     },
     "folders": [
       "pcfx",
-      "NEC PC-FX"
+      "NEC PC-FX",
+      "pc-fx"
     ],
     "colors": [
       "#F5F5F5",
@@ -70,6 +72,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_pcfx_libretro.so \"{file.path}\""
         },
         "macos": {

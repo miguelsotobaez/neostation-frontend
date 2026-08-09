@@ -14,7 +14,15 @@ finish-args:
   - --share=network
   - --allow=bluetooth
   - --filesystem=home
+  # EmuDeck is commonly installed to an SD card, and system-wide Flatpaks keep
+  # their export wrappers and RetroArch cores outside $HOME. Read-only: these
+  # are probed for emulators, never written to.
+  - --filesystem=/run/media:ro
+  - --filesystem=/var/lib/flatpak:ro
   - --talk-name=org.freedesktop.secrets
+  # Required to start an emulator at all: a sandbox cannot exec a host binary.
+  # See LinuxHostProcess — this is the only thing that uses it.
+  - --talk-name=org.freedesktop.Flatpak
 
 cleanup:
   - /include

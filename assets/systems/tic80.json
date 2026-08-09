@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "tic80",
+    "multidisc": false,
     "name": "TIC-80",
     "short_name": "TIC-80",
     "details": {
@@ -67,6 +68,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L tic80_libretro.so \"{file.path}\""
         },
         "macos": {

@@ -3,6 +3,16 @@ import 'dart:convert';
 import '../data/datasources/sqlite_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
+class MetadataTransferResult {
+  final String appSystemId;
+  final bool metadataTransferred;
+
+  const MetadataTransferResult({
+    required this.appSystemId,
+    required this.metadataTransferred,
+  });
+}
+
 /// Repository for ScreenScraper system configuration data access.
 class ScraperRepository {
   static final _log = LoggerService.instance;
@@ -466,6 +476,78 @@ class ScraperRepository {
 
   // ── Metadata ──────────────────────────────────────────────────────────────
 
+  /// Returns the raw metadata row for a game, or null when it was never
+  /// scraped. Column names match the table (`real_name`, `description_en`,
+  /// `developer`, …).
+  static Future<Map<String, dynamic>?> getGameMetadata(
+    String appSystemId,
+    String filename,
+  ) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final rows = await db.query(
+        'user_screenscraper_metadata',
+        where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+        whereArgs: [appSystemId, filename],
+        limit: 1,
+      );
+      return rows.isEmpty ? null : rows.first;
+    } catch (e) {
+      _log.e('Error reading game metadata: $e');
+      return null;
+    }
+  }
+
+  /// Partially updates editable metadata [fields] for a game. Only the
+  /// provided columns are touched; a minimal row is created when the game
+  /// has no metadata yet. Used by the manual metadata editor.
+  static Future<bool> updateGameMetadata(
+    String appSystemId,
+    String filename,
+    Map<String, dynamic> fields,
+  ) async {
+    if (fields.isEmpty) return false;
+    try {
+      final db = await SqliteService.getDatabase();
+      final existing = await db.query(
+        'user_screenscraper_metadata',
+        columns: const ['app_system_id'],
+        where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+        whereArgs: [appSystemId, filename],
+        limit: 1,
+      );
+
+      final values = Map<String, dynamic>.from(fields)
+        ..remove('app_system_id')
+        ..remove('filename')
+        ..remove('is_fully_scraped')
+        ..remove('updated_at')
+        ..['updated_at'] = DateTime.now().toIso8601String();
+
+      if (existing.isEmpty) {
+        values['app_system_id'] = appSystemId;
+        values['filename'] = filename;
+        values['is_fully_scraped'] = 0;
+        await db.insert(
+          'user_screenscraper_metadata',
+          values,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        await db.update(
+          'user_screenscraper_metadata',
+          values,
+          where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+          whereArgs: [appSystemId, filename],
+        );
+      }
+      return true;
+    } catch (e) {
+      _log.e('Error updating game metadata: $e');
+      return false;
+    }
+  }
+
   /// Saves the metadata to the local user_screenscraper_metadata table.
   static Future<bool> saveGameMetadata(
     Map<String, dynamic> metadata,
@@ -491,6 +573,153 @@ class ScraperRepository {
     }
   }
 
+  /// Merges ES-DE-imported metadata into `user_screenscraper_metadata`,
+  /// writing only columns that are currently empty (fill-gaps precedence).
+  ///
+  /// [esde] maps column names (`real_name`, `description_en`, `rating`, …) to
+  /// candidate values; null / blank values are ignored. Existing non-empty
+  /// NeoStation-scraped values are never overwritten. `is_fully_scraped` is
+  /// left at 0 so a later NeoStation scrape still upgrades the entry.
+  ///
+  /// Returns true if a row was created or at least one column was filled.
+  static Future<bool> mergeEsdeMetadata(
+    String appSystemId,
+    String filename,
+    Map<String, dynamic> esde, {
+    String? mediaSubdir,
+  }) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final existing = await db.query(
+        'user_screenscraper_metadata',
+        where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+        whereArgs: [appSystemId, filename],
+        limit: 1,
+      );
+      final row = existing.isNotEmpty ? existing.first : null;
+
+      final toWrite = buildEsdeMetadataWrite(
+        appSystemId: appSystemId,
+        filename: filename,
+        row: row,
+        esde: esde,
+        mediaSubdir: mediaSubdir,
+      );
+      if (toWrite == null) return false;
+
+      if (row == null) {
+        await db.insert(
+          'user_screenscraper_metadata',
+          toWrite,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        await db.update(
+          'user_screenscraper_metadata',
+          toWrite,
+          where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+          whereArgs: [appSystemId, filename],
+        );
+      }
+      return true;
+    } catch (e) {
+      _log.e('Error merging ES-DE metadata: $e');
+      return false;
+    }
+  }
+
+  /// Computes the fill-gaps write for [esde] against [row] — the game's current
+  /// `user_screenscraper_metadata` row, or null when it has none.
+  ///
+  /// Returns null when nothing needs writing. When [row] is null the returned
+  /// map is a complete insert (keys, `is_fully_scraped`, provenance marker);
+  /// otherwise it holds only the columns to update.
+  ///
+  /// Pure — no database access — so a bulk importer that already has the rows
+  /// in hand can reuse the precedence rules and batch the writes itself.
+  static Map<String, dynamic>? buildEsdeMetadataWrite({
+    required String appSystemId,
+    required String filename,
+    required Map<String, Object?>? row,
+    required Map<String, dynamic> esde,
+    String? mediaSubdir,
+  }) {
+    final toWrite = <String, dynamic>{};
+    esde.forEach((col, val) {
+      if (val == null) return;
+      if (val is String && val.trim().isEmpty) return;
+      final cur = row?[col];
+      final curEmpty = cur == null || (cur is String && cur.trim().isEmpty);
+      if (curEmpty) toWrite[col] = val;
+    });
+
+    // Media subfolder is ES-DE bookkeeping (mirrors the ROM's subfolder inside
+    // downloaded_media), not user-visible metadata — always keep it current so
+    // read-time fallback can resolve nested artwork, even when nothing else
+    // needs filling.
+    if (mediaSubdir != null &&
+        (row == null || row['esde_media_subdir'] != mediaSubdir)) {
+      toWrite['esde_media_subdir'] = mediaSubdir;
+    }
+
+    if (toWrite.isEmpty) return null;
+    toWrite['updated_at'] = DateTime.now().toIso8601String();
+
+    if (row == null) {
+      toWrite['app_system_id'] = appSystemId;
+      toWrite['filename'] = filename;
+      toWrite['is_fully_scraped'] = 0;
+      // Provenance marker so reset() can remove ES-DE-created rows without
+      // touching NeoStation's own partially-scraped rows. Only set on insert
+      // (rows the import creates from scratch); gap-fills into pre-existing
+      // NeoStation rows are left unmarked so reset() won't delete them.
+      toWrite['esde_imported'] = 1;
+    }
+    return toWrite;
+  }
+
+  /// Resolves an ES-DE system folder name (e.g. `psx`, `megadrive`) to a
+  /// NeoStation system. Checks the ES-DE/LaunchBox alias table first
+  /// (`app_system_folders`), then falls back to a direct `app_systems`
+  /// folder-name match. Returns `{app_system_id, folder_name}` or null.
+  static Future<Map<String, String>?> resolveSystemByFolderName(
+    String folderName,
+  ) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final aliased = await db.rawQuery(
+        '''SELECT s.id AS id, s.folder_name AS folder_name
+           FROM app_system_folders f
+           JOIN app_systems s ON s.id = f.system_id
+           WHERE f.folder_name = ? COLLATE NOCASE LIMIT 1''',
+        [folderName],
+      );
+      if (aliased.isNotEmpty) {
+        return {
+          'app_system_id': aliased.first['id'].toString(),
+          'folder_name': aliased.first['folder_name'].toString(),
+        };
+      }
+      final direct = await db.query(
+        'app_systems',
+        columns: ['id', 'folder_name'],
+        where: 'folder_name = ? COLLATE NOCASE',
+        whereArgs: [folderName],
+        limit: 1,
+      );
+      if (direct.isNotEmpty) {
+        return {
+          'app_system_id': direct.first['id'].toString(),
+          'folder_name': direct.first['folder_name'].toString(),
+        };
+      }
+      return null;
+    } catch (e) {
+      _log.e('Error resolving system for folder "$folderName": $e');
+      return null;
+    }
+  }
+
   /// Marks a game's metadata as fully scraped.
   static Future<void> markGameFullyScraped(String filename) async {
     final db = await SqliteService.getDatabase();
@@ -500,6 +729,119 @@ class ScraperRepository {
       where: 'filename = ?',
       whereArgs: [filename],
     );
+  }
+
+  /// Transfers scraped metadata from the first matching source ROM to a newly
+  /// created multi-disc playlist. Source paths keep the update scoped to the
+  /// correct system, even where different systems contain identically named
+  /// files. Existing playlist metadata is never overwritten.
+  static Future<MetadataTransferResult?> transferMetadataToPlaylist({
+    required List<String> sourceRomPaths,
+    required List<String> sourceFilenames,
+    required String playlistFilename,
+  }) async {
+    if (sourceRomPaths.isEmpty && sourceFilenames.isEmpty) return null;
+
+    try {
+      final db = await SqliteService.getDatabase();
+      return await db.transaction((txn) async {
+        for (var index = 0; index < sourceRomPaths.length; index++) {
+          final sourceRomPath = sourceRomPaths[index];
+          final sourceFilename = index < sourceFilenames.length
+              ? sourceFilenames[index]
+              : null;
+          var sourceRows = await txn.rawQuery(
+            '''
+            SELECT ur.app_system_id, ur.filename
+            FROM user_roms ur
+            INNER JOIN user_screenscraper_metadata usm
+              ON usm.app_system_id = ur.app_system_id
+              AND usm.filename = ur.filename
+            WHERE ur.rom_path = ?
+            ''',
+            [sourceRomPath],
+          );
+
+          if (sourceRows.isEmpty && sourceFilename != null) {
+            final filenameMatches = await txn.rawQuery(
+              '''
+              SELECT ur.app_system_id, ur.filename
+              FROM user_roms ur
+              INNER JOIN user_screenscraper_metadata usm
+                ON usm.app_system_id = ur.app_system_id
+                AND usm.filename = ur.filename
+              WHERE ur.filename = ?
+              ''',
+              [sourceFilename],
+            );
+
+            if (filenameMatches.length == 1) {
+              sourceRows = filenameMatches;
+              _log.i(
+                'Transferring metadata for $sourceFilename using filename fallback.',
+              );
+            } else if (filenameMatches.length > 1) {
+              _log.w(
+                'Metadata transfer skipped for $sourceFilename: filename matches multiple systems.',
+              );
+            }
+          }
+
+          for (final source in sourceRows) {
+            final appSystemId = source['app_system_id'].toString();
+            final matchedFilename = source['filename'].toString();
+            final updated = await txn.rawUpdate(
+              '''
+              UPDATE user_screenscraper_metadata
+              SET filename = ?, updated_at = ?
+              WHERE app_system_id = ? AND filename = ?
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM user_screenscraper_metadata
+                  WHERE app_system_id = ? AND filename = ?
+                )
+              ''',
+              [
+                playlistFilename,
+                DateTime.now().toIso8601String(),
+                appSystemId,
+                matchedFilename,
+                appSystemId,
+                playlistFilename,
+              ],
+            );
+            if (updated > 0) {
+              _log.i(
+                'Transferred metadata from $matchedFilename to $playlistFilename.',
+              );
+              return MetadataTransferResult(
+                appSystemId: appSystemId,
+                metadataTransferred: true,
+              );
+            }
+
+            final targetExists = await txn.query(
+              'user_screenscraper_metadata',
+              columns: ['filename'],
+              where: 'app_system_id = ? AND filename = ?',
+              whereArgs: [appSystemId, playlistFilename],
+              limit: 1,
+            );
+            if (targetExists.isNotEmpty) {
+              return MetadataTransferResult(
+                appSystemId: appSystemId,
+                metadataTransferred: false,
+              );
+            }
+          }
+        }
+        _log.i('No scraped metadata found to transfer to $playlistFilename.');
+        return null;
+      });
+    } catch (e) {
+      _log.e('Error transferring metadata to playlist: $e');
+      return null;
+    }
   }
 
   // ── Bulk scraping ─────────────────────────────────────────────────────────

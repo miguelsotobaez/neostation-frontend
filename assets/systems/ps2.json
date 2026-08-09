@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ps2",
+    "multidisc": true,
     "name": "Sony PlayStation 2",
     "short_name": "PS2",
     "details": {
@@ -84,6 +85,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -104,6 +107,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -124,6 +129,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -144,6 +151,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -164,6 +173,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -184,6 +195,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L pcsx2_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -249,6 +262,17 @@
       }
     },
     {
+      "name": "Standalone ARMSX2 Refresh",
+      "unique_id": "ps2.com.armsx2",
+      "description": "Supported extensions: iso, chd, gz, mdf, bin, ciso, img.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.armsx2/.Main -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
       "name": "Standalone ARMSX2 (Nightly)",
       "unique_id": "ps2.com.nanodata.armsx2.debug",
       "description": "Supported extensions: iso, chd, gz, mdf, bin, ciso, img.",
@@ -260,17 +284,16 @@
       }
     },
     {
-      "name": "Standalone ARMSX2 Refresh",
-      "unique_id": "ps2.com.armsx2",
-      "description": "Supported extensions: iso, chd, gz, mdf, bin, ciso, img.",
+      "name": "EmuCoreX",
+      "unique_id": "ps2.com.sbro.emucorex",
+      "description": "Supported extensions: iso, chd, bin.",
       "is_retroachievements_compatible": true,
       "platforms": {
         "android": {
-          "launch_arguments": "-n com.armsx2/.Main -a android.intent.action.VIEW -d \"{file.uri}\""
+          "launch_arguments": "-n com.sbro.emucorex/.MainActivity -a com.sbro.emucorex.action.LAUNCH_GAME --es com.sbro.emucorex.extra.GAME_PATH \"{file.uri}\" --activity-clear-task --activity-clear-top"
         }
       }
     },
-
     {
       "name": "Standalone PCSX2",
       "unique_id": "ps2.net.pcsx2.android",
@@ -283,6 +306,8 @@
         },
         "linux": {
           "executable": "pcsx2",
+          "flatpak": "net.pcsx2.PCSX2",
+          "emudeck_launcher": "pcsx2-qt.sh",
           "args": "{file.path}"
         },
         "macos": {

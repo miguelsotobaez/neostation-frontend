@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ws",
+    "multidisc": false,
     "name": "WonderSwan",
     "short_name": "WS",
     "details": {
@@ -17,7 +18,8 @@
       "ws",
       "Bandai WonderSwan",
       "WonderSwan",
-      "wswan"
+      "wswan",
+      "wonderswan"
     ],
     "colors": [
       "#B0BEC5",
@@ -83,6 +85,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mednafen_wswan_libretro.so \"{file.path}\""
         },
         "macos": {

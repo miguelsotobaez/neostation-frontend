@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "zxspectrum",
+    "multidisc": false,
     "name": "ZX Spectrum",
     "short_name": "ZXS",
     "details": {
@@ -18,7 +19,8 @@
       "ZX Spectrum",
       "ZX",
       "ZXS",
-      "Spectrum"
+      "Spectrum",
+      "zxs"
     ],
     "colors": [
       "#212121",
@@ -78,6 +80,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fuse_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -101,6 +105,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

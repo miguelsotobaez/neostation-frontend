@@ -9,7 +9,7 @@ set -e
 #     ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
 #     libsqlite3-dev libsecret-1-dev libjsoncpp-dev libasound2-dev libpulse-dev \
 #     libopus-dev libvorbis-dev libflac-dev libogg-dev python3 imagemagick \
-#     patchelf dos2unix desktop-file-utils libgdk-pixbuf2.0-dev fakeroot file \
+#     patchelf binutils dos2unix desktop-file-utils libgdk-pixbuf2.0-dev fakeroot file \
 #     libfuse2 squashfs-tools wget lld
 
 echo "Building Flutter Linux app (x86_64)..."
@@ -131,17 +131,47 @@ if [ ! -d "$APPDIR/usr/bin/data" ]; then
     exit 1
 fi
 
-LIB_DIR="/usr/lib/x86_64-linux-gnu"
+# Library search paths for x86_64 across Debian/Ubuntu and Fedora/RHEL Linux
+LIB_SEARCH_PATHS=(
+  "/usr/lib/x86_64-linux-gnu"
+  "/usr/lib64"
+  "/usr/lib"
+  "/lib/x86_64-linux-gnu"
+  "/lib64"
+)
+
+copy_lib_to_appdir() {
+  local lib_pattern="$1"
+  local found=0
+  for search_dir in "${LIB_SEARCH_PATHS[@]}"; do
+    if [ -d "$search_dir" ]; then
+      while IFS= read -r lib_path; do
+        if [ -n "$lib_path" ] && [ -f "$lib_path" ]; then
+          cp -L "$lib_path" "$APPDIR/usr/lib/" 2>/dev/null || true
+          found=1
+        fi
+      done < <(find "$search_dir" -maxdepth 1 -name "$lib_pattern" 2>/dev/null)
+    fi
+  done
+  return $found
+}
 
 # Copy FFmpeg libraries
 echo "Copying FFmpeg libraries..."
 for lib in libavcodec.so.* libavformat.so.* libavutil.so.* libswscale.so.* libswresample.so.* libavfilter.so.*; do
-  find "$LIB_DIR" -name "$lib" -exec cp -L {} "$APPDIR/usr/lib/" \; 2>/dev/null || true
+  copy_lib_to_appdir "$lib" || true
 done
 
 # Copy SQLite3
-if [ -f "$LIB_DIR/libsqlite3.so.0" ]; then
-  cp -L "$LIB_DIR"/libsqlite3.so.* "$APPDIR/usr/lib/" 2>/dev/null || true
+SQLITE3_FOUND=0
+for search_dir in "${LIB_SEARCH_PATHS[@]}"; do
+  if [ -f "$search_dir/libsqlite3.so.0" ]; then
+    cp -L "$search_dir"/libsqlite3.so.* "$APPDIR/usr/lib/" 2>/dev/null || true
+    SQLITE3_FOUND=1
+    break
+  fi
+done
+if [ "$SQLITE3_FOUND" = "1" ]; then
   cd "$APPDIR/usr/lib/"
   for f in libsqlite3.so.0.*; do
     [ -f "$f" ] && ln -sf "$f" libsqlite3.so.0
@@ -154,14 +184,99 @@ fi
 # Copy X11 libraries
 echo "Copying X11 libraries..."
 for xlib in libX11.so.* libXau.so.* libXdmcp.so.* libXext.so.* libXfixes.so.* libXrender.so.* libXrandr.so.* libXi.so.* libXcursor.so.* libXdamage.so.* libXcomposite.so.* libXpresent.so.* libxcb.so.* libxcb-shm.so.* libxcb-render.so.*; do
-  find "$LIB_DIR" -name "$xlib" -exec cp -L {} "$APPDIR/usr/lib/" \; 2>/dev/null || true
+  copy_lib_to_appdir "$xlib" || true
 done
 
 # Copy SoLoud audio dependencies (loaded at runtime via DynamicLibrary.open — not caught by ldd on main binary)
 echo "Copying SoLoud audio libraries..."
 for audiolib in libFLAC.so.* libFLAC++.so.* libogg.so.* libvorbis.so.* libvorbisenc.so.* libvorbisfile.so.* libopus.so.*; do
-  find "$LIB_DIR" /usr/lib -name "$audiolib" -exec cp -L {} "$APPDIR/usr/lib/" \; 2>/dev/null || true
+  copy_lib_to_appdir "$audiolib" || true
 done
+
+# ...and put them where the loader will actually look. usr/lib is NOT on any
+# runtime search path: AppRun deliberately leaves LD_LIBRARY_PATH unset (see the
+# note there — setting it shadows system GL/EGL and breaks video), so the only
+# bundled directory that resolves is usr/bin/lib, via the executable's
+# RUNPATH of $ORIGIN/lib. libflutter_soloud_plugin.so is dlopen'd from there and
+# needs its FLAC/Xiph deps alongside it. Without this the plugin loads only on
+# hosts that happen to ship the same FLAC SONAME as the build machine — e.g.
+# every release so far has needed libFLAC.so.14, which SteamOS does not have,
+# so audio has never worked on the Steam Deck.
+mkdir -p "$APPDIR/usr/bin/lib"
+for audiolib in libFLAC.so.* libFLAC++.so.* libogg.so.* libvorbis.so.* libvorbisenc.so.* libvorbisfile.so.* libopus.so.*; do
+  for lib_path in "$APPDIR"/usr/lib/$audiolib; do
+    [ -f "$lib_path" ] && cp -L "$lib_path" "$APPDIR/usr/bin/lib/" 2>/dev/null || true
+  done
+done
+
+# The system copies above are not necessarily the ones the plugin was linked against:
+# flutter_soloud ships its own FLAC/Xiph libraries and CMake prefers them ("FLAC: using
+# bundled library: .../flutter_soloud/linux/libs/libFLAC.so" in the build log). Their
+# SONAMEs differ from the build host's — the bundled FLAC is libFLAC.so.14 while Ubuntu
+# 24.04 ships libFLAC.so.12 — so on that host everything above satisfies nothing and the
+# plugin's DT_NEEDED entries go unresolved. Copy the plugin's own libraries in on top,
+# named by SONAME rather than by filename: the package ships each one three times under
+# names that are mostly not its SONAME, and for some there is no correctly-named copy at
+# all (libvorbis is shipped as libvorbis.so/.so.0.4.9, and its SONAME is libvorbis.so.0.4.9).
+SOLOUD_LIBS_DIR="$PROJECT_ROOT/linux/flutter/ephemeral/.plugin_symlinks/flutter_soloud/linux/libs"
+if [ -d "$SOLOUD_LIBS_DIR" ]; then
+  if ! command -v objdump >/dev/null 2>&1; then
+    echo "ERROR: objdump (binutils) is required to bundle flutter_soloud's audio libraries by SONAME."
+    exit 1
+  fi
+  echo "Copying flutter_soloud's bundled audio libraries..."
+  for lib_path in "$SOLOUD_LIBS_DIR"/lib*.so*; do
+    [ -f "$lib_path" ] || continue
+    lib_soname=$(objdump -p "$lib_path" 2>/dev/null | awk '/SONAME/{print $2; exit}')
+    [ -n "$lib_soname" ] || continue
+    cp -L "$lib_path" "$APPDIR/usr/bin/lib/$lib_soname"
+  done
+fi
+
+# Verify critical audio libraries were bundled. Fedora/RHEL places them under /usr/lib64,
+# while Debian/Ubuntu uses /usr/lib/x86_64-linux-gnu. If the build machine lacks the
+# -devel/-dev package, CMake may link against a versioned SONAME that we then fail to ship.
+# Checked in usr/bin/lib, since a copy anywhere else cannot be loaded, and matched by
+# glob rather than by SONAME so the next FLAC bump doesn't silently slip through.
+if ! ls "$APPDIR"/usr/bin/lib/libFLAC.so.* >/dev/null 2>&1; then
+  echo "ERROR: libFLAC was not bundled. Ensure libflac/libflac-dev is installed and found in one of:"
+  printf '  %s\n' "${LIB_SEARCH_PATHS[@]}"
+  exit 1
+fi
+
+# Copying the libraries next to the plugin is necessary but NOT sufficient: the
+# plugin is dlopen'd, and its own DT_NEEDED entries are resolved using ITS RUNPATH,
+# not the executable's. CMake bakes in a RUNPATH pointing at the build machine
+# (linux/flutter/ephemeral/.plugin_symlinks/...), which exists on no user's system,
+# so resolution falls through to the system paths and finds libFLAC only on hosts
+# that happen to ship the same SONAME. Point it at its own directory instead.
+SOLOUD_PLUGIN="$APPDIR/usr/bin/lib/libflutter_soloud_plugin.so"
+if [ -f "$SOLOUD_PLUGIN" ]; then
+  if ! command -v patchelf >/dev/null 2>&1; then
+    echo "ERROR: patchelf is required to fix the SoLoud plugin's RUNPATH (see the dependency list at the top of this script)."
+    exit 1
+  fi
+  patchelf --set-rpath '$ORIGIN' "$SOLOUD_PLUGIN"
+  echo "Set RUNPATH=\$ORIGIN on libflutter_soloud_plugin.so"
+fi
+
+# Belt and braces: the plugin is dlopen'd, so a dependency it cannot find surfaces
+# only as a silent "no audio" on the user's machine. Assert every Xiph/FLAC library
+# it declares is actually sitting next to it. This reads DT_NEEDED rather than using
+# ldd on purpose — ldd resolves against the BUILD HOST's /usr/lib and would pass
+# happily while shipping an AppImage that loads nowhere else.
+if command -v objdump >/dev/null 2>&1 && [ -f "$SOLOUD_PLUGIN" ]; then
+  MISSING_AUDIO_DEPS=""
+  for dep in $(objdump -p "$SOLOUD_PLUGIN" 2>/dev/null | awk '/NEEDED/{print $2}' | grep -E '^lib(FLAC|ogg|vorbis|opus)'); do
+    [ -f "$APPDIR/usr/bin/lib/$dep" ] || MISSING_AUDIO_DEPS="$MISSING_AUDIO_DEPS $dep"
+  done
+  if [ -n "$MISSING_AUDIO_DEPS" ]; then
+    echo "ERROR: libflutter_soloud_plugin.so needs these libraries, which are not in usr/bin/lib:$MISSING_AUDIO_DEPS"
+    echo "       Only usr/bin/lib is on the runtime search path (RUNPATH \$ORIGIN/lib);"
+    echo "       a copy in usr/lib cannot be loaded."
+    exit 1
+  fi
+fi
 
 # Analyze and copy additional binary dependencies
 # Run ldd on main binary AND all bundled .so plugins to catch transitive/runtime-loaded deps

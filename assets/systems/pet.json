@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "pet",
+    "multidisc": false,
     "name": "Commodore - PET",
     "short_name": "PET",
     "details": {
@@ -16,7 +17,8 @@
     "folders": [
       "pet",
       "Commodore PET",
-      "CommodorePET"
+      "CommodorePET",
+      "cpet"
     ],
     "colors": [
       "#BDBDBD",
@@ -89,6 +91,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L vice_xpet_libretro.so \"{file.path}\""
         },
         "macos": {

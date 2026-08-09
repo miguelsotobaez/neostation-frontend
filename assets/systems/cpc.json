@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "cpc",
+    "multidisc": false,
     "name": "Amstrad CPC",
     "short_name": "CPC",
     "details": {
@@ -17,7 +18,9 @@
       "cpc",
       "amstradcpc",
       "Amstrad CPC",
-      "gx4000"
+      "gx4000",
+      "acpc",
+      "amstrad-gx4000"
     ],
     "colors": [
       "#42A5F5",
@@ -98,6 +101,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L crocods_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -122,6 +127,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L cap32_libretro.so \"{file.path}\""
         },
         "macos": {

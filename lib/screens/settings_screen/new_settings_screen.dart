@@ -9,12 +9,13 @@ import 'package:neostation/utils/adaptive_scroll.dart';
 import 'new_settings_options/general_settings_content.dart';
 import 'new_settings_options/secondary_settings_content.dart';
 import 'new_settings_options/directories_settings_content.dart';
+import 'new_settings_options/tools_settings_content.dart';
 import 'new_settings_options/systems_settings_content.dart';
 import 'new_settings_options/launcher_settings_content.dart';
 import 'new_settings_options/about_settings_content.dart';
 import 'new_settings_options/exit_settings_content.dart';
-import 'new_settings_options/palette_settings_content.dart';
 import 'new_settings_options/themes_settings_content.dart';
+import 'new_settings_options/system_art_settings_content.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -38,6 +39,7 @@ class NewSettingsScreen extends StatefulWidget {
   static void navigateLeft() => _currentInstance?._navigateLeft();
   static void navigateRight() => _currentInstance?._navigateRight();
   static void selectCurrent() => _currentInstance?._selectItem();
+  static void deleteCurrent() => _currentInstance?._deleteCurrentItem();
 
   static _NewSettingsScreenState? _currentInstance;
 }
@@ -74,12 +76,14 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       GlobalKey<GeneralSettingsContentState>();
   final GlobalKey<SecondarySettingsContentState> _secondarySettingsKey =
       GlobalKey<SecondarySettingsContentState>();
-  final GlobalKey<PaletteSettingsContentState> _paletteSettingsKey =
-      GlobalKey<PaletteSettingsContentState>();
   final GlobalKey<ThemesSettingsContentState> _themesSettingsKey =
       GlobalKey<ThemesSettingsContentState>();
+  final GlobalKey<SystemArtSettingsContentState> _systemArtSettingsKey =
+      GlobalKey<SystemArtSettingsContentState>();
   final GlobalKey<DirectoriesSettingsContentState> _directoriesSettingsKey =
       GlobalKey<DirectoriesSettingsContentState>();
+  final GlobalKey<ToolsSettingsContentState> _toolsSettingsKey =
+      GlobalKey<ToolsSettingsContentState>();
   final GlobalKey<SystemsSettingsContentState> _systemsSettingsKey =
       GlobalKey<SystemsSettingsContentState>();
   final GlobalKey<AboutSettingsContentState> _aboutSettingsKey =
@@ -135,6 +139,15 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       ),
     );
 
+    _menuItems.add(
+      SettingsMenuItem(
+        title: '',
+        localeKey: AppLocale.tools,
+        icon: Symbols.build_rounded,
+        isVisible: true,
+      ),
+    );
+
     if (_menuIncludesSecondary) {
       _menuItems.add(
         SettingsMenuItem(
@@ -158,7 +171,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     _menuItems.add(
       SettingsMenuItem(
         title: '',
-        localeKey: AppLocale.palettes,
+        localeKey: AppLocale.themes,
         icon: Symbols.palette_rounded,
         isVisible: true,
       ),
@@ -167,7 +180,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     _menuItems.add(
       SettingsMenuItem(
         title: '',
-        localeKey: AppLocale.neoThemes,
+        localeKey: AppLocale.systemArt,
         icon: Symbols.image_rounded,
         isVisible: true,
       ),
@@ -223,12 +236,12 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
 
     // Content-Specific Navigation Overrides.
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
-    if (selectedKey == AppLocale.palettes) {
-      _paletteSettingsKey.currentState?.navigateUp();
+    if (selectedKey == AppLocale.themes) {
+      _themesSettingsKey.currentState?.navigateUp();
       return true;
     }
-    if (selectedKey == AppLocale.neoThemes) {
-      _themesSettingsKey.currentState?.navigateUp();
+    if (selectedKey == AppLocale.systemArt) {
+      _systemArtSettingsKey.currentState?.navigateUp();
       return true;
     }
 
@@ -255,6 +268,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _directoriesSettingsKey.currentState?.scrollToIndex(
         _selectedContentIndex,
       );
+    } else if (selectedKey == AppLocale.tools) {
+      _toolsSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.systemsSettings) {
       _systemsSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.about) {
@@ -272,12 +287,12 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     }
 
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
-    if (selectedKey == AppLocale.palettes) {
-      _paletteSettingsKey.currentState?.navigateDown();
+    if (selectedKey == AppLocale.themes) {
+      _themesSettingsKey.currentState?.navigateDown();
       return true;
     }
-    if (selectedKey == AppLocale.neoThemes) {
-      _themesSettingsKey.currentState?.navigateDown();
+    if (selectedKey == AppLocale.systemArt) {
+      _systemArtSettingsKey.currentState?.navigateDown();
       return true;
     }
 
@@ -297,18 +312,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     if (_focusOnMenu) return;
 
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
-    if (selectedKey == AppLocale.palettes) {
+    if (selectedKey == AppLocale.themes) {
       final returnToMenu =
-          _paletteSettingsKey.currentState?.navigateLeft() ?? true;
+          _themesSettingsKey.currentState?.navigateLeft() ?? true;
       if (returnToMenu) {
         setState(() {
           _focusOnMenu = true;
           _selectedContentIndex = 0;
         });
       }
-    } else if (selectedKey == AppLocale.neoThemes) {
+    } else if (selectedKey == AppLocale.systemArt) {
       final returnToMenu =
-          _themesSettingsKey.currentState?.navigateLeft() ?? true;
+          _systemArtSettingsKey.currentState?.navigateLeft() ?? true;
       if (returnToMenu) {
         setState(() {
           _focusOnMenu = true;
@@ -335,10 +350,10 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     }
 
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
-    if (selectedKey == AppLocale.palettes) {
-      _paletteSettingsKey.currentState?.navigateRight();
-    } else if (selectedKey == AppLocale.neoThemes) {
+    if (selectedKey == AppLocale.themes) {
       _themesSettingsKey.currentState?.navigateRight();
+    } else if (selectedKey == AppLocale.systemArt) {
+      _systemArtSettingsKey.currentState?.navigateRight();
     }
   }
 
@@ -351,6 +366,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     }
   }
 
+  /// Delete Protocol: routes the X button to a delete action on the focused
+  /// content item. Currently only the Themes category (imported themes) uses it.
+  void _deleteCurrentItem() {
+    if (_focusOnMenu) return;
+    final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
+    if (selectedKey == AppLocale.themes) {
+      _themesSettingsKey.currentState?.deleteFocusedTheme(
+        _selectedContentIndex,
+      );
+    }
+  }
+
   /// Resolves the total item count for the currently active category.
   int _getContentItemCount() {
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
@@ -358,12 +385,14 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       return _generalSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.secondaryDisplay) {
       return _secondarySettingsKey.currentState?.getItemCount() ?? 0;
-    } else if (selectedKey == AppLocale.palettes) {
-      return _paletteSettingsKey.currentState?.getItemCount(context) ?? 0;
-    } else if (selectedKey == AppLocale.neoThemes) {
-      return _themesSettingsKey.currentState?.getItemCount() ?? 0;
+    } else if (selectedKey == AppLocale.themes) {
+      return _themesSettingsKey.currentState?.getItemCount(context) ?? 0;
+    } else if (selectedKey == AppLocale.systemArt) {
+      return _systemArtSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.directories) {
       return _directoriesSettingsKey.currentState?.getItemCount() ?? 0;
+    } else if (selectedKey == AppLocale.tools) {
+      return _toolsSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.systemsSettings) {
       final provider = context.read<SqliteConfigProvider>();
       return _systemsSettingsKey.currentState?.getItemCount(provider) ?? 0;
@@ -381,12 +410,14 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
     if (selectedKey == AppLocale.general) {
       _generalSettingsKey.currentState?.selectItem(_selectedContentIndex);
-    } else if (selectedKey == AppLocale.palettes) {
-      _paletteSettingsKey.currentState?.selectItem(_selectedContentIndex);
-    } else if (selectedKey == AppLocale.neoThemes) {
+    } else if (selectedKey == AppLocale.themes) {
       _themesSettingsKey.currentState?.selectItem(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.systemArt) {
+      _systemArtSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.directories) {
       _directoriesSettingsKey.currentState?.selectItem(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.tools) {
+      _toolsSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.secondaryDisplay) {
       _secondarySettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.systemsSettings) {
@@ -408,6 +439,9 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     final bool shouldShutdown = config.bartopExitPoweroff;
 
     if (Platform.isAndroid) {
+      // The secondary display's persisted artwork is neutralised by
+      // SqliteConfigProvider.didChangeAppLifecycleState on the detached that
+      // follows this pop, so no explicit clear is needed here.
       SystemNavigator.pop();
     } else {
       if (shouldShutdown) {
@@ -565,6 +599,12 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
       );
+    } else if (selectedKey == AppLocale.tools) {
+      return ToolsSettingsContent(
+        key: _toolsSettingsKey,
+        isContentFocused: !_focusOnMenu,
+        selectedContentIndex: _selectedContentIndex,
+      );
     } else if (selectedKey == AppLocale.secondaryDisplay) {
       return SecondarySettingsContent(
         key: _secondarySettingsKey,
@@ -577,9 +617,9 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
       );
-    } else if (selectedKey == AppLocale.palettes) {
-      return PaletteSettingsContent(
-        key: _paletteSettingsKey,
+    } else if (selectedKey == AppLocale.themes) {
+      return ThemesSettingsContent(
+        key: _themesSettingsKey,
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
         onSelectionChanged: (newIndex) {
@@ -588,9 +628,9 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
           });
         },
       );
-    } else if (selectedKey == AppLocale.neoThemes) {
-      return ThemesSettingsContent(
-        key: _themesSettingsKey,
+    } else if (selectedKey == AppLocale.systemArt) {
+      return SystemArtSettingsContent(
+        key: _systemArtSettingsKey,
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
         onSelectionChanged: (newIndex) {

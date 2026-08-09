@@ -3,6 +3,7 @@ import 'package:neostation/screens/app_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/widgets/music_notification_listener.dart';
+import 'package:neostation/widgets/scraping_notification_listener.dart';
 
 class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
@@ -11,7 +12,9 @@ class MainScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       key: context.read<MenuAppProvider>().scaffoldKey,
-      body: MusicNotificationListener(child: AppScreen()),
+      body: ScrapingNotificationListener(
+        child: MusicNotificationListener(child: AppScreen()),
+      ),
     );
   }
 }

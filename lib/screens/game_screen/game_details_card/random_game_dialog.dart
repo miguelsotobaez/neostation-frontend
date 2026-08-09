@@ -102,8 +102,8 @@ class _RandomGameDialogState extends State<RandomGameDialog>
           widget.onPlayGame(_selectedGame!);
         }
       },
-      // Gamepad SELECT (View): Restart the randomization process.
-      onSelectButton: () {
+      // Gamepad X: Restart the randomization process.
+      onXButton: () {
         if (!_isAnimating && _showPlayButton) {
           _reroll();
         }
@@ -198,6 +198,14 @@ class _RandomGameDialogState extends State<RandomGameDialog>
         ? game.systemFolderName!
         : widget.systemFolderName;
     return game.getImagePath(systemFolder, imageType, widget.fileProvider);
+  }
+
+  /// Resolves the background image, preferring the screenshot and falling back
+  /// to fanart when the game has no screenshot on disk.
+  File _resolveBackgroundFile(GameModel game) {
+    final screenshotFile = File(_getImagePath(game, 'screenshots'));
+    if (screenshotFile.existsSync()) return screenshotFile;
+    return File(_getImagePath(game, 'fanarts'));
   }
 
   @override
@@ -321,7 +329,7 @@ class _RandomGameDialogState extends State<RandomGameDialog>
                         BlendMode.srcIn,
                       ),
                       child: Image.asset(
-                        'assets/images/gamepad/Xbox_View_button.png',
+                        'assets/images/gamepad/Xbox_X_button.png',
                         width: 14.r,
                         height: 14.r,
                         errorBuilder: (context, e, s) => Icon(
@@ -408,8 +416,7 @@ class _RandomGameDialogState extends State<RandomGameDialog>
 
   /// Core UI layout: Features a gradient-masked screenshot background and meta-info overlay.
   Widget _buildBody(ThemeData theme, GameModel currentGame) {
-    final screenshotPath = _getImagePath(currentGame, 'screenshots');
-    final screenshotFile = File(screenshotPath);
+    final screenshotFile = _resolveBackgroundFile(currentGame);
 
     return Stack(
       fit: StackFit.expand,

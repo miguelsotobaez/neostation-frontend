@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "zx81",
+    "multidisc": false,
     "name": "ZX 81",
     "short_name": "ZX81",
     "details": {
@@ -70,6 +71,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L 81_libretro.so \"{file.path}\""
         },
         "macos": {

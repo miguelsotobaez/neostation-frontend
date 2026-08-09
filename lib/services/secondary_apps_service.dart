@@ -79,7 +79,9 @@ class SecondaryAppsService {
     try {
       await _channel.invokeMethod('openAccessibilitySettings');
     } on PlatformException catch (e) {
-      _log.e("Secondary: failed to open accessibility settings: '${e.message}'.");
+      _log.e(
+        "Secondary: failed to open accessibility settings: '${e.message}'.",
+      );
     }
   }
 }

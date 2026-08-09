@@ -14,6 +14,11 @@ class GameDetailsGeneralTab extends StatelessWidget {
   final SystemModel system;
   final GameModel game;
   final FileProvider fileProvider;
+
+  /// Bumped when a scrape rewrites the artwork. It keys the wheel images so a
+  /// re-scraped logo is resolved again instead of being redrawn from the copy
+  /// this widget already holds.
+  final int imageVersion;
   final Future<Uint8List?>? androidAppIconFuture;
 
   const GameDetailsGeneralTab({
@@ -21,6 +26,7 @@ class GameDetailsGeneralTab extends StatelessWidget {
     required this.system,
     required this.game,
     required this.fileProvider,
+    this.imageVersion = 0,
     this.androidAppIconFuture,
   });
 
@@ -46,7 +52,7 @@ class GameDetailsGeneralTab extends StatelessWidget {
           Positioned.fill(
             child: Center(
               child: Transform.translate(
-                offset: Offset(4.r, 4.r),
+                offset: Offset(6.r, 6.r),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 320),
                   switchInCurve: Curves.easeOutQuint,
@@ -58,12 +64,16 @@ class GameDetailsGeneralTab extends StatelessWidget {
                       ? Image.file(
                           File(wheelPath),
                           key: ValueKey(
-                            'wheel_shadow_${game.romPath ?? game.romname}',
+                            'wheel_shadow_${game.romPath ?? game.romname}'
+                            '_v$imageVersion',
                           ),
                           fit: BoxFit.contain,
                           filterQuality: FilterQuality.low,
-                          cacheWidth: 32,
-                          color: Colors.black.withValues(alpha: 0.7),
+                          cacheWidth: 256,
+                          isAntiAlias: false,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.shadow.withValues(alpha: 0.5),
                           height: 140.r,
                           width: 280.r,
                         )
@@ -79,8 +89,10 @@ class GameDetailsGeneralTab extends StatelessWidget {
                                 snapshot.data!,
                                 fit: BoxFit.contain,
                                 filterQuality: FilterQuality.low,
-                                color: Colors.black.withValues(alpha: 0.7),
-                                cacheWidth: 40,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.shadow.withValues(alpha: 0.7),
+                                cacheWidth: 32,
                                 height: 60.r,
                                 width: 60.r,
                                 alignment: Alignment.center,
@@ -110,7 +122,10 @@ class GameDetailsGeneralTab extends StatelessWidget {
                 child: wheelExists
                     ? Image.file(
                         File(wheelPath),
-                        key: ValueKey('wheel_${game.romPath ?? game.romname}'),
+                        key: ValueKey(
+                          'wheel_${game.romPath ?? game.romname}'
+                          '_v$imageVersion',
+                        ),
                         fit: BoxFit.contain,
                         cacheWidth: 640,
                         height: 140.r,
@@ -125,7 +140,7 @@ class GameDetailsGeneralTab extends StatelessWidget {
                             return Image.memory(
                               snapshot.data!,
                               fit: BoxFit.contain,
-                              cacheWidth: 60,
+                              cacheWidth: 32,
                               height: 60.r,
                               width: 60.r,
                               alignment: Alignment.center,

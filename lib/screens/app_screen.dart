@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/nav_tabs.dart';
+import 'package:neostation/models/config_model.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/update_service.dart';
 import 'package:neostation/services/systems_update_service.dart';
@@ -9,15 +11,14 @@ import 'package:neostation/widgets/systems_update_dialog.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../widgets/fixed_header.dart';
 import 'systems_screen/system_content.dart';
+import 'search_screen/search_screen.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
-import 'neo_sync_screen/login_screen/neo_sync_content.dart';
 import 'neo_sync_screen/neo_sync_tab.dart';
 import '../widgets/scraper_content.dart';
 import 'package:neostation/services/game_service.dart';
-import 'package:neostation/services/android_service.dart';
-import 'package:neostation/providers/palette_provider.dart';
+import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
 import 'dart:async';
 import 'dart:io';
@@ -33,11 +34,34 @@ class AppScreen extends StatefulWidget {
   AppScreenState createState() => AppScreenState();
 }
 
+/// Top-level navigation tab order.
+///
+/// The header renders tabs in this order and [AppScreenState] delegates input
+/// per tab, so both must agree — these constants are the single definition of
+/// that order. Inserting a tab shifts every later index, which is why the
+/// delegation logic below is written against these names rather than literals.
+abstract final class AppTabs {
+  static const int systems = 0;
+  static const int search = 1;
+  static const int sync = 2;
+  static const int achievements = 3;
+  static const int scraper = 4;
+  static const int settings = 5;
+
+  /// Total number of tabs, used for wrap-around when cycling with the bumpers.
+  static const int count = 6;
+}
+
 /// Bridge class providing static access to the main application navigation state.
 ///
 /// Facilitates tab switching and navigation lifecycle control from deep within
 /// the component tree without requiring direct context propagation.
 class AppNavigation {
+  /// Switches directly to [index] (see [AppTabs]).
+  static void goToTab(int index) {
+    AppScreenState._selectTabStatic(index);
+  }
+
   /// Temporarily suspends global gamepad and keyboard navigation.
   static void deactivate() {
     AppScreenState.deactivateNavigation();
@@ -71,18 +95,25 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   /// Input orchestration layer for gamepad and keyboard support.
   late GamepadNavigation _gamepadNav;
 
-  /// Cached list of primary content widgets for each navigation tab.
-  late final List<Widget> _tabContents;
-
   /// Static reference to the currently active instance for global access.
   static AppScreenState? _currentInstance;
 
-  PaletteProvider? _themeProvider;
+  ThemeProvider? _themeProvider;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _themeProvider = Provider.of<PaletteProvider>(context, listen: false);
+    // Attach the secondary-display theme sync here (not in initState): the
+    // provider isn't resolvable until didChangeDependencies runs, so an
+    // initState addListener would silently no-op on a null _themeProvider and
+    // the secondary display would never pick up theme changes until an
+    // unrelated re-push. Re-bind if the provider instance ever changes.
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (!identical(themeProvider, _themeProvider)) {
+      _themeProvider?.removeListener(_onThemeChanged);
+      _themeProvider = themeProvider;
+      _themeProvider!.addListener(_onThemeChanged);
+    }
   }
 
   @override
@@ -90,14 +121,6 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     super.initState();
     _currentInstance = this;
     WidgetsBinding.instance.addObserver(this);
-
-    _tabContents = [
-      SystemContent(), // Tab 0: Game Systems
-      NeoSyncContent(), // Tab 1: Cloud Persistence (NeoSync)
-      RAContent(), // Tab 2: RetroAchievements
-      ScraperContent(), // Tab 3: Metadata Scraper
-      NewSettingsScreen(), // Tab 4: Global Settings
-    ];
 
     // Initialize the navigation bridge with core application callbacks.
     _gamepadNav = GamepadNavigation(
@@ -110,6 +133,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
       onSelectItem: _selectCurrentItem,
       onSettings: _handleSettings,
       onBack: _handleBackNavigation,
+      onXButton: _handleXButton,
     );
 
     // Asynchronous initialization of navigation and update checking.
@@ -127,8 +151,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
       _runUpdateSequence();
     });
 
-    // Synchronize theme changes with secondary displays (e.g., dual-screen hardware).
-    _themeProvider?.addListener(_onThemeChanged);
+    // Secondary-display theme sync is attached in didChangeDependencies, where
+    // the ThemeProvider is first resolvable (see note there).
   }
 
   /// Runs the sequenced update flow: updates first, then one ROM scan.
@@ -157,9 +181,16 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     // timeouts) left the Systems tab completely blank until they timed out. The
     // scan flips isScanning/isLoading, so the user sees a spinner then content.
     final startupScanPending = configProvider.consumeStartupScan();
+    _log.i(
+      'AppScreen: startupScanPending=$startupScanPending, mounted=$mounted',
+    );
     Future<void>? initialScan;
-    if (startupScanPending && configProvider.hasRomFolder && mounted) {
-      initialScan = configProvider.scanSystems();
+    if (startupScanPending && mounted) {
+      // A default launcher may be started before removable storage has mounted.
+      // Let the startup scan wait for it rather than interpreting an empty SD
+      // card as a library whose ROMs were deleted.
+      initialScan = configProvider.scanSystems(waitForAndroidStorage: true);
+      _log.i('AppScreen: initial startup scan started');
     }
 
     unawaited(_fixRetroarchAndroidDefault());
@@ -195,33 +226,22 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     if (!Platform.isAndroid) return;
 
     try {
-      final packages = await EmulatorRepository.getAndroidRetroArchPackages();
-      if (packages.isEmpty) {
+      // Already filtered to installed variants and ordered best-first, so the
+      // first entry is the one to promote. Only promote a variant that is
+      // actually installed: falling back to an uninstalled package would
+      // silently replace working standalone defaults with a broken core one.
+      final installed =
+          await EmulatorRepository.getInstalledAndroidRetroArchPackages();
+
+      if (installed.isEmpty) {
         await EmulatorRepository.clearRetroArchDefaultsForAndroid();
-        _log.i('Android: No RetroArch found, cleared RetroArch defaults');
+        _log.i(
+          'Android: No RetroArch variant installed; cleared RA defaults so standalone defaults remain active',
+        );
         return;
       }
 
-      const priorityOrder = [
-        'com.retroarch.aarch64',
-        'com.retroarch',
-        'com.retroarch.ra32',
-      ];
-
-      String? chosenPackage;
-      for (final pkg in priorityOrder) {
-        if (packages.contains(pkg) &&
-            await AndroidService.isPackageInstalled(pkg)) {
-          chosenPackage = pkg;
-          break;
-        }
-      }
-
-      chosenPackage ??= priorityOrder.firstWhere(
-        (p) => packages.contains(p),
-        orElse: () => 'com.retroarch.aarch64',
-      );
-
+      final chosenPackage = installed.first;
       await EmulatorRepository.fixRetroArchDefaultForAndroid(chosenPackage);
       _log.i('Android: Set RetroArch default package to $chosenPackage');
     } catch (e) {
@@ -314,9 +334,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
     secondaryState.updateState(
       isOled: themeProvider.isOled,
-      backgroundColor: themeProvider.currentPalette.scaffoldBackgroundColor
+      backgroundColor: themeProvider.currentTheme.scaffoldBackgroundColor
           .toARGB32(),
-      themeName: themeProvider.currentPaletteName,
+      themeName: themeProvider.currentThemeName,
     );
 
     _log.i(
@@ -342,6 +362,10 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     _currentInstance?._navigateToPreviousTab();
   }
 
+  static void _selectTabStatic(int index) {
+    _currentInstance?._onTabSelected(index);
+  }
+
   // ==========================================
   // NAVIGATION DELEGATION LOGIC
   // ==========================================
@@ -349,26 +373,26 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   // to allow for context-aware navigation patterns (Grid vs List vs Paged).
 
   void _navigateContentRight() {
-    if (_selectedTabIndex == 0) {
+    if (_selectedTabIndex == AppTabs.systems) {
       return; // Grid navigation delegated to my_systems.dart via provider.
     }
-    if (_selectedTabIndex == 3) {
+    if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateRight();
       return;
     }
-    if (_selectedTabIndex == 4) {
+    if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.navigateRight();
       return;
     }
   }
 
   void _navigateContentLeft() {
-    if (_selectedTabIndex == 0) return;
-    if (_selectedTabIndex == 3) {
+    if (_selectedTabIndex == AppTabs.systems) return;
+    if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateLeft();
       return;
     }
-    if (_selectedTabIndex == 4) {
+    if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.navigateLeft();
       return;
     }
@@ -376,55 +400,62 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   /// Returns whether the selection moved, so the gamepad handler can suppress
   /// the nav sound when repeating against the start/end of a list.
+  ///
+  /// The achievements tab is absent: `RAContent` pushes its own navigation
+  /// layer unconditionally, so this handler is deactivated whenever that tab is
+  /// mounted. Keeping a second route to the same screen is what caused the
+  /// double-dispatch bug fixed in #255.
   bool _navigateContentDown() {
-    if (_selectedTabIndex == 0) return true;
-    if (_selectedTabIndex == 2) {
-      return RAContent.navigateDown();
-    }
-    if (_selectedTabIndex == 3) {
+    if (_selectedTabIndex == AppTabs.systems) return true;
+    if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateDown();
       return true;
     }
-    if (_selectedTabIndex == 4) {
+    if (_selectedTabIndex == AppTabs.settings) {
       return NewSettingsScreen.navigateDown();
     }
     return true;
   }
 
   bool _navigateContentUp() {
-    if (_selectedTabIndex == 0) return true;
-    if (_selectedTabIndex == 2) {
-      return RAContent.navigateUp();
-    }
-    if (_selectedTabIndex == 3) {
+    if (_selectedTabIndex == AppTabs.systems) return true;
+    if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateUp();
       return true;
     }
-    if (_selectedTabIndex == 4) {
+    if (_selectedTabIndex == AppTabs.settings) {
       return NewSettingsScreen.navigateUp();
     }
     return true;
   }
 
   void _handleSettings() {
-    if (_selectedTabIndex == 0) {
+    if (_selectedTabIndex == AppTabs.systems) {
       return;
     }
   }
 
   void _handleBackNavigation() {
-    if (_selectedTabIndex == 3) {
+    if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.backCurrent();
     }
   }
 
   void _selectCurrentItem() async {
-    if (_selectedTabIndex == 0) return;
+    if (_selectedTabIndex == AppTabs.systems) return;
 
-    if (_selectedTabIndex == 3) {
+    if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.selectCurrent();
-    } else if (_selectedTabIndex == 4) {
+    } else if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.selectCurrent();
+    }
+  }
+
+  /// X button: on the Settings tab this deletes the focused item (used to remove
+  /// imported themes). No-op elsewhere.
+  void _handleXButton() {
+    if (_selectedTabIndex == AppTabs.settings) {
+      NewSettingsScreen.deleteCurrent();
     }
   }
 
@@ -450,7 +481,11 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
     // Re-verify navigation focus after tab transition.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _gamepadNav.activate();
+      // The destination tab may have pushed its own navigation layer during
+      // the rebuild. Reactivate the stack's top layer instead of unconditionally
+      // reactivating AppScreen, which would leave two controllers handling the
+      // same D-pad event (e.g. Username -> API Key -> Connect in one press).
+      GamepadNavigationManager.reactivate();
     });
   }
 
@@ -463,28 +498,28 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
       ).secondaryDisplayState;
       if (secondaryState == null) return;
 
-      final paletteProvider = Provider.of<PaletteProvider>(
-        context,
-        listen: false,
-      );
-      final isOled = paletteProvider.isOled;
+      final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+      final isOled = themeProvider.isOled;
 
-      if (index == 0) {
+      if (index == AppTabs.systems) {
         return; // System tab manages its own secondary display state.
       }
 
       String tabName = '';
       switch (index) {
-        case 1:
+        case AppTabs.search:
+          tabName = 'Search';
+          break;
+        case AppTabs.sync:
           tabName = 'Sync';
           break;
-        case 2:
+        case AppTabs.achievements:
           tabName = 'Achievements';
           break;
-        case 3:
+        case AppTabs.scraper:
           tabName = 'Scraper';
           break;
-        case 4:
+        case AppTabs.settings:
           tabName = 'Settings';
           break;
       }
@@ -493,9 +528,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         systemName: tabName,
         useFluidShader: true,
         isOled: isOled,
-        backgroundColor: paletteProvider.currentPalette.scaffoldBackgroundColor
+        backgroundColor: themeProvider.currentTheme.scaffoldBackgroundColor
             .toARGB32(),
-        themeName: paletteProvider.currentPaletteName,
+        themeName: themeProvider.currentThemeName,
         isGameSelected: false,
         clearSystemLogo: true,
         clearSystemBackground: true,
@@ -508,21 +543,51 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _navigateToNextTab() {
-    final nextIndex = (_selectedTabIndex + 1) % _tabContents.length;
-    _onTabSelected(nextIndex);
+  /// Tabs the user hasn't hidden, in canonical order. Never empty — Systems and
+  /// Settings can't be hidden.
+  List<NavTab> get _visibleTabs => visibleNavTabs(
+    Provider.of<SqliteConfigProvider>(context, listen: false).config,
+  );
+
+  /// Steps [step] places through the visible tabs, wrapping at both ends, so a
+  /// hidden tab is skipped rather than selected and immediately bounced.
+  void _cycleTab(int step) {
+    final visible = _visibleTabs;
+    if (visible.isEmpty) return;
+
+    final current = NavTab.values[_selectedTabIndex];
+    final position = visible.indexOf(current);
+    // Currently on a hidden tab (config changed underneath us): step from the
+    // start of the strip rather than off the end of the list.
+    final from = position == -1 ? 0 : position;
+    final next = (from + step + visible.length) % visible.length;
+    _onTabSelected(visible[next].index);
   }
 
-  void _navigateToPreviousTab() {
-    final previousIndex =
-        (_selectedTabIndex - 1 + _tabContents.length) % _tabContents.length;
-    _onTabSelected(previousIndex);
+  void _navigateToNextTab() => _cycleTab(1);
+
+  void _navigateToPreviousTab() => _cycleTab(-1);
+
+  /// Falls back to Systems if the selected tab is no longer visible.
+  ///
+  /// Unreachable in normal use (the toggles live on Settings, which can't be
+  /// hidden), but it keeps an imported or cloud-restored config from stranding
+  /// the user on a tab that has no entry in the strip.
+  void _ensureSelectedTabVisible(ConfigModel config) {
+    if (visibleNavTabs(config).contains(NavTab.values[_selectedTabIndex])) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onTabSelected(NavTab.systems.index);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SqliteConfigProvider, PaletteProvider>(
-      builder: (context, configProvider, paletteProvider, child) {
+    return Consumer2<SqliteConfigProvider, ThemeProvider>(
+      builder: (context, configProvider, themeProvider, child) {
+        _ensureSelectedTabVisible(configProvider.config);
+
         return PopScope(
           canPop: false, // Intercept hardware back button to maintain app flow.
           child: Scaffold(
@@ -579,22 +644,29 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   /// Content factory for the currently selected tab.
   Widget _buildCurrentTabContent() {
     switch (_selectedTabIndex) {
-      case 0:
+      case AppTabs.systems:
         return SystemContent(
           selectedIndex: _selectedSystemIndex,
           onCardTapped: _onSystemCardTapped,
         );
-      case 1:
+      case AppTabs.search:
+        // Search owns its own gamepad layer (text field + filter menus), so the
+        // app-level handler steps aside while it is on screen.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _gamepadNav.deactivate();
+        });
+        return const SearchScreen();
+      case AppTabs.sync:
         // NeoSync tab manages its own focus lifecycle due to complex login flows.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _gamepadNav.deactivate();
         });
         return const NeoSyncTab();
-      case 2:
+      case AppTabs.achievements:
         return RAContent();
-      case 3:
+      case AppTabs.scraper:
         return ScraperContent();
-      case 4:
+      case AppTabs.settings:
         return NewSettingsScreen();
       default:
         return SystemContent(

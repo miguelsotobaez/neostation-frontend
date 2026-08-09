@@ -48,7 +48,7 @@ Key providers:
 - `SqliteConfigProvider` — main app state (ROM folders, systems, scanning)
 - `SqliteDatabaseProvider` — game library data
 - `NeoSyncProvider` — cloud save sync state
-- `ThemeProvider` — theme switching (6 themes)
+- `ThemeProvider` — theme switching (14 built-in themes + user custom themes)
 - `RetroAchievementsProvider` — RA user data and achievements
 
 ### Business Logic Layer
@@ -57,6 +57,7 @@ Key providers:
 
 Key services:
 - `NeoSyncService` — cloud file synchronization
+- `SyncManager` (`lib/sync/`) — provider-agnostic save-sync orchestration; cloud backends implement `ISyncProvider` (NeoSync adapter under `lib/sync/providers/`)
 - `RetroAchievementsService` — RA API client
 - `ScreenScraperService` — metadata scraping with concurrency control
 - `GameService` — game launching and session tracking
@@ -104,6 +105,7 @@ Database migrations are versioned in `lib/data/datasources/sqlite_migrations.dar
 
 - **Desktop (Windows/Linux/macOS)**: Uses `window_manager` and `fullscreen_window` for fullscreen toggling. Supports `Alt+Enter` shortcut.
 - **Android**: Uses immersive sticky mode, landscape lock, and a custom directory picker for Android TV.
+- **Dual-screen handhelds (Android)**: the secondary display runs a second Flutter engine (`subDisplay()` entrypoint in `main.dart`, via the `sub_screen` package) rendering `lib/screens/secondary_screen/`. It is a separate isolate: no shared memory with the main engine — state is shared only through the SQLite database.
 - **Gamepad input**: Handled via the local `gamepads` plugin with custom navigation logic in `lib/utils/gamepad_nav.dart`.
 
 ## Local Packages (Vendored)
@@ -112,7 +114,6 @@ To maintain stability and performance, some libraries are maintained within the 
 
 - **`gamepads`**: A modified version of Flame Engine's gamepad library, optimized for low-latency UI navigation and multi-controller support.
 - **`flutter_7zip`**: FFI bindings for the 7-Zip library. Used for efficient extraction of compressed ROMs (7z, zip, rar) with progress tracking.
-- **`flutter_soloud`**: Low-level audio engine. Bypasses standard Flutter audio plugins to provide the low-latency SFX and background music required for a console-like experience.
 
 ## Asset Bootstrap
 

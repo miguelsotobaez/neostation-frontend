@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "gog",
+    "multidisc": false,
     "name": "GOG",
     "neosync": {
       "sync": false,

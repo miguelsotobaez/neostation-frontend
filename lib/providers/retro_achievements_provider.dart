@@ -10,6 +10,7 @@ import '../models/retro_achievements_dashboard_models.dart';
 import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
 import '../models/retro_achievements_user_awards.dart';
+import 'retro_achievements_credentials.dart';
 import 'retroachievements/strategy_factory.dart';
 
 /// Provider responsible for managing the integration with RetroAchievements.org.
@@ -99,6 +100,11 @@ class RetroAchievementsProvider extends ChangeNotifier {
   bool _userAwardsLoading = false;
   String? _userAwardsError;
 
+  /// Cached filtered/sorted award lists so the dashboard build doesn't redo
+  /// the work on every frame.
+  List<UserAward> _cachedRecentMasteries = [];
+  List<UserAward> _cachedRecentCompletions = [];
+
   List<RetroAchievementRecentUnlockItem> _recentUnlocks = [];
   bool _recentUnlocksLoaded = false;
   bool _recentUnlocksLoading = false;
@@ -155,11 +161,10 @@ class RetroAchievementsProvider extends ChangeNotifier {
   }
 
   /// Recent mastery awards (hardcore) visible to the user.
-  List<UserAward> get recentMasteries => _recentAwardsForMode(hardcore: true);
+  List<UserAward> get recentMasteries => _cachedRecentMasteries;
 
   /// Recent completion awards (casual) visible to the user.
-  List<UserAward> get recentCompletions =>
-      _recentAwardsForMode(hardcore: false);
+  List<UserAward> get recentCompletions => _cachedRecentCompletions;
 
   RetroAchievementsUserAwards? get userAwards => _userAwards;
   bool get userAwardsLoaded => _userAwardsLoaded;
@@ -373,7 +378,13 @@ class RetroAchievementsProvider extends ChangeNotifier {
         apiKey: _apiKey,
       );
       if (awardsData != null) {
-        _userAwards = RetroAchievementsUserAwards.fromJson(awardsData);
+        // Parse the (potentially large) awards payload off the main thread so
+        // the dashboard doesn't jank while building.
+        _userAwards = await compute(
+          _parseRetroAchievementsUserAwards,
+          awardsData,
+        );
+        _updateRecentAwardsCache();
         _userAwardsLoaded = true;
         return true;
       }
@@ -442,9 +453,34 @@ class RetroAchievementsProvider extends ChangeNotifier {
   /// Initializes the provider and attempts automatic login with stored credentials.
   Future<void> initialize() async {
     try {
-      final loggedIn = await tryAutoLogin();
-      if (loggedIn) {
-        await fetchGOTW();
+      // When NeoStation is the default launcher it can start before Wi-Fi has
+      // reconnected. Credentials are already persisted, but a single failed
+      // request made during that window used to leave the UI signed out until
+      // the user restarted the app. Retry only during initialization and only
+      // while a stored account exists; manual login remains a single attempt.
+      const maxAttempts = 5;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        final loggedIn = await tryAutoLogin();
+        if (loggedIn) {
+          await fetchGOTW();
+          return;
+        }
+
+        final user = await _readRAUserFromConfig();
+        final apiKey = await _readRAApiKeyFromConfig();
+        // Keep retrying while a stored account exists — or while we cannot yet
+        // tell, because unreadable storage is exactly the cold-boot case this
+        // retry is here for.
+        final worthRetrying =
+            !user.ok || !apiKey.ok || (user.hasValue && apiKey.hasValue);
+        if (!worthRetrying || attempt == maxAttempts) {
+          return;
+        }
+
+        _log.i(
+          'RetroAchievements auto-login attempt $attempt failed; retrying after startup delay',
+        );
+        await Future<void>.delayed(const Duration(seconds: 4));
       }
     } catch (e) {
       _log.e('Error initializing RA: $e');
@@ -454,40 +490,42 @@ class RetroAchievementsProvider extends ChangeNotifier {
   /// Attempts to re-authenticate using the username persisted in the local configuration.
   Future<bool> tryAutoLogin() async {
     try {
-      final savedUsername = await _loadRAUserFromConfig();
-      final savedApiKey = await _loadRAApiKeyFromConfig();
+      final user = await _readRAUserFromConfig();
+      final apiKey = await _readRAApiKeyFromConfig();
 
-      if (savedUsername != null && savedUsername.isNotEmpty) {
-        if (RetroAchievementsService.resolveApiKey(
-          savedApiKey,
-        ).trim().isEmpty) {
-          _log.i(
-            'Skipping RetroAchievements auto-login for $savedUsername: no API key available',
-          );
-          return false;
-        }
+      switch (resolveRaAutoLoginAction(user: user, apiKey: apiKey)) {
+        case RaAutoLoginAction.attemptLogin:
+          final success = await connect(user.value!, apiKey: apiKey.value);
+          if (!success) {
+            _log.e(
+              'Auto-login failed for: ${user.value} (user preserved for retry)',
+            );
+          }
+          return success;
 
-        final success = await connect(savedUsername, apiKey: savedApiKey);
-        if (!success) {
-          _log.e(
-            'Auto-login failed for: $savedUsername (user preserved for retry)',
-          );
-        }
-        return success;
-      } else {
-        // No saved username. Older builds persisted the maintainer's shared
-        // API key here and authenticated everyone's traffic with it; the v94
-        // migration cleared the username to force a personal-key login. Since
-        // credentials are now always saved/cleared as a pair, a key with no
-        // username can only be that orphaned legacy key — drop it so it can
-        // never be reused.
-        if (savedApiKey != null && savedApiKey.isNotEmpty) {
+        case RaAutoLoginAction.clearOrphanedKey:
           await RetroAchievementsRepository.clearRAApiKey();
           _log.i(
             'Cleared orphaned RetroAchievements API key (legacy shared key)',
           );
-        }
-        return false;
+          return false;
+
+        case RaAutoLoginAction.skip:
+          if (!user.ok || !apiKey.ok) {
+            // Credential storage was unreadable — on a cold boot the database
+            // may still be on a mounting volume. Change nothing and let the
+            // caller retry; treating this as "signed out" would delete a valid
+            // account.
+            _log.w(
+              'Skipping RetroAchievements auto-login: credential storage '
+              'unreadable (credentials preserved)',
+            );
+          } else if (user.hasValue) {
+            _log.i(
+              'Skipping RetroAchievements auto-login for ${user.value}: no API key available',
+            );
+          }
+          return false;
       }
     } catch (e) {
       _log.e('Error loading user: $e (user preserved for retry)');
@@ -515,6 +553,8 @@ class RetroAchievementsProvider extends ChangeNotifier {
     _userAwardsLoaded = false;
     _userAwardsLoading = false;
     _userAwardsError = null;
+    _cachedRecentMasteries = [];
+    _cachedRecentCompletions = [];
     _recentUnlocks = [];
     _recentUnlocksLoaded = false;
     _recentUnlocksLoading = false;
@@ -603,24 +643,26 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
   }
 
-  /// Retrieves the persisted RetroAchievements username from the configuration table.
-  Future<String?> _loadRAUserFromConfig() async {
+  /// Retrieves the persisted RetroAchievements username from the configuration
+  /// table, reporting whether the read itself succeeded.
+  Future<CredentialRead> _readRAUserFromConfig() async {
     try {
-      return await RetroAchievementsRepository.getRAUser();
+      return CredentialRead.ok(await RetroAchievementsRepository.getRAUser());
     } catch (e) {
       _log.e('Error loading RA user from DB: $e');
+      return const CredentialRead.failed();
     }
-    return null;
   }
 
-  /// Retrieves the persisted RetroAchievements API key from secure storage.
-  Future<String?> _loadRAApiKeyFromConfig() async {
+  /// Retrieves the persisted RetroAchievements API key from secure storage,
+  /// reporting whether the read itself succeeded.
+  Future<CredentialRead> _readRAApiKeyFromConfig() async {
     try {
-      return await RetroAchievementsRepository.getRAApiKey();
+      return CredentialRead.ok(await RetroAchievementsRepository.getRAApiKey());
     } catch (e) {
       _log.e('Error loading RA API key from secure storage: $e');
+      return const CredentialRead.failed();
     }
-    return null;
   }
 
   /// Removes the RetroAchievements username from persistent storage.
@@ -792,6 +834,13 @@ class RetroAchievementsProvider extends ChangeNotifier {
     return '$fallback: $error';
   }
 
+  /// Recomputes the filtered/sorted recent masteries/completions caches.
+  /// Should be called whenever [_userAwards] changes.
+  void _updateRecentAwardsCache() {
+    _cachedRecentMasteries = _recentAwardsForMode(hardcore: true);
+    _cachedRecentCompletions = _recentAwardsForMode(hardcore: false);
+  }
+
   List<UserAward> _recentAwardsForMode({required bool hardcore}) {
     final awards = _userAwards?.visibleUserAwards ?? const <UserAward>[];
     final matchingMode = hardcore ? 1 : 0;
@@ -806,4 +855,12 @@ class RetroAchievementsProvider extends ChangeNotifier {
     filtered.sort((a, b) => b.awardedAt.compareTo(a.awardedAt));
     return filtered;
   }
+}
+
+/// Top-level helper for [compute] so the large RA awards payload can be parsed
+/// off the main thread.
+RetroAchievementsUserAwards _parseRetroAchievementsUserAwards(
+  Map<String, dynamic> json,
+) {
+  return RetroAchievementsUserAwards.fromJson(json);
 }

@@ -10,6 +10,7 @@ import 'package:archive/archive_io.dart';
 import 'package:neostation/services/logger_service.dart';
 
 import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/utils/version_compare.dart';
 
 /// Service responsible for orchestrating the over-the-air (OTA) update lifecycle.
 ///
@@ -46,11 +47,17 @@ class UpdateService {
 
       final releaseData = json.decode(response.body) as Map<String, dynamic>;
 
-      // Standardize version tag by removing 'v' prefix and build metadata.
-      final latestVersion = releaseData['tag_name']
-          .toString()
-          .replaceFirst('v', '')
-          .split('+')[0];
+      // Standardize the tag for display: strip a leading 'v' and the build
+      // metadata. replaceFirst('v', '') would have removed a 'v' anywhere in
+      // the string, so only a genuine prefix is dropped here. The comparison
+      // below normalizes independently and tolerates either form.
+      final rawTag = releaseData['tag_name'].toString().trim();
+      final latestVersion =
+          (rawTag.startsWith('v') || rawTag.startsWith('V')
+                  ? rawTag.substring(1)
+                  : rawTag)
+              .split('+')
+              .first;
 
       // 3. Perform semantic version comparison.
       if (_isNewerVersion(currentVersion, latestVersion)) {
@@ -94,21 +101,19 @@ class UpdateService {
   }
 
   /// Performs a semantic comparison between two version strings.
+  ///
+  /// Both sides carry decoration that plain integer parsing chokes on: the
+  /// Android dev and feature-test flavors add a `-dev` / `-feature`
+  /// versionNameSuffix, and release tags carry `v` and `+build` metadata.
   static bool _isNewerVersion(String current, String latest) {
-    try {
-      final currentParts = current.split('.').map(int.parse).toList();
-      final latestParts = latest.split('.').map(int.parse).toList();
-
-      for (int i = 0; i < 3; i++) {
-        if (latestParts[i] > currentParts[i]) return true;
-        if (latestParts[i] < currentParts[i]) return false;
-      }
-
-      return false; // Versions are identical or current is newer.
-    } catch (e) {
-      _log.e('UpdateService: Version comparison failure', error: e);
+    if (parseVersion(current) == null || parseVersion(latest) == null) {
+      _log.w(
+        'UpdateService: unparseable version (current="$current", '
+        'latest="$latest"); skipping update check',
+      );
       return false;
     }
+    return isNewerVersion(current, latest);
   }
 
   /// Identifies the correct release asset based on the current execution environment.

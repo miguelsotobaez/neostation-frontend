@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "genesis",
+    "multidisc": false,
     "name": "Sega Genesis",
     "short_name": "Genesis",
     "details": {
@@ -161,6 +162,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L genesis_plus_gx_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -184,6 +187,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L genesis_plus_gx_wide_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -207,6 +212,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L picodrive_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -230,6 +237,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

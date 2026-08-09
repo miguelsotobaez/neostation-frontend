@@ -3,7 +3,6 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
-import 'dart:io';
 import 'dart:async';
 import '../../../models/system_model.dart';
 import '../../../models/game_model.dart';
@@ -12,8 +11,8 @@ import '../../../providers/retro_achievements_provider.dart';
 import '../../../sync/i_sync_provider.dart';
 import '../../../models/retro_achievements_game_info.dart';
 import '../../../repositories/game_repository.dart';
-import '../../../repositories/retro_achievements_repository.dart';
-import '../../../services/retroachievements_hash_service.dart';
+import '../../../services/retro_achievements_helper.dart';
+import '../../../utils/artwork_cache.dart';
 import '../../../utils/gamepad_nav.dart';
 import 'package:flutter/foundation.dart';
 
@@ -27,10 +26,12 @@ import 'package:neostation/widgets/custom_notification.dart';
 import '../../../models/secondary_display_state.dart';
 import 'widgets/game_details_footer.dart';
 import 'widgets/game_details_tabs_header.dart';
+import 'widgets/scraping_progress_panel.dart';
 import 'tabs/game_details_general_tab.dart';
+import 'tabs/game_details_box2d_tab.dart';
+import 'tabs/game_details_screenshot_video_tab.dart';
 import 'tabs/game_details_game_info_tab.dart';
 import 'tabs/game_details_achievements_tab.dart';
-import 'tabs/game_details_settings_tab.dart';
 
 /// A comprehensive details view for a selected game, providing access to metadata,
 /// achievements, system settings, and cloud synchronization status.
@@ -49,17 +50,27 @@ class GameDetailsCardList extends StatefulWidget {
   final ISyncProvider syncProvider;
   final String? localizedDescription;
 
+  /// Bumped by the games list whenever this game's artwork files change on
+  /// disk — a scrape, or a media file replaced from the settings dialog. The
+  /// card folds it into its own version so the artwork tabs reload; without it
+  /// they keep the decode they already resolved until another game is selected.
+  final int artworkVersion;
+
   /// True when an external (list-level) scrape is running for this game, e.g.
   /// triggered by the Select button. Drives the scrape button spinner so the
   /// feedback matches a scrape started from the button itself.
   final bool isExternallyScraping;
+
+  /// Progress and step of that external scrape, so the card's progress panel
+  /// reports it exactly as it reports a scrape the card started itself.
+  final double? externalScrapeProgress;
+  final String? externalScrapeStatus;
 
   final VoidCallback? onDeactivateNavigation;
   final VoidCallback? onReactivateNavigation;
   final void Function(VoidCallback)? onShowAchievements;
   final void Function(VoidCallback)? onRegisterRefreshAchievements;
   final Function(Function())? onToggleVideoMute;
-  final Function(Function())? onToggleSettings;
   final Function(Function())? onToggleInfo;
 
   /// Callback to register overlay state getters for external navigation management.
@@ -99,8 +110,11 @@ class GameDetailsCardList extends StatefulWidget {
   /// Callback to register tab-based navigation handling (Gamepad L/R bumpers).
   final Function(bool Function(bool))? onRegisterTabNavigation;
 
-  /// Callback to register the Start button action.
-  final Function(VoidCallback)? onRegisterStartAction;
+  /// Callback to register the Select button action.
+  final Function(VoidCallback)? onRegisterSelectButton;
+
+  /// Callback to register the scrape action (Select + A combo).
+  final Function(VoidCallback)? onRegisterScrapeAction;
 
   final bool isSecondaryScreenActive;
   final bool isNavigatingFast;
@@ -118,13 +132,15 @@ class GameDetailsCardList extends StatefulWidget {
     required this.retroAchievementsProvider,
     required this.syncProvider,
     this.localizedDescription,
+    this.artworkVersion = 0,
     this.isExternallyScraping = false,
+    this.externalScrapeProgress,
+    this.externalScrapeStatus,
     this.onDeactivateNavigation,
     this.onReactivateNavigation,
     this.onShowAchievements,
     this.onRegisterRefreshAchievements,
     this.onToggleVideoMute,
-    this.onToggleSettings,
     this.onToggleInfo,
     this.onRegisterOverlayState,
     this.onRegisterNavigation,
@@ -138,7 +154,8 @@ class GameDetailsCardList extends StatefulWidget {
     this.onRegisterSecondaryAction,
     this.onRegisterIsPlayingGameBlocked,
     this.onRegisterTabNavigation,
-    this.onRegisterStartAction,
+    this.onRegisterSelectButton,
+    this.onRegisterScrapeAction,
     this.isSecondaryScreenActive = false,
     this.isNavigatingFast = false,
     this.onBack,
@@ -167,14 +184,12 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
   // Cloud Synchronization state.
   late bool _cloudSyncEnabled;
-  final ScrollController _settingsScrollController = ScrollController();
 
   // ScreenScraper / Metadata acquisition state.
   bool _isScrapingGame = false;
   late final FocusNode _scrapeButtonFocusNode;
 
   // Navigation management: Explicit focus nodes for UI control points.
-  late final FocusNode _settingsButtonFocusNode;
   late final FocusNode _muteButtonFocusNode;
   late final FocusNode _achievementsButtonFocusNode;
   late final FocusNode _favoriteButtonFocusNode;
@@ -186,10 +201,14 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   String _scrapeStatus = '';
 
   // View state: Current active tab and scrolling context.
-  DetailTab _currentTab = DetailTab.general;
+  DetailTab _currentTab = DetailTab.wheel;
   final ScrollController _achievementsScrollController = ScrollController();
   int _imageVersion =
       0; // Cache-busting version for images after metadata refreshes.
+
+  /// Cache-busting version for the artwork tabs, covering both the card's own
+  /// scrape and artwork the games list saw change underneath it.
+  int get _artworkImageVersion => _imageVersion + widget.artworkVersion;
 
   Future<Uint8List?>? _androidAppIconFuture;
   SecondaryDisplayState? _secondaryState;
@@ -197,14 +216,11 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
   final GlobalKey<GameDetailsAchievementsTabState> _achievementsTabKey =
       GlobalKey<GameDetailsAchievementsTabState>();
-  final GlobalKey<GameDetailsSettingsTabState> _settingsTabKey =
-      GlobalKey<GameDetailsSettingsTabState>();
 
-  /// Determines if the detailed game info tab should be suppressed in favor of secondary display output.
+  /// Determines if the screenshot/video tab should be suppressed when secondary display is active.
   bool get _isGameInfoHidden {
     if (!widget.isSecondaryScreenActive) return false;
     final config = context.read<SqliteConfigProvider>().config;
-    // If secondary display is active and not explicitly hidden in config, suppress primary UI info.
     return !config.hideBottomScreen;
   }
 
@@ -246,18 +262,24 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     _game = widget.game;
     _cloudSyncEnabled = widget.game.cloudSyncEnabled ?? true;
 
-    _settingsButtonFocusNode = FocusNode();
     _muteButtonFocusNode = FocusNode();
     _achievementsButtonFocusNode = FocusNode();
     _favoriteButtonFocusNode = FocusNode();
     _scrapeButtonFocusNode = FocusNode();
 
-    _currentTab = DetailTab.general;
+    _currentTab = DetailTab.wheel;
 
-    // Reset primary UI 'Game Info' overlay to ensure clean state transitions.
+    // Restore the last tab the user picked with L1/R1. Deferred to the first
+    // frame so _setTab can run its side effects (game info overlay, video
+    // delay) exactly as it would for a live tab change.
+    final restoredTab = _persistedTab();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (!mounted) return;
+      if (restoredTab == DetailTab.wheel) {
+        // Reset primary UI 'Game Info' overlay to ensure clean state transitions.
         context.read<SqliteConfigProvider>().updateShowGameInfo(false);
+      } else {
+        _setTab(restoredTab, persist: false);
       }
     });
 
@@ -289,7 +311,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     widget.onShowAchievements?.call(() {
       _setTab(
         _currentTab == DetailTab.achievements
-            ? DetailTab.general
+            ? DetailTab.wheel
             : DetailTab.achievements,
       );
     });
@@ -297,17 +319,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     widget.onRegisterRefreshAchievements?.call(refreshAchievements);
 
     widget.onToggleVideoMute?.call(_toggleVideoMute);
-    widget.onToggleSettings?.call(() {
-      _setTab(
-        _currentTab == DetailTab.settings
-            ? DetailTab.general
-            : DetailTab.settings,
-      );
-    });
 
-    // Info toggle: Triggers metadata scraping if information is missing.
     widget.onToggleInfo?.call(() {
-      if (_currentTab == DetailTab.gameInfo && _isScrapingGame == false) {
+      if (_currentTab == DetailTab.screenshotVideo &&
+          _isScrapingGame == false) {
         if (_game.getDescriptionForLanguage('en').isEmpty ||
             _game.getDescriptionForLanguage('en') ==
                 'No description available.') {
@@ -319,39 +334,29 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         refreshAchievements();
       } else {
         _setTab(
-          _currentTab == DetailTab.gameInfo
-              ? DetailTab.general
-              : DetailTab.gameInfo,
+          _currentTab == DetailTab.screenshotVideo
+              ? DetailTab.wheel
+              : DetailTab.screenshotVideo,
         );
       }
     });
 
     widget.onRegisterOverlayState?.call(
-      () => _currentTab != DetailTab.general,
-      () =>
-          _currentTab == DetailTab.achievements ||
-          _currentTab == DetailTab.settings,
+      () => _currentTab != DetailTab.wheel,
+      () => _currentTab == DetailTab.achievements,
     );
-    widget.onRegisterCloseOverlays?.call(() {
-      _setTab(DetailTab.general);
-    });
-    widget.onRegisterIsPlayingGameBlocked?.call(
-      () => _currentTab == DetailTab.settings,
-    );
+    widget.onRegisterCloseOverlays?.call(_closeAllOverlays);
     widget.onRegisterTabNavigation?.call(_handleTabNavigation);
-    widget.onRegisterStartAction?.call(_handleStartAction);
+    widget.onRegisterSelectButton?.call(_handleSelectAction);
+    widget.onRegisterScrapeAction?.call(_onScrapeGameCompact);
     widget.onRegisterNavigation?.call(
       moveUp: () {
-        if (_currentTab == DetailTab.settings) {
-          _settingsTabKey.currentState?.moveUp();
-        } else if (_currentTab == DetailTab.achievements) {
+        if (_currentTab == DetailTab.achievements) {
           _achievementsTabKey.currentState?.moveUp();
         }
       },
       moveDown: () {
-        if (_currentTab == DetailTab.settings) {
-          _settingsTabKey.currentState?.moveDown();
-        } else if (_currentTab == DetailTab.achievements) {
+        if (_currentTab == DetailTab.achievements) {
           _achievementsTabKey.currentState?.moveDown();
         }
       },
@@ -446,32 +451,27 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       _applyVideoMuteState();
     }
 
-    // Dynamic UI constraints: exit tabs if their requirements are no longer met.
-    if ((_isGameInfoHidden && _currentTab == DetailTab.gameInfo) ||
+    if ((_isGameInfoHidden && _currentTab == DetailTab.screenshotVideo) ||
         (!_hasRetroAchievements && _currentTab == DetailTab.achievements)) {
-      _currentTab = DetailTab.general;
+      _currentTab = DetailTab.wheel;
     }
 
-    widget.onToggleSettings?.call(() {
-      _setTab(
-        _currentTab == DetailTab.settings
-            ? DetailTab.general
-            : DetailTab.settings,
-      );
-    });
     widget.onToggleInfo?.call(() {
       _setTab(
-        _currentTab == DetailTab.gameInfo
-            ? DetailTab.general
-            : DetailTab.gameInfo,
+        _currentTab == DetailTab.screenshotVideo
+            ? DetailTab.wheel
+            : DetailTab.screenshotVideo,
       );
     });
   }
 
-  void _handleStartAction() {
+  void _handleSelectAction() {
+    // Achievements owns Select for its refresh; everywhere else the preview
+    // video is what's playing, so Select mutes it (the general tab included —
+    // that's where the video is usually watched).
     if (_currentTab == DetailTab.achievements) {
       refreshAchievements();
-    } else if (_currentTab == DetailTab.gameInfo) {
+    } else {
       _toggleVideoMute();
     }
   }
@@ -483,12 +483,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     _animationController.dispose();
     _syncIconController.dispose();
     _videoDelayTimer?.cancel();
-    _settingsButtonFocusNode.dispose();
     _muteButtonFocusNode.dispose();
     _achievementsButtonFocusNode.dispose();
     _favoriteButtonFocusNode.dispose();
     _scrapeButtonFocusNode.dispose();
-    _settingsScrollController.dispose();
     _achievementsScrollController.dispose();
     super.dispose();
   }
@@ -514,7 +512,6 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     });
   }
 
-  /// Gracefully terminates video preview playback and cancels pending transition timers.
   void _cancelVideoDelay() {
     _videoDelayTimer?.cancel();
     _videoDelayTimer = null;
@@ -539,92 +536,19 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     });
 
     try {
-      if (!widget.retroAchievementsProvider.isConnected) {
-        if (mounted) {
-          setState(() {
-            _currentGameInfo = null;
-            _isLoadingAchievements = false;
-          });
-        }
-        return;
-      }
-
-      final summary = widget.retroAchievementsProvider.userSummary;
-
-      // Identify if the hardware system requires a specialized hash generation algorithm.
-      final hasSpecificGenerator =
-          RetroAchievementsHashService.hasSpecificHashGenerator(
-            gameTarget.systemFolderName,
-          );
-
-      String? md5Hash = gameTarget.raHash;
-
-      if (hasSpecificGenerator) {
-        // Core systems (e.g., PSX, GBA): Always generate hashes for precise matching.
-        if (md5Hash == null || md5Hash.isEmpty) {
-          md5Hash = await RetroAchievementsHashService.generateHashForGame(
-            gameTarget,
-          );
-        }
-      } else {
-        // Fallback systems: Generate MD5 only for files < 512MB to maintain performance.
-        if (md5Hash == null || md5Hash.isEmpty) {
-          if (gameTarget.romPath != null) {
-            final file = File(gameTarget.romPath!);
-            if (await file.exists()) {
-              final fileSize = await file.length();
-              const maxSize = 512 * 1024 * 1024;
-
-              if (fileSize < maxSize) {
-                md5Hash =
-                    await RetroAchievementsHashService.generateHashForGame(
-                      gameTarget,
-                    );
-              }
-            }
-          }
-        }
-      }
-
-      if (widget.game.romname != gameTarget.romname) {
-        return;
-      }
-
-      // Resolve the RetroAchievements internal GameID using local cache or API resolution.
-      final gameId = await _findGameIdForCurrentGame(
-        summary,
-        md5Hash,
-        hasSpecificGenerator,
+      final gameInfo = await RetroAchievementsHelper.loadGameInfo(
+        game: gameTarget,
+        provider: widget.retroAchievementsProvider,
+        effectiveSystem: _effectiveSystem,
+        isAllMode: widget.isAllMode,
+        forceRefresh: forceRefresh,
       );
 
       if (widget.game.romname != gameTarget.romname) return;
 
-      if (gameId == null) {
-        if (mounted) {
-          setState(() {
-            _currentGameInfo = null;
-            _isLoadingAchievements = false;
-          });
-        }
-        return;
-      }
-
-      final gameInfo = await widget.retroAchievementsProvider
-          .getGameInfoAndUserProgress(
-            gameId,
-            forceRefresh: forceRefresh,
-            md5Hash: md5Hash,
-          );
-
       if (mounted && widget.game.romname == gameTarget.romname) {
-        // Evict existing badge images from the global cache during forced refreshes.
-        if (forceRefresh && _currentGameInfo != null) {
-          for (final ach in _currentGameInfo!.achievements.values) {
-            final baseUrl =
-                'https://media.retroachievements.org/Badge/${ach.badgeName}';
-            NetworkImage('$baseUrl.png').evict();
-            NetworkImage('${baseUrl}_lock.png').evict();
-          }
+        if (forceRefresh) {
+          RetroAchievementsHelper.evictBadgeCache(_currentGameInfo);
         }
 
         setState(() {
@@ -693,85 +617,6 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     await _applyVideoMuteState();
   }
 
-  /// Resolves the internal RetroAchievements GameID via MD5 hash or optimized filename lookup.
-  Future<int?> _findGameIdForCurrentGame(
-    dynamic summary,
-    String? md5Hash,
-    bool hasSpecificGenerator,
-  ) async {
-    // Strategy 1: Exact Hash matching against local RA database.
-    if (md5Hash != null && md5Hash.isNotEmpty) {
-      try {
-        final gameId = await RetroAchievementsRepository.findGameIdByHash(
-          md5Hash,
-        );
-        if (gameId != null) return gameId;
-      } catch (e) {
-        _log.e('Hash lookup failure: $e');
-      }
-    }
-
-    if (hasSpecificGenerator) {
-      return null;
-    }
-
-    // Strategy 2: Filename normalization and metadata matching.
-    try {
-      var filenameWithoutExt = widget.game.romname.contains('.')
-          ? widget.game.romname.substring(
-              0,
-              widget.game.romname.lastIndexOf('.'),
-            )
-          : widget.game.romname;
-
-      // Sanitize filename: remove regional metadata and bracketed flags for broader matching.
-      filenameWithoutExt = filenameWithoutExt
-          .replaceAll(RegExp(r'\([^)]*\)'), '')
-          .replaceAll(RegExp(r'\[[^\]]*\]'), '')
-          .trim();
-
-      final systemFolderName =
-          widget.isAllMode && _game.systemFolderName != null
-          ? _game.systemFolderName!
-          : _effectiveSystem.primaryFolderName;
-
-      final gameId = await RetroAchievementsRepository.findGameIdByFilename(
-        systemFolderName,
-        filenameWithoutExt,
-      );
-      if (gameId != null) return gameId;
-    } catch (e) {
-      _log.e('Database metadata search failed: $e');
-    }
-
-    // Strategy 3: Heuristic matching against user's 'Recently Played' history.
-    try {
-      final gameName = widget.game.name.toLowerCase();
-      final normalizedLocal = gameName
-          .replaceAll(RegExp(r'[^\w\s]'), '')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim()
-          .toLowerCase();
-
-      for (final recentlyPlayed in summary?.recentlyPlayed ?? const []) {
-        final raGameName = recentlyPlayed.title.toLowerCase();
-        final normalizedRA = raGameName
-            .replaceAll(RegExp(r'[^\w\s]'), '')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim()
-            .toLowerCase();
-
-        if (normalizedLocal == normalizedRA) {
-          return recentlyPlayed.gameId;
-        }
-      }
-    } catch (e) {
-      _log.e('Recent history metadata resolution failed: $e');
-    }
-
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final imageSystemFolder = _effectiveSystem.primaryFolderName;
@@ -782,115 +627,106 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     );
     return Card(
       color: Colors.transparent,
-      margin: EdgeInsets.only(left: 8.r),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0.r)),
-      child: Container(
-        height: 220.r,
-        color: Colors.transparent,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Background Layer: Dynamic fanart with aesthetic transitions.
-            _buildCardBackground(),
-
-            // Header Layer: Tab navigation and system status.
-            Positioned(
-              left: -0.5.r,
-              right: -0.5.r,
-              top: -0.5.r,
-              child: GameDetailsTabsHeader(
-                isGameInfoHidden: _isGameInfoHidden,
-                hasRetroAchievements: _hasRetroAchievements,
-                showSettings: _effectiveSystem.folderName != 'android',
-                currentTab: _currentTab,
-                onTabChanged: (tab) => _setTab(tab),
-              ),
+      shadowColor: Colors.transparent,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Header Layer: Tab navigation and system status.
+          Positioned(
+            left: 0.r,
+            right: 0.r,
+            top: 0.r,
+            child: GameDetailsTabsHeader(
+              isScreenshotVideoHidden: _isGameInfoHidden,
+              hasRetroAchievements: _hasRetroAchievements,
+              currentTab: _currentTab,
+              onTabChanged: (tab) => _setTab(tab),
             ),
+          ),
 
-            // Footer Layer: Action bar and synchronization status.
-            GameDetailsFooter(
+          // Footer Layer: Action bar and synchronization status.
+          GameDetailsFooter(
+            system: _effectiveSystem,
+            game: _game,
+            isMusicSystem: _effectiveSystem.folderName == 'music',
+            hasScreenScraper: _hasScreenScraper,
+            isSecondaryScreenActive: widget.isSecondaryScreenActive,
+            cloudSyncEnabled: _cloudSyncEnabled,
+            syncProvider: widget.syncProvider,
+            syncIconController: _syncIconController,
+            onPlayGame: () => widget.onPlayGame?.call(),
+            onShowAchievements: () => _setTab(DetailTab.achievements),
+            hasRetroAchievements: _hasRetroAchievements,
+            isLoadingAchievements: _isLoadingAchievements,
+            currentGameInfo: _currentGameInfo,
+          ),
+
+          if (_currentTab == DetailTab.wheel)
+            GameDetailsGeneralTab(
               system: _effectiveSystem,
               game: _game,
-              isMusicSystem: _effectiveSystem.folderName == 'music',
-              hasScreenScraper: _hasScreenScraper,
+              fileProvider: widget.fileProvider,
+              imageVersion: _artworkImageVersion,
+              androidAppIconFuture: _androidAppIconFuture,
+            ),
+          if (_currentTab == DetailTab.box2d)
+            GameDetailsBox2dTab(
+              system: _effectiveSystem,
+              game: _game,
+              fileProvider: widget.fileProvider,
+              imageVersion: _artworkImageVersion,
+            ),
+          Visibility(
+            visible: _currentTab == DetailTab.screenshotVideo,
+            maintainState: true,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainInteractivity: true,
+            child: GameDetailsScreenshotVideoTab(
+              screenshotPath: screenshotPath,
+              isVideoDelayActive: _isVideoDelayActive,
+              videoController: widget.videoController,
+              imageVersion: _artworkImageVersion,
+              onToggleVideoMute: _toggleVideoMute,
+            ),
+          ),
+          if (_currentTab == DetailTab.gameInfo)
+            GameDetailsGameInfoTab(
+              system: _effectiveSystem,
+              game: _game,
+              fileProvider: widget.fileProvider,
+              description:
+                  widget.localizedDescription ??
+                  (_game.getDescriptionForLanguage('en').isEmpty
+                      ? AppLocale.noDescription.getString(context)
+                      : _game.getDescriptionForLanguage('en')),
               isScrapingGame: _isScrapingGame || widget.isExternallyScraping,
-              localizedDescription: widget.localizedDescription,
-              isSecondaryScreenActive: widget.isSecondaryScreenActive,
-              isFavorite: _game.isFavorite ?? false,
-              cloudSyncEnabled: _cloudSyncEnabled,
-              syncProvider: widget.syncProvider,
-              syncIconController: _syncIconController,
-              onPlayGame: () => widget.onPlayGame?.call(),
-              onToggleFavorite: _toggleFavorite,
               onScrapeGame: _onScrapeGameCompact,
-              onShowAchievements: () => _setTab(DetailTab.achievements),
-              hasRetroAchievements: _hasRetroAchievements,
-              isLoadingAchievements: _isLoadingAchievements,
-              currentGameInfo: _currentGameInfo,
+            ),
+          if (_currentTab == DetailTab.achievements)
+            GameDetailsAchievementsTab(
+              key: _achievementsTabKey,
+              gameInfo: _currentGameInfo,
+              isLoading: _isLoadingAchievements,
+              onRefresh: refreshAchievements,
             ),
 
-            // Dynamic Content Layer: Selected Tab View.
-            if (_currentTab == DetailTab.general)
-              GameDetailsGeneralTab(
-                system: _effectiveSystem,
-                game: _game,
-                fileProvider: widget.fileProvider,
-                androidAppIconFuture: _androidAppIconFuture,
-              ),
-            if (_currentTab == DetailTab.gameInfo)
-              GameDetailsGameInfoTab(
-                system: _effectiveSystem,
-                game: _game,
-                fileProvider: widget.fileProvider,
-                description:
-                    widget.localizedDescription ??
-                    (_game.getDescriptionForLanguage('en').isEmpty
-                        ? AppLocale.noDescription.getString(context)
-                        : _game.getDescriptionForLanguage('en')),
-                screenshotPath: screenshotPath,
-                isScrapingGame: _isScrapingGame || widget.isExternallyScraping,
-                scrapeProgress: _scrapeProgress,
-                scrapeStatus: _scrapeStatus,
-                isSecondaryScreenActive: widget.isSecondaryScreenActive,
-                isVideoDelayActive: _isVideoDelayActive,
-                videoController: widget.videoController,
-                imageVersion: _imageVersion,
-                onToggleVideoMute: _toggleVideoMute,
-                onScrapeGame: _onScrapeGameCompact,
-              ),
-            if (_currentTab == DetailTab.settings)
-              GameDetailsSettingsTab(
-                key: _settingsTabKey,
-                game: _game,
-                system: _effectiveSystem,
-                syncProvider: widget.syncProvider,
-                isAllMode: widget.isAllMode,
-                onGameUpdated: widget.onGameUpdated,
-                onGameDeleted: widget.onGameDeleted,
-              ),
-            if (_currentTab == DetailTab.achievements)
-              GameDetailsAchievementsTab(
-                key: _achievementsTabKey,
-                gameInfo: _currentGameInfo,
-                isLoading: _isLoadingAchievements,
-                onRefresh: refreshAchievements,
-              ),
-          ],
-        ),
+          // Scrape feedback for every tab. A scrape can start from any of them
+          // (the Scrape button, Select + A, or the games list), so it is drawn
+          // over the tab panels rather than inside one of them.
+          if (_isScrapingGame || widget.isExternallyScraping)
+            ScrapingProgressPanel(
+              progress: _isScrapingGame
+                  ? _scrapeProgress
+                  : (widget.externalScrapeProgress ?? 0.0),
+              status: _isScrapingGame
+                  ? _scrapeStatus
+                  : (widget.externalScrapeStatus ?? ''),
+            ),
+        ],
       ),
     );
-  }
-
-  /// Toggles the 'Favorite' status in the local database and notifies observers.
-  Future<void> _toggleFavorite() async {
-    await GameService.toggleFavorite(_game);
-    if (mounted) {
-      await context.read<SqliteConfigProvider>().refreshDetectedSystems();
-    }
-    setState(() {
-      _game = _game.copyWith(isFavorite: !(_game.isFavorite ?? false));
-    });
-    widget.onFavoriteToggled?.call();
   }
 
   /// Orchestrates a quick-access metadata scrape.
@@ -906,86 +742,24 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         description == AppLocale.noDescription.getString(context) ||
         description.trim().isEmpty;
 
-    if (!widget.isSecondaryScreenActive) {
-      _setTab(DetailTab.gameInfo);
-    }
-    // Force metadata overwrite if a valid description is already present.
+    // No tab switch at all: the progress panel overlays whichever tab is open,
+    // so the user stays where they were — and the tab they chose stays the
+    // remembered one (#284).
     _startSingleGameScrape(forceOverwrite: !isDescriptionMissing);
   }
 
   /// Renders the background fanart with smooth cross-fades and scale animations.
-  Widget _buildCardBackground() {
-    final imageSystemFolder = _effectiveSystem.primaryFolderName;
-    final fanartPath = _game.getImagePath(
-      imageSystemFolder,
-      'fanarts',
-      widget.fileProvider,
-    );
 
-    return Positioned.fill(
-      child: ClipRRect(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 512),
-          switchInCurve: Curves.easeOutExpo,
-          switchOutCurve: Curves.easeInCubic,
-          layoutBuilder: (currentChild, previousChildren) {
-            return Stack(
-              fit: StackFit.expand,
-              alignment: Alignment.center,
-              children: [...previousChildren, ?currentChild],
-            );
-          },
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 1.0, end: 1.1).animate(
-                  CurvedAnimation(parent: animation, curve: Curves.easeOut),
-                ),
-                child: child,
-              ),
-            );
-          },
-          child: Builder(
-            key: ValueKey('fanart_${_game.romPath ?? _game.romname}'),
-            builder: (context) {
-              final file = File(fanartPath);
-              if (file.existsSync()) {
-                return Image.file(
-                  file,
-                  key: ValueKey('${file.path}_$_imageVersion'),
-                  fit: BoxFit.cover,
-                  cacheWidth: 1920,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Directs primary gamepad inputs (A Button) based on the currently active tab.
   void _handleTriggerAction() {
-    // Achievements Tab: Triggers a data refresh.
     if (_currentTab == DetailTab.achievements) {
-      if (_scrapeButtonFocusNode.hasFocus ||
-          _currentTab != DetailTab.settings) {
+      if (_scrapeButtonFocusNode.hasFocus) {
         refreshAchievements();
       }
       return;
     }
 
-    // Settings Tab: Delegates interaction to the specialized tab controller.
-    if (_currentTab == DetailTab.settings) {
-      _settingsTabKey.currentState?.trigger();
-      return;
-    }
-
-    // Metadata Tab: Initiates scraping if the dedicated button is focused.
-    if (_currentTab == DetailTab.gameInfo) {
+    if (_currentTab == DetailTab.gameInfo ||
+        _currentTab == DetailTab.screenshotVideo) {
       if (_scrapeButtonFocusNode.hasFocus) {
         _startSingleGameScrape();
       }
@@ -994,32 +768,45 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
   /// Handles secondary hardware actions (typically mapped to X or RB).
   void _handleSecondaryAction() {
-    if (!_isGameInfoHidden) {
-      _setTab(DetailTab.gameInfo);
-    } else {
-      // If primary UI is hidden (OLED secondary screen optimization), skip navigation.
-      return;
-    }
+    // Unchanged condition — the action stays tied to the screenshot tab being
+    // available — but it no longer switches to that tab: the progress panel
+    // overlays whichever tab the user is on.
+    if (_isGameInfoHidden) return;
 
     if (_isScrapingGame) return;
 
     _startSingleGameScrape();
   }
 
+  /// Whether [tab] can be shown for the current game and display setup.
+  bool _isTabAvailable(DetailTab tab) {
+    if (tab == DetailTab.screenshotVideo && _isGameInfoHidden) return false;
+    if (tab == DetailTab.achievements && !_hasRetroAchievements) return false;
+    return true;
+  }
+
+  /// Resolves the persisted tab preference into a tab usable right now.
+  ///
+  /// An unknown name (config written by another build) or a tab this game
+  /// can't show falls back to the wheel, leaving the stored preference intact
+  /// so it returns on a game that supports it.
+  DetailTab _persistedTab() {
+    final storedName = context
+        .read<SqliteConfigProvider>()
+        .config
+        .gameDetailsTab;
+    final tab = DetailTab.values.firstWhere(
+      (t) => t.name == storedName,
+      orElse: () => DetailTab.wheel,
+    );
+    return _isTabAvailable(tab) ? tab : DetailTab.wheel;
+  }
+
   /// Processes tab navigation via hardware bumpers (LB/RB).
   bool _handleTabNavigation(bool isRight) {
     if (!mounted) return false;
 
-    // Resolve which tabs are logically available for the current context.
-    final availableTabs = DetailTab.values.where((tab) {
-      if (tab == DetailTab.gameInfo && _isGameInfoHidden) return false;
-      if (tab == DetailTab.achievements && !_hasRetroAchievements) return false;
-      if (tab == DetailTab.settings &&
-          _effectiveSystem.folderName == 'android') {
-        return false;
-      }
-      return true;
-    }).toList();
+    final availableTabs = DetailTab.values.where(_isTabAvailable).toList();
 
     int currentIndexInAvailable = availableTabs.indexOf(_currentTab);
     if (currentIndexInAvailable == -1) currentIndexInAvailable = 0;
@@ -1032,17 +819,24 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     return true; // Input consumed.
   }
 
-  /// Updates the active tab and synchronizes required global state (e.g., video mute during info browsing).
-  void _setTab(DetailTab tab) {
+  /// Switches to [tab].
+  ///
+  /// [persist] records the tab as the user's preference so it carries across
+  /// games, systems and restarts; it is disabled for tabs the app forces on the
+  /// user (a scrape jumping to the media tab, or restoring the stored tab).
+  void _setTab(DetailTab tab, {bool persist = true}) {
     if (_currentTab == tab) return;
 
-    final wasGameInfo = _currentTab == DetailTab.gameInfo;
+    final wasScreenshotVideo = _currentTab == DetailTab.screenshotVideo;
 
     setState(() {
       _currentTab = tab;
 
       final config = context.read<SqliteConfigProvider>();
-      if (tab == DetailTab.gameInfo) {
+      if (persist) {
+        config.updateGameDetailsTab(tab.name);
+      }
+      if (tab == DetailTab.screenshotVideo) {
         config.updateShowGameInfo(true);
         widget.videoController?.setVolume(0);
         _startVideoDelay();
@@ -1050,10 +844,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         if (config.config.showGameInfo) {
           config.updateShowGameInfo(false);
         }
-        if (wasGameInfo) {
+        if (wasScreenshotVideo) {
           _cancelVideoDelay();
         }
-        if (tab == DetailTab.general &&
+        if (tab == DetailTab.wheel &&
             widget.videoController != null &&
             widget.showVideo) {
           _applyVideoMuteState();
@@ -1062,9 +856,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     });
   }
 
-  /// Closes all open metadata/achievement overlays, returning to the general view.
   void _closeAllOverlays() {
-    _setTab(DetailTab.general);
+    // Dismissing an overlay isn't a tab choice, so it leaves the preference be.
+    _setTab(DetailTab.wheel, persist: false);
   }
 
   /// Orchestrates a metadata acquisition process via ScreenScraperService.
@@ -1109,6 +903,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
     if (!mounted) return;
 
+    // No "scraping…" toast: the progress panel above says the same thing for
+    // the whole run, wherever the scrape was started from.
     final secondaryState = context.read<SecondaryDisplayState?>();
     if (secondaryState != null && widget.isSecondaryScreenActive) {
       secondaryState.updateState(
@@ -1149,31 +945,12 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
       if (mounted) {
         if (result['success'] == true) {
-          // Protocol: Evict all cached artwork to force immediate UI refresh with new assets.
-          try {
-            final imagesToEvict = [
-              _game.getScreenshotPath(targetSystemFolder),
-              _game.getImagePath(
-                targetSystemFolder,
-                'wheels',
-                widget.fileProvider,
-              ),
-              _game.getImagePath(
-                targetSystemFolder,
-                'fanarts',
-                widget.fileProvider,
-              ),
-            ];
-
-            for (final imagePath in imagesToEvict) {
-              final imageFile = File(imagePath);
-              if (await imageFile.exists()) {
-                await FileImage(imageFile).evict();
-              }
-            }
-          } catch (e) {
-            _log.e('Image cache eviction failed: $e');
-          }
+          // Evict every artwork file the scrape may have rewritten — box art
+          // included — so the tabs below reload them instead of redrawing the
+          // decoded copies they were already showing.
+          await evictScrapedArtwork(
+            scrapedArtworkPaths(_game, targetSystemFolder, widget.fileProvider),
+          );
 
           if (!context.mounted) return;
 

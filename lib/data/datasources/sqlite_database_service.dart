@@ -176,6 +176,14 @@ class SqliteDatabaseService {
 
     final List<RomEntry> romEntries = [];
 
+    // Resolve every alias folder to a concrete directory before walking any of
+    // them. A system's aliases can name the same physical directory: EmuDeck
+    // ships roms/gamecube as a symlink to roms/gc, and both are aliases of the
+    // GameCube system, so walking each alias in turn finds every file twice and
+    // stores it under two different rom_path spellings.
+    final scanTargets =
+        <({String dirPath, String canonicalPath, bool useSaf})>[];
+
     for (final romFolder in romFolders) {
       final bool useSaf =
           Platform.isAndroid && romFolder.startsWith('content://');
@@ -183,57 +191,70 @@ class SqliteDatabaseService {
 
       for (final folderToScan in allPossibleFolderNames) {
         try {
-          List<RomEntry> entries;
+          final String? dirPath;
 
           if (subdirsForRoot != null) {
-            final folderLower = folderToScan.toLowerCase();
-            final resolvedPath = subdirsForRoot[folderLower];
-
-            if (resolvedPath != null) {
-              if (useSaf) {
-                entries = await _scanSafUri(
-                  resolvedPath,
-                  validExtensionsSet,
-                  system.recursiveScan,
-                  ignoreHiddenFiles: ignoreHiddenFiles,
-                );
-              } else {
-                entries = await _scanStandardPath(
-                  resolvedPath,
-                  validExtensionsSet,
-                  system.recursiveScan,
-                  ignoreHiddenFiles: ignoreHiddenFiles,
-                );
-              }
-            } else {
-              continue;
-            }
+            dirPath = subdirsForRoot[folderToScan.toLowerCase()];
+          } else if (useSaf) {
+            dirPath = await _resolveSafSubfolderUri(
+              romFolder,
+              folderToScan,
+              ignoreHiddenFiles: ignoreHiddenFiles,
+            );
           } else {
-            if (useSaf) {
-              entries = await _scanSafFolder(
-                romFolder,
-                folderToScan,
-                validExtensionsSet,
-                system.recursiveScan,
-                ignoreHiddenFiles: ignoreHiddenFiles,
-              );
-            } else {
-              entries = await _scanStandardFolder(
-                romFolder,
-                folderToScan,
-                validExtensionsSet,
-                system.recursiveScan,
-                ignoreHiddenFiles: ignoreHiddenFiles,
-              );
-            }
+            dirPath = await _resolveStandardSubfolderPath(
+              romFolder,
+              folderToScan,
+              ignoreHiddenFiles: ignoreHiddenFiles,
+            );
           }
 
-          if (entries.isNotEmpty) {
-            romEntries.addAll(entries);
-          }
+          if (dirPath == null) continue;
+
+          scanTargets.add((
+            dirPath: dirPath,
+            canonicalPath: await _canonicalScanPath(dirPath, useSaf: useSaf),
+            useSaf: useSaf,
+          ));
         } catch (e) {
-          _log.e('Error scanning folder $folderToScan in $romFolder: $e');
+          _log.e('Error resolving folder $folderToScan in $romFolder: $e');
         }
+      }
+    }
+
+    // Walk real directories before symlinked aliases so the stored rom_path
+    // names the physical location: if the user later drops the alias link, the
+    // rows that survived still resolve.
+    final orderedTargets = [
+      ...scanTargets.where((t) => t.dirPath == t.canonicalPath),
+      ...scanTargets.where((t) => t.dirPath != t.canonicalPath),
+    ];
+
+    final walkedDirs = <String>{};
+    for (final target in orderedTargets) {
+      // An alias pointing at a directory already walked for this system.
+      if (!walkedDirs.add(target.canonicalPath)) continue;
+
+      try {
+        final entries = target.useSaf
+            ? await _scanSafUri(
+                target.dirPath,
+                validExtensionsSet,
+                system.recursiveScan,
+                ignoreHiddenFiles: ignoreHiddenFiles,
+              )
+            : await _scanStandardPath(
+                target.dirPath,
+                validExtensionsSet,
+                system.recursiveScan,
+                ignoreHiddenFiles: ignoreHiddenFiles,
+              );
+
+        if (entries.isNotEmpty) {
+          romEntries.addAll(entries);
+        }
+      } catch (e) {
+        _log.e('Error scanning folder ${target.dirPath}: $e');
       }
     }
 
@@ -254,10 +275,11 @@ class SqliteDatabaseService {
       ..addAll(deduplicatedEntries);
 
     // Clean orphaned entries (files deleted from disk)
-    final removedCount = await _cleanupOrphanedRomsOptimized(
+    final cleanup = await _cleanupOrphanedRomsOptimized(
       system.id!,
       romEntries.map((e) => e.path).toSet(),
     );
+    final removedCount = cleanup.removed;
 
     if (romEntries.isEmpty) {
       final finalCount = await SqliteService.getRomCountForSystem(system.id!);
@@ -269,16 +291,38 @@ class SqliteDatabaseService {
       );
     }
 
+    // Only rows the database does not already carry need writing. A warm
+    // rescan finds nothing new, so this turns ~9k pointless upserts (and the
+    // 399 transactions around them) into zero work. Entries whose row is
+    // populated from the file itself are always re-upserted so a previously
+    // failed extraction still gets another chance.
+    final entriesToWrite = romEntries
+        .where(
+          (e) =>
+              !cleanup.knownPaths.contains(e.path) ||
+              _needsMetadataExtraction(system.id!, e),
+        )
+        .toList();
+
+    if (entriesToWrite.isEmpty) {
+      return ScanSummary(
+        added: 0,
+        removed: removedCount,
+        total: (initialCount - removedCount).clamp(0, 999999),
+        systemName: system.realName,
+      );
+    }
+
     // Batch insertion with dynamic batch size tuning
-    final batchSize = _calculateOptimalBatchSize(romEntries.length);
+    final batchSize = _calculateOptimalBatchSize(entriesToWrite.length);
     final batches = <List<RomEntry>>[];
-    for (int i = 0; i < romEntries.length; i += batchSize) {
+    for (int i = 0; i < entriesToWrite.length; i += batchSize) {
       batches.add(
-        romEntries.sublist(
+        entriesToWrite.sublist(
           i,
-          (i + batchSize < romEntries.length)
+          (i + batchSize < entriesToWrite.length)
               ? i + batchSize
-              : romEntries.length,
+              : entriesToWrite.length,
         ),
       );
     }
@@ -431,6 +475,18 @@ class SqliteDatabaseService {
     }
   }
 
+  /// Whether [entry] carries metadata that [_batchInsertRoms] derives by reading
+  /// the file itself (Switch title info, Vita Title ID, Steam App ID).
+  ///
+  /// Rows like these are re-upserted on every scan even when the path is already
+  /// known, so an extraction that failed once — unreadable file, missing Switch
+  /// keys — is retried later instead of being frozen out by the path diff.
+  static bool _needsMetadataExtraction(String systemId, RomEntry entry) {
+    if (systemId == 'switch' || systemId == 'nintendo-switch') return true;
+    final lower = entry.filename.toLowerCase();
+    return lower.endsWith('.psvita') || lower.endsWith('.steam');
+  }
+
   /// Calculates a tuned batch size for insertions based on the total file count.
   static int _calculateOptimalBatchSize(int totalFiles) {
     if (totalFiles <= 10) return totalFiles;
@@ -457,13 +513,17 @@ class SqliteDatabaseService {
     if (isSwitch) await SwitchTitleExtractor.loadKeys();
 
     await db.transaction((txn) async {
+      // app_emulator_unique_id/os_id are left NULL = "inherit the system
+      // default", resolved live at launch. Do NOT freeze the default here:
+      // stamping it made per-game settings stale/"whack-a-mole" and bypassed
+      // the installed-aware default resolution at launch.
       const sql = '''
         INSERT INTO user_roms
         (app_system_id, app_emulator_unique_id, app_emulator_os_id, filename, rom_path, title_id, title_name, created_at)
         VALUES (
           ?,
-          (SELECT e.unique_identifier FROM app_emulators e WHERE e.system_id = ? AND e.os_id = 1 AND e.is_default = 1 LIMIT 1),
-          (SELECT e.os_id FROM app_emulators e WHERE e.system_id = ? AND e.os_id = 1 AND e.is_default = 1 LIMIT 1),
+          NULL,
+          NULL,
           ?, ?, ?, ?, datetime('now')
         )
         ON CONFLICT(rom_path) DO UPDATE SET
@@ -551,8 +611,6 @@ class SqliteDatabaseService {
         }
 
         batch.rawInsert(sql, [
-          systemId,
-          systemId,
           systemId,
           entry.filename,
           entry.path,
@@ -677,7 +735,15 @@ class SqliteDatabaseService {
 
   /// Removes database records for ROMs that are no longer physically present
   /// on the storage device.
-  static Future<int> _cleanupOrphanedRomsOptimized(
+  ///
+  /// Returns the number of rows deleted along with the set of `rom_path` values
+  /// that remain in the database for [systemId]. The caller uses that set to
+  /// skip re-upserting rows it already has: the query it comes from has to run
+  /// anyway, so the diff is free. On error the known-path set comes back empty,
+  /// which degrades to the old behaviour (upsert everything) rather than
+  /// silently skipping inserts.
+  static Future<({int removed, Set<String> knownPaths})>
+  _cleanupOrphanedRomsOptimized(
     String systemId,
     Set<String> existingRomPaths,
   ) async {
@@ -687,25 +753,51 @@ class SqliteDatabaseService {
         'SELECT rom_path FROM user_roms WHERE app_system_id = ?',
         [systemId],
       );
-      if (existingRoms.isEmpty) return 0;
+      if (existingRoms.isEmpty) {
+        return (removed: 0, knownPaths: <String>{});
+      }
 
-      final romsToDelete = existingRoms
-          .where(
-            (rom) => !existingRomPaths.contains(rom['rom_path'].toString()),
-          )
-          .toList();
-      if (romsToDelete.isEmpty) return 0;
+      final knownPaths = <String>{};
+      final romsToDelete = <String>[];
+      for (final rom in existingRoms) {
+        final path = rom['rom_path'].toString();
+        if (existingRomPaths.contains(path)) {
+          knownPaths.add(path);
+        } else {
+          romsToDelete.add(path);
+        }
+      }
+      if (romsToDelete.isEmpty) {
+        return (removed: 0, knownPaths: knownPaths);
+      }
+
+      // Rows stored before the scan learned to skip symlinked alias folders
+      // still spell the path through the alias (…/roms/gamecube/x.rvz for a
+      // file the scan now keeps as …/roms/gc/x.rvz). Those files are not
+      // missing, so their play time, favourite flag and scraped ids have to be
+      // folded into the surviving row before the delete below discards them.
+      final renamed = await _mergeAliasDuplicateRoms(
+        romsToDelete,
+        existingRomPaths,
+        knownPaths,
+      );
+      if (renamed.isNotEmpty) {
+        romsToDelete.removeWhere(renamed.containsKey);
+        knownPaths.addAll(renamed.values);
+        if (romsToDelete.isEmpty) {
+          return (removed: 0, knownPaths: knownPaths);
+        }
+      }
 
       await db.transaction((txn) async {
         const batchSize = 100;
         for (int i = 0; i < romsToDelete.length; i += batchSize) {
-          final batch = romsToDelete.sublist(
+          final paths = romsToDelete.sublist(
             i,
             (i + batchSize < romsToDelete.length)
                 ? i + batchSize
                 : romsToDelete.length,
           );
-          final paths = batch.map((r) => r['rom_path'].toString()).toList();
           final placeholders = List.filled(paths.length, '?').join(',');
           await txn.rawDelete(
             'DELETE FROM user_roms WHERE rom_path IN ($placeholders)',
@@ -713,11 +805,154 @@ class SqliteDatabaseService {
           );
         }
       });
-      return romsToDelete.length;
+      return (removed: romsToDelete.length, knownPaths: knownPaths);
     } catch (e) {
       _log.e('Error cleaning up orphaned ROMs for system $systemId: $e');
-      return 0;
+      return (removed: 0, knownPaths: <String>{});
     }
+  }
+
+  /// Folds rows that reach an already-scanned file through a symlinked alias
+  /// folder into the row the scan keeps, and returns the ones that were instead
+  /// renamed in place (orphan path -> surviving path).
+  ///
+  /// Only runs when a scan found orphans at all, so a warm rescan never pays
+  /// for it, and it resolves one directory at a time rather than one file at a
+  /// time. `content://` paths are skipped outright: a SAF URI is an opaque
+  /// DocumentsProvider identifier with no symbolic link to resolve.
+  static Future<Map<String, String>> _mergeAliasDuplicateRoms(
+    List<String> orphanPaths,
+    Set<String> scannedPaths,
+    Set<String> knownPaths,
+  ) async {
+    final dirCache = <String, String?>{};
+
+    Future<String?> canonicalDirOf(String dirPath) async {
+      if (dirCache.containsKey(dirPath)) return dirCache[dirPath];
+      String? resolved;
+      try {
+        resolved = await Directory(dirPath).resolveSymbolicLinks();
+      } catch (e) {
+        resolved = null;
+      }
+      dirCache[dirPath] = resolved;
+      return resolved;
+    }
+
+    // Index the scanned files by canonical path, so a row spelled through an
+    // alias can find the row the scan kept whatever the two spellings are.
+    final canonicalToScanned = <String, String>{};
+    for (final scanned in scannedPaths) {
+      if (scanned.startsWith('content://')) continue;
+      final dir = await canonicalDirOf(path.dirname(scanned));
+      if (dir == null) continue;
+      canonicalToScanned[path.join(dir, path.basename(scanned))] = scanned;
+    }
+    if (canonicalToScanned.isEmpty) return const {};
+
+    final renames = <String, String>{};
+    final merges = <String, String>{};
+    final claimed = <String>{};
+
+    for (final orphanPath in orphanPaths) {
+      if (orphanPath.startsWith('content://')) continue;
+      final dir = await canonicalDirOf(path.dirname(orphanPath));
+      if (dir == null) continue; // The directory is gone: a genuine orphan.
+
+      final survivor =
+          canonicalToScanned[path.join(dir, path.basename(orphanPath))];
+      if (survivor == null || survivor == orphanPath) continue;
+
+      if (knownPaths.contains(survivor) || claimed.contains(survivor)) {
+        merges[orphanPath] = survivor;
+      } else {
+        // Only the alias spelling was ever stored, so the row can simply move
+        // to the surviving path and keep everything it carries.
+        renames[orphanPath] = survivor;
+        claimed.add(survivor);
+      }
+    }
+
+    if (renames.isEmpty && merges.isEmpty) return const {};
+
+    int asInt(Object? value) =>
+        value is int ? value : int.tryParse('${value ?? ''}') ?? 0;
+
+    String? latest(Object? a, Object? b) {
+      final x = (a == null || a.toString().isEmpty) ? null : a.toString();
+      final y = (b == null || b.toString().isEmpty) ? null : b.toString();
+      if (x == null) return y;
+      if (y == null) return x;
+      return x.compareTo(y) >= 0 ? x : y;
+    }
+
+    const columns =
+        'is_favorite, play_time, last_played, id_ra, ra_hash, ss_hash, '
+        'app_emulator_unique_id, app_emulator_os_id, '
+        'app_alternative_emulators_id';
+
+    final db = await SqliteService.getDatabase();
+    await db.transaction((txn) async {
+      for (final entry in renames.entries) {
+        await txn.rawUpdate(
+          "UPDATE user_roms SET rom_path = ?, updated_at = datetime('now') "
+          'WHERE rom_path = ?',
+          [entry.value, entry.key],
+        );
+      }
+
+      for (final entry in merges.entries) {
+        final duplicateRows = await txn.rawQuery(
+          'SELECT $columns FROM user_roms WHERE rom_path = ?',
+          [entry.key],
+        );
+        final survivorRows = await txn.rawQuery(
+          'SELECT $columns FROM user_roms WHERE rom_path = ?',
+          [entry.value],
+        );
+        if (duplicateRows.isEmpty || survivorRows.isEmpty) continue;
+
+        final d = duplicateRows.first;
+        final s = survivorRows.first;
+
+        // The surviving row wins every scalar it already carries; the duplicate
+        // only fills gaps. Play time is summed because each launch was recorded
+        // against exactly one of the two rows.
+        await txn.rawUpdate(
+          '''
+          UPDATE user_roms SET
+            is_favorite = ?,
+            play_time = ?,
+            last_played = ?,
+            id_ra = ?,
+            ra_hash = ?,
+            ss_hash = ?,
+            app_emulator_unique_id = ?,
+            app_emulator_os_id = ?,
+            app_alternative_emulators_id = ?,
+            updated_at = datetime('now')
+          WHERE rom_path = ?
+          ''',
+          [
+            (asInt(s['is_favorite']) == 1 || asInt(d['is_favorite']) == 1)
+                ? 1
+                : 0,
+            asInt(s['play_time']) + asInt(d['play_time']),
+            latest(s['last_played'], d['last_played']),
+            s['id_ra'] ?? d['id_ra'],
+            s['ra_hash'] ?? d['ra_hash'],
+            s['ss_hash'] ?? d['ss_hash'],
+            s['app_emulator_unique_id'] ?? d['app_emulator_unique_id'],
+            s['app_emulator_os_id'] ?? d['app_emulator_os_id'],
+            s['app_alternative_emulators_id'] ??
+                d['app_alternative_emulators_id'],
+            entry.value,
+          ],
+        );
+      }
+    });
+
+    return renames;
   }
 
   /// Performs a specialized scan of installed Android applications.
@@ -839,18 +1074,15 @@ class SqliteDatabaseService {
     return result;
   }
 
-  /// Scans for a system-specific subdirectory within a SAF root URI.
-  static Future<List<RomEntry>> _scanSafFolder(
+  /// Locates a system-specific subdirectory within a SAF root URI.
+  static Future<String?> _resolveSafSubfolderUri(
     String romFolderUri,
-    String folderName,
-    Set<String> validExtensions,
-    bool recursive, {
+    String folderName, {
     bool ignoreHiddenFiles = true,
   }) async {
     try {
       final children = await SafDirectoryService.listFiles(romFolderUri);
-      if (children.isEmpty) return [];
-      String? systemTargetUri;
+      if (children.isEmpty) return null;
       for (final child in children) {
         if (_shouldSkipSafEntry(child, ignoreHiddenFiles: ignoreHiddenFiles)) {
           continue;
@@ -858,20 +1090,34 @@ class SqliteDatabaseService {
         if (child['isDirectory'] == true &&
             child['name'].toString().toLowerCase() ==
                 folderName.toLowerCase()) {
-          systemTargetUri = child['uri'].toString();
-          break;
+          return child['uri'].toString();
         }
       }
-      if (systemTargetUri == null) return [];
-      return await _scanSafUri(
-        systemTargetUri,
-        validExtensions,
-        recursive,
-        ignoreHiddenFiles: ignoreHiddenFiles,
-      );
+      return null;
     } catch (e) {
-      _log.e('Error scanning SAF folder $romFolderUri for $folderName: $e');
-      return [];
+      _log.e('Error resolving SAF folder $romFolderUri for $folderName: $e');
+      return null;
+    }
+  }
+
+  /// Returns the key identifying a scan target's physical directory, so alias
+  /// folders resolving to one place are only walked once.
+  ///
+  /// SAF URIs are opaque DocumentsProvider identifiers rather than filesystem
+  /// paths, so they are returned untouched: resolving symbolic links is
+  /// meaningless there, and quietly falling back to a real path would break the
+  /// `content://` rom_path identity the launcher depends on.
+  static Future<String> _canonicalScanPath(
+    String dirPath, {
+    required bool useSaf,
+  }) async {
+    if (useSaf) return dirPath;
+    try {
+      return await Directory(dirPath).resolveSymbolicLinks();
+    } catch (e) {
+      // Unreadable, or gone between listing and resolving. Fall back to the
+      // literal path so the directory is still walked exactly once.
+      return dirPath;
     }
   }
 
@@ -883,6 +1129,30 @@ class SqliteDatabaseService {
     bool ignoreHiddenFiles = true,
   }) async {
     final entries = <RomEntry>[];
+
+    // Fast path: walk the tree with direct filesystem I/O in one native call
+    // instead of a DocumentsProvider query per directory. Returns null when it
+    // cannot prove equivalence (non-primary volume, permission not held), in
+    // which case the SAF walk below runs unchanged.
+    final fastEntries = await SafDirectoryService.fastWalkTree(
+      uri,
+      recursive: recursive,
+      extensions: validExtensions,
+      ignoreHiddenFiles: ignoreHiddenFiles,
+    );
+    if (fastEntries != null) {
+      for (final item in fastEntries) {
+        entries.add(
+          RomEntry(
+            path: item['uri'].toString(),
+            filename: item['name'].toString(),
+            size: (item['size'] as num?)?.toInt() ?? 0,
+          ),
+        );
+      }
+      return entries;
+    }
+
     try {
       final content = await SafDirectoryService.listFiles(uri);
       for (final item in content) {
@@ -922,18 +1192,15 @@ class SqliteDatabaseService {
     return entries;
   }
 
-  /// Scans for a system-specific subdirectory within a standard filesystem path.
-  static Future<List<RomEntry>> _scanStandardFolder(
+  /// Locates a system-specific subdirectory within a standard filesystem path.
+  static Future<String?> _resolveStandardSubfolderPath(
     String romFolderPath,
-    String folderName,
-    Set<String> validExtensions,
-    bool recursive, {
+    String folderName, {
     bool ignoreHiddenFiles = true,
   }) async {
     try {
       final rootDir = Directory(romFolderPath);
-      if (!await rootDir.exists()) return [];
-      String? systemPath;
+      if (!await rootDir.exists()) return null;
       try {
         final List<FileSystemEntity> children = await rootDir.list().toList();
         for (final child in children) {
@@ -946,27 +1213,20 @@ class SqliteDatabaseService {
           if (child is Directory &&
               path.basename(child.path).toLowerCase() ==
                   folderName.toLowerCase()) {
-            systemPath = child.path;
-            break;
+            return child.path;
           }
         }
       } catch (e) {
         _log.e('Error listing standard directory $romFolderPath: $e');
         final directPath = path.join(romFolderPath, folderName);
-        if (await Directory(directPath).exists()) systemPath = directPath;
+        if (await Directory(directPath).exists()) return directPath;
       }
-      if (systemPath == null) return [];
-      return await _scanStandardPath(
-        systemPath,
-        validExtensions,
-        recursive,
-        ignoreHiddenFiles: ignoreHiddenFiles,
-      );
+      return null;
     } catch (e) {
       _log.e(
-        'Error scanning standard folder $romFolderPath for $folderName: $e',
+        'Error resolving standard folder $romFolderPath for $folderName: $e',
       );
-      return [];
+      return null;
     }
   }
 

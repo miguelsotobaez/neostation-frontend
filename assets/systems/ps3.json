@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "ps3",
+    "multidisc": false,
     "name": "Sony PlayStation 3",
     "short_name": "PS3",
     "details": {
@@ -51,6 +52,8 @@
         },
         "linux": {
           "executable": "rpcs3",
+          "flatpak": "net.rpcs3.RPCS3",
+          "emudeck_launcher": "rpcs3.sh",
           "args": "--no-gui \"{file.path}\""
         },
         "macos": {

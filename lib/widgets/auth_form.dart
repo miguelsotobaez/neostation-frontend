@@ -1,14 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/game_service.dart'
+    show GamepadNavigationManager;
 import 'package:neostation/services/neosync/auth_service.dart';
-import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/login_form_selection.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:neostation/screens/app_screen.dart' show AppNavigation;
 import 'package:neostation/services/logger_service.dart';
 
 class AuthForm extends StatefulWidget {
@@ -20,7 +22,7 @@ class AuthForm extends StatefulWidget {
   AuthFormState createState() => AuthFormState();
 }
 
-class AuthFormState extends State<AuthForm> {
+class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -29,7 +31,7 @@ class AuthFormState extends State<AuthForm> {
   final _resetTokenController = TextEditingController();
   final _newPasswordController = TextEditingController();
 
-  // TV navigation focus nodes
+  // Gamepad navigation focus nodes
   final _usernameFocus = FocusNode();
   final _emailFocus = FocusNode();
   final _passwordFocus = FocusNode();
@@ -51,77 +53,90 @@ class AuthFormState extends State<AuthForm> {
   Timer? _pollingTimer;
   String? _pendingVerificationEmail;
 
-  // TV mode state
-  bool _isTelevision = false;
-  int _tvFieldIndex = 0;
-  GamepadNavigation? _tvNav;
+  GamepadNavigation? _gamepadNav;
 
+  /// The slots the D-pad walks, which change with the form's mode: register
+  /// carries a username that login doesn't, the verification step is a pair of
+  /// buttons with no field, and the reset flow swaps in its own two fields.
+  /// A null entry is an action button rather than something to focus.
   @override
-  void initState() {
-    super.initState();
-    _initTvMode();
-  }
-
-  Future<void> _initTvMode() async {
-    if (!Platform.isAndroid) return;
-    final isTV = await PermissionService.isTelevision();
-    if (!mounted) return;
-    setState(() => _isTelevision = isTV);
-    if (!isTV) return;
-    _tvNav = GamepadNavigation(
-      onNavigateUp: () => _tvMove(-1),
-      onNavigateDown: () => _tvMove(1),
-      onSelectItem: _tvSelect,
-      onBack: _tvBack,
-    );
-    _tvNav!.initialize();
-    _tvNav!.activate();
-  }
-
-  // Returns ordered list of FocusNodes (null = action button) for current state
-  List<FocusNode?> _getCurrentTvFields() {
-    if (_showResetPassword) return [_resetTokenFocus, _newPasswordFocus, null];
-    if (_showForgotPassword) return [_emailFocus, null];
+  List<FocusNode?> get selectionSlots {
+    if (_showResetPassword) {
+      return [_resetTokenFocus, _newPasswordFocus, null, null]; // reset + back
+    }
+    if (_showForgotPassword) return [_emailFocus, null, null]; // send + back
     if (_showVerification && !_showEmailVerification) {
       return [_verificationTokenFocus, null];
     }
     if (_showEmailVerification) return [null, null]; // resend + back
-    if (_isLogin) return [_emailFocus, _passwordFocus, null];
-    return [_usernameFocus, _emailFocus, _passwordFocus, null];
+    if (_isLogin) {
+      // login + "sign up" + "forgot password"
+      return [_emailFocus, _passwordFocus, null, null, null];
+    }
+    // sign up + "already have an account"
+    return [_usernameFocus, _emailFocus, _passwordFocus, null, null];
   }
 
-  bool _isAnyFieldFocused() {
-    return _usernameFocus.hasFocus ||
-        _emailFocus.hasFocus ||
-        _passwordFocus.hasFocus ||
-        _verificationTokenFocus.hasFocus ||
-        _resetTokenFocus.hasFocus ||
-        _newPasswordFocus.hasFocus;
-  }
+  /// Every node the form owns, not just the ones the current mode shows, so
+  /// focus tracking survives a mode switch.
+  @override
+  List<FocusNode> get ownedFocusNodes => [
+    _usernameFocus,
+    _emailFocus,
+    _passwordFocus,
+    _verificationTokenFocus,
+    _resetTokenFocus,
+    _newPasswordFocus,
+  ];
 
-  void _tvMove(int delta) {
-    if (!_isTelevision || _isAnyFieldFocused()) return;
-    final fields = _getCurrentTvFields();
-    setState(() {
-      _tvFieldIndex = (_tvFieldIndex + delta).clamp(0, fields.length - 1);
+  @override
+  void initState() {
+    super.initState();
+    attachFocusSelectionListeners();
+    // Deferred by a frame because NeoSyncContent pushes its own layer in a
+    // post-frame callback. This form has to land on top of it, and pushing
+    // synchronously here would put it underneath.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _initControllerNavigation();
     });
   }
 
-  void _tvSelect() {
-    if (!_isTelevision) return;
-    final fields = _getCurrentTvFields();
-    if (_tvFieldIndex >= fields.length) return;
-    final node = fields[_tvFieldIndex];
-    if (node != null) {
-      node.requestFocus();
-    } else {
-      _tvHandleAction();
-    }
+  /// Registers the form's own navigation layer.
+  ///
+  /// Not gated on Android TV: the form is the only thing on screen whenever it
+  /// is shown, so the D-pad has to drive it on handhelds and the Deck too.
+  /// Going through the manager rather than calling `activate()` directly is
+  /// what stops this handler and NeoSyncContent's both seeing the same press.
+  void _initControllerNavigation() {
+    _gamepadNav = GamepadNavigation(
+      onNavigateUp: () => moveSelection(-1),
+      onNavigateDown: () => moveSelection(1),
+      onSelectItem: _selectCurrent,
+      onPreviousTab: AppNavigation.previousTab,
+      onNextTab: AppNavigation.nextTab,
+      onLeftBumper: AppNavigation.previousTab,
+      onRightBumper: AppNavigation.nextTab,
+      allowRepeat: false,
+      isTextFieldFocused: isAnyFieldFocused,
+      onBack: _handleBack,
+    );
+    _gamepadNav!.initialize();
+    GamepadNavigationManager.pushLayer(
+      'auth_form',
+      onActivate: () => _gamepadNav?.activate(),
+      onDeactivate: () => _gamepadNav?.deactivate(),
+    );
   }
 
-  void _tvHandleAction() {
+  void _selectCurrent() {
+    if (focusSelectedField()) return;
+    _handleAction();
+  }
+
+  void _handleAction() {
     if (_showEmailVerification) {
-      if (_tvFieldIndex == 0) {
+      if (isSelected(0)) {
         _resendVerification();
       } else {
         _goBackToLogin();
@@ -129,21 +144,55 @@ class AuthFormState extends State<AuthForm> {
       return;
     }
     if (_showResetPassword) {
-      _resetPassword();
+      isSelected(3) ? _goBackToLogin() : _resetPassword();
       return;
     }
     if (_showForgotPassword) {
-      _sendForgotPasswordEmail();
+      isSelected(2) ? _goBackToLogin() : _sendForgotPasswordEmail();
       return;
     }
     if (_showVerification) {
       _verifyEmail();
       return;
     }
+    // The mode-switch link trails the submit button, so it sits one slot later
+    // in register, which carries a username field the login form doesn't.
+    if (isSelected(_isLogin ? 3 : 4)) {
+      _toggleMode();
+      return;
+    }
+    if (_isLogin && isSelected(4)) {
+      _openForgotPassword();
+      return;
+    }
     _submitForm();
   }
 
-  void _tvBack() {
+  /// Tapping a link and pressing A on it both land here, so the two paths
+  /// can't drift on what a mode switch resets.
+  void _toggleMode() {
+    setState(() {
+      _isLogin = !_isLogin;
+      _message = null;
+      resetSelectionInPlace();
+    });
+  }
+
+  void _openForgotPassword() {
+    setState(() {
+      _showForgotPassword = true;
+      _message = null;
+      resetSelectionInPlace();
+    });
+  }
+
+  /// B leaves a focused field first — that is what it does everywhere else in
+  /// the app — and only steps back to the login form once nothing is focused.
+  void _handleBack() {
+    if (isAnyFieldFocused()) {
+      exitTextEntry();
+      return;
+    }
     if (_showForgotPassword ||
         _showResetPassword ||
         _showVerification ||
@@ -161,21 +210,15 @@ class AuthFormState extends State<AuthForm> {
       _showResetPassword = false;
       _isPolling = false;
       _message = null;
-      _tvFieldIndex = 0;
+      resetSelectionInPlace();
     });
   }
 
-  void _resetTvIndex() {
-    if (_isTelevision) {
-      _tvFieldIndex = 0;
-    }
-  }
-
-  bool _isTvSelected(int slot) => _isTelevision && _tvFieldIndex == slot;
-
   @override
   void dispose() {
-    _tvNav?.dispose();
+    GamepadNavigationManager.popLayer('auth_form');
+    _gamepadNav?.dispose();
+    detachFocusSelectionListeners();
     _usernameFocus.dispose();
     _emailFocus.dispose();
     _passwordFocus.dispose();
@@ -434,7 +477,7 @@ class AuthFormState extends State<AuthForm> {
       _message = AppLocale.emailNotVerified.getString(context);
       _showEmailVerification = true;
       _showVerification = false;
-      _tvFieldIndex = 0;
+      resetSelectionInPlace();
     });
   }
 
@@ -443,7 +486,7 @@ class AuthFormState extends State<AuthForm> {
       _message = AppLocale.registrationSuccessCheckEmail.getString(context);
       _showEmailVerification = true;
       _showVerification = false;
-      _tvFieldIndex = 0;
+      resetSelectionInPlace();
     });
     _startEmailVerificationPolling();
   }
@@ -477,9 +520,8 @@ class AuthFormState extends State<AuthForm> {
         setState(() {
           _showForgotPassword = false;
           _showResetPassword = true;
-          _tvFieldIndex = 0;
+          resetSelectionInPlace();
         });
-        _resetTvIndex();
       }
     } catch (e) {
       setState(() {
@@ -532,9 +574,8 @@ class AuthFormState extends State<AuthForm> {
             _message = AppLocale.passwordResetSuccess.getString(context);
             _resetTokenController.clear();
             _newPasswordController.clear();
-            _tvFieldIndex = 0;
+            resetSelectionInPlace();
           });
-          _resetTvIndex();
         });
       }
     } catch (e) {
@@ -623,7 +664,7 @@ class AuthFormState extends State<AuthForm> {
                       AppLocale.verificationToken.getString(context),
                       AppLocale.enterTokenFromEmail.getString(context),
                       Symbols.mark_email_read_rounded,
-                      isTvHighlighted: _isTvSelected(0),
+                      isHighlighted: isSelected(0),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -644,7 +685,7 @@ class AuthFormState extends State<AuthForm> {
               ],
 
               if (!_showEmailVerification)
-                _buildTvActionButton(
+                _buildActionButton(
                   context: context,
                   slot: 1,
                   onPressed: _isLoading ? null : _verifyEmail,
@@ -652,15 +693,15 @@ class AuthFormState extends State<AuthForm> {
                 ),
               SizedBox(height: 8.r),
 
-              // Email verification buttons with TV highlight
-              _buildTvTextButton(
+              // Email verification buttons
+              _buildSecondaryButton(
                 context: context,
                 slot: _showEmailVerification ? 0 : -1,
                 onPressed: _isLoading ? null : _resendVerification,
                 label: AppLocale.resendVerificationEmail.getString(context),
                 fontSize: 10.r,
               ),
-              _buildTvTextButton(
+              _buildSecondaryButton(
                 context: context,
                 slot: _showEmailVerification ? 1 : -1,
                 onPressed: () => _goBackToLogin(),
@@ -685,7 +726,7 @@ class AuthFormState extends State<AuthForm> {
                         AppLocale.username.getString(context),
                         AppLocale.chooseUsername.getString(context),
                         Symbols.person_outline_rounded,
-                        isTvHighlighted: _isTvSelected(0),
+                        isHighlighted: isSelected(0),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -715,7 +756,7 @@ class AuthFormState extends State<AuthForm> {
                       AppLocale.email.getString(context),
                       'you@example.com',
                       Symbols.email_rounded,
-                      isTvHighlighted: _isTvSelected(_isLogin ? 0 : 1),
+                      isHighlighted: isSelected(_isLogin ? 0 : 1),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -749,7 +790,7 @@ class AuthFormState extends State<AuthForm> {
                           AppLocale.password.getString(context),
                           AppLocale.enterPassword.getString(context),
                           Symbols.lock_outline_rounded,
-                          isTvHighlighted: _isTvSelected(_isLogin ? 1 : 2),
+                          isHighlighted: isSelected(_isLogin ? 1 : 2),
                         ).copyWith(
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -787,7 +828,7 @@ class AuthFormState extends State<AuthForm> {
                 SizedBox(height: 8.r),
               ],
 
-              _buildTvActionButton(
+              _buildActionButton(
                 context: context,
                 slot: _isLogin ? 2 : 3,
                 onPressed: _isLoading ? null : _submitForm,
@@ -805,59 +846,39 @@ class AuthFormState extends State<AuthForm> {
                 !_showEmailVerification) ...[
               SizedBox(
                 height: 24.r,
-                child: TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isLogin = !_isLogin;
-                      _message = null;
-                      _tvFieldIndex = 0;
-                    });
-                    _resetTvIndex();
-                  },
-                  child: Text(
-                    _isLogin
-                        ? AppLocale.dontHaveAccount.getString(context)
-                        : AppLocale.alreadyHaveAccount.getString(context),
-                    style: TextStyle(
-                      fontSize: 8.r,
-                      color: theme.colorScheme.secondary.withValues(alpha: 0.9),
-                    ),
-                  ),
+                child: _buildSecondaryButton(
+                  context: context,
+                  slot: _isLogin ? 3 : 4,
+                  onPressed: _toggleMode,
+                  label: _isLogin
+                      ? AppLocale.dontHaveAccount.getString(context)
+                      : AppLocale.alreadyHaveAccount.getString(context),
+                  fontSize: 8.r,
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.9),
                 ),
               ),
               SizedBox(height: 6.r),
               if (_isLogin)
                 SizedBox(
                   height: 24.r,
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showForgotPassword = true;
-                        _message = null;
-                        _tvFieldIndex = 0;
-                      });
-                      _resetTvIndex();
-                    },
-                    child: Text(
-                      AppLocale.forgotPasswordQuestion.getString(context),
-                      style: TextStyle(
-                        fontSize: 8.r,
-                        color: theme.colorScheme.secondary.withValues(
-                          alpha: 0.9,
-                        ),
-                      ),
-                    ),
+                  child: _buildSecondaryButton(
+                    context: context,
+                    slot: 4,
+                    onPressed: _openForgotPassword,
+                    label: AppLocale.forgotPasswordQuestion.getString(context),
+                    fontSize: 8.r,
+                    color: theme.colorScheme.secondary.withValues(alpha: 0.9),
                   ),
                 ),
             ] else if (_showForgotPassword || _showResetPassword) ...[
               SizedBox(
                 height: 24.r,
-                child: TextButton(
-                  onPressed: () => _goBackToLogin(),
-                  child: Text(
-                    AppLocale.backToLogin.getString(context),
-                    style: TextStyle(fontSize: 8.r),
-                  ),
+                child: _buildSecondaryButton(
+                  context: context,
+                  slot: _showForgotPassword ? 2 : 3,
+                  onPressed: _goBackToLogin,
+                  label: AppLocale.backToLogin.getString(context),
+                  fontSize: 8.r,
                 ),
               ),
             ],
@@ -867,9 +888,9 @@ class AuthFormState extends State<AuthForm> {
     );
   }
 
-  // Wraps a field with a TV selection highlight border
+  // Wraps a field with the gamepad selection highlight border
   Widget _buildFieldHighlight({required int slot, required Widget child}) {
-    if (!_isTelevision || !_isTvSelected(slot)) return child;
+    if (!isSelected(slot)) return child;
     final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
@@ -886,17 +907,17 @@ class AuthFormState extends State<AuthForm> {
     );
   }
 
-  // TV-aware ElevatedButton for submit actions
-  Widget _buildTvActionButton({
+  // Submit button carrying the gamepad selection glow
+  Widget _buildActionButton({
     required BuildContext context,
     required int slot,
     required VoidCallback? onPressed,
     required String label,
   }) {
     final theme = Theme.of(context);
-    final isSelected = _isTvSelected(slot);
+    final selected = isSelected(slot);
     return Container(
-      decoration: isSelected
+      decoration: selected
           ? BoxDecoration(
               borderRadius: BorderRadius.circular(8.r),
               boxShadow: [
@@ -941,18 +962,19 @@ class AuthFormState extends State<AuthForm> {
     );
   }
 
-  // TV-aware TextButton for secondary actions (slot=-1 means no TV highlight)
-  Widget _buildTvTextButton({
+  // Secondary action button; slot = -1 means it is not gamepad-selectable
+  Widget _buildSecondaryButton({
     required BuildContext context,
     required int slot,
     required VoidCallback? onPressed,
     required String label,
     required double fontSize,
+    Color? color,
   }) {
     final theme = Theme.of(context);
-    final isSelected = slot >= 0 && _isTvSelected(slot);
+    final selected = slot >= 0 && isSelected(slot);
     return Container(
-      decoration: isSelected
+      decoration: selected
           ? BoxDecoration(
               borderRadius: BorderRadius.circular(6.r),
               border: Border.all(
@@ -963,7 +985,10 @@ class AuthFormState extends State<AuthForm> {
           : null,
       child: TextButton(
         onPressed: onPressed,
-        child: Text(label, style: TextStyle(fontSize: fontSize)),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: fontSize, color: color),
+        ),
       ),
     );
   }
@@ -990,7 +1015,7 @@ class AuthFormState extends State<AuthForm> {
     String label,
     String hint,
     IconData icon, {
-    bool isTvHighlighted = false,
+    bool isHighlighted = false,
   }) {
     final theme = Theme.of(context);
     return InputDecoration(
@@ -1019,10 +1044,10 @@ class AuthFormState extends State<AuthForm> {
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8.r),
         borderSide: BorderSide(
-          color: isTvHighlighted
+          color: isHighlighted
               ? theme.colorScheme.primary
               : theme.colorScheme.primary.withValues(alpha: 0.1),
-          width: isTvHighlighted ? 2.r : 1.r,
+          width: isHighlighted ? 2.r : 1.r,
         ),
       ),
       focusedBorder: OutlineInputBorder(
@@ -1048,7 +1073,7 @@ class AuthFormState extends State<AuthForm> {
               AppLocale.email.getString(context),
               AppLocale.enterRegisteredEmail.getString(context),
               Symbols.email_rounded,
-              isTvHighlighted: _isTvSelected(0),
+              isHighlighted: isSelected(0),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -1063,7 +1088,7 @@ class AuthFormState extends State<AuthForm> {
           _buildMessageBox(context),
           SizedBox(height: 12.r),
         ],
-        _buildTvActionButton(
+        _buildActionButton(
           context: context,
           slot: 1,
           onPressed: _isLoading ? null : _sendForgotPasswordEmail,
@@ -1090,7 +1115,7 @@ class AuthFormState extends State<AuthForm> {
               AppLocale.resetTokenLabel.getString(context),
               AppLocale.enterTokenFromEmail.getString(context),
               Symbols.vpn_key_rounded,
-              isTvHighlighted: _isTvSelected(0),
+              isHighlighted: isSelected(0),
             ),
           ),
         ),
@@ -1110,7 +1135,7 @@ class AuthFormState extends State<AuthForm> {
                   AppLocale.newPassword.getString(context),
                   AppLocale.atLeast8Characters.getString(context),
                   Symbols.lock_outline_rounded,
-                  isTvHighlighted: _isTvSelected(1),
+                  isHighlighted: isSelected(1),
                 ).copyWith(
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -1134,19 +1159,13 @@ class AuthFormState extends State<AuthForm> {
           _buildMessageBox(context),
           SizedBox(height: 12.r),
         ],
-        _buildTvActionButton(
+        // No back link here: the shared one below the form covers both this
+        // mode and the forgot-password one, and two of them rendered at once.
+        _buildActionButton(
           context: context,
           slot: 2,
           onPressed: _isLoading ? null : _resetPassword,
           label: AppLocale.resetPassword.getString(context),
-        ),
-        SizedBox(height: 6.r),
-        TextButton(
-          onPressed: () => _goBackToLogin(),
-          child: Text(
-            AppLocale.backToLogin.getString(context),
-            style: TextStyle(fontSize: 10.r),
-          ),
         ),
       ],
     );

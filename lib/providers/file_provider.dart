@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -40,6 +41,41 @@ class FileProvider extends ChangeNotifier {
 
   /// Cached map of supported file extensions per system, loaded from the database.
   Map<String, Set<String>> _systemExtensions = {};
+
+  /// Absolute path to the user's ES-DE application folder, or null if the ES-DE
+  /// import is not configured. Used for read-time fallback artwork resolution.
+  String? _esdeRoot;
+
+  /// NeoStation system folder name -> ES-DE `downloaded_media` subfolder name,
+  /// captured during ES-DE import.
+  Map<String, String> _esdeSystemDirs = {};
+
+  /// "systemFolder\u0000romBase" -> ES-DE media subfolder (the ROM's directory
+  /// relative to the system folder). Only populated for ROMs that live in a
+  /// subfolder; ES-DE mirrors that structure inside `downloaded_media`.
+  Map<String, String> _esdeMediaSubdirs = {};
+
+  /// Builds the composite subdir-map key. The NUL separator can't occur in a
+  /// folder or ROM name, and both parts are lowercased because ES-DE ROMs are
+  /// matched case-insensitively at import time (so write- and read-side keys
+  /// agree even when the gamelist casing differs from the scanned filename).
+  static String _esdeSubdirKey(String systemFolder, String romBase) =>
+      '${systemFolder.toLowerCase()}\u0000${romBase.toLowerCase()}';
+
+  /// NeoStation media-type folder -> ES-DE `downloaded_media` categories, in
+  /// preference order. ES-DE scrapes more categories than NeoStation renders
+  /// and users routinely enable only some of them, so each type falls back to
+  /// the next-best ES-DE category rather than showing nothing.
+  static const Map<String, List<String>> _esdeMediaCategories = {
+    'box2d': ['covers', '3dboxes'],
+    'wheels': ['marquees'],
+    'screenshots': ['screenshots', 'titlescreens', 'miximages'],
+    'fanarts': ['fanart', 'miximages'],
+    'videos': ['videos'],
+  };
+
+  /// Image extensions ES-DE writes into `downloaded_media`.
+  static const List<String> _esdeMediaExtensions = ['png', 'jpg'];
 
   // Getters
   String? get userDataPath => _userDataPath;
@@ -93,6 +129,7 @@ class FileProvider extends ChangeNotifier {
       }
 
       _systemExtensions = await SystemRepository.getSystemExtensionsMap();
+      await _loadEsdeConfig();
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -113,49 +150,70 @@ class FileProvider extends ChangeNotifier {
   /// 3. Checks against common ROM extensions.
   /// 4. Fallback for short, non-spaced substrings following the final dot.
   String _stripRomExtension(String romName, [String? systemFolderName]) {
+    final validExtensions = systemFolderName != null
+        ? _systemExtensions[systemFolderName]
+        : null;
+    return stripRomExtension(romName, validExtensions);
+  }
+
+  /// Common ROM container/image extensions used by the extension-stripping
+  /// fallback when a system-specific whitelist isn't available.
+  static const Set<String> _commonRomExts = {
+    'zip',
+    '7z',
+    'rar',
+    'iso',
+    'bin',
+    'cue',
+    'chd',
+    'nes',
+    'sfc',
+    'smc',
+    'gba',
+    'gbc',
+    'gb',
+    'n64',
+    'z64',
+    'v64',
+    'nds',
+    '3ds',
+    'cia',
+    'nsp',
+    'xci',
+    'nca',
+    'nro',
+    'nso',
+    'rvz',
+    'wbfs',
+    'gcm',
+    'rpx',
+  };
+
+  /// Strips a ROM filename's extension using the same multi-stage logic
+  /// everywhere (single source of truth so write-time and read-time media keys
+  /// stay in agreement):
+  /// 1. If [validExtensions] is given and matches, strip it.
+  /// 2. Preserve version-like strings (e.g. `.v1`, `.123`).
+  /// 3. Strip known common ROM extensions.
+  /// 4. Fallback: strip short, non-spaced extensions.
+  static String stripRomExtension(
+    String romName, [
+    Set<String>? validExtensions,
+  ]) {
     if (!romName.contains('.')) return romName;
 
     final lastDot = romName.lastIndexOf('.');
     final ext = romName.substring(lastDot + 1).toLowerCase();
 
-    if (systemFolderName != null &&
-        _systemExtensions.containsKey(systemFolderName)) {
-      final validExtensions = _systemExtensions[systemFolderName]!;
-      if (validExtensions.contains(ext)) {
-        return romName.substring(0, lastDot);
-      }
+    if (validExtensions != null && validExtensions.contains(ext)) {
+      return romName.substring(0, lastDot);
     }
 
     final isVersion =
         RegExp(r'^\d+$').hasMatch(ext) || RegExp(r'^v\d+').hasMatch(ext);
-
     if (isVersion) return romName;
 
-    const commonRomExts = {
-      'zip',
-      '7z',
-      'rar',
-      'iso',
-      'bin',
-      'cue',
-      'chd',
-      'nes',
-      'sfc',
-      'smc',
-      'gba',
-      'gbc',
-      'gb',
-      'nsp',
-      'xci',
-      'nca',
-      'nro',
-      'nso',
-      'rvz',
-      'wbfs',
-      'gcm',
-      'rpx',
-    };
-    if (commonRomExts.contains(ext)) {
+    if (_commonRomExts.contains(ext)) {
       return romName.substring(0, lastDot);
     }
 
@@ -354,11 +412,150 @@ class FileProvider extends ChangeNotifier {
     return path.join(_mediaPath!, mediaFolder);
   }
 
+  /// Loads ES-DE fallback configuration (root path + per-system media dirs)
+  /// from the database. Safe to call repeatedly.
+  Future<void> _loadEsdeConfig() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final cfg = await db.query(
+        'user_config',
+        columns: ['esde_folder_path'],
+        limit: 1,
+      );
+      final rootRaw = cfg.isNotEmpty
+          ? cfg.first['esde_folder_path']?.toString()
+          : null;
+      _esdeRoot = (rootRaw != null && rootRaw.trim().isNotEmpty)
+          ? rootRaw.trim()
+          : null;
+
+      final map = <String, String>{};
+      if (_esdeRoot != null) {
+        final rows = await db.rawQuery('''
+          SELECT s.folder_name AS folder_name, ss.esde_media_dir AS esde_media_dir
+          FROM user_system_settings ss
+          JOIN app_systems s ON s.id = ss.app_system_id
+          WHERE ss.esde_media_dir IS NOT NULL AND ss.esde_media_dir != ''
+        ''');
+        for (final r in rows) {
+          final fn = r['folder_name']?.toString();
+          final ed = r['esde_media_dir']?.toString();
+          if (fn != null && ed != null && ed.isNotEmpty) map[fn] = ed;
+        }
+      }
+      _esdeSystemDirs = map;
+
+      final subdirs = <String, String>{};
+      if (_esdeRoot != null) {
+        final rows = await db.rawQuery('''
+          SELECT s.folder_name AS folder_name, m.filename AS filename,
+                 m.esde_media_subdir AS subdir
+          FROM user_screenscraper_metadata m
+          JOIN app_systems s ON s.id = m.app_system_id
+          WHERE m.esde_media_subdir IS NOT NULL AND m.esde_media_subdir != ''
+        ''');
+        for (final r in rows) {
+          final fn = r['folder_name']?.toString();
+          final file = r['filename']?.toString();
+          final sub = r['subdir']?.toString();
+          if (fn == null || file == null || sub == null || sub.isEmpty) {
+            continue;
+          }
+          final base = _stripRomExtension(file, fn);
+          subdirs[_esdeSubdirKey(fn, base)] = sub;
+        }
+      }
+      _esdeMediaSubdirs = subdirs;
+    } catch (e) {
+      _esdeRoot = null;
+      _esdeSystemDirs = {};
+      _esdeMediaSubdirs = {};
+    }
+  }
+
+  /// Reloads ES-DE fallback configuration after an import and notifies
+  /// listeners so views re-resolve artwork.
+  Future<void> refreshEsde() async {
+    await _loadEsdeConfig();
+    notifyListeners();
+  }
+
+  /// Candidate read-time fallback paths for a media asset inside the user's
+  /// ES-DE `downloaded_media` tree, most-preferred first, or empty if ES-DE is
+  /// not configured for this system / media type. Does NOT check existence —
+  /// the caller stats them in order.
+  ///
+  /// Candidates cover every ES-DE category mapped to [imageType] and every
+  /// extension ES-DE writes. When the import recorded a media subfolder for
+  /// this ROM the subfolder is tried first, then the category root: ES-DE can
+  /// list one ROM filename in several subfolders and only one of them is
+  /// recorded, so the root is where the art often actually sits.
+  List<String> getEsdeMediaCandidates(
+    String systemFolderName,
+    String imageType,
+    String romName,
+  ) {
+    if (_esdeRoot == null) return const [];
+    final esdeDir = _esdeSystemDirs[systemFolderName];
+    if (esdeDir == null) return const [];
+    final categories = _esdeMediaCategories[imageType];
+    if (categories == null) return const [];
+    final baseName = _stripRomExtension(romName, systemFolderName);
+    final subdir =
+        _esdeMediaSubdirs[_esdeSubdirKey(systemFolderName, baseName)];
+    final subdirs = <String>[
+      if (subdir != null && subdir.isNotEmpty) subdir,
+      '',
+    ];
+
+    final candidates = <String>[];
+    for (final category in categories) {
+      for (final sub in subdirs) {
+        for (final extension in _esdeMediaExtensions) {
+          candidates.add(
+            path.joinAll([
+              _esdeRoot!,
+              'downloaded_media',
+              esdeDir,
+              category,
+              if (sub.isNotEmpty) sub,
+              '$baseName.$extension',
+            ]),
+          );
+        }
+      }
+    }
+    return candidates;
+  }
+
+  /// Resolves the read-time fallback path for a preview video inside the user's
+  /// ES-DE `downloaded_media` tree, or null if ES-DE is not configured for this
+  /// system. Does NOT check existence.
+  String? getEsdeVideoPath(String systemFolderName, String romName) {
+    if (_esdeRoot == null) return null;
+    final esdeDir = _esdeSystemDirs[systemFolderName];
+    if (esdeDir == null) return null;
+    final baseName = _stripRomExtension(romName, systemFolderName);
+    final subdir =
+        _esdeMediaSubdirs[_esdeSubdirKey(systemFolderName, baseName)];
+    return path.joinAll([
+      _esdeRoot!,
+      'downloaded_media',
+      esdeDir,
+      'videos',
+      if (subdir != null && subdir.isNotEmpty) subdir,
+      '$baseName.mp4',
+    ]);
+  }
+
   /// Resets the internal state of the provider.
   void reset() {
     _userDataPath = null;
     _mediaPath = null;
     _documentsPath = null;
+    _esdeRoot = null;
+    _esdeSystemDirs = {};
+    _esdeMediaSubdirs = {};
     _isInitialized = false;
     notifyListeners();
   }

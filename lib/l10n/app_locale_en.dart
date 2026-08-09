@@ -18,6 +18,12 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.download: 'Download',
   AppLocale.stop: 'Stop',
   AppLocale.reset: 'Reset',
+  AppLocale.startupStorageUnavailable:
+      'NeoStation could not reach the folder where your data is stored. Check that the SD card or drive is connected.',
+  AppLocale.startupStorageRetry: 'Retry',
+  AppLocale.startupStorageUseDefault: 'Continue without it',
+  AppLocale.startupLoading:
+      'Preparing NeoStation. Waiting for storage and services...',
 
   AppLocale.play: 'Play',
   AppLocale.playButton: 'PLAY',
@@ -35,17 +41,18 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.general: 'General',
   AppLocale.secondaryDisplay: 'Secondary Screen',
   AppLocale.directories: 'Directories',
-  AppLocale.palettes: 'Palettes',
-  AppLocale.neoThemes: 'Themes',
-  AppLocale.neoThemesSubtitle: 'Customize system card backgrounds and logos',
-  AppLocale.neoThemesNone: 'None',
-  AppLocale.neoThemesNoneSubtitle: 'Default appearance',
-  AppLocale.neoThemesLoading: 'Loading themes...',
-  AppLocale.neoThemesError: 'Could not load themes',
-  AppLocale.neoThemesApplyTitle: 'Apply theme?',
-  AppLocale.neoThemesApplyBody:
-      'The theme assets will be downloaded for all systems. This may take a moment.',
-  AppLocale.neoThemesDownloading: 'Downloading theme assets...',
+  AppLocale.themes: 'Themes',
+  AppLocale.systemArt: 'System Art',
+  AppLocale.systemArtSubtitle:
+      'Customize system card backgrounds and logos with System Art packs',
+  AppLocale.systemArtNone: 'None',
+  AppLocale.systemArtNoneSubtitle: 'Default appearance',
+  AppLocale.systemArtLoading: 'Loading System Art...',
+  AppLocale.systemArtError: 'Could not load System Art',
+  AppLocale.systemArtApplyTitle: 'Apply System Art?',
+  AppLocale.systemArtApplyBody:
+      'The System Art pack will be downloaded for all systems. This may take a moment.',
+  AppLocale.systemArtDownloading: 'Downloading System Art pack...',
   AppLocale.about: 'About',
   AppLocale.exit: 'Exit',
   AppLocale.launcher: 'Launcher',
@@ -56,8 +63,14 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.hideRecentCard: 'Recent Games Card',
   AppLocale.hideRecentCardSubtitle:
       'Show the recently played card in the systems grid',
-  AppLocale.palettesSubtitle: 'Personalize the appearance of your NeoStation',
+  AppLocale.themesSubtitle: 'Personalize the appearance of your NeoStation',
   AppLocale.systemTheme: 'System',
+  AppLocale.importTheme: 'Import Theme',
+  AppLocale.importThemeSuccess: 'Imported "%s"',
+  AppLocale.importThemeExists: 'Theme "%s" is already imported',
+  AppLocale.importThemeError: 'Couldn\'t import theme — invalid file',
+  AppLocale.deleteThemeTitle: 'Delete Theme?',
+  AppLocale.deleteThemeConfirm: 'Remove the imported theme "%s"?',
 
   AppLocale.generalSettings: 'General Settings',
   AppLocale.alwaysShowRomName: 'Always show ROM file name',
@@ -114,7 +127,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.nowPlayingDimNever: 'Never',
   AppLocale.nowPlayingDockEnabled: 'App dock',
   AppLocale.nowPlayingDockEnabledSubtitle:
-      'Show the app dock on the secondary Now Playing panel',
+      'Show the app dock on the secondary screen',
   AppLocale.nowPlayingDockSlots: 'Dock slots',
   AppLocale.nowPlayingDockSlotsSubtitle:
       'How many app slots the dock shows (1-5)',
@@ -161,6 +174,19 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.bartopShutdownSubtitle:
       'Shut down the computer when exiting the application',
 
+  AppLocale.showSyncTab: 'Show Sync tab',
+  AppLocale.showSyncTabSubtitle:
+      'Display the Cloud Sync tab in the navigation bar',
+  AppLocale.showAchievementsTab: 'Show Achievements tab',
+  AppLocale.showAchievementsTabSubtitle:
+      'Display the RetroAchievements tab in the navigation bar',
+  AppLocale.showScraperTab: 'Show Scraper tab',
+  AppLocale.showScraperTabSubtitle:
+      'Display the Scraping tab in the navigation bar',
+  AppLocale.showSearchTab: 'Show Search tab',
+  AppLocale.showSearchTabSubtitle:
+      'Display the Search tab in the navigation bar',
+
   AppLocale.configureDirectories: 'Directories',
   AppLocale.configureRomsFolder: 'Configure ROMs folder',
   AppLocale.cannotAccessFolder: 'Cannot Access Folder',
@@ -177,6 +203,39 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.confirmExit: 'Confirm Exit',
   AppLocale.rescanAllFolders: 'Rescan All ROM Folders',
   AppLocale.rescanAllFoldersSubtitle: 'Manually scan for new systems and ROMs',
+  AppLocale.organizeMultiDiscGames: 'Organize Multi-Disc Games',
+  AppLocale.organizeMultiDiscGamesSubtitle:
+      'Automatically creates .m3u files for multi disc games and organises them into folders',
+  AppLocale.organizeMultiDiscScanning:
+      'Scanning ROM folders for multi-disc games...',
+  AppLocale.organizeMultiDiscNoRomFoldersConfigured:
+      'No ROM folders configured.',
+  AppLocale.organizeMultiDiscSkippedSuffix: ' ({count} folder path(s) skipped)',
+  AppLocale.organizeMultiDiscDone:
+      'Done: {groups} set(s) organized, {files} file(s) moved, {playlists} playlist(s) created{skipped}.',
+  AppLocale.organizeMultiDiscNoSetsFound:
+      'No multi-disc sets found to organize{skipped}.',
+  AppLocale.organizeMultiDiscFailed:
+      'Failed to organize multi-disc games: {error}',
+  AppLocale.organizeMultiDiscWarning:
+      'This moves matching ROM files into new game folders and creates .m3u playlists on your storage. This cannot be undone automatically.',
+  AppLocale.cleanOrphanedMetadata: 'Clean Orphaned Metadata',
+  AppLocale.cleanOrphanedMetadataSubtitle:
+      'Remove metadata and media left behind by deleted ROMs',
+  AppLocale.cleanOrphanedMetadataWarning:
+      'This permanently deletes metadata rows and media files for ROMs that are no longer in your library. ES-DE imported entries will not be removed.',
+  AppLocale.cleanOrphanedMetadataScanning: 'Cleaning orphaned metadata...',
+  AppLocale.cleanOrphanedMetadataCleaningItem: 'Cleaning {filename}...',
+  AppLocale.cleanOrphanedMetadataNothingFound: 'No orphaned metadata found.',
+  AppLocale.cleanOrphanedMetadataDone:
+      'Cleaned {entries} metadata entr(y/ies) and {files} media file(s).',
+  AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
+      ' {count} ES-DE entr(y/ies) were left untouched.',
+  AppLocale.cleanOrphanedMetadataFailed:
+      'Failed to clean orphaned metadata: {error}',
+  AppLocale.notifications: 'Notifications',
+  AppLocale.clearAll: 'Clear all',
+  AppLocale.noActiveNotifications: 'No active notifications',
   AppLocale.romsFolderSubtitle: 'Add a folder containing your ROM files',
   AppLocale.pressToRemoveFolder: 'Press confirm to remove this folder',
   AppLocale.maxRomFoldersReached: 'Maximum 5 ROM folders allowed',
@@ -406,6 +465,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.stoppingScraping: 'Stopping scraping process...',
   AppLocale.syncError: 'Error synchronizing system IDs',
   AppLocale.metadataError: 'Error during metadata scraping',
+  AppLocale.scrapeQuotaExceeded: 'ScreenScraper daily scraping quota exceeded',
   AppLocale.start: 'Start',
   AppLocale.systemsSub: 'Select which systems to scrape',
   AppLocale.disableAll: 'Disable All',
@@ -437,6 +497,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.hintRefresh: 'Refresh',
   AppLocale.hintViewMode: 'View Mode',
   AppLocale.hintScrape: 'Scrape',
+  AppLocale.hintMoreActions: 'More',
 
   AppLocale.error: 'Error',
   AppLocale.loading: 'Loading...',
@@ -490,6 +551,21 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.scrape: 'Scrape',
   AppLocale.noAchievements: 'No Achievements',
   AppLocale.gameInfo: 'Game Info',
+  AppLocale.manage: 'Manage',
+  AppLocale.forceRescrape: 'Force Rescrape',
+  AppLocale.scrapingData: 'Scraping Data',
+  AppLocale.scrapingMedia: 'Scraping Media',
+  AppLocale.gameTitle: 'Title',
+  AppLocale.publisher: 'Publisher',
+  AppLocale.genre: 'Genre',
+  AppLocale.description: 'Description',
+  AppLocale.screenshot: 'Screenshot',
+  AppLocale.fanart: 'Fanart',
+  AppLocale.wheel: 'Wheel',
+  AppLocale.boxart: 'Boxart',
+  AppLocale.change: 'Change',
+  AppLocale.metadataSaved: 'Metadata saved',
+  AppLocale.imageUpdated: 'Image updated',
   AppLocale.unlocked: 'Unlocked!',
   AppLocale.points: 'pts',
   AppLocale.scanningRomsRA: 'Scanning ROMs for RetroAchievements',
@@ -756,6 +832,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.systemsUpdateCurrentVersion: 'Current version: {version}',
   AppLocale.systemsUpdateNewVersion: 'New version: {version}',
   AppLocale.systemsUpdateDownloading: 'Downloading system configs...',
+  AppLocale.systemsUpdateCancelling: 'Cancelling...',
   AppLocale.systemsUpdateSyncing: 'Syncing systems database...',
   AppLocale.systemsUpdateComplete: 'Systems updated successfully!',
   AppLocale.systemsUpdateError:
@@ -777,7 +854,7 @@ const Map<String, dynamic> appLocaleEn = {
 
   AppLocale.userDataLocation: 'User Data Location',
   AppLocale.userDataLocationSubtitle:
-      'Choose where scraped media, themes, and app data are stored',
+      'Choose where scraped media, system art packs, and app data are stored',
   AppLocale.userDataLocationDefault: 'Default location',
   AppLocale.selectUserDataFolder: 'Select User Data Folder',
   AppLocale.folderNotEmptyTitle: 'Folder Not Empty',
@@ -800,8 +877,25 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.userDataLocationUpdated: 'User data location updated',
   AppLocale.resetToDefault: 'Reset to Default',
   AppLocale.romDirectories: 'ROM Directories',
+  AppLocale.tools: 'Tools',
+  AppLocale.toolsSubtitle: 'Tools to help organise your ROMs',
   AppLocale.addRomFolder: 'Add ROM Folder',
   AppLocale.removeRomFolder: 'Remove',
+  AppLocale.searchTitle: 'Search',
+  AppLocale.searchNameHint: 'Search...',
+  AppLocale.searchNoResults: 'No games found',
+  AppLocale.searchResultsCount: '{count} results',
+  AppLocale.searchClearFilters: 'Clear filters',
+  AppLocale.searchFilters: 'Filters',
+  AppLocale.searchViewResults: 'View results',
+  AppLocale.searchOpen: 'Search',
+  AppLocale.searchGoToGame: 'Go to game',
+  AppLocale.filterPlatform: 'Platform',
+  AppLocale.filterDeveloper: 'Developer',
+  AppLocale.filterGenre: 'Genre',
+  AppLocale.filterRating: 'Rating',
+  AppLocale.filterYear: 'Year',
+  AppLocale.filterAny: 'Any',
   AppLocale.resetPlayTimeConfirm: 'Reset Play Time',
   AppLocale.resetPlayTimeConfirmBody:
       'This will permanently reset the recorded play time for this game to zero. This cannot be undone.',
@@ -845,7 +939,59 @@ const Map<String, dynamic> appLocaleEn = {
       'RetroAchievements is busy right now. Please wait a moment and try again.',
   AppLocale.raApiKey: 'API Key',
   AppLocale.raEnterApiKey: 'Enter your API key',
+  AppLocale.raGetApiKey: 'Get API Key',
+  AppLocale.raApiKeyHelp:
+      'Open your RetroAchievements control panel to copy your personal Web API key.',
   AppLocale.raNoRecentUnlocks: 'No recent unlocks in the last 30 days',
   AppLocale.raRecentlyPlayedTitle: 'Recently Played',
   AppLocale.raNoRecentlyPlayed: 'No recently played games',
+
+  // ES-DE import
+  AppLocale.esdeImport: 'ES-DE Import',
+  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
+  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeSelectFolderSubtitle:
+      'Choose the ES-DE folder containing gamelists and downloaded_media',
+  AppLocale.esdeRunImport: 'Import from ES-DE',
+  AppLocale.esdeRunImportSubtitle:
+      'Fill in missing metadata and use ES-DE artwork as fallback',
+  AppLocale.esdeImporting: 'Importing from ES-DE',
+  AppLocale.esdeImportComplete: 'ES-DE import complete',
+  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
+  AppLocale.esdeReset: 'Reset ES-DE Import',
+  AppLocale.esdeResetSubtitle:
+      'Remove imported metadata and media links so the import can be re-run',
+  AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeResetConfirmBody:
+      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeImportNotEsdeFolder:
+      'This folder is not an ES-DE installation (no gamelists found)',
+  AppLocale.esdeImportNothingFound:
+      'No matching systems or games were found to import',
+  AppLocale.esdeSummarySystemsMatched: 'Systems matched',
+  AppLocale.esdeSummaryUnmatched: 'unmatched',
+  AppLocale.esdeSummarySkipped: 'skipped (unreadable)',
+  AppLocale.esdeSummaryGamesImported: 'Games imported',
+  AppLocale.esdeSummaryNoRomMatch: 'no ROM match',
+  AppLocale.esdeSummaryStatsUpdated: 'Favorites / stats updated',
+  AppLocale.esdeSummaryGames: 'games',
+  AppLocale.esdeSummarySystems: 'systems',
+  AppLocale.wizardScanComplete: 'Scan complete',
+  AppLocale.wizardTapNextToContinue: 'Tap Next to continue',
+  AppLocale.wizardEsdeStepTitle: 'Import from ES-DE',
+  AppLocale.wizardEsdeStepDesc:
+      'Already using ES-DE? Import your game metadata and artwork. Select the '
+      'main ES-DE folder containing your "gamelists" and "downloaded_media" '
+      'folders. Optional; you can run it later from Settings.',
+  AppLocale.wizardArtPackTitle: 'Get the NeoStation Art Pack',
+  AppLocale.wizardArtPackDesc:
+      'We strongly recommend downloading the NeoStation system art pack for '
+      'beautiful console backgrounds across your library. It can be changed '
+      'later in Settings.',
+  AppLocale.wizardDownloadArtPack: 'Download Art Pack',
+  AppLocale.wizardArtPackInstalled:
+      'Art pack installed! You can explore more themes later in Settings.',
+  AppLocale.wizardArtPackUnavailable:
+      'The art pack couldn\'t be reached right now. You can install it later '
+      'from Settings once you\'re online.',
 };

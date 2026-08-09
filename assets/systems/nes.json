@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "nes",
+    "multidisc": false,
     "name": "Nintendo Entertainment System",
     "short_name": "NES",
     "details": {
@@ -185,6 +186,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L nestopia_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -209,6 +212,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fceumm_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -232,6 +237,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L mesen_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -255,6 +262,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L quicknes_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -278,6 +287,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L bnes_libretro.so \"{file.path}\""
         },
         "macos": {
@@ -301,6 +312,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L fbneo_libretro.so \"{file.path}\""
         },
         "macos": {

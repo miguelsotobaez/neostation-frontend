@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "wiiu",
+    "multidisc": false,
     "name": "Nintendo Wii U",
     "short_name": "Wii U",
     "details": {
@@ -48,6 +49,8 @@
         },
         "linux": {
           "executable": "cemu",
+          "flatpak": "info.cemu.Cemu",
+          "emudeck_launcher": "cemu.sh",
           "args": "-g \"{file.path}\" -f"
         },
         "macos": {

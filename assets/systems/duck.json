@@ -1,6 +1,7 @@
 {
   "system": {
     "id": "duck",
+    "multidisc": false,
     "name": "Mega Duck",
     "short_name": "Duck",
     "details": {
@@ -15,7 +16,8 @@
     },
     "folders": [
       "megaduck",
-      "Mega Duck"
+      "Mega Duck",
+      "mega-duck-slash-cougar-boy"
     ],
     "colors": [
       "#FFF176",
@@ -68,6 +70,8 @@
         },
         "linux": {
           "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
           "args": "-L sameduck_libretro.so \"{file.path}\""
         },
         "macos": {

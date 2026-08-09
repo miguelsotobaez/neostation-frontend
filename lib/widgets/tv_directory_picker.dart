@@ -17,8 +17,13 @@ import '../services/permission_service.dart';
 ///   When null (default), directory-picker mode: returns selected folder path.
 class TvDirectoryPicker extends StatefulWidget {
   final List<String>? allowedExtensions;
+  final bool executableMode;
 
-  const TvDirectoryPicker({super.key, this.allowedExtensions});
+  const TvDirectoryPicker({
+    super.key,
+    this.allowedExtensions,
+    this.executableMode = false,
+  });
 
   /// Directory-picker mode — returns the chosen folder path.
   static Future<String?> show(BuildContext context) {
@@ -42,6 +47,24 @@ class TvDirectoryPicker extends StatefulWidget {
     );
   }
 
+  /// Portal-free executable picker for Linux and SteamOS Game Mode.
+  static Future<String?> showExecutablePicker(BuildContext context) {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const TvDirectoryPicker(executableMode: true),
+    );
+  }
+
+  /// Converts Flatpak's host filesystem mount into a portable host path.
+  static String persistedExecutablePath(String selectedPath) {
+    const hostMountPrefix = '/run/host/';
+    if (selectedPath.startsWith(hostMountPrefix)) {
+      return '/${selectedPath.substring(hostMountPrefix.length)}';
+    }
+    return selectedPath;
+  }
+
   @override
   State<TvDirectoryPicker> createState() => _TvDirectoryPickerState();
 }
@@ -61,7 +84,8 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   bool _permissionDenied = false;
   bool _readyToSelect = false;
 
-  bool get _isFilePicker => widget.allowedExtensions != null;
+  bool get _isFilePicker =>
+      widget.allowedExtensions != null || widget.executableMode;
 
   // Focus index: volume phase = index into _volumes;
   // folder phase (dir mode):  0 = <Set dir>, 1..n = dirs
@@ -71,7 +95,8 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   final ScrollController _scrollController = ScrollController();
   GamepadNavigation? _gamepadNav;
 
-  static const double _itemHeight = 44.0;
+  double get _itemHeight => widget.executableMode ? 60.0 : 44.0;
+  double get _volumeRowSpacing => widget.executableMode ? 8.0 : 0.0;
 
   @override
   void initState() {
@@ -129,10 +154,10 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   void _scrollToFocused() {
     if (!_scrollController.hasClients) return;
     final viewportHeight = _scrollController.position.viewportDimension;
+    final itemExtent =
+        _itemHeight + (_showVolumePicker ? _volumeRowSpacing : 0.0);
     final targetOffset =
-        (_focusedIndex * _itemHeight) -
-        (viewportHeight / 2) +
-        (_itemHeight / 2);
+        (_focusedIndex * itemExtent) - (viewportHeight / 2) + (itemExtent / 2);
     _scrollController.animateTo(
       targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 120),
@@ -190,6 +215,47 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
 
   Future<void> _detectVolumes(BuildContext context) async {
     final volumes = <_StorageVolume>[];
+
+    if (Platform.isLinux && widget.executableMode) {
+      final home = Platform.environment['HOME'] ?? '';
+      final candidates = <_StorageVolume>[
+        if (home.isNotEmpty)
+          _StorageVolume(name: 'Home', path: home, isInternal: true),
+        if (home.isNotEmpty)
+          _StorageVolume(
+            name: 'Applications',
+            path: '$home/Applications',
+            isInternal: true,
+          ),
+        if (home.isNotEmpty)
+          _StorageVolume(
+            name: 'Local binaries',
+            path: '$home/.local/bin',
+            isInternal: true,
+          ),
+        const _StorageVolume(
+          name: 'System binaries',
+          path: '/usr/bin',
+          isInternal: true,
+        ),
+        const _StorageVolume(
+          name: 'Host system binaries',
+          path: '/run/host/usr/bin',
+          isInternal: true,
+        ),
+      ];
+      for (final candidate in candidates) {
+        if (await Directory(candidate.path).exists()) volumes.add(candidate);
+      }
+      if (mounted) {
+        setState(() {
+          _volumes = volumes;
+          _loadingVolumes = false;
+          _focusedIndex = 0;
+        });
+      }
+      return;
+    }
 
     // Use Android API for reliable detection of USB/SD on TV devices.
     final androidVolumes = await PermissionService.getExternalStorageVolumes();
@@ -279,11 +345,11 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
 
         if (entity is Directory) {
           dirs.add(_DirEntry(name: name, path: entity.path));
-        } else if (entity is File && exts != null) {
+        } else if ((entity is File || entity is Link) && _isFilePicker) {
           final ext = name.contains('.')
               ? name.split('.').last.toLowerCase()
               : '';
-          if (exts.contains(ext)) {
+          if (widget.executableMode || (exts?.contains(ext) ?? false)) {
             files.add(_DirEntry(name: name, path: entity.path));
           }
         }
@@ -520,10 +586,11 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
       );
     }
 
-    return ListView.builder(
+    return ListView.separated(
       controller: _scrollController,
       physics: const ClampingScrollPhysics(),
       itemCount: _volumes.length,
+      separatorBuilder: (_, _) => SizedBox(height: _volumeRowSpacing.r),
       itemBuilder: (context, index) {
         final vol = _volumes[index];
         final focused = _focusedIndex == index;
@@ -572,8 +639,12 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
                           color: focused
                               ? theme.colorScheme.primary
                               : theme.colorScheme.onSurface,
+                          height: 1.15,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      SizedBox(height: 4.r),
                       Text(
                         vol.path,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -581,7 +652,10 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
                           color: theme.colorScheme.onSurface.withValues(
                             alpha: 0.45,
                           ),
+                          height: 1.15,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -644,7 +718,9 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
                 child: Row(
                   children: [
                     Icon(
-                      Symbols.image_rounded,
+                      widget.executableMode
+                          ? Symbols.terminal_rounded
+                          : Symbols.image_rounded,
                       color: focused
                           ? theme.colorScheme.secondary
                           : theme.colorScheme.onSurface.withValues(alpha: 0.6),
