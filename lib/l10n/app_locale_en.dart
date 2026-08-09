@@ -27,7 +27,6 @@ const Map<String, dynamic> appLocaleEn = {
 
   AppLocale.play: 'Play',
   AppLocale.playButton: 'PLAY',
-  AppLocale.openButton: 'OPEN',
   AppLocale.favorite: 'Favorite',
   AppLocale.random: 'RANDOM',
   AppLocale.randomGame: 'Random Game',
@@ -98,9 +97,6 @@ const Map<String, dynamic> appLocaleEn = {
       'Group ROMs in subfolders into browsable folders instead of mixing them with games',
   AppLocale.subfolderViewEnabled: 'Subfolders shown as folders',
   AppLocale.subfolderViewDisabled: 'Subfolders mixed with games',
-  AppLocale.subfolderViewDefault: 'Show Subfolders (All Systems)',
-  AppLocale.subfolderViewDefaultSubtitle:
-      'Turns subfolders on or off for every system; each system can still be changed individually',
   AppLocale.errorScanningSystem: 'Error scanning system: {error}',
   AppLocale.scrapedTitlesUsed: 'Scraped titles will be used when available',
   AppLocale.gameExtensionsHidden: 'Game extensions will be hidden',

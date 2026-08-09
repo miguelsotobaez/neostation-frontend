@@ -46,9 +46,6 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   static const String play = 'play';
   static const String playButton = 'play_button';
-
-  /// Confirm label on a folder row, where 'PLAY' reads oddly.
-  static const String openButton = 'open_button';
   static const String favorite = 'favorite';
   static const String random = 'random';
   static const String randomGame = 'random_game';
@@ -117,9 +114,6 @@ mixin AppLocale {
   static const String subfolderViewSubtitle = 'subfolder_view_subtitle';
   static const String subfolderViewEnabled = 'subfolder_view_enabled';
   static const String subfolderViewDisabled = 'subfolder_view_disabled';
-  static const String subfolderViewDefault = 'subfolder_view_default';
-  static const String subfolderViewDefaultSubtitle =
-      'subfolder_view_default_subtitle';
   static const String errorScanningSystem = 'error_scanning_system';
   static const String scrapedTitlesUsed = 'scraped_titles_used';
   static const String gameExtensionsHidden = 'game_extensions_hidden';

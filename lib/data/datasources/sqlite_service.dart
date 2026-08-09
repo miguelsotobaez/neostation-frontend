@@ -1771,7 +1771,6 @@ class SqliteService {
         game_grid_columns TEXT DEFAULT 'M',
         game_carousel_card_style TEXT DEFAULT 'fanart',
         use_12_hour_clock INTEGER DEFAULT 0,
-        subfolder_view_default INTEGER DEFAULT 0,
         dock_apps TEXT,
         dock_enabled INTEGER DEFAULT 1,
         dock_slot_count INTEGER DEFAULT 3,
@@ -2525,7 +2524,6 @@ class SqliteService {
     int? hideBottomScreen,
     int? sfxEnabled,
     int? use12HourClock,
-    int? subfolderViewDefault,
     String? systemSortBy,
     String? systemSortOrder,
     String? appLanguage,
@@ -2596,9 +2594,6 @@ class SqliteService {
     }
     if (use12HourClock != null) {
       newConfig['use_12_hour_clock'] = use12HourClock;
-    }
-    if (subfolderViewDefault != null) {
-      newConfig['subfolder_view_default'] = subfolderViewDefault;
     }
     if (systemSortBy != null) {
       newConfig['system_sort_by'] = systemSortBy;
@@ -2774,24 +2769,6 @@ class SqliteService {
     bool enabled,
   ) async {
     await _updateSystemSetting(systemId, 'subfolder_view', enabled ? 1 : 0);
-  }
-
-  /// Stamps every system's subfolder-view setting to [enabled]. Used by the
-  /// global General-settings toggle, which acts as a master switch: it writes
-  /// the value to all systems, after which each system can be toggled
-  /// individually.
-  static Future<void> setSubfolderViewForAllSystems(bool enabled) async {
-    final db = await instance.database;
-    await db.execute(
-      '''
-      INSERT INTO user_system_settings (app_system_id, subfolder_view)
-      SELECT id, ? FROM app_systems WHERE true
-      ON CONFLICT(app_system_id)
-      DO UPDATE SET subfolder_view = excluded.subfolder_view,
-                    updated_at = CURRENT_TIMESTAMP
-      ''',
-      [enabled ? 1 : 0],
-    );
   }
 
   /// Retrieves the complete configuration for a system.

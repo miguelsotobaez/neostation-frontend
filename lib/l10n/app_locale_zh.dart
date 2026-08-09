@@ -26,7 +26,6 @@ const Map<String, dynamic> appLocaleZh = {
 
   AppLocale.play: '开始游戏',
   AppLocale.playButton: '开始游戏',
-  AppLocale.openButton: '打开',
   AppLocale.favorite: '收藏',
   AppLocale.random: '随机',
   AppLocale.randomGame: '随机游戏',
@@ -88,8 +87,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.subfolderViewSubtitle: '将子文件夹中的 ROM 归入可浏览的文件夹，而不是与游戏混在一起',
   AppLocale.subfolderViewEnabled: '子文件夹显示为文件夹',
   AppLocale.subfolderViewDisabled: '子文件夹与游戏混合',
-  AppLocale.subfolderViewDefault: '显示子文件夹（所有系统）',
-  AppLocale.subfolderViewDefaultSubtitle: '一次性开启或关闭所有系统的子文件夹；每个系统仍可单独更改',
   AppLocale.errorScanningSystem: '扫描系统时出错: {error}',
   AppLocale.scrapedTitlesUsed: '抓取的标题可用时将被使用',
   AppLocale.gameExtensionsHidden: '游戏扩展名将隐藏',

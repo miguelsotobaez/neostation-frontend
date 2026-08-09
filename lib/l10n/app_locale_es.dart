@@ -27,7 +27,6 @@ const Map<String, dynamic> appLocaleEs = {
 
   AppLocale.play: 'Jugar',
   AppLocale.playButton: 'JUGAR',
-  AppLocale.openButton: 'ABRIR',
   AppLocale.favorite: 'Favorito',
   AppLocale.random: 'RANDOM',
   AppLocale.randomGame: 'Juego Aleatorio',
@@ -101,9 +100,6 @@ const Map<String, dynamic> appLocaleEs = {
       'Agrupar las ROMs de subcarpetas en carpetas navegables en lugar de mezclarlas con los juegos',
   AppLocale.subfolderViewEnabled: 'Subcarpetas mostradas como carpetas',
   AppLocale.subfolderViewDisabled: 'Subcarpetas mezcladas con los juegos',
-  AppLocale.subfolderViewDefault: 'Mostrar subcarpetas (todos los sistemas)',
-  AppLocale.subfolderViewDefaultSubtitle:
-      'Activa o desactiva las subcarpetas en todos los sistemas; cada sistema aún se puede cambiar individualmente',
   AppLocale.errorScanningSystem: 'Error al escanear el sistema: {error}',
   AppLocale.scrapedTitlesUsed:
       'Se usarán los títulos obtenidos cuando estén disponibles',

@@ -27,7 +27,6 @@ const Map<String, dynamic> appLocaleIt = {
 
   AppLocale.play: 'Gioca',
   AppLocale.playButton: 'GIOCA',
-  AppLocale.openButton: 'APRI',
   AppLocale.favorite: 'Preferito',
   AppLocale.random: 'Casuale',
   AppLocale.randomGame: 'Gioco Casuale',
@@ -100,9 +99,6 @@ const Map<String, dynamic> appLocaleIt = {
       'Raggruppa le ROM nelle sottocartelle in cartelle navigabili invece di mescolarle con i giochi',
   AppLocale.subfolderViewEnabled: 'Sottocartelle mostrate come cartelle',
   AppLocale.subfolderViewDisabled: 'Sottocartelle mescolate ai giochi',
-  AppLocale.subfolderViewDefault: 'Mostra sottocartelle (tutti i sistemi)',
-  AppLocale.subfolderViewDefaultSubtitle:
-      'Attiva o disattiva le sottocartelle per ogni sistema; ogni sistema può comunque essere modificato singolarmente',
   AppLocale.errorScanningSystem:
       'Errore durante la scansione del sistema: {error}',
   AppLocale.scrapedTitlesUsed: 'I titoli cercati verranno usati se disponibili',

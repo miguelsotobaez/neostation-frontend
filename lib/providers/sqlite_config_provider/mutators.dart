@@ -155,16 +155,6 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
-  /// Master switch for showing ROM subfolders as navigable folders. Persists
-  /// its own state and stamps the value onto every system, which can then be
-  /// adjusted individually from each system's settings.
-  Future<void> updateSubfolderViewDefault(bool value) async {
-    _config = _config.copyWith(subfolderViewDefault: value);
-    await SqliteConfigService.saveConfig(_config);
-    await SystemRepository.setSubfolderViewForAllSystems(value);
-    _notify();
-  }
-
   /// Updates whether UI navigation SFX sounds are enabled
   Future<void> updateSfxEnabled(bool value) async {
     _config = _config.copyWith(sfxEnabled: value);

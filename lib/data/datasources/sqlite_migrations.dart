@@ -5318,34 +5318,19 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v112: Adds the global `subfolder_view_default` master toggle to
-  /// user_config. Toggling it in General settings stamps every system's
-  /// user_system_settings.subfolder_view; each system can then be adjusted
-  /// individually.
+  /// Migration v112: intentionally a no-op.
+  ///
+  /// It originally added `user_config.subfolder_view_default`, the master
+  /// toggle for the subfolder view. That global setting was dropped before
+  /// release in favour of the per-system toggle alone, so nothing reads the
+  /// column. The version number is kept (rather than renumbered away) so
+  /// devices that already migrated to v112 do not read as a downgrade, which
+  /// would recreate the whole database.
   static Future<void> _migrateToVersion112(Database db) async {
-    _log.i('Migration v112: Adding subfolder_view_default to user_config');
-    try {
-      final configInfo = db.select('PRAGMA table_info(user_config)');
-      final configColumns = configInfo
-          .map((c) => c['name'].toString())
-          .toList();
-      if (!configColumns.contains('subfolder_view_default')) {
-        db.execute(
-          'ALTER TABLE user_config ADD COLUMN subfolder_view_default INTEGER DEFAULT 0',
-        );
-        _log.i('Column subfolder_view_default added via v112');
-      } else {
-        _log.i('Column subfolder_view_default already exists');
-      }
-      _log.i('Migration v112 completed');
-    } catch (e, stackTrace) {
-      _log.e('Error in migration v112: $e');
-      _log.e('   StackTrace: $stackTrace');
-      rethrow;
-    }
+    _log.i('Migration v112: no-op (global subfolder toggle removed)');
   }
 
-  /// Migration v113: Backfills the two subfolder columns if either is absent.
+  /// Migration v113: Backfills the per-system subfolder column if absent.
   ///
   /// v111/v112 were originally authored as v96/v97 on this feature branch and
   /// renumbered when main claimed those numbers. A device that ran a *different*
@@ -5354,8 +5339,8 @@ class SqliteMigrations {
   /// query joining it then fails with "no such column" and the library reads as
   /// 0 systems. Same failure mode main fixed in v97 for `game_carousel_card_style`.
   ///
-  /// Idempotent: adds only what is missing, so it is a no-op on databases that
-  /// took the normal v111/v112 path.
+  /// Idempotent: adds the column only when missing, so it is a no-op on
+  /// databases that took the normal v111 path.
   static Future<void> _migrateToVersion113(Database db) async {
     _log.i('Migration v113: Backfilling subfolder columns if absent');
     try {
@@ -5368,17 +5353,6 @@ class SqliteMigrations {
           'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
         );
         _log.i('Column subfolder_view backfilled via v113');
-      }
-
-      final configColumns = db
-          .select('PRAGMA table_info(user_config)')
-          .map((c) => c['name'].toString())
-          .toList();
-      if (!configColumns.contains('subfolder_view_default')) {
-        db.execute(
-          'ALTER TABLE user_config ADD COLUMN subfolder_view_default INTEGER DEFAULT 0',
-        );
-        _log.i('Column subfolder_view_default backfilled via v113');
       }
 
       _log.i('Migration v113 completed');

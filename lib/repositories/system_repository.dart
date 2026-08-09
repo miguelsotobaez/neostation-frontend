@@ -91,10 +91,6 @@ class SystemRepository {
   static Future<void> setSubfolderView(String systemId, bool value) =>
       SqliteService.setSystemSubfolderView(systemId, value);
 
-  /// Master switch: stamps every system's subfolder-view value.
-  static Future<void> setSubfolderViewForAllSystems(bool value) =>
-      SqliteService.setSubfolderViewForAllSystems(value);
-
   static Future<void> setHideExtension(String systemId, bool value) =>
       SqliteService.setSystemHideExtension(systemId, value);
 

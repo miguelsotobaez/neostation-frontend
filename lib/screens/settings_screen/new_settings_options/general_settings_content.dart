@@ -176,7 +176,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // Auto-update Systems
     count++; // SFX Sounds
     count++; // 12-Hour Clock
-    count++; // Global Subfolder View Default
     count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
@@ -243,15 +242,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     if (index == currentItemIndex) {
       configProvider.updateUse12HourClock(
         !configProvider.config.use12HourClock,
-      );
-      return;
-    }
-    currentItemIndex++;
-
-    // Protocol: Global Subfolder View Default.
-    if (index == currentItemIndex) {
-      configProvider.updateSubfolderViewDefault(
-        !configProvider.config.subfolderViewDefault,
       );
       return;
     }
@@ -495,31 +485,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                         context
                             .read<SqliteConfigProvider>()
                             .updateUse12HourClock(value);
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  );
-                }(),
-
-                // Setting: Global Subfolder View Default.
-                SizedBox(height: 12.r),
-                () {
-                  final index = currentItemIdx++;
-                  return SettingRow(
-                    key: _itemKeys[index],
-                    focused:
-                        widget.isContentFocused &&
-                        widget.selectedContentIndex == index,
-                    title: AppLocale.subfolderViewDefault.getString(context),
-                    subtitle: AppLocale.subfolderViewDefaultSubtitle.getString(
-                      context,
-                    ),
-                    trailing: CustomToggleSwitch(
-                      value: config.subfolderViewDefault,
-                      onChanged: (value) {
-                        context
-                            .read<SqliteConfigProvider>()
-                            .updateSubfolderViewDefault(value);
                       },
                       activeColor: theme.colorScheme.primary,
                     ),

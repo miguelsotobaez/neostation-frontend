@@ -26,7 +26,6 @@ const Map<String, dynamic> appLocaleKo = {
 
   AppLocale.play: '플레이',
   AppLocale.playButton: '플레이',
-  AppLocale.openButton: '열기',
   AppLocale.favorite: '즐겨찾기',
   AppLocale.random: '무작위',
   AppLocale.randomGame: '무작위 게임',
@@ -88,9 +87,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.subfolderViewSubtitle: '하위 폴더의 ROM을 게임 목록에 섞지 않고 탐색 가능한 폴더로 그룹화합니다',
   AppLocale.subfolderViewEnabled: '하위 폴더를 폴더로 표시합니다',
   AppLocale.subfolderViewDisabled: '하위 폴더를 게임 목록에 섞어서 표시합니다',
-  AppLocale.subfolderViewDefault: '하위 폴더 표시 (모든 시스템)',
-  AppLocale.subfolderViewDefaultSubtitle:
-      '모든 시스템의 하위 폴더 표시를 켜거나 끕니다. 각 시스템에서 개별적으로 변경할 수 있습니다',
   AppLocale.errorScanningSystem: '시스템 검색 오류: {error}',
   AppLocale.scrapedTitlesUsed: '스크랩된 게임 제목이 있으면 우선 사용합니다',
   AppLocale.gameExtensionsHidden: '게임 파일 확장자를 숨깁니다',

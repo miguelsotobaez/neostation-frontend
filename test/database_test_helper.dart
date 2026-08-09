@@ -121,8 +121,7 @@ class DatabaseTestHelper {
         system_grid_columns TEXT DEFAULT 'M',
         use_12_hour_clock INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
-        esde_folder_path TEXT,
-        subfolder_view_default INTEGER DEFAULT 0
+        esde_folder_path TEXT
       )
     ''');
 

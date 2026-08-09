@@ -27,7 +27,6 @@ const Map<String, dynamic> appLocaleFr = {
 
   AppLocale.play: 'Jouer',
   AppLocale.playButton: 'JOUER',
-  AppLocale.openButton: 'OUVRIR',
   AppLocale.favorite: 'Favori',
   AppLocale.random: 'Aléatoire',
   AppLocale.randomGame: 'Jeu Aléatoire',
@@ -104,10 +103,6 @@ const Map<String, dynamic> appLocaleFr = {
       'Regrouper les ROMs des sous-dossiers dans des dossiers navigables au lieu de les mélanger avec les jeux',
   AppLocale.subfolderViewEnabled: 'Sous-dossiers affichés comme dossiers',
   AppLocale.subfolderViewDisabled: 'Sous-dossiers mélangés aux jeux',
-  AppLocale.subfolderViewDefault:
-      'Afficher les sous-dossiers (tous les systèmes)',
-  AppLocale.subfolderViewDefaultSubtitle:
-      'Active ou désactive les sous-dossiers pour tous les systèmes ; chaque système reste modifiable individuellement',
   AppLocale.errorScanningSystem:
       'Erreur lors de l’analyse du système : {error}',
   AppLocale.scrapedTitlesUsed:

@@ -159,12 +159,6 @@ class SqliteConfigService {
                 ) ??
                 0) ==
             1,
-        subfolderViewDefault:
-            (int.tryParse(
-                  userConfig?['subfolder_view_default']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
         systemSortBy:
             userConfig?['system_sort_by']?.toString() ?? 'alphabetical',
         systemSortOrder: userConfig?['system_sort_order']?.toString() ?? 'asc',
@@ -274,7 +268,6 @@ class SqliteConfigService {
         videoSound: config.videoSound ? 1 : 0,
         sfxEnabled: config.sfxEnabled ? 1 : 0,
         use12HourClock: config.use12HourClock ? 1 : 0,
-        subfolderViewDefault: config.subfolderViewDefault ? 1 : 0,
         systemSortBy: config.systemSortBy,
         systemSortOrder: config.systemSortOrder,
         appLanguage: config.appLanguage,

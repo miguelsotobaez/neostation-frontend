@@ -196,45 +196,6 @@ void main() {
       expect(system!.subfolderView, isTrue);
     });
 
-    test('setSubfolderViewForAllSystems stamps every system', () async {
-      await seedSystem(id: 'nes', realName: 'NES', folderName: 'nes');
-      await seedSystem(id: 'snes', realName: 'SNES', folderName: 'snes');
-
-      // Master switch on: both systems get the value, even without a prior
-      // per-system settings row.
-      await SystemRepository.setSubfolderViewForAllSystems(true);
-      expect(
-        (await SystemRepository.getSystemByFolderName('nes'))!.subfolderView,
-        isTrue,
-      );
-      expect(
-        (await SystemRepository.getSystemByFolderName('snes'))!.subfolderView,
-        isTrue,
-      );
-
-      // An individual system can then be turned back off on its own.
-      await SystemRepository.setSubfolderView('snes', false);
-      expect(
-        (await SystemRepository.getSystemByFolderName('nes'))!.subfolderView,
-        isTrue,
-      );
-      expect(
-        (await SystemRepository.getSystemByFolderName('snes'))!.subfolderView,
-        isFalse,
-      );
-
-      // Master switch off: everything is stamped off again.
-      await SystemRepository.setSubfolderViewForAllSystems(false);
-      expect(
-        (await SystemRepository.getSystemByFolderName('nes'))!.subfolderView,
-        isFalse,
-      );
-      expect(
-        (await SystemRepository.getSystemByFolderName('snes'))!.subfolderView,
-        isFalse,
-      );
-    });
-
     test('getHiddenSystems returns hidden folder names', () async {
       await seedSystem(id: 'nes', realName: 'NES', folderName: 'nes');
       await db.execute(

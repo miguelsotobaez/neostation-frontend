@@ -199,8 +199,11 @@ class GameViewFooter extends StatelessWidget {
                     ),
                     SizedBox(width: 5.r),
                     Text(
-                      (isFolder ? AppLocale.openButton : AppLocale.playButton)
-                          .getString(context),
+                      isFolder
+                          // Same word the systems view uses for descending into
+                          // a container; upper-cased to match PLAY beside it.
+                          ? AppLocale.enter.getString(context).toUpperCase()
+                          : AppLocale.playButton.getString(context),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onPrimary,
                         fontWeight: FontWeight.w900,

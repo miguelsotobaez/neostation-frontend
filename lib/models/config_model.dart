@@ -87,10 +87,6 @@ class ConfigModel {
   /// Whether the header clock should use a 12-hour format with AM/PM (false = 24-hour).
   final bool use12HourClock;
 
-  /// Global default for showing ROM subfolders as navigable folders. Applied to
-  /// every system unless the system enables its own override.
-  final bool subfolderViewDefault;
-
   /// The property used to sort the system list (e.g., 'alphabetical', 'release_year').
   final String systemSortBy;
 
@@ -198,7 +194,6 @@ class ConfigModel {
     this.videoSound = false,
     this.sfxEnabled = true,
     this.use12HourClock = false,
-    this.subfolderViewDefault = false,
     this.systemSortBy = 'alphabetical',
     this.systemSortOrder = 'asc',
     this.appLanguage = 'es',
@@ -297,12 +292,6 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['use12HourClock'] ?? false).toString().toLowerCase() == 'true',
-      subfolderViewDefault:
-          (json['subfolderViewDefault'] ?? json['subfolder_view_default'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['subfolderViewDefault'] ?? false).toString().toLowerCase() ==
-              'true',
       systemSortBy:
           (json['systemSortBy'] ?? json['system_sort_by'] ?? 'alphabetical')
               .toString(),
@@ -429,7 +418,6 @@ class ConfigModel {
       'videoSound': videoSound,
       'sfxEnabled': sfxEnabled,
       'use12HourClock': use12HourClock,
-      'subfolderViewDefault': subfolderViewDefault,
       'systemSortBy': systemSortBy,
       'systemSortOrder': systemSortOrder,
       'appLanguage': appLanguage,
@@ -475,7 +463,6 @@ class ConfigModel {
     bool? videoSound,
     bool? sfxEnabled,
     bool? use12HourClock,
-    bool? subfolderViewDefault,
     String? systemSortBy,
     String? systemSortOrder,
     String? appLanguage,
@@ -518,7 +505,6 @@ class ConfigModel {
       videoSound: videoSound ?? this.videoSound,
       sfxEnabled: sfxEnabled ?? this.sfxEnabled,
       use12HourClock: use12HourClock ?? this.use12HourClock,
-      subfolderViewDefault: subfolderViewDefault ?? this.subfolderViewDefault,
       systemSortBy: systemSortBy ?? this.systemSortBy,
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
