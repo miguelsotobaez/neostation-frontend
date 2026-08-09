@@ -357,15 +357,12 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
-    // Re-check the Screen Return grant whenever we come back to the foreground.
-    // The user can grant or revoke it from Android's settings at any time — and
-    // the dock explainer sends them there from the secondary display, which
-    // never returns through the Secondary settings panel that used to be the
-    // only other place this was refreshed. Cheap (one method-channel call).
-    if (state == AppLifecycleState.resumed) {
-      // ignore: unawaited_futures
-      refreshSecondaryScreenshotAccess();
-    }
+    // No Screen Return re-check here: AppLifecycleHandler already refreshes it
+    // on every resume (see app_lifecycle_handler.dart). A second call would
+    // send an extra full-state snapshot to the secondary engine during the
+    // post-game resume, where the transport gives no ordering guarantees and a
+    // stray snapshot can clobber the Now Playing state the same resume is
+    // restoring.
   }
 
   /// Closes the current DB and re-initializes from scratch at the (possibly new) path.

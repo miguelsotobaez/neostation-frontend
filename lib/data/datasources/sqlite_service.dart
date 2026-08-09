@@ -2697,22 +2697,31 @@ class SqliteService {
       updates['esde_folder_path'] = esdeFolderPath;
     }
 
-    // The row is a singleton (id = 1, enforced by CHECK since migration v24).
-    // Create it if this is the first write — OR IGNORE so a concurrent caller
-    // that got there first isn't reset to column defaults — then set only the
-    // columns this call named.
-    await db.insert('user_config', {
-      'id': 1,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    // Both statements run in one transaction. Apart alone they can straddle a
+    // concurrent [clearUserData], which deletes the row: the insert would run
+    // before the delete and the update after it, matching nothing and
+    // discarding the user's setting with no error (saves are fire-and-forget in
+    // places — see mutators.dart). The old single INSERT OR REPLACE couldn't
+    // lose a write that way, so the transaction restores what the rewrite gave
+    // up.
+    await db.transaction((txn) async {
+      // The row is a singleton (id = 1, enforced by CHECK since migration v24).
+      // Create it if this is the first write — OR IGNORE so a concurrent caller
+      // that got there first isn't reset to column defaults — then set only the
+      // columns this call named.
+      await txn.insert('user_config', {
+        'id': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
-    if (updates.isEmpty) return;
+      if (updates.isEmpty) return;
 
-    // No WHERE: on a singleton table this is the same row, and it keeps the
-    // write from assuming an id the read side doesn't ask for either
-    // ([getUserConfig] just takes the first row). If a stray row ever did
-    // exist, every row converges instead of the reader and writer disagreeing
-    // about which one is live.
-    await db.update('user_config', updates);
+      // No WHERE: on a singleton table this is the same row, and it keeps the
+      // write from assuming an id the read side doesn't ask for either
+      // ([getUserConfig] just takes the first row). If a stray row ever did
+      // exist, every row converges instead of the reader and writer disagreeing
+      // about which one is live.
+      await txn.update('user_config', updates);
+    });
   }
 
   /// Returns folder names of systems the user has hidden

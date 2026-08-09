@@ -22,7 +22,7 @@ void main() {
     test('saveConfig leaves a newly chosen theme alone', () async {
       // Launch: the app boots on 'system' and the provider caches that.
       await ConfigRepository.updateThemeName('system');
-      const launchTimeConfig = ConfigModel(themeName: 'system');
+      const launchTimeConfig = ConfigModel();
 
       // The user picks a theme (ThemeProvider writes the column directly).
       await ConfigRepository.updateThemeName('dracula');
@@ -49,7 +49,7 @@ void main() {
     test('a theme survives repeated saves from a stale config', () async {
       await ConfigRepository.updateThemeName('nord');
 
-      const stale = ConfigModel(themeName: 'light');
+      const stale = ConfigModel();
       for (var i = 0; i < 3; i++) {
         await SqliteConfigService.saveConfig(stale);
       }
