@@ -342,6 +342,9 @@ class SqliteMigrations {
       case 112:
         await _migrateToVersion112(db);
         break;
+      case 113:
+        await _migrateToVersion113(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5337,6 +5340,50 @@ class SqliteMigrations {
       _log.i('Migration v112 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v112: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v113: Backfills the two subfolder columns if either is absent.
+  ///
+  /// v111/v112 were originally authored as v96/v97 on this feature branch and
+  /// renumbered when main claimed those numbers. A device that ran a *different*
+  /// branch's v111 first is already past that version, so its `case 111` never
+  /// fires and `user_system_settings.subfolder_view` is never created — every
+  /// query joining it then fails with "no such column" and the library reads as
+  /// 0 systems. Same failure mode main fixed in v97 for `game_carousel_card_style`.
+  ///
+  /// Idempotent: adds only what is missing, so it is a no-op on databases that
+  /// took the normal v111/v112 path.
+  static Future<void> _migrateToVersion113(Database db) async {
+    _log.i('Migration v113: Backfilling subfolder columns if absent');
+    try {
+      final settingsColumns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!settingsColumns.contains('subfolder_view')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view backfilled via v113');
+      }
+
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!configColumns.contains('subfolder_view_default')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN subfolder_view_default INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view_default backfilled via v113');
+      }
+
+      _log.i('Migration v113 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v113: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
