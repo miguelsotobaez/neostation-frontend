@@ -121,6 +121,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // the filesystem, which is too costly to redo every time a folder is focused.
   final Map<String, List<File>> _folderCoverCache = {};
 
+  /// Sentinel alphabet group for folder rows: they are not part of the A–Z
+  /// ordering, so held-D-pad letter jumping treats them as a single block.
+  static const String _folderJumpGroup = '\u0000folder';
+
   int get _folderCount => _currentFolderEntries.length;
   bool _isFolderEntry(GameModel? g) =>
       g != null && _folderPlaceholders.contains(g);
@@ -482,6 +486,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _openGameSettingsDialog() {
     final game = _selectedGame;
     if (game == null) return;
+    // Folder rows are placeholders, not ROMs — a settings dialog for one would
+    // write per-game rows keyed to a path that has no game behind it.
+    if (_isFolderEntry(game)) return;
     SfxService().playNavSound();
     showDialog(
       context: context,
@@ -559,9 +566,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
     }
     _lastNavTime = now;
 
-    // Resolve current alphabetical letter for navigation overlays.
+    // Resolve current alphabetical letter for navigation overlays. Folder rows
+    // sit outside the alphabet, so they show no letter at all.
     final game = _games[newIndex];
-    final letter = LetterJump.letterFor(game);
+    final letter = _isFolderEntry(game) ? null : LetterJump.letterFor(game);
 
     setState(() {
       _selectedGameIndex = newIndex;

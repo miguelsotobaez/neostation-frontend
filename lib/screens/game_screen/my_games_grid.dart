@@ -944,7 +944,19 @@ class _GamesGridState extends State<GamesGrid> {
 
   Future<void> _loadAchievementsForSelectedGame() async {
     if (widget.games.isEmpty) return;
-    final game = widget.games[_selectedIndex.clamp(0, widget.games.length - 1)];
+    final index = _selectedIndex.clamp(0, widget.games.length - 1);
+    // A folder placeholder has no hash to look up: asking RetroAchievements
+    // about it can only fail, so skip the request and clear the panel.
+    if (index < widget.folderCount) {
+      if (mounted) {
+        setState(() {
+          _currentGameInfo = null;
+          _isLoadingAchievements = false;
+        });
+      }
+      return;
+    }
+    final game = widget.games[index];
 
     if (!_hasRetroAchievementsFor(game)) {
       if (mounted) {

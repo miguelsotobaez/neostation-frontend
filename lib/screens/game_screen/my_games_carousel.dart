@@ -217,14 +217,24 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   static const String _favoritesLabel = '★';
 
+  /// Sentinel alphabet group for folder cards (see [_uniqueLetters]).
+  static const String _folderJumpGroup = '\u0000folder';
+
   bool get _hasFavoriteGames => widget.games.any((g) => g.isFavorite == true);
+
+  /// Whether the entry at [index] is a folder placeholder rather than a game.
+  bool _isFolderIndex(int index) => index < widget.folderCount;
 
   List<String> get _uniqueLetters {
     final letters = <String>[];
     if (_hasFavoriteGames) {
       letters.add(_favoritesLabel);
     }
-    for (final game in widget.games) {
+    for (var i = 0; i < widget.games.length; i++) {
+      // Folders are not alphabetical content — keep them out of the bar so its
+      // letters stay in order and always describe games.
+      if (_isFolderIndex(i)) continue;
+      final game = widget.games[i];
       if (game.isFavorite == true) continue;
 
       final displayName = game.name.isNotEmpty ? game.name : game.realname;
@@ -248,12 +258,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
   int _getFirstGameIndexForLetter(String letter) {
     if (letter == _favoritesLabel) {
       for (int i = 0; i < widget.games.length; i++) {
+        if (_isFolderIndex(i)) continue;
         if (widget.games[i].isFavorite == true) return i;
       }
       return 0;
     }
 
     for (int i = 0; i < widget.games.length; i++) {
+      if (_isFolderIndex(i)) continue;
       if (widget.games[i].isFavorite == true) continue;
       if (_getLetterForGame(widget.games[i]) == letter) return i;
     }
@@ -383,7 +395,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
       length: widget.games.length,
       currentIndex: _currentIndex,
       forward: forward,
-      letterAt: (index) => _getLetterForGame(widget.games[index]),
+      // Folders share one sentinel group so a held jump clears them in a
+      // single hop rather than pausing on each folder's initial.
+      letterAt: (index) => _isFolderIndex(index)
+          ? _folderJumpGroup
+          : _getLetterForGame(widget.games[index]),
     );
     if (target == null) return false;
 
@@ -540,7 +556,19 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   Future<void> _loadAchievementsForSelectedGame() async {
     if (widget.games.isEmpty) return;
-    final game = widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
+    final index = _currentIndex.clamp(0, widget.games.length - 1);
+    // A folder placeholder has no hash to look up: asking RetroAchievements
+    // about it can only fail, so skip the request and clear the panel.
+    if (_isFolderIndex(index)) {
+      if (mounted) {
+        setState(() {
+          _currentGameInfo = null;
+          _isLoadingAchievements = false;
+        });
+      }
+      return;
+    }
+    final game = widget.games[index];
 
     if (!_hasRetroAchievementsFor(game)) {
       if (mounted) {
