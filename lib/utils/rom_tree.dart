@@ -152,6 +152,16 @@ List<GameModel> gamesUnderFolder({
   return matched;
 }
 
+/// The folder holding [romPath], relative to whichever root in [rootFolders]
+/// contains it — `''` for a game sitting directly in the system root, or null
+/// when the path is absent or outside every root.
+///
+/// Used to open the list at a deep-linked game's own level: search ("Go to
+/// game") and the RetroAchievements dashboard hand [SystemGamesList] a rom
+/// path, which is only findable once the folder level containing it is built.
+String? folderRelPathFor(String? romPath, List<String> rootFolders) =>
+    _relativePath(romPath, rootFolders.map(_normalize).toList());
+
 /// Normalizes a ROM path so the tree logic is identical across platforms:
 /// forward slashes, no trailing separator. On Android the path is a Storage
 /// Access Framework content URI whose real path lives — URL-encoded — in the

@@ -134,6 +134,17 @@ extension _DataLoading on _SystemGamesListState {
         _subfolderViewEnabled = subfolderView;
         _subfolderRoots = subfolderRoots;
         _allGames = games;
+        // A deep link (search "Go to game", the RA dashboard) names a rom path
+        // that only exists in [_games] once ITS OWN folder level is built —
+        // otherwise the lookup below misses and the user lands at the top of the
+        // root level instead of on the game they picked.
+        if (subfolderView &&
+            !_initialRomPathAnchored &&
+            (widget.initialRomPath?.isNotEmpty ?? false)) {
+          _initialRomPathAnchored = true;
+          _currentRelPath =
+              folderRelPathFor(widget.initialRomPath, subfolderRoots) ?? '';
+        }
         // Folders comingle with games only when subfolder view is off; otherwise
         // [_games] is the current folder level (folders first, then games).
         _games = _buildDisplayList();

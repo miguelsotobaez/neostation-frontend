@@ -125,6 +125,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// ordering, so held-D-pad letter jumping treats them as a single block.
   static const String _folderJumpGroup = '\u0000folder';
 
+  /// Whether a deep-linked [SystemGamesList.initialRomPath] has already
+  /// anchored the folder level. Applied on the first load only, so a later
+  /// refresh cannot yank the user out of the folder they are browsing.
+  bool _initialRomPathAnchored = false;
+
   int get _folderCount => _currentFolderEntries.length;
   bool _isFolderEntry(GameModel? g) =>
       g != null && _folderPlaceholders.contains(g);
