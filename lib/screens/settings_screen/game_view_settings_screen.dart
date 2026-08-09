@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/repositories/config_repository.dart';
@@ -75,9 +77,15 @@ class _GameViewSettingsScreenState extends State<GameViewSettingsScreen> {
   }
 
   /// Persists the selected visualization mode and notifies the user.
+  ///
+  /// Goes through [SqliteConfigProvider] rather than writing the column
+  /// directly: the provider keeps its in-memory [ConfigModel] in step with the
+  /// row, and a direct write would leave that model holding the old mode until
+  /// the next launch — so the next settings change the user made would write
+  /// the stale value back and undo this one. Same shape as the theme bug.
   Future<void> _saveViewMode(String viewMode) async {
     try {
-      await ConfigRepository.updateGameViewMode(viewMode);
+      await context.read<SqliteConfigProvider>().updateGameViewMode(viewMode);
       if (mounted) {
         setState(() {
           _currentView = viewMode;
