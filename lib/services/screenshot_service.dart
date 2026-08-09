@@ -14,6 +14,18 @@ class ScreenshotService {
     'com.neogamelab.neostation/game',
   );
 
+  /// The last answer Android actually gave us, or null before the first check.
+  ///
+  /// The secondary display's copy of this flag can be clobbered by a stale
+  /// snapshot echoed from its own engine at boot (its default is `false`), so
+  /// the main engine needs a known-good value to re-assert. Kept here rather
+  /// than in one caller because several of them check independently — the
+  /// provider at init/resume, the Secondary settings panel, and the in-game
+  /// achievements controller — and they must all agree on the latest answer.
+  static bool? _lastKnownAccess;
+
+  static bool? get lastKnownAccess => _lastKnownAccess;
+
   /// Whether the screenshot accessibility service is currently enabled.
   static Future<bool> isAccessEnabled() async {
     if (!Platform.isAndroid) return false;
@@ -21,8 +33,11 @@ class ScreenshotService {
       final enabled = await _channel.invokeMethod<bool>(
         'isScreenshotAccessEnabled',
       );
-      return enabled ?? false;
+      _lastKnownAccess = enabled ?? false;
+      return _lastKnownAccess!;
     } on PlatformException {
+      // Leave the cache alone: a failed channel call is not evidence the grant
+      // was revoked.
       return false;
     }
   }

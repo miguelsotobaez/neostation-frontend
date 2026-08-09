@@ -356,6 +356,16 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
         useShader: true,
       );
     }
+
+    // Re-check the Screen Return grant whenever we come back to the foreground.
+    // The user can grant or revoke it from Android's settings at any time — and
+    // the dock explainer sends them there from the secondary display, which
+    // never returns through the Secondary settings panel that used to be the
+    // only other place this was refreshed. Cheap (one method-channel call).
+    if (state == AppLifecycleState.resumed) {
+      // ignore: unawaited_futures
+      refreshSecondaryScreenshotAccess();
+    }
   }
 
   /// Closes the current DB and re-initializes from scratch at the (possibly new) path.

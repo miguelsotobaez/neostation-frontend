@@ -168,14 +168,19 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         _currentThemeName = savedThemeName;
         _notifyThemeChanged();
       } else {
-        // The previously selected theme is no longer available (e.g. removed
-        // in an update). Fall back to the system theme and persist it.
+        // The saved theme didn't resolve — either it was removed in an update,
+        // or (far more likely for a custom theme) [_loadCustomThemes] came back
+        // empty because the user-data directory wasn't readable this launch.
+        // Fall back in memory only: persisting 'system' here would turn a
+        // transient read failure into permanent loss of the user's choice.
+        // Leaving the column alone means the theme comes back by itself on the
+        // next launch that can read it.
         _log.w(
-          'Saved theme "$savedThemeName" is no longer available, falling back to system.',
+          'Saved theme "$savedThemeName" did not resolve, using system for this '
+          'session (keeping the saved value).',
         );
         _currentThemeName = 'system';
         _updateSystemTheme();
-        await ConfigRepository.updateThemeName('system');
         _notifyThemeChanged();
       }
     } catch (e) {

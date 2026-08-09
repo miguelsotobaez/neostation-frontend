@@ -121,7 +121,22 @@ class DatabaseTestHelper {
         system_grid_columns TEXT DEFAULT 'M',
         use_12_hour_clock INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
-        esde_folder_path TEXT
+        esde_folder_path TEXT,
+        -- Kept in step with the real user_config (sqlite_service.dart) so a
+        -- whole-row write via SqliteConfigService.saveConfig works in tests.
+        legend_hidden INTEGER DEFAULT 0,
+        hide_tab_sync INTEGER DEFAULT 0,
+        hide_tab_achievements INTEGER DEFAULT 0,
+        hide_tab_scraper INTEGER DEFAULT 0,
+        hide_tab_search INTEGER DEFAULT 0,
+        game_grid_columns TEXT DEFAULT 'M',
+        game_carousel_card_style TEXT DEFAULT 'fanart',
+        dock_apps TEXT,
+        dock_enabled INTEGER DEFAULT 1,
+        dock_slot_count INTEGER DEFAULT 3,
+        now_playing_dim_delay INTEGER DEFAULT 3,
+        now_playing_dim_level INTEGER DEFAULT 100,
+        fanart_dim_level INTEGER DEFAULT 25
       )
     ''');
 

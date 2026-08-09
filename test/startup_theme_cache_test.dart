@@ -116,8 +116,13 @@ void main() {
       final provider = await ThemeProvider.create();
 
       expect(provider.currentThemeName, 'system');
-      // The stale name is rewritten so the warning isn't logged every launch.
-      expect(await ConfigRepository.getThemeName(), 'system');
+      // The fallback is in-memory ONLY — the saved name is left alone. An
+      // unresolved id usually means a custom theme whose file couldn't be read
+      // this launch (user-data storage not ready yet), not a theme that is
+      // really gone, and rewriting it to 'system' turned that transient failure
+      // into permanent loss of the user's choice. Costs one warning per launch
+      // in the genuinely-removed case; the theme returns by itself otherwise.
+      expect(await ConfigRepository.getThemeName(), 'a-theme-that-was-removed');
     });
   });
 }
