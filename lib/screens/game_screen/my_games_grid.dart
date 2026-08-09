@@ -1318,7 +1318,10 @@ class _GamesGridState extends State<GamesGrid> {
   void _buildSettledChrome() {
     final settledGame =
         widget.games[_settledIndex.clamp(0, widget.games.length - 1)];
-    final hasRa = _hasRetroAchievementsFor(settledGame);
+    final isFolder = _settledIndex < widget.folderCount;
+    // A folder has no hash and no video: the RetroAchievements pill and the
+    // mute pill must both stay away, or they render their empty states.
+    final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
         '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
@@ -1334,7 +1337,7 @@ class _GamesGridState extends State<GamesGrid> {
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
-      hasVideo: _hasVideoFor(settledGame),
+      hasVideo: !isFolder && _hasVideoFor(settledGame),
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can animate it without invalidating this memoized subtree.

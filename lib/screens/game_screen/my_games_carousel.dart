@@ -225,6 +225,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
   /// Whether the entry at [index] is a folder placeholder rather than a game.
   bool _isFolderIndex(int index) => index < widget.folderCount;
 
+  /// Whether the centred card is a folder.
+  bool get _isFolderCentred => _isFolderIndex(_currentIndex);
+
   List<String> get _uniqueLetters {
     final letters = <String>[];
     if (_hasFavoriteGames) {
@@ -466,7 +469,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
   /// burst reuses cached widget instances instead of rebuilding this chrome.
   void _buildSettledChrome() {
     final settledGame = widget.games[_settledIndex.clamp(0, _gamesLength - 1)];
-    final hasRa = _hasRetroAchievementsFor(settledGame);
+    final isFolder = _settledIndex < widget.folderCount;
+    // A folder has no hash and no video: the RetroAchievements pill and the
+    // mute pill must both stay away, or they render their empty states.
+    final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
         '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
@@ -482,7 +488,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
-      hasVideo: _hasVideoFor(settledGame),
+      hasVideo: !isFolder && _hasVideoFor(settledGame),
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can slide it without invalidating this memoized subtree.
@@ -669,6 +675,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   void _scrollToCurrentLetter() {
     if (!_letterBarController.hasClients || widget.games.isEmpty) return;
 
+    if (_isFolderCentred) return;
     final currentLetter = _getLetterForGame(widget.games[_currentIndex]);
     final letters = _uniqueLetters;
     final letterIndex = letters.indexOf(currentLetter);
@@ -906,41 +913,114 @@ class _GamesCarouselState extends State<GamesCarousel> {
         ) ??
         const [];
 
-    return Center(
+    // Same footprint, radius and shadow as a game card. A fixed-size square
+    // centred in the (much larger) carousel slot read as a jumble of cropped
+    // fragments, so the card now fills the slot, the covers are inset
+    // thumbnails, and the name/count sits on a bottom scrim — where a game
+    // card carries its wheel logo.
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.all(5.r),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 8.r,
+            offset: Offset(2.r, 2.r),
+          ),
+        ],
+      ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16.r),
-        child: Container(
-          width: 220.r,
-          height: 220.r,
+        borderRadius: BorderRadius.circular(24.r),
+        child: ColoredBox(
           color: theme.colorScheme.surfaceContainerHighest,
-          child: covers.isEmpty
-              ? Center(
-                  child: Icon(
-                    Symbols.folder_rounded,
-                    size: 96.r,
-                    fill: 1,
-                    color: widget.system.colorAsColor,
-                  ),
-                )
-              : _buildCoverMosaic(covers),
+          child: Column(
+            children: [
+              Expanded(
+                child: covers.isEmpty
+                    ? Center(
+                        child: Icon(
+                          Symbols.folder_rounded,
+                          size: 96.r,
+                          fill: 1,
+                          color: widget.system.colorAsColor,
+                        ),
+                      )
+                    : Padding(
+                        padding: EdgeInsets.all(14.r),
+                        child: _buildCoverMosaic(covers),
+                      ),
+              ),
+              Container(
+                width: double.infinity,
+                color: Colors.black.withValues(alpha: 0.55),
+                padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 10.r),
+                child: Row(
+                  children: [
+                    Icon(
+                      Symbols.folder_rounded,
+                      size: 18.r,
+                      fill: 1,
+                      color: widget.system.colorAsColor,
+                    ),
+                    SizedBox(width: 8.r),
+                    Expanded(
+                      child: Text(
+                        folder.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14.r,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8.r),
+                    Text(
+                      '${folder.gameCount}',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 12.r,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Fills the folder card with 1–4 cover images: a single cover fills the
-  /// whole card, two split it into columns, three/four stack into rows so the
-  /// mosaic always covers the entire space edge-to-edge.
+  /// Lays 1–4 covers out as separate rounded thumbnails with gutters between
+  /// them: one cover fills the area, two split into columns, three/four fill a
+  /// 2×2. Insetting each cover rather than butting them edge to edge is what
+  /// keeps the montage legible at carousel size.
   Widget _buildCoverMosaic(List<File> covers) {
-    Widget tile(File file) => Image.file(
-      file,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    final gutter = 8.r;
+
+    Widget tile(File file) => ClipRRect(
+      borderRadius: BorderRadius.circular(10.r),
+      child: Image.file(
+        file,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      ),
     );
 
-    Widget row(List<File> files) =>
-        Row(children: [for (final f in files) Expanded(child: tile(f))]);
+    Widget row(List<File> files) => Row(
+      children: [
+        for (var i = 0; i < files.length; i++) ...[
+          if (i > 0) SizedBox(width: gutter),
+          Expanded(child: tile(files[i])),
+        ],
+      ],
+    );
 
     if (covers.length == 1) return tile(covers.first);
     if (covers.length == 2) return row(covers);
@@ -948,6 +1028,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return Column(
       children: [
         Expanded(child: row(covers.sublist(0, 2))),
+        SizedBox(height: gutter),
         Expanded(child: row(covers.sublist(2))),
       ],
     );
@@ -1138,7 +1219,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final currentGame =
         widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
     final letters = _uniqueLetters;
-    final currentLetter = _getLetterForGame(currentGame);
+    // Null while a folder is centred: folders sit outside A–Z, so no chip is
+    // highlighted rather than the folder's own initial claiming one.
+    final String? currentLetter = _isFolderCentred
+        ? null
+        : _getLetterForGame(currentGame);
 
     final textStyle = TextStyle(
       color: theme.colorScheme.onSurface,
@@ -1227,27 +1312,28 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 padding: EdgeInsets.symmetric(horizontal: 4.r),
                 child: Stack(
                   children: [
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 120),
-                      curve: Curves.easeInOut,
-                      left: _getLetterBarOffset(
-                        currentLetter,
-                        letters,
-                        selectedTextStyle,
-                      ),
-                      top: 0,
-                      bottom: 0,
-                      width: _calculateLetterWidth(
-                        currentLetter,
-                        selectedTextStyle,
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.secondary,
-                          borderRadius: BorderRadius.circular(12.r),
+                    if (currentLetter != null)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 120),
+                        curve: Curves.easeInOut,
+                        left: _getLetterBarOffset(
+                          currentLetter,
+                          letters,
+                          selectedTextStyle,
+                        ),
+                        top: 0,
+                        bottom: 0,
+                        width: _calculateLetterWidth(
+                          currentLetter,
+                          selectedTextStyle,
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.secondary,
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
                         ),
                       ),
-                    ),
                     Row(
                       children: letters.map((letter) {
                         final isSelected = letter == currentLetter;
