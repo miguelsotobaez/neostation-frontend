@@ -936,6 +936,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
         child: ColoredBox(
           color: theme.colorScheme.surfaceContainerHighest,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: covers.isEmpty
@@ -1003,17 +1004,23 @@ class _GamesCarouselState extends State<GamesCarousel> {
   Widget _buildCoverMosaic(List<File> covers) {
     final gutter = 8.r;
 
+    // SizedBox.expand + stretch on both axes is load-bearing: inside a Row the
+    // cross axis is loosely constrained, so a bare Image sizes to its intrinsic
+    // aspect ratio and leaves empty bands instead of filling its cell.
     Widget tile(File file) => ClipRRect(
       borderRadius: BorderRadius.circular(10.r),
-      child: Image.file(
-        file,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      child: SizedBox.expand(
+        child: Image.file(
+          file,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
       ),
     );
 
     Widget row(List<File> files) => Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < files.length; i++) ...[
           if (i > 0) SizedBox(width: gutter),
@@ -1026,6 +1033,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (covers.length == 2) return row(covers);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(child: row(covers.sublist(0, 2))),
         SizedBox(height: gutter),

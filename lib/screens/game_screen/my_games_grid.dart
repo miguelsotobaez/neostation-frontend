@@ -1687,20 +1687,28 @@ class _GamesGridState extends State<GamesGrid> {
   /// whole tile, two split it into columns, three/four stack into rows so the
   /// mosaic always covers the entire space edge-to-edge.
   Widget _buildCoverMosaic(List<File> covers) {
-    Widget tile(File file) => Image.file(
-      file,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    // SizedBox.expand + stretch on both axes is load-bearing: inside a Row the
+    // cross axis is loosely constrained, so a bare Image sizes to its intrinsic
+    // aspect ratio and leaves empty bands instead of filling its cell.
+    Widget tile(File file) => SizedBox.expand(
+      child: Image.file(
+        file,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      ),
     );
 
-    Widget row(List<File> files) =>
-        Row(children: [for (final f in files) Expanded(child: tile(f))]);
+    Widget row(List<File> files) => Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [for (final f in files) Expanded(child: tile(f))],
+    );
 
     if (covers.length == 1) return tile(covers.first);
     if (covers.length == 2) return row(covers);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(child: row(covers.sublist(0, 2))),
         Expanded(child: row(covers.sublist(2))),
