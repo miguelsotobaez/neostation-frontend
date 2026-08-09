@@ -46,6 +46,9 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   static const String play = 'play';
   static const String playButton = 'play_button';
+
+  /// Confirm label on a folder row, where 'PLAY' reads oddly.
+  static const String openButton = 'open_button';
   static const String favorite = 'favorite';
   static const String random = 'random';
   static const String randomGame = 'random_game';

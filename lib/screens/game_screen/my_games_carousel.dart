@@ -489,6 +489,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
       hasVideo: !isFolder && _hasVideoFor(settledGame),
+      isFolder: isFolder,
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can slide it without invalidating this memoized subtree.

@@ -26,6 +26,7 @@ const Map<String, dynamic> appLocaleZhHant = {
 
   AppLocale.play: '開始遊戲',
   AppLocale.playButton: '開始遊戲',
+  AppLocale.openButton: '開啟',
   AppLocale.favorite: '收藏',
   AppLocale.random: '隨機',
   AppLocale.randomGame: '隨機遊戲',

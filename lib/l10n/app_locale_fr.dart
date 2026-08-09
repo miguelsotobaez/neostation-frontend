@@ -27,6 +27,7 @@ const Map<String, dynamic> appLocaleFr = {
 
   AppLocale.play: 'Jouer',
   AppLocale.playButton: 'JOUER',
+  AppLocale.openButton: 'OUVRIR',
   AppLocale.favorite: 'Favori',
   AppLocale.random: 'Aléatoire',
   AppLocale.randomGame: 'Jeu Aléatoire',

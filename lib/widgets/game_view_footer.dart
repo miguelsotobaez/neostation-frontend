@@ -38,6 +38,10 @@ class GameViewFooter extends StatelessWidget {
   /// control that does nothing for this game.
   final bool hasVideo;
 
+  /// Whether the selection is a subfolder rather than a game: A descends into
+  /// it, so the confirm button reads OPEN instead of PLAY.
+  final bool isFolder;
+
   const GameViewFooter({
     super.key,
     required this.game,
@@ -48,6 +52,7 @@ class GameViewFooter extends StatelessWidget {
     this.onShowAchievements,
     this.onToggleMute,
     this.hasVideo = false,
+    this.isFolder = false,
   });
 
   @override
@@ -194,7 +199,8 @@ class GameViewFooter extends StatelessWidget {
                     ),
                     SizedBox(width: 5.r),
                     Text(
-                      AppLocale.playButton.getString(context),
+                      (isFolder ? AppLocale.openButton : AppLocale.playButton)
+                          .getString(context),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onPrimary,
                         fontWeight: FontWeight.w900,

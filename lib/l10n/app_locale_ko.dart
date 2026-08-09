@@ -26,6 +26,7 @@ const Map<String, dynamic> appLocaleKo = {
 
   AppLocale.play: '플레이',
   AppLocale.playButton: '플레이',
+  AppLocale.openButton: '열기',
   AppLocale.favorite: '즐겨찾기',
   AppLocale.random: '무작위',
   AppLocale.randomGame: '무작위 게임',

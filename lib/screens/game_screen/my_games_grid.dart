@@ -1338,6 +1338,7 @@ class _GamesGridState extends State<GamesGrid> {
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
       hasVideo: !isFolder && _hasVideoFor(settledGame),
+      isFolder: isFolder,
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can animate it without invalidating this memoized subtree.
