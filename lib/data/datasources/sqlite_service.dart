@@ -2449,14 +2449,37 @@ class SqliteService {
   }
 
   /// Persists a complete list of ROM directories, replacing existing ones.
+  ///
+  /// An empty list is ignored while folders are already configured. No caller
+  /// legitimately clears the table this way — removing a folder has its own
+  /// targeted API ([removeRomFolder]) — so an empty list means the config
+  /// object never carried the folders, not that the user removed them. Acting
+  /// on it is silently destructive: the next scan runs as a fast scan, which
+  /// prunes every system and ROM row, which in turn leaves
+  /// [recoverRomFoldersFromStoredRoms] nothing to derive a root from.
   static Future<void> saveUserRomFolders(List<String> folders) async {
     final db = await instance.database;
+    final paths = folders.where((folder) => folder.isNotEmpty).toList();
+
+    if (paths.isEmpty) {
+      final rows = await db.rawQuery(
+        'SELECT COUNT(*) AS count FROM user_rom_folders',
+      );
+      final existing = rows.isEmpty ? 0 : (rows.first['count'] as int?) ?? 0;
+      if (existing > 0) {
+        _log.w(
+          'saveUserRomFolders called with an empty list while $existing ROM '
+          'folder(s) are configured - keeping them. Use removeRomFolder() to '
+          'remove one.',
+        );
+        return;
+      }
+    }
+
     await db.transaction((txn) async {
       await txn.delete('user_rom_folders');
-      for (final folder in folders) {
-        if (folder.isNotEmpty) {
-          await txn.insert('user_rom_folders', {'path': folder});
-        }
+      for (final folder in paths) {
+        await txn.insert('user_rom_folders', {'path': folder});
       }
     });
   }
@@ -2553,132 +2576,154 @@ class SqliteService {
   }) async {
     final db = await instance.database;
 
-    // First get existing config to not overwrite with nulls
-    final currentConfig = await getUserConfig();
-    final Map<String, dynamic> newConfig = currentConfig != null
-        ? Map.from(currentConfig)
-        : {};
-
-    // Ensure ID
-    newConfig['id'] = 1;
+    // Only the fields this call was actually given. Writing just these columns
+    // is what makes concurrent writers safe: this used to read the whole row,
+    // patch it, and write every column back, so any writer whose read landed
+    // before another writer's write silently reverted it. That cost users their
+    // theme (a settings toggle rewriting theme_name from its own stale read),
+    // and the same window is open on active_theme, systems_version and ra_user
+    // — all of which have a single dedicated setter and no other writer that
+    // would restore them. An UPDATE of the named columns leaves every other
+    // column alone, so there is nothing to lose.
+    final Map<String, Object?> updates = {};
 
     // Update fields if provided
-    if (lastScan != null) newConfig['last_scan'] = lastScan;
+    if (lastScan != null) updates['last_scan'] = lastScan;
     if (gameViewMode != null) {
-      newConfig['system_view_mode'] = gameViewMode; // Legacy mapping
-      newConfig['game_view_mode'] = gameViewMode;
+      updates['system_view_mode'] = gameViewMode; // Legacy mapping
+      updates['game_view_mode'] = gameViewMode;
     }
-    if (systemViewMode != null) newConfig['system_view_mode'] = systemViewMode;
-    if (themeName != null) newConfig['theme_name'] = themeName;
-    if (videoSound != null) newConfig['video_sound'] = videoSound;
-    if (raUser != null) newConfig['ra_user'] = raUser;
-    if (showGameInfo != null) newConfig['show_game_info'] = showGameInfo;
-    if (isFullscreen != null) newConfig['is_fullscreen'] = isFullscreen;
+    if (systemViewMode != null) updates['system_view_mode'] = systemViewMode;
+    if (themeName != null) updates['theme_name'] = themeName;
+    if (videoSound != null) updates['video_sound'] = videoSound;
+    if (raUser != null) updates['ra_user'] = raUser;
+    if (showGameInfo != null) updates['show_game_info'] = showGameInfo;
+    if (isFullscreen != null) updates['is_fullscreen'] = isFullscreen;
     if (bartopExitPoweroff != null) {
-      newConfig['bartop_exit_poweroff'] = bartopExitPoweroff;
+      updates['bartop_exit_poweroff'] = bartopExitPoweroff;
     }
     if (scanOnStartup != null) {
-      newConfig['scan_on_startup'] = scanOnStartup;
+      updates['scan_on_startup'] = scanOnStartup;
     }
     if (ignoreHiddenFiles != null) {
-      newConfig['ignore_hidden_files'] = ignoreHiddenFiles;
+      updates['ignore_hidden_files'] = ignoreHiddenFiles;
     }
     if (setupCompleted != null) {
-      newConfig['setup_completed'] = setupCompleted;
+      updates['setup_completed'] = setupCompleted;
     }
     if (hideBottomScreen != null) {
-      newConfig['hide_bottom_screen'] = hideBottomScreen;
+      updates['hide_bottom_screen'] = hideBottomScreen;
     }
     if (sfxEnabled != null) {
-      newConfig['sfx_enabled'] = sfxEnabled;
+      updates['sfx_enabled'] = sfxEnabled;
     }
     if (use12HourClock != null) {
-      newConfig['use_12_hour_clock'] = use12HourClock;
+      updates['use_12_hour_clock'] = use12HourClock;
     }
     if (systemSortBy != null) {
-      newConfig['system_sort_by'] = systemSortBy;
+      updates['system_sort_by'] = systemSortBy;
     }
     if (systemSortOrder != null) {
-      newConfig['system_sort_order'] = systemSortOrder;
+      updates['system_sort_order'] = systemSortOrder;
     }
     if (appLanguage != null) {
-      newConfig['app_language'] = appLanguage;
+      updates['app_language'] = appLanguage;
     }
     if (activeTheme != null) {
-      newConfig['active_theme'] = activeTheme;
+      updates['active_theme'] = activeTheme;
     }
     if (hideRecentCard != null) {
-      newConfig['hide_recent_card'] = hideRecentCard;
+      updates['hide_recent_card'] = hideRecentCard;
     }
     if (legendHidden != null) {
-      newConfig['legend_hidden'] = legendHidden;
+      updates['legend_hidden'] = legendHidden;
     }
     if (gameDetailsTab != null) {
-      newConfig['game_details_tab'] = gameDetailsTab;
+      updates['game_details_tab'] = gameDetailsTab;
     }
     if (hideTabSync != null) {
-      newConfig['hide_tab_sync'] = hideTabSync;
+      updates['hide_tab_sync'] = hideTabSync;
     }
     if (hideTabAchievements != null) {
-      newConfig['hide_tab_achievements'] = hideTabAchievements;
+      updates['hide_tab_achievements'] = hideTabAchievements;
     }
     if (hideTabScraper != null) {
-      newConfig['hide_tab_scraper'] = hideTabScraper;
+      updates['hide_tab_scraper'] = hideTabScraper;
     }
     if (hideTabSearch != null) {
-      newConfig['hide_tab_search'] = hideTabSearch;
+      updates['hide_tab_search'] = hideTabSearch;
     }
     if (activeSyncProvider != null) {
-      newConfig['active_sync_provider'] = activeSyncProvider;
+      updates['active_sync_provider'] = activeSyncProvider;
     }
     if (systemsVersion != null) {
-      newConfig['systems_version'] = systemsVersion;
+      updates['systems_version'] = systemsVersion;
     }
     if (neostationAppVersion != null) {
-      newConfig['neostation_app_version'] = neostationAppVersion;
+      updates['neostation_app_version'] = neostationAppVersion;
     }
     if (autoUpdateApp != null) {
-      newConfig['auto_update_app'] = autoUpdateApp;
+      updates['auto_update_app'] = autoUpdateApp;
     }
     if (autoUpdateSystems != null) {
-      newConfig['auto_update_systems'] = autoUpdateSystems;
+      updates['auto_update_systems'] = autoUpdateSystems;
     }
     if (systemGridColumns != null) {
-      newConfig['system_grid_columns'] = systemGridColumns;
+      updates['system_grid_columns'] = systemGridColumns;
     }
     if (gameGridColumns != null) {
-      newConfig['game_grid_columns'] = gameGridColumns;
+      updates['game_grid_columns'] = gameGridColumns;
     }
     if (gameCarouselCardStyle != null) {
-      newConfig['game_carousel_card_style'] = gameCarouselCardStyle;
+      updates['game_carousel_card_style'] = gameCarouselCardStyle;
     }
     if (dockApps != null) {
-      newConfig['dock_apps'] = dockApps;
+      updates['dock_apps'] = dockApps;
     }
     if (dockEnabled != null) {
-      newConfig['dock_enabled'] = dockEnabled;
+      updates['dock_enabled'] = dockEnabled;
     }
     if (dockSlotCount != null) {
-      newConfig['dock_slot_count'] = dockSlotCount;
+      updates['dock_slot_count'] = dockSlotCount;
     }
     if (nowPlayingDimDelay != null) {
-      newConfig['now_playing_dim_delay'] = nowPlayingDimDelay;
+      updates['now_playing_dim_delay'] = nowPlayingDimDelay;
     }
     if (nowPlayingDimLevel != null) {
-      newConfig['now_playing_dim_level'] = nowPlayingDimLevel;
+      updates['now_playing_dim_level'] = nowPlayingDimLevel;
     }
     if (fanartDimLevel != null) {
-      newConfig['fanart_dim_level'] = fanartDimLevel;
+      updates['fanart_dim_level'] = fanartDimLevel;
     }
     if (esdeFolderPath != null) {
-      newConfig['esde_folder_path'] = esdeFolderPath;
+      updates['esde_folder_path'] = esdeFolderPath;
     }
 
-    await db.insert(
-      'user_config',
-      newConfig,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    // Both statements run in one transaction. Apart alone they can straddle a
+    // concurrent [clearUserData], which deletes the row: the insert would run
+    // before the delete and the update after it, matching nothing and
+    // discarding the user's setting with no error (saves are fire-and-forget in
+    // places — see mutators.dart). The old single INSERT OR REPLACE couldn't
+    // lose a write that way, so the transaction restores what the rewrite gave
+    // up.
+    await db.transaction((txn) async {
+      // The row is a singleton (id = 1, enforced by CHECK since migration v24).
+      // Create it if this is the first write — OR IGNORE so a concurrent caller
+      // that got there first isn't reset to column defaults — then set only the
+      // columns this call named.
+      await txn.insert('user_config', {
+        'id': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+      if (updates.isEmpty) return;
+
+      // No WHERE: on a singleton table this is the same row, and it keeps the
+      // write from assuming an id the read side doesn't ask for either
+      // ([getUserConfig] just takes the first row). If a stray row ever did
+      // exist, every row converges instead of the reader and writer disagreeing
+      // about which one is live.
+      await txn.update('user_config', updates);
+    });
   }
 
   /// Returns folder names of systems the user has hidden

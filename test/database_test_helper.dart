@@ -91,37 +91,58 @@ class DatabaseTestHelper {
     ''');
 
     await db.execute('''
+      -- Mirrors the production user_config (sqlite_service.dart) closely enough
+      -- that writes behave the same: the CHECK makes the row a real singleton
+      -- (saveUserConfig's WHERE-less UPDATE relies on it) and the DEFAULTs are
+      -- what a bare `INSERT INTO user_config (id) VALUES (1)` falls back to.
+      -- Without both, tests of the write path pass against a table that cannot
+      -- reproduce production behaviour.
       CREATE TABLE user_config (
-        id INTEGER PRIMARY KEY DEFAULT 1,
+        id INTEGER PRIMARY KEY CHECK (id = 1),
         last_scan TEXT,
-        system_view_mode TEXT,
-        theme_name TEXT,
-        video_sound INTEGER,
+        system_view_mode TEXT DEFAULT 'grid',
+        theme_name TEXT DEFAULT 'system',
+        video_sound INTEGER DEFAULT 1,
         ra_user TEXT,
-        show_game_info INTEGER,
-        is_fullscreen INTEGER,
-        bartop_exit_poweroff INTEGER,
-        scan_on_startup INTEGER,
+        show_game_info INTEGER DEFAULT 0,
+        is_fullscreen INTEGER DEFAULT 1,
+        bartop_exit_poweroff INTEGER DEFAULT 0,
+        scan_on_startup INTEGER DEFAULT 1,
         ignore_hidden_files INTEGER DEFAULT 1,
-        setup_completed INTEGER,
-        hide_bottom_screen INTEGER,
-        sfx_enabled INTEGER,
-        system_sort_by TEXT,
-        system_sort_order TEXT,
-        app_language TEXT,
-        active_theme TEXT,
-        hide_recent_card INTEGER,
-        active_sync_provider TEXT,
-        game_view_mode TEXT,
+        setup_completed INTEGER DEFAULT 0,
+        hide_bottom_screen INTEGER DEFAULT 0,
+        sfx_enabled INTEGER DEFAULT 1,
+        system_sort_by TEXT DEFAULT 'alphabetical',
+        system_sort_order TEXT DEFAULT 'asc',
+        app_language TEXT DEFAULT 'en',
+        active_theme TEXT DEFAULT '',
+        hide_recent_card INTEGER DEFAULT 0,
+        active_sync_provider TEXT DEFAULT 'neosync',
+        game_view_mode TEXT DEFAULT 'list',
         rom_folders TEXT,
-        systems_version TEXT,
-        neostation_app_version TEXT,
-        auto_update_app INTEGER,
-        auto_update_systems INTEGER,
+        systems_version TEXT DEFAULT '',
+        neostation_app_version TEXT DEFAULT '',
+        auto_update_app INTEGER DEFAULT 1,
+        auto_update_systems INTEGER DEFAULT 1,
         system_grid_columns TEXT DEFAULT 'M',
         use_12_hour_clock INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
-        esde_folder_path TEXT
+        esde_folder_path TEXT,
+        -- Kept in step with the real user_config (sqlite_service.dart) so a
+        -- whole-row write via SqliteConfigService.saveConfig works in tests.
+        legend_hidden INTEGER DEFAULT 0,
+        hide_tab_sync INTEGER DEFAULT 0,
+        hide_tab_achievements INTEGER DEFAULT 0,
+        hide_tab_scraper INTEGER DEFAULT 0,
+        hide_tab_search INTEGER DEFAULT 0,
+        game_grid_columns TEXT DEFAULT 'M',
+        game_carousel_card_style TEXT DEFAULT 'fanart',
+        dock_apps TEXT,
+        dock_enabled INTEGER DEFAULT 1,
+        dock_slot_count INTEGER DEFAULT 3,
+        now_playing_dim_delay INTEGER DEFAULT 3,
+        now_playing_dim_level INTEGER DEFAULT 100,
+        fanart_dim_level INTEGER DEFAULT 25
       )
     ''');
 

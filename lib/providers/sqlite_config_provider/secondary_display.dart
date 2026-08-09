@@ -192,7 +192,10 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
               state.dockSlotCount != _config.dockSlotCount ||
               state.nowPlayingDimDelay != _config.nowPlayingDimDelay ||
               state.nowPlayingDimLevel != _config.nowPlayingDimLevel ||
-              state.fanartDimLevel != _config.fanartDimLevel)) {
+              state.fanartDimLevel != _config.fanartDimLevel ||
+              (ScreenshotService.lastKnownAccess != null &&
+                  state.screenshotAccessEnabled !=
+                      ScreenshotService.lastKnownAccess))) {
         // No edit trigger, yet a main-owned field in the shared snapshot
         // disagrees with the persisted config — this is a stale echo from the
         // secondary, whose startup snapshot synced before (or raced) our boot
@@ -204,6 +207,13 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
         // dockEditTrigger above), so the main engine owns them and we re-assert
         // the persisted values whenever they drift. (Guarded on _initialized so
         // we don't fight before the config has loaded.)
+        //
+        // screenshotAccessEnabled rides along for the same reason: its default
+        // is false, so the same boot echo made the dock treat an already-granted
+        // Screen Return as revoked — every filled slot guarded behind the
+        // "enable Screen Return" explainer until the user opened Secondary
+        // settings. Only re-asserted once we've actually checked with Android
+        // (null = not checked yet), so we never push a guessed `false`.
         _secondaryDisplayState?.updateState(
           dockApps: _config.dockApps,
           dockEnabled: _config.dockEnabled,
@@ -211,6 +221,7 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
           nowPlayingDimDelay: _config.nowPlayingDimDelay,
           nowPlayingDimLevel: _config.nowPlayingDimLevel,
           fanartDimLevel: _config.fanartDimLevel,
+          screenshotAccessEnabled: ScreenshotService.lastKnownAccess,
         );
       }
     }
@@ -243,10 +254,13 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
   }
 
   /// Checks current screenshot access and pushes it to the secondary display.
+  ///
+  /// Runs the check even when there's no secondary state yet: it refreshes
+  /// [ScreenshotService.lastKnownAccess], which is what corrects a later stale
+  /// echo from the secondary engine.
   Future<void> refreshSecondaryScreenshotAccess() async {
-    if (_secondaryDisplayState == null) return;
     final enabled = await ScreenshotService.isAccessEnabled();
-    _secondaryDisplayState!.updateState(screenshotAccessEnabled: enabled);
+    _secondaryDisplayState?.updateState(screenshotAccessEnabled: enabled);
   }
 
   /// Re-applies the persisted secondary display visibility setting to the native

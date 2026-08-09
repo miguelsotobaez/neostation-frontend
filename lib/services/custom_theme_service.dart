@@ -6,6 +6,12 @@ import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/themes/custom_theme.dart';
 
+/// Outcome of a [CustomThemeService.loadAll] call.
+///
+/// [complete] separates "there are no custom themes on disk" from "we couldn't
+/// read what's on disk", which callers must not confuse — see [loadAll].
+typedef CustomThemeLoad = ({List<CustomTheme> themes, bool complete});
+
 /// Outcome of an import attempt.
 class ThemeImportResult {
   final CustomTheme theme;
@@ -35,8 +41,15 @@ class CustomThemeService {
 
   /// Loads every valid custom theme from disk. Corrupt/unreadable files are
   /// skipped and logged rather than aborting the whole load.
-  static Future<List<CustomTheme>> loadAll() async {
+  ///
+  /// [CustomThemeLoad.complete] is false when the picture is not trustworthy —
+  /// the directory couldn't be listed, or a file had to be skipped. An empty
+  /// list therefore means "this user has no custom themes" only when the load
+  /// is complete; otherwise it means "we couldn't tell". Callers must not treat
+  /// a theme missing from an incomplete load as deleted.
+  static Future<CustomThemeLoad> loadAll() async {
     final result = <CustomTheme>[];
+    var complete = true;
     try {
       final dir = await _dir();
       final files = await dir
@@ -52,13 +65,15 @@ class CustomThemeService {
           }
           result.add(CustomTheme.fromDaisyJson(json));
         } catch (e) {
+          complete = false;
           _log.w('CustomThemeService: skipping "${file.path}" ($e).');
         }
       }
     } catch (e) {
+      complete = false;
       _log.e('CustomThemeService: failed to load custom themes: $e');
     }
-    return result;
+    return (themes: result, complete: complete);
   }
 
   /// Reads, parses and persists a daisyUI theme JSON file.

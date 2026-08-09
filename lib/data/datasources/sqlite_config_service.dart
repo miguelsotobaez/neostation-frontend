@@ -110,7 +110,6 @@ class SqliteConfigService {
         emulators: detectedEmulators,
         gameViewMode: userConfig?['game_view_mode']?.toString() ?? 'list',
         systemViewMode: userConfig?['system_view_mode']?.toString() ?? 'grid',
-        themeName: userConfig?['theme_name']?.toString() ?? 'system',
         showGameInfo:
             (int.tryParse(userConfig?['show_game_info']?.toString() ?? '0') ??
                 0) ==
@@ -252,6 +251,15 @@ class SqliteConfigService {
   /// Persists the provided [ConfigModel] to SQLite.
   ///
   /// Updates basic preferences, ROM folders, and detected emulator paths.
+  ///
+  /// Deliberately does NOT write `theme_name`: `ThemeProvider` owns that column
+  /// and writes it directly on every theme change. [ConfigModel] carried a
+  /// `themeName` that nothing updated after launch, so passing it here (this is
+  /// a whole-config write) made every other settings change restore the
+  /// launch-time theme — a theme picked and then followed by any other toggle
+  /// was silently reverted on the next start. The field has since been removed
+  /// from the model rather than merely skipped here, so there is no longer a
+  /// theme on the model for a caller to believe this method persists.
   static Future<void> saveConfig(ConfigModel config) async {
     try {
       await SqliteService.saveUserConfig(
@@ -271,7 +279,6 @@ class SqliteConfigService {
         systemSortBy: config.systemSortBy,
         systemSortOrder: config.systemSortOrder,
         appLanguage: config.appLanguage,
-        themeName: config.themeName,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
         legendHidden: config.legendHidden ? 1 : 0,
         gameDetailsTab: config.gameDetailsTab,

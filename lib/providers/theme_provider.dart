@@ -136,14 +136,20 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Loads user-imported themes from disk into [AppThemes.customThemes] so they
   /// resolve like built-ins. Safe to call more than once.
-  Future<void> _loadCustomThemes() async {
+  ///
+  /// Returns whether the load was complete (see [CustomThemeService.loadAll]).
+  /// A false result means an id missing from [AppThemes.customThemes] proves
+  /// nothing about whether that theme still exists.
+  Future<bool> _loadCustomThemes() async {
     try {
-      final themes = await CustomThemeService.loadAll();
+      final load = await CustomThemeService.loadAll();
       AppThemes.customThemes
         ..clear()
-        ..addEntries(themes.map((t) => MapEntry(t.id, t)));
+        ..addEntries(load.themes.map((t) => MapEntry(t.id, t)));
+      return load.complete;
     } catch (e) {
       _log.e('Error loading custom themes: $e');
+      return false;
     }
   }
 
@@ -152,7 +158,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       // Imported themes must be registered before we resolve the saved id, so a
       // persisted custom theme survives restarts.
-      await _loadCustomThemes();
+      final customThemesComplete = await _loadCustomThemes();
 
       final savedThemeName = await ConfigRepository.getThemeName();
       if (savedThemeName == 'system') {
@@ -167,16 +173,41 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         _currentTheme = AppThemes.customThemes[savedThemeName]!.themeData;
         _currentThemeName = savedThemeName;
         _notifyThemeChanged();
-      } else {
-        // The previously selected theme is no longer available (e.g. removed
-        // in an update). Fall back to the system theme and persist it.
+      } else if (customThemesComplete) {
+        // We have a trustworthy picture of what's on disk and the saved theme
+        // isn't in it, so it really is gone (removed in an update, or a custom
+        // theme the user deleted outside the app). Rewrite the column: leaving
+        // a dangling name behind means nothing ever repairs it, and a later
+        // import that reuses the id would silently adopt it.
         _log.w(
-          'Saved theme "$savedThemeName" is no longer available, falling back to system.',
+          'Saved theme "$savedThemeName" is no longer available, falling back '
+          'to system.',
         );
         _currentThemeName = 'system';
         _updateSystemTheme();
         await ConfigRepository.updateThemeName('system');
         _notifyThemeChanged();
+      } else {
+        // The load was incomplete — the user-data directory wasn't readable
+        // this launch, or a theme file had to be skipped. The saved theme may
+        // be perfectly fine, so fall back for this session ONLY: persisting
+        // 'system' would turn a transient read failure into permanent loss of
+        // the user's choice.
+        //
+        // Deliberately not [_notifyThemeChanged]: that mirrors the resolved
+        // palette into [StartupThemeCache], and caching the system palette
+        // while the database still names the user's theme would make the next
+        // launch paint its startup screens in the wrong colours before
+        // snapping to the restored theme. Leaving the cache alone keeps it
+        // agreeing with the saved name.
+        _log.w(
+          'Saved theme "$savedThemeName" did not resolve and the custom-theme '
+          'load was incomplete; using system for this session (keeping both '
+          'the saved value and the startup cache).',
+        );
+        _currentThemeName = 'system';
+        _updateSystemTheme();
+        notifyListeners();
       }
     } catch (e) {
       _log.e('Error loading saved theme: $e');

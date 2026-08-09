@@ -356,6 +356,13 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
         useShader: true,
       );
     }
+
+    // No Screen Return re-check here: AppLifecycleHandler already refreshes it
+    // on every resume (see app_lifecycle_handler.dart). A second call would
+    // send an extra full-state snapshot to the secondary engine during the
+    // post-game resume, where the transport gives no ordering guarantees and a
+    // stray snapshot can clobber the Now Playing state the same resume is
+    // restoring.
   }
 
   /// Closes the current DB and re-initializes from scratch at the (possibly new) path.

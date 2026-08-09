@@ -54,9 +54,6 @@ class ConfigModel {
   /// Preferred display mode for the system list (e.g., 'grid', 'list').
   final String systemViewMode;
 
-  /// Identifier of the currently active UI theme.
-  final String themeName;
-
   /// Whether to display detailed game metadata by default.
   final bool showGameInfo;
 
@@ -183,7 +180,6 @@ class ConfigModel {
     this.emulators = const {},
     this.gameViewMode = 'list',
     this.systemViewMode = 'grid',
-    this.themeName = 'system',
     this.showGameInfo = false,
     this.isFullscreen = true,
     this.bartopExitPoweroff = false,
@@ -257,7 +253,6 @@ class ConfigModel {
       emulators: emulators,
       gameViewMode: (json['gameViewMode'] ?? 'list').toString(),
       systemViewMode: (json['systemViewMode'] ?? 'grid').toString(),
-      themeName: (json['themeName'] ?? 'system').toString(),
       showGameInfo:
           (json['showGameInfo'] ?? false).toString().toLowerCase() == 'true',
       isFullscreen:
@@ -407,7 +402,6 @@ class ConfigModel {
       'emulators': emulatorsJson,
       'gameViewMode': gameViewMode,
       'systemViewMode': systemViewMode,
-      'themeName': themeName,
       'showGameInfo': showGameInfo,
       'isFullscreen': isFullscreen,
       'bartopExitPoweroff': bartopExitPoweroff,
@@ -452,7 +446,6 @@ class ConfigModel {
     Map<String, EmulatorModel>? emulators,
     String? gameViewMode,
     String? systemViewMode,
-    String? themeName,
     bool? showGameInfo,
     bool? isFullscreen,
     bool? bartopExitPoweroff,
@@ -494,7 +487,6 @@ class ConfigModel {
       emulators: emulators ?? this.emulators,
       gameViewMode: gameViewMode ?? this.gameViewMode,
       systemViewMode: systemViewMode ?? this.systemViewMode,
-      themeName: themeName ?? this.themeName,
       showGameInfo: showGameInfo ?? this.showGameInfo,
       isFullscreen: isFullscreen ?? this.isFullscreen,
       bartopExitPoweroff: bartopExitPoweroff ?? this.bartopExitPoweroff,
