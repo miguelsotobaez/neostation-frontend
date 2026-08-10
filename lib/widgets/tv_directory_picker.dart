@@ -123,8 +123,13 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   final ScrollController _scrollController = ScrollController();
   GamepadNavigation? _gamepadNav;
 
-  double get _itemHeight => widget.executableMode ? 60.0 : 44.0;
-  double get _volumeRowSpacing => widget.executableMode ? 8.0 : 0.0;
+  // Scaled like the text inside the rows. Left unscaled these were fixed
+  // pixels wrapping `.r`-sized labels, so anywhere `.r` is above 1 the two
+  // lines of a volume row overflowed the row and printed on top of each other
+  // (the Steam Deck is the worst case at exactly 2x — 640x480 design size
+  // against a 1280x800 logical screen).
+  double get _itemHeight => (widget.executableMode ? 60.0 : 44.0).r;
+  double get _volumeRowSpacing => (widget.executableMode ? 8.0 : 0.0).r;
 
   @override
   void initState() {
@@ -154,10 +159,16 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
       onBack: _handleBack,
     );
     _gamepadNav?.initialize();
+    // Modal: this is a `showDialog` surface and must keep the controller until
+    // it is dismissed. Left non-modal, any widget mounting behind it pushes
+    // itself on top and takes the input, so the picker stops responding — or
+    // never appears to. It opens nothing on top of itself, so the manager's
+    // caveat about a modal's own children does not apply.
     GamepadNavigationManager.pushLayer(
       'tv_directory_picker',
       onActivate: () => _gamepadNav?.activate(),
       onDeactivate: () => _gamepadNav?.deactivate(),
+      modal: true,
     );
   }
 
@@ -238,6 +249,13 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   }
 
   void _handleBack() {
+    // B unwinds the browse before it cancels it: out of a subfolder, up to its
+    // parent, back to the volume list, and only then out of the picker. Going
+    // straight out from three levels deep loses the whole descent to one press.
+    if (!_showVolumePicker) {
+      _goUp();
+      return;
+    }
     Navigator.of(context).pop();
   }
 
@@ -276,11 +294,34 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
       if (!await dir.exists()) continue;
       try {
         for (final entry in await dir.list().toList()) {
-          if (entry is! Directory || !seen.add(entry.path)) continue;
+          if (entry is! Directory) continue;
+
+          // SteamOS leaves /run/media/<label> as a symlink to the user-scoped
+          // /run/media/<user>/<label>, so the same card arrives twice under
+          // two different paths. Dedup on the target, and offer that rather
+          // than the link.
+          String resolved;
+          try {
+            resolved = await entry.resolveSymbolicLinks();
+          } on FileSystemException {
+            continue;
+          }
+          if (!seen.add(resolved)) continue;
+
+          // Something we cannot read is no use as a starting point: SteamOS
+          // keeps a root-owned /run/media/root that would otherwise be listed
+          // and then open empty. Taking one entry is enough to prove access,
+          // and an empty directory yields none without throwing.
+          try {
+            await Directory(resolved).list(followLinks: false).take(1).toList();
+          } on FileSystemException {
+            continue;
+          }
+
           volumes.add(
             _StorageVolume(
-              name: entry.path.split('/').last,
-              path: entry.path,
+              name: resolved.split('/').last,
+              path: resolved,
               isInternal: false,
             ),
           );
@@ -675,7 +716,7 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
       controller: _scrollController,
       physics: const ClampingScrollPhysics(),
       itemCount: _volumes.length,
-      separatorBuilder: (_, _) => SizedBox(height: _volumeRowSpacing.r),
+      separatorBuilder: (_, _) => SizedBox(height: _volumeRowSpacing),
       itemBuilder: (context, index) {
         final vol = _volumes[index];
         final focused = _focusedIndex == index;
@@ -701,7 +742,12 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
               children: [
                 Icon(
                   vol.isInternal
-                      ? Symbols.phone_android_rounded
+                      // A phone glyph for "Home" reads as wrong on a desktop
+                      // or a handheld PC, which is where this list is the
+                      // only way to reach a folder.
+                      ? (Platform.isAndroid
+                            ? Symbols.phone_android_rounded
+                            : Symbols.computer_rounded)
                       : Symbols.sd_card_rounded,
                   color: focused
                       ? theme.colorScheme.primary
@@ -1026,7 +1072,10 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
               SizedBox(width: 12.r),
               _HintChip(
                 label: 'B',
-                description: AppLocale.cancel.getString(context),
+                // Inside a folder B is a level up, not a way out.
+                description: _showVolumePicker
+                    ? AppLocale.cancel.getString(context)
+                    : AppLocale.hintBack.getString(context),
               ),
             ],
           ),
