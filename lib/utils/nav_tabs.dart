@@ -151,7 +151,7 @@ List<NavTab> hidableNavTabs() => NavTab.values
 /// Most tab slots the header strip shows at once. With more visible tabs than
 /// this, the strip scrolls; with this many or fewer it renders exactly as a
 /// static strip and never scrolls.
-const int maxVisibleNavTabSlots = 6;
+const int maxVisibleNavTabSlots = 5;
 
 /// First slot shown by the scrolling strip after selection moves to
 /// [selectedSlot].
