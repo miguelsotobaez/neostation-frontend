@@ -8,6 +8,13 @@ part of '../sqlite_config_provider.dart';
 /// class declaration, all state, lifecycle wiring, and secondary-display logic.
 /// `notifyListeners()` routes through the host's `_notify()` bridge and the
 /// static `_log` is host-qualified (both required from an extension).
+/// Bell entry for ROM roots that stopped resolving. A fixed id so consecutive
+/// scans replace the warning in place rather than stacking one per launch.
+const String _unreachableRomFoldersNotificationId = 'rom-folders-unreachable';
+
+/// Bell entry for a ROM folder refused because its path was transient.
+const String _transientRomFolderNotificationId = 'rom-folder-transient';
+
 extension SqliteConfigScanning on SqliteConfigProvider {
   /// Registers a new filesystem directory as a ROM source.
   ///
@@ -27,6 +34,15 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           'Pick it again with the built-in folder browser.';
       SqliteConfigProvider._log.w(
         'Rejected transient portal ROM folder: $folderPath',
+      );
+      // Settings > Directories, the screen this is normally reached from,
+      // never reads `_error` — without the bell the pick would simply appear
+      // to do nothing, which is no better than the silent failure being fixed.
+      GlobalNotificationService().show(
+        id: _transientRomFolderNotificationId,
+        title: 'ROM folder not added',
+        message: _error!,
+        type: GlobalNotificationType.error,
       );
       _notify();
       return;
@@ -192,6 +208,22 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           'Scan aborted, ${unreachable.length} unreachable ROM folder(s); '
           'library preserved: ${unreachable.join(', ')}',
         );
+        // The preserved library is worth nothing if the screen behind this
+        // stays blank. `_scanCompleted` is only set at the far end of a
+        // successful scan, and the systems screen renders neither the library
+        // nor the setup prompt until it flips — an early return without it
+        // leaves an empty page, which is the very symptom being fixed.
+        _scanCompleted = true;
+        // `_error` reaches only the initial-setup widget, which is shown when
+        // no systems are detected — impossible here, since this branch needs
+        // stored ROMs. The bell is the one surface that both survives the scan
+        // ending and does not need a BuildContext from this layer.
+        GlobalNotificationService().show(
+          id: _unreachableRomFoldersNotificationId,
+          title: 'ROM folder$plural unavailable',
+          message: _error!,
+          type: GlobalNotificationType.error,
+        );
         _setScanning(false);
         _notify();
         return;
@@ -204,6 +236,11 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         );
       }
     }
+
+    // Getting this far means nothing blocked the scan, so retire a warning
+    // left by an earlier one instead of leaving the user chasing a folder they
+    // have already reconnected or removed.
+    GlobalNotificationService().dismiss(_unreachableRomFoldersNotificationId);
 
     // Initialize progress
     _totalSystemsToScan = 0;
