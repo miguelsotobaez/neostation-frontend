@@ -11,6 +11,7 @@ import 'package:neostation/widgets/systems_update_dialog.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../widgets/fixed_header.dart';
 import 'systems_screen/system_content.dart';
+import 'systems_screen/my_systems_section/initial_setup_widget.dart';
 import 'search_screen/search_screen.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
@@ -442,7 +443,13 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   }
 
   void _selectCurrentItem() async {
-    if (_selectedTabIndex == AppTabs.systems) return;
+    if (_selectedTabIndex == AppTabs.systems) {
+      // The systems grid owns A through its own navigation layer, which is why
+      // this returns. On first run that grid is replaced by the setup card,
+      // which has no layer — without this its one button is pad-unreachable.
+      InitialSetupWidget.selectCurrent();
+      return;
+    }
 
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.selectCurrent();

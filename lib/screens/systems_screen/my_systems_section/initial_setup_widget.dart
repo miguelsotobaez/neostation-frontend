@@ -9,8 +9,50 @@ import '../../../providers/sqlite_config_provider.dart';
 ///
 /// Facilitates the initial filesystem handshake, allowing users to select
 /// their root ROM directory and initiate the first automated system scan.
-class InitialSetupWidget extends StatelessWidget {
+class InitialSetupWidget extends StatefulWidget {
   const InitialSetupWidget({super.key});
+
+  static _InitialSetupWidgetState? _currentInstance;
+
+  /// Runs the folder picker for whichever setup card is on screen, if any.
+  ///
+  /// This card replaces the systems grid on first run, and unlike the grid it
+  /// pushes no navigation layer — so AppScreen, which hands the Systems tab to
+  /// that layer, has nothing to hand A to and drops it. Selecting a ROM folder
+  /// was therefore reachable by touch only, which on a controller-driven
+  /// handheld means the first run cannot be completed at all.
+  ///
+  /// A layer of its own would have to re-serve every other binding the tab
+  /// relies on (bumpers, settings, back); registering the one action it owns
+  /// is the smaller contract. Mirrors `NewSettingsScreen.selectCurrent`.
+  static void selectCurrent() => _currentInstance?._selectFolder();
+
+  @override
+  State<InitialSetupWidget> createState() => _InitialSetupWidgetState();
+}
+
+class _InitialSetupWidgetState extends State<InitialSetupWidget> {
+  @override
+  void initState() {
+    super.initState();
+    InitialSetupWidget._currentInstance = this;
+  }
+
+  @override
+  void dispose() {
+    if (identical(InitialSetupWidget._currentInstance, this)) {
+      InitialSetupWidget._currentInstance = null;
+    }
+    super.dispose();
+  }
+
+  /// Opens the ROM folder picker. Inert while a scan is running, matching the
+  /// button, which shows a progress state instead of an action just then.
+  void _selectFolder() {
+    final configProvider = context.read<SqliteConfigProvider>();
+    if (configProvider.isLoading || configProvider.isScanning) return;
+    configProvider.selectRomFolder(context: context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -200,35 +242,47 @@ class InitialSetupWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final hasFolder = configProvider.hasRomFolder;
 
+    // Focus ring, in the app's usual 2px primary. It is always drawn rather
+    // than tracking a selection because this button is the only thing on the
+    // first-run card a controller can act on — it says "A does this here",
+    // which nothing on this screen said before. Kept outside the fill with a
+    // gap of surface, since the button is already filled with that primary.
     return Container(
-      width: double.infinity,
-      height: 64,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: theme.colorScheme.primary, width: 2),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => configProvider.selectRomFolder(context: context),
+      child: Container(
+        width: double.infinity,
+        height: 64,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary,
           borderRadius: BorderRadius.circular(18),
-          child: Center(
-            child: Text(
-              hasFolder
-                  ? AppLocale.changeFolder.getString(context)
-                  : AppLocale.selectRomFolderButton.getString(context),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: theme.colorScheme.onPrimary,
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _selectFolder,
+            borderRadius: BorderRadius.circular(18),
+            child: Center(
+              child: Text(
+                hasFolder
+                    ? AppLocale.changeFolder.getString(context)
+                    : AppLocale.selectRomFolderButton.getString(context),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: theme.colorScheme.onPrimary,
+                ),
               ),
             ),
           ),
