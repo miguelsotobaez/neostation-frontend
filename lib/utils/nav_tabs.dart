@@ -147,3 +147,35 @@ List<NavTab> visibleNavTabs(ConfigModel config) => NavTab.values
 List<NavTab> hidableNavTabs() => NavTab.values
     .where((tab) => navTabSpec(tab).isHidable)
     .toList(growable: false);
+
+/// Most tab slots the header strip shows at once. With more visible tabs than
+/// this, the strip scrolls; with this many or fewer it renders exactly as a
+/// static strip and never scrolls.
+const int maxVisibleNavTabSlots = 6;
+
+/// First slot shown by the scrolling strip after selection moves to
+/// [selectedSlot].
+///
+/// Minimal-scroll windowing: the window is untouched while the selection stays
+/// inside it and shifts just far enough to include the selection when it walks
+/// off either edge, so cycling with the bumpers scrolls one slot at a time
+/// (with a jump only on wrap-around). A [selectedSlot] of -1 (selected tab
+/// hidden by a config change) keeps the current window rather than snapping
+/// anywhere. The result is always clamped so the window never shows blank
+/// slots past either end.
+int navTabWindowStart({
+  required int windowStart,
+  required int selectedSlot,
+  required int tabCount,
+  int maxSlots = maxVisibleNavTabSlots,
+}) {
+  if (tabCount <= maxSlots) return 0;
+  var start = windowStart;
+  if (selectedSlot >= 0) {
+    if (selectedSlot < start) start = selectedSlot;
+    if (selectedSlot > start + maxSlots - 1) {
+      start = selectedSlot - maxSlots + 1;
+    }
+  }
+  return start.clamp(0, tabCount - maxSlots);
+}

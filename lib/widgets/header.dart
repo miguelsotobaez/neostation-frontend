@@ -48,6 +48,12 @@ class HeaderState extends State<Header> {
   Timer? _timeUpdateTimer;
   late final List<FocusNode> _tabFocusNodes;
 
+  /// First slot shown when the tab strip has more visible tabs than
+  /// [maxVisibleNavTabSlots]. Recomputed during build (not in setState) because
+  /// every input that can move it — tab selection, hide toggles — already
+  /// triggers a rebuild through the widget or the config provider.
+  int _windowStart = 0;
+
   @override
   void initState() {
     super.initState();
@@ -317,7 +323,7 @@ class HeaderState extends State<Header> {
                               // Tinting from the ANIMATED position instead
                               // keeps each icon's colour matched to how much of
                               // the pill is actually under it.
-                              return TweenAnimationBuilder<double>(
+                              final strip = TweenAnimationBuilder<double>(
                                 tween: Tween<double>(
                                   end: (selectedSlot < 0 ? 0 : selectedSlot)
                                       .toDouble(),
@@ -375,6 +381,16 @@ class HeaderState extends State<Header> {
                                     ],
                                   );
                                 },
+                              );
+                              if (visibleTabs.length <= maxVisibleNavTabSlots) {
+                                _windowStart = 0;
+                                return strip;
+                              }
+
+                              return _buildScrollingStrip(
+                                strip,
+                                visibleTabs.length,
+                                selectedSlot,
                               );
                             },
                           ),
@@ -504,6 +520,56 @@ class HeaderState extends State<Header> {
       textScaler: MediaQuery.textScalerOf(context),
     )..layout();
     return painter.width;
+  }
+
+  // Windows the full-width [strip] to [maxVisibleNavTabSlots] slots, sliding it
+  // so the selected tab stays in view. The slide shares the indicator's
+  // duration/curve so the two motions read as one. Icons at a scrollable edge
+  // fade out (alpha mask, so it works over the translucent pill) to signal that
+  // the strip continues past the window.
+  Widget _buildScrollingStrip(Widget strip, int tabCount, int selectedSlot) {
+    _windowStart = navTabWindowStart(
+      windowStart: _windowStart,
+      selectedSlot: selectedSlot,
+      tabCount: tabCount,
+    );
+
+    final viewportWidth = maxVisibleNavTabSlots * 32.r;
+    final canScrollLeft = _windowStart > 0;
+    final canScrollRight = _windowStart < tabCount - maxVisibleNavTabSlots;
+    final fade = 12.r / viewportWidth;
+
+    return SizedBox(
+      width: viewportWidth,
+      height: 32.r,
+      child: ClipRect(
+        child: ShaderMask(
+          shaderCallback: (rect) => LinearGradient(
+            colors: [
+              canScrollLeft ? Colors.transparent : Colors.white,
+              Colors.white,
+              Colors.white,
+              canScrollRight ? Colors.transparent : Colors.white,
+            ],
+            stops: [0, fade, 1 - fade, 1],
+          ).createShader(rect),
+          blendMode: BlendMode.dstIn,
+          child: Stack(
+            children: [
+              AnimatedPositioned(
+                left: -_windowStart * 32.r,
+                top: 0,
+                width: tabCount * 32.r,
+                height: 32.r,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeInOut,
+                child: strip,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // Steam-style tab button.
