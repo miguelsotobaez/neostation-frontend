@@ -18,40 +18,35 @@ void main() {
       }
     });
 
-    test('keeps the window still while the selection stays inside it', () {
-      for (var slot = 1; slot <= 6; slot++) {
-        expect(
-          navTabWindowStart(
-            windowStart: 1,
-            selectedSlot: slot,
-            tabCount: 8,
-            maxSlots: 6,
-          ),
-          1,
-        );
-      }
-    });
-
-    test(
-      'shifts right just far enough when the selection walks off the end',
-      () {
-        expect(
-          navTabWindowStart(
-            windowStart: 0,
-            selectedSlot: 6,
-            tabCount: 8,
-            maxSlots: 6,
-          ),
-          1,
-        );
-      },
-    );
-
-    test('shifts left to the selection when it walks off the start', () {
+    test('keeps the selection in the middle slot mid-strip', () {
+      // 6 tabs through a 3-slot window: slots 2 and 3 are far enough from
+      // both ends to center exactly.
       expect(
         navTabWindowStart(
-          windowStart: 2,
-          selectedSlot: 1,
+          windowStart: 0,
+          selectedSlot: 2,
+          tabCount: 6,
+          maxSlots: 3,
+        ),
+        1,
+      );
+      expect(
+        navTabWindowStart(
+          windowStart: 1,
+          selectedSlot: 3,
+          tabCount: 6,
+          maxSlots: 3,
+        ),
+        2,
+      );
+    });
+
+    test('sits left of middle for an even window width', () {
+      // 8 tabs through a 6-slot window: slot 3 renders in window slot 2.
+      expect(
+        navTabWindowStart(
+          windowStart: 0,
+          selectedSlot: 3,
           tabCount: 8,
           maxSlots: 6,
         ),
@@ -59,27 +54,34 @@ void main() {
       );
     });
 
-    test('wrap-around jumps the window to the far end', () {
-      // R1 from the last tab wraps to slot 0.
-      expect(
-        navTabWindowStart(
-          windowStart: 2,
-          selectedSlot: 0,
-          tabCount: 8,
-          maxSlots: 6,
-        ),
-        0,
-      );
-      // L1 from the first tab wraps to the last slot.
-      expect(
-        navTabWindowStart(
-          windowStart: 0,
-          selectedSlot: 7,
-          tabCount: 8,
-          maxSlots: 6,
-        ),
-        2,
-      );
+    test('clamps at the far left instead of showing blank slots', () {
+      for (final slot in [0, 1]) {
+        expect(
+          navTabWindowStart(
+            windowStart: 2,
+            selectedSlot: slot,
+            tabCount: 6,
+            maxSlots: 3,
+          ),
+          0,
+          reason: 'slot $slot is within half a window of the start',
+        );
+      }
+    });
+
+    test('clamps at the far right instead of showing blank slots', () {
+      for (final slot in [4, 5]) {
+        expect(
+          navTabWindowStart(
+            windowStart: 0,
+            selectedSlot: slot,
+            tabCount: 6,
+            maxSlots: 3,
+          ),
+          3,
+          reason: 'slot $slot is within half a window of the end',
+        );
+      }
     });
 
     test('keeps the current window when the selected tab is hidden', () {

@@ -156,11 +156,12 @@ const int maxVisibleNavTabSlots = 6;
 /// First slot shown by the scrolling strip after selection moves to
 /// [selectedSlot].
 ///
-/// Minimal-scroll windowing: the window is untouched while the selection stays
-/// inside it and shifts just far enough to include the selection when it walks
-/// off either edge, so cycling with the bumpers scrolls one slot at a time
-/// (with a jump only on wrap-around). A [selectedSlot] of -1 (selected tab
-/// hidden by a config change) keeps the current window rather than snapping
+/// Centered windowing: the selection sits in the window's middle slot (the
+/// left-of-middle slot when [maxSlots] is even), clamped at both ends of the
+/// strip — so the selection only reaches an edge slot when it is genuinely
+/// near the first or last tab, and everywhere else the strip scrolls under a
+/// stationary highlight. A [selectedSlot] of -1 (selected tab hidden by a
+/// config change) keeps the current [windowStart] rather than snapping
 /// anywhere. The result is always clamped so the window never shows blank
 /// slots past either end.
 int navTabWindowStart({
@@ -170,12 +171,8 @@ int navTabWindowStart({
   int maxSlots = maxVisibleNavTabSlots,
 }) {
   if (tabCount <= maxSlots) return 0;
-  var start = windowStart;
-  if (selectedSlot >= 0) {
-    if (selectedSlot < start) start = selectedSlot;
-    if (selectedSlot > start + maxSlots - 1) {
-      start = selectedSlot - maxSlots + 1;
-    }
-  }
+  final start = selectedSlot >= 0
+      ? selectedSlot - (maxSlots - 1) ~/ 2
+      : windowStart;
   return start.clamp(0, tabCount - maxSlots);
 }
