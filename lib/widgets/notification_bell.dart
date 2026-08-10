@@ -310,7 +310,12 @@ class _NotificationDropdownItem extends StatelessWidget {
                     ).colorScheme.onSurface.withValues(alpha: 0.8),
                     fontSize: 10.r,
                   ),
-                  maxLines: 3,
+                  // Enough room for a message that names a path and then says
+                  // what to do about it. At three lines the ROM-folder warnings
+                  // were cut off mid-advice ("…came from a temporary deskt"),
+                  // leaving the one actionable half of the message unread.
+                  // Short notifications are unaffected: this is a maximum.
+                  maxLines: 6,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (data.progress != null) ...[
