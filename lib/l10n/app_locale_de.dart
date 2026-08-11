@@ -435,6 +435,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.regionUpdated: 'Regionpriorität aktualisiert',
   AppLocale.regionError: 'Fehler beim Aktualisieren der Regionpriorität',
   AppLocale.systems: 'Systeme',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      'Fügt geschätzte Spielzeiten bis zum Durchspielen hinzu (Hauptgeschichte, Haupt+Extras, Komplettierung). Keine Anmeldung nötig.',
+  AppLocale.hltbStartScraping: 'Scraping starten',
+  AppLocale.hltbMainPill: '~{hours}h zum Durchspielen',
   AppLocale.screenscraper: 'ScreenScraper-Konto',
   AppLocale.totalGames: 'Gesamtzahl Spiele',
   AppLocale.successFailed: 'Erfolg / Fehlgeschlagen',

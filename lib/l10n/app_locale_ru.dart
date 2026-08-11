@@ -426,6 +426,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.regionUpdated: 'Приоритет регионов обновлён',
   AppLocale.regionError: 'Ошибка обновления приоритета регионов',
   AppLocale.systems: 'Системы',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      'Добавляет примерное время прохождения (основной сюжет, основной + дополнения, полное прохождение). Учётная запись не требуется.',
+  AppLocale.hltbStartScraping: 'Начать сбор данных',
+  AppLocale.hltbMainPill: '~{hours}ч на прохождение',
   AppLocale.screenscraper: 'Аккаунт ScreenScraper',
   AppLocale.totalGames: 'Всего игр',
   AppLocale.successFailed: 'Успешно / Ошибка',

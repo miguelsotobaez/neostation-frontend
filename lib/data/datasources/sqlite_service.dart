@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 114;
+  static const int _databaseVersion = 115;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1944,6 +1944,18 @@ class SqliteService {
         cloud_updated_at INTEGER NOT NULL,
         file_size INTEGER NOT NULL,
         file_hash TEXT
+      );
+      ''',
+      '''
+      CREATE TABLE IF NOT EXISTS user_hltb_metadata (
+        app_system_id TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        main_hours INTEGER,
+        main_extra_hours INTEGER,
+        completionist_hours INTEGER,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
+        UNIQUE(app_system_id, filename)
       );
       ''',
     ];

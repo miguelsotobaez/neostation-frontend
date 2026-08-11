@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:path/path.dart' as path;
 import 'package:neostation/l10n/app_locale.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../providers/file_provider.dart';
+import '../../../../repositories/scraper_repository.dart';
 import '../../../../services/screenscraper_service.dart';
 import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
@@ -81,6 +83,41 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
 
   String _selectedLanguage = 'en';
 
+  /// HowLongToBeat completion-time estimate for the current game, or null
+  /// while loading / when nothing has been scraped for it yet.
+  Map<String, dynamic>? _hltbData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHltbData();
+  }
+
+  @override
+  void didUpdateWidget(GameDetailsGameInfoTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.game.romPath != widget.game.romPath) {
+      _hltbData = null;
+      _loadHltbData();
+    }
+  }
+
+  Future<void> _loadHltbData() async {
+    final appSystemId = widget.game.systemId ?? widget.system.id;
+    final romPath = widget.game.romPath;
+    if (appSystemId == null || romPath == null || romPath.isEmpty) return;
+    // Keyed on the filename WITH extension, matching user_roms.filename —
+    // GameModel.romname (despite its doc comment) is extension-stripped.
+    final data = await ScraperRepository.getHltbForGame(
+      appSystemId,
+      path.basename(romPath),
+    );
+    if (mounted) setState(() => _hltbData = data);
+  }
+
+  int? get _hltbMainHours =>
+      int.tryParse(_hltbData?['main_hours']?.toString() ?? '');
+
   List<String> _availableLanguages() {
     final descriptions = widget.game.descriptions;
     if (descriptions == null || descriptions.isEmpty) return [];
@@ -155,9 +192,20 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                           !widget.isScrapingGame &&
                           (widget.game.developer.isNotEmpty ||
                               widget.game.players.isNotEmpty ||
-                              widget.game.year.isNotEmpty))
+                              widget.game.year.isNotEmpty ||
+                              _hltbMainHours != null))
                         Row(
                           children: [
+                            if (_hltbMainHours != null)
+                              _InfoPill(
+                                icon: Symbols.schedule_rounded,
+                                text: AppLocale.hltbMainPill
+                                    .getString(context)
+                                    .replaceFirst(
+                                      '{hours}',
+                                      _hltbMainHours.toString(),
+                                    ),
+                              ),
                             if (widget.game.developer.isNotEmpty)
                               _InfoPill(
                                 icon: Symbols.business_rounded,

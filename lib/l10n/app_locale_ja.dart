@@ -365,6 +365,11 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.regionUpdated: '地域優先度を更新しました',
   AppLocale.regionError: '地域優先度の更新中にエラーが発生しました',
   AppLocale.systems: 'システム',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      '推定クリア時間を追加します（メインストーリー、メイン+やり込み、コンプリート）。アカウント登録は不要です。',
+  AppLocale.hltbStartScraping: 'スクレイピング開始',
+  AppLocale.hltbMainPill: 'クリアまで約{hours}時間',
   AppLocale.screenscraper: 'ScreenScraperアカウント',
   AppLocale.totalGames: '総ゲーム数',
   AppLocale.successFailed: '成功 / 失敗',

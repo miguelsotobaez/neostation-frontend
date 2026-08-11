@@ -416,6 +416,11 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.regionUpdated: 'Region priority updated',
   AppLocale.regionError: 'Error updating region priority',
   AppLocale.systems: 'Systems',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      'Adds estimated completion times (main story, main + extras, completionist). No account needed.',
+  AppLocale.hltbStartScraping: 'Start Scraping',
+  AppLocale.hltbMainPill: '~{hours}h to beat',
   AppLocale.screenscraper: 'ScreenScraper Account',
   AppLocale.totalGames: 'Total Games',
   AppLocale.successFailed: 'Success / Failed',

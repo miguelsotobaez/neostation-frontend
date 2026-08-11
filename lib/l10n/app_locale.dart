@@ -445,6 +445,10 @@ mixin AppLocale {
   static const String regionUpdated = 'region_updated';
   static const String regionError = 'region_error';
   static const String systems = 'systems';
+  static const String howLongToBeat = 'howlongtobeat';
+  static const String hltbDescription = 'hltb_description';
+  static const String hltbStartScraping = 'hltb_start_scraping';
+  static const String hltbMainPill = 'hltb_main_pill';
   static const String screenscraper = 'screenscraper';
   static const String totalGames = 'total_games';
   static const String successFailed = 'success_failed';

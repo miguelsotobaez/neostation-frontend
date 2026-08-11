@@ -372,6 +372,11 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.regionUpdated: '지역 우선순위가 업데이트되었습니다',
   AppLocale.regionError: '지역 우선순위를 업데이트하는 중에 오류가 발생했습니다',
   AppLocale.systems: '시스템',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      '예상 클리어 시간을 추가합니다 (메인 스토리, 메인+추가, 완전 공략). 계정이 필요하지 않습니다.',
+  AppLocale.hltbStartScraping: '스크래핑 시작',
+  AppLocale.hltbMainPill: '클리어까지 약 {hours}시간',
   AppLocale.screenscraper: 'ScreenScraper 계정',
   AppLocale.totalGames: '전체 게임',
   AppLocale.successFailed: '성공/실패',

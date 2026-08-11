@@ -206,6 +206,7 @@ class DatabaseTestHelper {
         hide_logo INTEGER DEFAULT 0,
         prefer_file_name INTEGER DEFAULT 0,
         subfolder_view INTEGER DEFAULT 0,
+        open_on_second_screen INTEGER DEFAULT 0,
         custom_background_path TEXT,
         custom_logo_path TEXT,
         esde_media_dir TEXT,
@@ -300,6 +301,18 @@ class DatabaseTestHelper {
         cloud_updated_at INTEGER NOT NULL,
         file_size INTEGER NOT NULL,
         file_hash TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE user_hltb_metadata (
+        app_system_id TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        main_hours INTEGER,
+        main_extra_hours INTEGER,
+        completionist_hours INTEGER,
+        updated_at TEXT,
+        UNIQUE(app_system_id, filename)
       )
     ''');
   }

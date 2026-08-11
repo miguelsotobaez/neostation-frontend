@@ -426,6 +426,11 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.regionUpdated: 'Prioridade de região atualizada',
   AppLocale.regionError: 'Erro ao atualizar prioridade de região',
   AppLocale.systems: 'Sistemas',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      'Adiciona tempos estimados de conclusão (história principal, principal + extras, completista). Não requer conta.',
+  AppLocale.hltbStartScraping: 'Iniciar scraping',
+  AppLocale.hltbMainPill: '~{hours}h para terminar',
   AppLocale.screenscraper: 'Conta ScreenScraper',
   AppLocale.totalGames: 'Total de Jogos',
   AppLocale.successFailed: 'Sucesso / Falha',

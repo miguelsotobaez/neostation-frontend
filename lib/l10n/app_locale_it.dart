@@ -428,6 +428,11 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.regionUpdated: 'Priorità regione aggiornata',
   AppLocale.regionError: "Errore nell'aggiornamento della priorità regione",
   AppLocale.systems: 'Sistemi',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      'Aggiunge tempi di completamento stimati (storia principale, principale + extra, completista). Nessun account richiesto.',
+  AppLocale.hltbStartScraping: 'Avvia scraping',
+  AppLocale.hltbMainPill: '~{hours}h per finire',
   AppLocale.screenscraper: 'Account ScreenScraper',
   AppLocale.totalGames: 'Totale Giochi',
   AppLocale.successFailed: 'Successo / Fallimento',

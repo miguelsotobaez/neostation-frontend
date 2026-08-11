@@ -417,6 +417,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.regionUpdated: 'Prioritas wilayah diperbarui',
   AppLocale.regionError: 'Kesalahan saat memperbarui prioritas wilayah',
   AppLocale.systems: 'Sistem',
+  AppLocale.howLongToBeat: 'HowLongToBeat',
+  AppLocale.hltbDescription:
+      'Menambahkan perkiraan waktu penyelesaian (cerita utama, utama + ekstra, penuntas). Tidak perlu akun.',
+  AppLocale.hltbStartScraping: 'Mulai Scraping',
+  AppLocale.hltbMainPill: '~{hours}j untuk selesai',
   AppLocale.screenscraper: 'Akun ScreenScraper',
   AppLocale.totalGames: 'Total Game',
   AppLocale.successFailed: 'Berhasil / Gagal',

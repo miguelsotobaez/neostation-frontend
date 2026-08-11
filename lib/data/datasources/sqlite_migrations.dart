@@ -348,6 +348,9 @@ class SqliteMigrations {
       case 114:
         await _migrateToVersion114(db);
         break;
+      case 115:
+        await _migrateToVersion115(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5398,6 +5401,33 @@ class SqliteMigrations {
       _log.i('Migration v114 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v114: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v115: Creates [user_hltb_metadata], storing HowLongToBeat
+  /// completion-time estimates per game. Kept in its own table rather than
+  /// folded into `user_screenscraper_metadata` — HowLongToBeat is scraped and
+  /// triggered independently of ScreenScraper.
+  static Future<void> _migrateToVersion115(Database db) async {
+    _log.i('Migration v115: Creating user_hltb_metadata table');
+    try {
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS user_hltb_metadata (
+          app_system_id TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          main_hours INTEGER,
+          main_extra_hours INTEGER,
+          completionist_hours INTEGER,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
+          UNIQUE(app_system_id, filename)
+        );
+      ''');
+      _log.i('Migration v115 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v115: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

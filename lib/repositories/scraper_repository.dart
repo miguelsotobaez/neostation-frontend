@@ -902,6 +902,60 @@ class ScraperRepository {
     );
   }
 
+  // ── Artwork/completion-time scraper operations ────────────────────────────
+
+  /// Returns every ROM across every detected system, with the system's
+  /// folder name, for a scan that needs every game regardless of
+  /// per-system scrape-status (artwork gap-filling, completion-time lookup).
+  static Future<List<Map<String, dynamic>>>
+  getAllRomsForArtworkScraping() async {
+    final db = await SqliteService.getDatabase();
+    return await db.rawQuery('''
+      SELECT ur.app_system_id, ur.filename, ur.rom_path, ur.title_name, s.folder_name
+      FROM user_roms ur
+      JOIN app_systems s ON s.id = ur.app_system_id
+      WHERE ur.app_system_id IN (SELECT DISTINCT app_system_id FROM user_detected_systems)
+    ''');
+  }
+
+  // ── HowLongToBeat scraper operations ──────────────────────────────────────
+
+  /// Returns the cached HowLongToBeat estimate for a single game, or null if
+  /// it hasn't been scraped yet.
+  static Future<Map<String, dynamic>?> getHltbForGame(
+    String appSystemId,
+    String filename,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.query(
+      'user_hltb_metadata',
+      where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+      whereArgs: [appSystemId, filename],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Upserts a game's HowLongToBeat estimate. Hour values may be null when
+  /// HowLongToBeat has no data for that completion category.
+  static Future<void> upsertHltbMetadata({
+    required String appSystemId,
+    required String filename,
+    int? mainHours,
+    int? mainExtraHours,
+    int? completionistHours,
+  }) async {
+    final db = await SqliteService.getDatabase();
+    await db.insert('user_hltb_metadata', {
+      'app_system_id': appSystemId,
+      'filename': filename,
+      'main_hours': mainHours,
+      'main_extra_hours': mainExtraHours,
+      'completionist_hours': completionistHours,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   static Future<String> getPreferredLanguage() async {
     try {
       final db = await SqliteService.getDatabase();
