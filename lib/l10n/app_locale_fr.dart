@@ -439,6 +439,16 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.regionError:
       'Erreur lors de la mise à jour de la priorité de région',
   AppLocale.systems: 'Systèmes',
+  AppLocale.steamGridDb: 'SteamGridDB',
+  AppLocale.steamGridDbDescription:
+      'Source d\'illustrations supplémentaire pour les jaquettes, fonds et logos, indépendante de ScreenScraper. Ne complète que les images manquantes, n\'écrase jamais les existantes.',
+  AppLocale.steamGridDbGetKey: 'Obtenir une clé API gratuite ↗',
+  AppLocale.steamGridDbApiKeyHint: 'Collez votre clé API SteamGridDB',
+  AppLocale.steamGridDbSaveKey: 'Enregistrer la clé',
+  AppLocale.steamGridDbClearKey: 'Supprimer la clé',
+  AppLocale.steamGridDbStartScraping: 'Démarrer le scraping',
+  AppLocale.steamGridDbInvalidKey: 'Clé API invalide',
+  AppLocale.steamGridDbKeySaved: 'Clé API enregistrée',
   AppLocale.screenscraper: 'Compte ScreenScraper',
   AppLocale.totalGames: 'Total de Jeux',
   AppLocale.successFailed: 'Succès / Échec',

@@ -445,6 +445,15 @@ mixin AppLocale {
   static const String regionUpdated = 'region_updated';
   static const String regionError = 'region_error';
   static const String systems = 'systems';
+  static const String steamGridDb = 'steamgriddb';
+  static const String steamGridDbDescription = 'steamgriddb_description';
+  static const String steamGridDbGetKey = 'steamgriddb_get_key';
+  static const String steamGridDbApiKeyHint = 'steamgriddb_api_key_hint';
+  static const String steamGridDbSaveKey = 'steamgriddb_save_key';
+  static const String steamGridDbClearKey = 'steamgriddb_clear_key';
+  static const String steamGridDbStartScraping = 'steamgriddb_start_scraping';
+  static const String steamGridDbInvalidKey = 'steamgriddb_invalid_key';
+  static const String steamGridDbKeySaved = 'steamgriddb_key_saved';
   static const String screenscraper = 'screenscraper';
   static const String totalGames = 'total_games';
   static const String successFailed = 'success_failed';

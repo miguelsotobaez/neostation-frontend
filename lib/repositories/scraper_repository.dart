@@ -902,6 +902,24 @@ class ScraperRepository {
     );
   }
 
+  // ── SteamGridDB scraper operations ────────────────────────────────────────
+
+  /// Returns every ROM across every detected system, with the system's
+  /// folder name, for an artwork-only scrape (SteamGridDB has no per-system
+  /// scrape-status table — the caller decides what's missing by checking the
+  /// media files on disk, same as [getSteamGamesWithScrapeStatus]'s sibling
+  /// the Steam scraper uses).
+  static Future<List<Map<String, dynamic>>>
+  getAllRomsForArtworkScraping() async {
+    final db = await SqliteService.getDatabase();
+    return await db.rawQuery('''
+      SELECT ur.filename, ur.rom_path, ur.title_name, s.folder_name
+      FROM user_roms ur
+      JOIN app_systems s ON s.id = ur.app_system_id
+      WHERE ur.app_system_id IN (SELECT DISTINCT app_system_id FROM user_detected_systems)
+    ''');
+  }
+
   static Future<String> getPreferredLanguage() async {
     try {
       final db = await SqliteService.getDatabase();

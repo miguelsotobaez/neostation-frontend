@@ -16,6 +16,7 @@ import 'scraper_contents/scrape_mode_content.dart';
 import 'scraper_contents/scraping_content.dart';
 import 'scraper_contents/systems_content.dart';
 import 'scraper_contents/media_content.dart';
+import 'scraper_contents/steamgriddb_content.dart';
 
 /// New scraper options screen with left menu and right content panel
 class NewScraperOptionsScreen extends StatefulWidget {
@@ -59,6 +60,8 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
   final GlobalKey<SystemsContentState> _systemsKey =
       GlobalKey<SystemsContentState>();
   final GlobalKey<MediaContentState> _mediaKey = GlobalKey<MediaContentState>();
+  final GlobalKey<SteamGridDbContentState> _steamGridDbKey =
+      GlobalKey<SteamGridDbContentState>();
 
   Map<String, String>? _userInfo;
   String? _currentScrapeMode;
@@ -142,6 +145,14 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         title: AppLocale.systems.getString(context),
         localeKey: AppLocale.systems,
         icon: Symbols.videogame_asset_rounded,
+        isVisible: true,
+      ),
+    );
+    _menuItems.add(
+      ScraperMenuItem(
+        title: AppLocale.steamGridDb.getString(context),
+        localeKey: AppLocale.steamGridDb,
+        icon: Symbols.grid_view_rounded,
         isVisible: true,
       ),
     );
@@ -345,6 +356,9 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
       return _systemsKey.currentState?.getItemCount() ?? 0;
     }
     if (selectedKey == AppLocale.account) return 1;
+    if (selectedKey == AppLocale.steamGridDb) {
+      return SteamGridDbContent.itemCount;
+    }
     return 0;
   }
 
@@ -366,6 +380,8 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
       if (_selectedContentIndex == 0) {
         _handleLogout();
       }
+    } else if (selectedKey == AppLocale.steamGridDb) {
+      _steamGridDbKey.currentState?.selectItem(_selectedContentIndex);
     }
   }
 
@@ -632,6 +648,12 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         selectedContentIndex: _selectedContentIndex,
         userInfo: _userInfo,
         onLogout: _handleLogout,
+      );
+    } else if (selectedKey == AppLocale.steamGridDb) {
+      return SteamGridDbContent(
+        key: _steamGridDbKey,
+        isContentFocused: !_focusOnMenu,
+        selectedContentIndex: _selectedContentIndex,
       );
     } else {
       return Center(
