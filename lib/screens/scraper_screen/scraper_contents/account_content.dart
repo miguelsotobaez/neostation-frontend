@@ -10,12 +10,17 @@ class AccountContent extends StatelessWidget {
   final Map<String, String>? userInfo;
   final VoidCallback onLogout;
 
+  /// Opens the ScreenScraper login screen. Null once logged in — this tab
+  /// only prompts for login when [userInfo] is absent.
+  final VoidCallback? onLoginRequested;
+
   const AccountContent({
     super.key,
     required this.isContentFocused,
     required this.selectedContentIndex,
     required this.userInfo,
     required this.onLogout,
+    this.onLoginRequested,
   });
 
   String _getContributionLevel(BuildContext context, String? contribution) {
@@ -60,7 +65,7 @@ class AccountContent extends StatelessWidget {
         userInfo != null && userInfo!['requests_today'] != null;
 
     if (userInfo == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildLoggedOutPrompt(context, theme);
     }
 
     return SingleChildScrollView(
@@ -84,6 +89,67 @@ class AccountContent extends StatelessWidget {
             ),
             SizedBox(height: 16.h),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Shown instead of the member header when there's no ScreenScraper
+  /// account yet — this tab is the only part of the scraper screen that
+  /// needs one; the others (SteamGridDB, HowLongToBeat, …) work regardless.
+  Widget _buildLoggedOutPrompt(BuildContext context, ThemeData theme) {
+    final focused = isContentFocused && selectedContentIndex == 0;
+    return Container(
+      padding: EdgeInsets.all(20.r),
+      decoration: _cardDecoration(theme),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppLocale.loginToScrape.getString(context),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontSize: 12.r,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+            ),
+          ),
+          SizedBox(height: 16.r),
+          GestureDetector(
+            onTap: onLoginRequested,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 12.r),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(
+                  alpha: focused ? 0.18 : 0.1,
+                ),
+                borderRadius: BorderRadius.circular(10.r),
+                border: Border.all(
+                  color: focused
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.primary.withValues(alpha: 0.25),
+                  width: focused ? 2.r : 1.r,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Symbols.login_rounded,
+                    size: 18.r,
+                    color: theme.colorScheme.primary,
+                  ),
+                  SizedBox(width: 10.r),
+                  Text(
+                    AppLocale.login.getString(context),
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.sp,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

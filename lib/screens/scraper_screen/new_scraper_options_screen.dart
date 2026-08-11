@@ -9,6 +9,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
+import 'scraper_login_screen.dart';
 import 'scraper_contents/account_content.dart';
 import 'scraper_contents/language_content.dart';
 import 'scraper_contents/region_content.dart';
@@ -364,7 +365,11 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
       _systemsKey.currentState?.selectItem();
     } else if (selectedKey == AppLocale.account) {
       if (_selectedContentIndex == 0) {
-        _handleLogout();
+        if (_userInfo == null) {
+          _openLoginScreen();
+        } else {
+          _handleLogout();
+        }
       }
     }
   }
@@ -387,6 +392,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
             AppLocale.logoutSuccess.getString(context),
             type: NotificationType.success,
           );
+          setState(() => _userInfo = null);
           widget.onLogout?.call();
         } else {
           AppNotification.showNotification(
@@ -397,6 +403,20 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         }
       }
     }
+  }
+
+  /// Opens the full ScreenScraper login screen and refreshes the Account
+  /// tab's state on return, whether or not the login succeeded. The login
+  /// screen has no back button of its own (normally embedded as a tab, not
+  /// pushed), so a successful login pops it directly.
+  Future<void> _openLoginScreen() async {
+    final navigator = Navigator.of(context);
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => ScraperLoginScreen(onLoginSuccess: navigator.pop),
+      ),
+    );
+    if (mounted) await _loadCredentials();
   }
 
   Future<void> _handleScrapeModeChange(String newMode) async {
@@ -632,6 +652,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         selectedContentIndex: _selectedContentIndex,
         userInfo: _userInfo,
         onLogout: _handleLogout,
+        onLoginRequested: _userInfo == null ? _openLoginScreen : null,
       );
     } else {
       return Center(
