@@ -30,6 +30,7 @@ import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'system_list_builder.dart';
 import 'system_card.dart';
+import '../system_details_card/system_details.dart';
 
 /// A premium carousel-based orchestrator for system and recent game selection.
 ///
@@ -1027,9 +1028,44 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
             );
           }
 
-          return content;
+          return _withLibraryStatsOverlay(content, allSystems[_currentIndex]);
         },
       ),
+    );
+  }
+
+  /// Floats the (otherwise-unused) [SystemDetails] card over the carousel's
+  /// bottom-left corner while the 'All Games' entry is focused — the
+  /// carousel's own horizontal scroller has no reserved space for a
+  /// persistent sidebar, so this overlays rather than reflowing the layout.
+  Widget _withLibraryStatsOverlay(Widget content, SystemInfo focused) {
+    final showStats = focused.folderName?.toLowerCase() == 'all';
+    return Stack(
+      children: [
+        content,
+        Positioned(
+          left: 16.r,
+          bottom: 64.r,
+          width: 280.r,
+          height: 220.r,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: showStats ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 220),
+              child: showStats
+                  ? SystemDetails(
+                      selectedSystem: _createAllGamesSystem(
+                        Provider.of<SqliteConfigProvider>(
+                          context,
+                          listen: false,
+                        ).detectedSystems,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
