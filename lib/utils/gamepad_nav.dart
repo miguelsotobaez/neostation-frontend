@@ -71,6 +71,11 @@ class GamepadNavigation {
   final VoidCallback? onLeftBumper;
   final VoidCallback? onRightBumper;
 
+  /// L2/R2 (analog triggers, distinct from the LB/RB bumpers above) — treated
+  /// as plain digital presses, same as the bumpers, not as analog axes.
+  final VoidCallback? onLeftTrigger;
+  final VoidCallback? onRightTrigger;
+
   /// Select (View) chord combos. The Select button is a pure modifier — on its
   /// own it does nothing. While it is held (or within a short window of a pulse),
   /// a face-button press fires the matching modifier callback instead of its
@@ -288,6 +293,8 @@ class GamepadNavigation {
     this.onSelectButton,
     this.onLeftBumper,
     this.onRightBumper,
+    this.onLeftTrigger,
+    this.onRightTrigger,
     this.onSelectModifierA,
     this.onSelectModifierB,
     this.onSelectModifierX,
@@ -783,6 +790,7 @@ class GamepadNavigation {
         event.inputType == GamepadInputType.leftStickY ||
         event.inputType == GamepadInputType.buttonLB ||
         event.inputType == GamepadInputType.buttonRB ||
+        event.inputType == GamepadInputType.buttonLT ||
         event.inputType == GamepadInputType.buttonRT) {
       shouldProcess = event.isPressed;
     } else {
@@ -929,6 +937,20 @@ class GamepadNavigation {
           onRightBumper!.call();
         } else {
           onNextTab?.call();
+        }
+        break;
+
+      case GamepadInputType.buttonLT:
+        if (onLeftTrigger != null) {
+          SfxService().playNavSound();
+          onLeftTrigger!.call();
+        }
+        break;
+
+      case GamepadInputType.buttonRT:
+        if (onRightTrigger != null) {
+          SfxService().playNavSound();
+          onRightTrigger!.call();
         }
         break;
 

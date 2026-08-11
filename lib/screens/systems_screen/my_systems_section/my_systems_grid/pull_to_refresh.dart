@@ -94,6 +94,9 @@ extension _PullToRefresh on _SystemCardGridViewState {
         _cols = Responsive.getSystemsCrossAxisCountFromSize(newSize);
         _cachedVirtualGrid = null;
         _cachedGridCols = null;
+        // Row count (and thus items-per-page) is tied to _cols — keep the
+        // current page pointed at whatever page still holds the selection.
+        _resyncPageForSelection();
         _showCardSizeLabel(newSize);
         rebuild(() {});
       }

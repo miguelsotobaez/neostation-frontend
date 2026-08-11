@@ -561,6 +561,96 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   /// updated immediately on pinch for real-time responsiveness.
   late int _cols;
 
+  /// Current page of the paged systems grid (0-based). Each page shows
+  /// up to [_rows] x [_cols] cards with no scrolling — L2/R2 (wired in
+  /// gamepad_grid_nav.dart) move between pages instead.
+  int _currentPage = 0;
+
+  /// Row count paired with [_cols] so a page always fills the screen: the
+  /// same S/M/L/XL tiers that fix column count also fix row count.
+  int get _rows => Responsive.getSystemsRowCountFromColumns(_cols);
+
+  int get _itemsPerPage => _cols * _rows;
+
+  List<List<SystemInfo>>? _cachedPages;
+  int? _cachedPagesCols;
+  int? _cachedPagesSystemCount;
+
+  /// Packs [_systemCards] into pages of at most [_itemsPerPage] *cells*.
+  ///
+  /// A plain count-based slice would break the "page always fills exactly"
+  /// guarantee whenever a spanning 'Recent Games' card (6 cells for 1 list
+  /// entry, see [buildVirtualGrid]) lands on a page — so pagination budgets
+  /// by cell cost, not card count, mirroring the virtual grid's own span rule.
+  List<List<SystemInfo>> get _pages {
+    if (_cachedPages != null &&
+        _cachedPagesCols == _cols &&
+        _cachedPagesSystemCount == _systemCards.length) {
+      return _cachedPages!;
+    }
+
+    final pages = <List<SystemInfo>>[];
+    var current = <SystemInfo>[];
+    var cellsUsed = 0;
+    for (final card in _systemCards) {
+      final cells = (card.isGame && _cols >= 3) ? 6 : 1;
+      if (cellsUsed + cells > _itemsPerPage && current.isNotEmpty) {
+        pages.add(current);
+        current = [];
+        cellsUsed = 0;
+      }
+      current.add(card);
+      cellsUsed += cells;
+    }
+    if (current.isNotEmpty) pages.add(current);
+    if (pages.isEmpty) pages.add(const []);
+
+    _cachedPages = pages;
+    _cachedPagesCols = _cols;
+    _cachedPagesSystemCount = _systemCards.length;
+    return pages;
+  }
+
+  int get _totalPages => _pages.length;
+
+  /// The slice of [_systemCards] visible on [_currentPage].
+  List<SystemInfo> get _currentPageCards {
+    final pages = _pages;
+    return pages[_currentPage.clamp(0, pages.length - 1)];
+  }
+
+  /// Global index of [_currentPageCards]'s first card — the offset to add to
+  /// a page-local card index to recover its index into [_systemCards].
+  int get _currentPageOffset {
+    final pages = _pages;
+    final page = _currentPage.clamp(0, pages.length - 1);
+    var offset = 0;
+    for (var i = 0; i < page; i++) {
+      offset += pages[i].length;
+    }
+    return offset;
+  }
+
+  /// Keeps [_currentPage] pointing at whichever page contains
+  /// [widget.selectedIndex] — called whenever [_cols] or the card list
+  /// changes underfoot.
+  void _resyncPageForSelection() {
+    final pages = _pages;
+    var remaining = widget.selectedIndex;
+    if (remaining < 0) {
+      _currentPage = 0;
+      return;
+    }
+    for (var i = 0; i < pages.length; i++) {
+      if (remaining < pages[i].length) {
+        _currentPage = i;
+        return;
+      }
+      remaining -= pages[i].length;
+    }
+    _currentPage = pages.length - 1;
+  }
+
   /// Throttling mechanism for pointer-based navigation events.
   DateTime? _lastNavigationTime;
 
@@ -592,6 +682,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   List<List<int>>? _cachedVirtualGrid;
   int? _cachedGridCols;
   int? _cachedGridSystemCount;
+  int? _cachedGridPage;
 
   /// Cached conversion of widget.systems to SystemInfo list, rebuilt only on systems change.
   late List<SystemInfo> _systemCards;
@@ -614,6 +705,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     super.initState();
     _systemCards = _toSystemCards(widget.systems);
     _cols = widget.crossAxisCount;
+    _resyncPageForSelection();
     _initializeGamepad();
 
     if (Platform.isAndroid) {
@@ -668,6 +760,10 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
       _cachedVirtualGrid = null;
       _systemCards = _toSystemCards(widget.systems);
     }
+    if (oldWidget.selectedIndex != widget.selectedIndex ||
+        oldWidget.crossAxisCount != widget.crossAxisCount) {
+      _resyncPageForSelection();
+    }
     if (oldWidget.selectedIndex != widget.selectedIndex) {
       if (mounted && _scrollController.hasClients) {
         _ensureSelectedItemVisibleUniversal();
@@ -697,7 +793,8 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   List<List<int>> _buildVirtualGrid(List<SystemInfo> cards, int cols) {
     if (_cachedVirtualGrid != null &&
         _cachedGridCols == cols &&
-        _cachedGridSystemCount == cards.length) {
+        _cachedGridSystemCount == cards.length &&
+        _cachedGridPage == _currentPage) {
       return _cachedVirtualGrid!;
     }
 
@@ -706,19 +803,25 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     _cachedVirtualGrid = grid;
     _cachedGridCols = cols;
     _cachedGridSystemCount = cards.length;
+    _cachedGridPage = _currentPage;
     return grid;
   }
 
   /// Resolves the live viewport width (net of the outer inset) and delegates to
   /// the pure [calculateGridDimensions]. [customWidth], when supplied (e.g. from
   /// a `LayoutBuilder`'s constraints), is used as-is without the inset.
-  Map<String, double> _calculateGridDimensions([double? customWidth]) {
+  Map<String, double> _calculateGridDimensions([
+    double? customWidth,
+    double? customHeight,
+  ]) {
     final screenWidth =
         customWidth ?? (MediaQuery.of(context).size.width - 12.0.r);
     return calculateGridDimensions(
       screenWidth: screenWidth,
       cols: _cols,
       childAspectRatio: widget.childAspectRatio,
+      screenHeight: customHeight,
+      rows: customHeight != null ? _rows : null,
     );
   }
 
@@ -765,7 +868,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             behavior:
                 _cachedScrollBehavior ??
                 ScrollConfiguration.of(context).copyWith(scrollbars: false),
-            child: _buildWideCardGrid(context, _systemCards),
+            child: _buildWideCardGrid(context, _currentPageCards),
           ),
         );
 
@@ -873,48 +976,38 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
 
   /// Renders a non-linear grid by manually positioning components according to their spans.
   ///
-  /// System cards can now have per-card aspect ratios (e.g. 1:1 when the system
-  /// logo is hidden). Each row's height is derived from the tallest card in that
-  /// row, eliminating empty footer space inside the card itself.
+  /// [systemCards] is a single *page's* worth of cards (see [_currentPageCards]) —
+  /// every row gets a fixed height of exactly `availableHeight / _rows`, so a full
+  /// page always fills the viewport with no partial rows and no scrolling. Card
+  /// indices here are page-local; [pageOffset] recovers the global index (into
+  /// the full systems list, and thus [widget.selectedIndex]) for each card.
   Widget _buildWideCardGrid(
     BuildContext context,
     List<SystemInfo> systemCards,
   ) {
     final cols = _cols;
+    final pageOffset = _currentPageOffset;
     final grid = _buildVirtualGrid(systemCards, cols);
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dims = _calculateGridDimensions(constraints.maxWidth);
+        final dims = _calculateGridDimensions(
+          constraints.maxWidth,
+          constraints.maxHeight,
+        );
         final colWidth = dims['itemWidth']!;
         final spX = dims['crossAxisSpacing']!;
         final spY = dims['mainAxisSpacing']!;
+        final fixedRowItemHeight = dims['itemHeight']!;
 
-        /// Resolves the aspect ratio for a card, falling back to the widget default.
-        double cardAspectRatio(int index) {
-          final ratios = widget.aspectRatios;
-          if (ratios != null && index >= 0 && index < ratios.length) {
-            return ratios[index];
-          }
-          return widget.childAspectRatio;
-        }
-
-        /// Computes the item height for each row based on the tallest occupant.
-        final rowItemHeights = List<double>.filled(grid.length, 0);
-        final rowHeights = List<double>.filled(grid.length, 0);
-        for (int r = 0; r < grid.length; r++) {
-          final seen = <int>{};
-          double maxHeight = 0;
-          for (int c = 0; c < grid[r].length; c++) {
-            final cardIdx = grid[r][c];
-            if (cardIdx == -1 || seen.contains(cardIdx)) continue;
-            seen.add(cardIdx);
-            final height = colWidth / cardAspectRatio(cardIdx);
-            if (height > maxHeight) maxHeight = height;
-          }
-          rowItemHeights[r] = maxHeight;
-          rowHeights[r] = maxHeight + spY;
-        }
+        final rowItemHeights = List<double>.filled(
+          grid.length,
+          fixedRowItemHeight,
+        );
+        final rowHeights = List<double>.filled(
+          grid.length,
+          fixedRowItemHeight + spY,
+        );
 
         /// Accumulated top offset for a given row.
         double rowTop(int row) {
@@ -925,7 +1018,8 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           return top;
         }
 
-        /// Total scrollable height (last row doesn't add trailing spacing).
+        /// Total height of this page's content — exactly one screen's worth
+        /// when the page is full ([rows] rows), less on a trailing partial page.
         final totalHeight = rowHeights.isEmpty
             ? 0.0
             : rowHeights.reduce((a, b) => a + b) - spY;
@@ -941,6 +1035,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             if (cardIdx == -1 || placedIndices.contains(cardIdx)) continue;
 
             final card = systemCards[cardIdx];
+            final globalIdx = cardIdx + pageOffset;
             final spanW = (card.isGame && cols >= 3) ? 3 : 1;
             final spanH = (card.isGame && cols >= 3) ? 2 : 1;
 
@@ -948,22 +1043,20 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             final width = spanW * colWidth + (spanW - 1) * spX;
 
             double cardHeight;
-            double top;
+            final top = rowTop(r);
             if (card.isGame) {
               cardHeight = 0;
               for (int i = 0; i < spanH && r + i < rowItemHeights.length; i++) {
                 cardHeight += rowItemHeights[r + i];
               }
               cardHeight += (spanH - 1) * spY;
-              top = rowTop(r);
             } else {
-              cardHeight = colWidth / cardAspectRatio(cardIdx);
-              // Center the card vertically inside the row band.
-              final rowItemHeight = rowItemHeights[r];
-              top = rowTop(r) + (rowItemHeight - cardHeight) / 2;
+              // Fixed row height — the card fills its row band exactly so
+              // [rows] rows always account for the entire available height.
+              cardHeight = rowItemHeights[r];
             }
 
-            if (cardIdx == widget.selectedIndex) {
+            if (globalIdx == widget.selectedIndex) {
               selLeft = left;
               selTop = top;
               selWidth = width;
@@ -978,14 +1071,14 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
                 height: cardHeight,
                 child: RepaintBoundary(
                   child: SystemCard(
-                    key: ValueKey('system_card_${card.title}_$cardIdx'),
+                    key: ValueKey('system_card_${card.title}_$globalIdx'),
                     info: card,
-                    isSelected: cardIdx == widget.selectedIndex,
+                    isSelected: globalIdx == widget.selectedIndex,
                     onTap: () {
                       // Touch users have no A button: tapping the card that is
                       // already selected enters it, so reaching for the footer
                       // is only ever optional. (SystemCard plays the sound.)
-                      if (cardIdx == widget.selectedIndex) {
+                      if (globalIdx == widget.selectedIndex) {
                         widget.onEnterPressed?.call();
                         return;
                       }
@@ -1001,7 +1094,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
                       }
 
                       _lastNavigationTime = now;
-                      widget.onCardTapped?.call(cardIdx);
+                      widget.onCardTapped?.call(globalIdx);
                     },
                   ),
                 ),

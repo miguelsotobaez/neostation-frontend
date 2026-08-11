@@ -113,6 +113,31 @@ class Responsive extends StatelessWidget {
     }
   }
 
+  /// Row count for the systems grid's paged view, paired with
+  /// [getSystemsCrossAxisCountFromSize] so each page fills the screen with no
+  /// scrolling: S=7x4, M=6x3, L=5x2, XL=4x1.
+  static int getSystemsRowCountFromSize(String size) {
+    switch (size) {
+      case 'S':
+        return 4;
+      case 'M':
+        return 3;
+      case 'L':
+        return 2;
+      case 'XL':
+        return 1;
+      default:
+        return 3;
+    }
+  }
+
+  /// Derives the row count from a live column count (which can differ from
+  /// the named S/M/L/XL tiers via pinch-to-zoom) — the same linear
+  /// relationship the named tiers follow: rows = cols - 3, floored at 1.
+  static int getSystemsRowCountFromColumns(int cols) {
+    return (cols - 3).clamp(1, 20);
+  }
+
   /// Obtener el crossAxisCount para el grid de Apps de Android
   /// 10 para pantallas grandes, menos para pequeñas
   static int getAndroidAppsCrossAxisCount(BuildContext context) {

@@ -45,6 +45,8 @@ extension _GamepadGridNav on _SystemCardGridViewState {
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
       onRightBumper: AppNavigation.nextTab,
+      onLeftTrigger: _pageBackward,
+      onRightTrigger: _pageForward,
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -67,11 +69,45 @@ extension _GamepadGridNav on _SystemCardGridViewState {
     _navigateVirtual(direction);
   }
 
-  /// Resolve the next focused index based on the virtual spatial grid.
+  /// Moves to the previous/next page (L2/R2), wrapping around. Selection
+  /// jumps to the first card of the destination page, matching the fact that
+  /// up/down/left/right navigation ([_navigateVirtual]) stays within a page.
+  void _pageBackward() {
+    if (_totalPages <= 1) return;
+    _goToPage((_currentPage - 1 + _totalPages) % _totalPages);
+  }
+
+  void _pageForward() {
+    if (_totalPages <= 1) return;
+    _goToPage((_currentPage + 1) % _totalPages);
+  }
+
+  void _goToPage(int page) {
+    final pages = _pages;
+    if (page < 0 || page >= pages.length) return;
+
+    var offset = 0;
+    for (var i = 0; i < page; i++) {
+      offset += pages[i].length;
+    }
+
+    rebuild(() {
+      _currentPage = page;
+      _cachedVirtualGrid = null;
+    });
+    if (pages[page].isNotEmpty) {
+      widget.onCardTapped?.call(offset);
+    }
+  }
+
+  /// Resolve the next focused index based on the current page's virtual
+  /// spatial grid — directional navigation stays within the current page;
+  /// L2/R2 ([_pageBackward]/[_pageForward]) are what move between pages.
   void _navigateVirtual(String direction) {
-    final cards = _systemCards;
+    final cards = _currentPageCards;
     final cols = _cols;
-    final current = widget.selectedIndex;
+    final pageOffset = _currentPageOffset;
+    final current = widget.selectedIndex - pageOffset;
 
     final grid = _buildVirtualGrid(cards, cols);
 
@@ -155,56 +191,14 @@ extension _GamepadGridNav on _SystemCardGridViewState {
     }
 
     if (newIndex != current) {
-      widget.onCardTapped?.call(newIndex);
+      widget.onCardTapped?.call(newIndex + pageOffset);
     }
   }
 
-  /// Automatically adjusts scroll position to keep the selected item centered in the viewport.
-  void _ensureSelectedItemVisibleUniversal() {
-    if (!_scrollController.hasClients || widget.systems.isEmpty) return;
-
-    final cards = _systemCards;
-    final cols = _cols;
-    final grid = _buildVirtualGrid(cards, cols);
-
-    int selectedRow = -1;
-    for (int r = 0; r < grid.length; r++) {
-      if (grid[r].contains(widget.selectedIndex)) {
-        selectedRow = r;
-        break;
-      }
-    }
-    if (selectedRow == -1) return;
-
-    final selectedCard = cards[widget.selectedIndex];
-    final spanH = (selectedCard.isGame && cols >= 3) ? 2 : 1;
-
-    final dimensions = _calculateGridDimensions();
-    final rowHeight = dimensions['rowHeight']!;
-    final itemHeight = dimensions['itemHeight']!;
-    final mainAxisSpacing = dimensions['mainAxisSpacing']!;
-
-    final viewportHeight = _scrollController.position.viewportDimension;
-    final maxScrollExtent = _scrollController.position.maxScrollExtent;
-    final minScrollExtent = _scrollController.position.minScrollExtent;
-
-    final double itemActualHeight =
-        spanH * itemHeight + (spanH - 1) * mainAxisSpacing;
-
-    final double itemTop = selectedRow * rowHeight;
-    final double itemCenter = itemTop + (itemActualHeight / 2);
-
-    final double targetOffset = (itemCenter - (viewportHeight / 2)).clamp(
-      minScrollExtent,
-      maxScrollExtent,
-    );
-
-    _scrollController.animateTo(
-      targetOffset,
-      duration: _isNavigatingFast
-          ? const Duration(milliseconds: 180)
-          : const Duration(milliseconds: 360),
-      curve: Curves.easeOutQuart,
-    );
-  }
+  /// No-op: a page is sized to fill the viewport exactly (see
+  /// [_buildWideCardGrid]), so the selected card is always already visible —
+  /// there is nothing to scroll to. Going off-page is handled by
+  /// [_pageBackward]/[_pageForward], not by scrolling. Kept as a call target
+  /// (rather than removed) so callers don't need page-vs-scroll awareness.
+  void _ensureSelectedItemVisibleUniversal() {}
 }

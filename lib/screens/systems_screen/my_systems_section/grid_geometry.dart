@@ -101,10 +101,18 @@ int findNearestInRow(List<List<int>> grid, int row, int col) {
 /// ratio (a non-1 ratio denotes a system card, which gets extra height for its
 /// logo footer). Returns the item/row sizing and spacing map consumed by the
 /// grid delegate.
+///
+/// When [screenHeight] and [rows] are supplied, item height fills the
+/// available height divided by [rows] instead of being derived from
+/// [childAspectRatio] — the paged systems grid always shows exactly [rows]
+/// rows, so the card height is whatever makes that many rows fill the
+/// screen, not a fixed aspect ratio.
 Map<String, double> calculateGridDimensions({
   required double screenWidth,
   required int cols,
   required double childAspectRatio,
+  double? screenHeight,
+  int? rows,
 }) {
   final crossAxisSpacing = 6.0.r;
   final mainAxisSpacing = 6.0.r;
@@ -113,10 +121,13 @@ Map<String, double> calculateGridDimensions({
   final availableWidth = screenWidth - totalSpacing;
   final itemWidth = availableWidth / cols;
 
-  // For game cards (childAspectRatio = 1) use traditional square calculation.
-  // For system cards (childAspectRatio != 1) add extra height for logo footer.
   final double itemHeight;
-  if (childAspectRatio != 1) {
+  if (screenHeight != null && rows != null && rows > 0) {
+    final totalVSpacing = mainAxisSpacing * (rows - 1);
+    itemHeight = (screenHeight - totalVSpacing) / rows;
+  } else if (childAspectRatio != 1) {
+    // For game cards (childAspectRatio = 1) use traditional square calculation.
+    // For system cards (childAspectRatio != 1) add extra height for logo footer.
     itemHeight = itemWidth + 32.r;
   } else {
     itemHeight = itemWidth / childAspectRatio;
