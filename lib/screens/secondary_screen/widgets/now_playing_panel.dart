@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../../models/secondary_display_state.dart';
+import '../background_builders.dart';
 import '../now_playing_helpers.dart';
 
 /// The Now Playing page shown on the secondary display: boxart + game/system
@@ -48,6 +49,20 @@ class NowPlayingPanel extends StatelessWidget {
       color: scheme.surface,
       child: Stack(
         children: [
+          // Banner background, matching the library-browsing preview's
+          // banner + logo treatment instead of a flat panel color.
+          if (value.gameFanart != null)
+            Positioned.fill(
+              child: buildBackground(value.gameFanart!, fit: BoxFit.cover),
+            ),
+          if (value.gameFanart != null && value.fanartDimLevel > 0)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black.withValues(
+                  alpha: value.fanartDimLevel.clamp(0, 100) / 100.0,
+                ),
+              ),
+            ),
           Padding(
             padding: EdgeInsets.fromLTRB(44.r, 32.r, 44.r, 96.r),
             child: Row(
@@ -56,69 +71,82 @@ class NowPlayingPanel extends StatelessWidget {
                 buildNowPlayingBoxart(value.gameBoxart),
                 SizedBox(width: 32.r),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'NOW PLAYING',
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontSize: 14.r,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 3.r,
+                  child: Container(
+                    // Backdrop independent of fanartDimLevel (tuned for the
+                    // banner's own look, not guaranteed to keep text legible)
+                    // — this keeps the text block readable over any banner.
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 24.r,
+                      vertical: 20.r,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(16.r),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'NOW PLAYING',
+                          style: TextStyle(
+                            color: scheme.primary,
+                            fontSize: 14.r,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 3.r,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 12.r),
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 30.r,
-                          fontWeight: FontWeight.bold,
+                        SizedBox(height: 12.r),
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 30.r,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 8.r),
-                      Text(
-                        value.systemName.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: scheme.onSurface.withValues(alpha: 0.7),
-                          fontSize: 16.r,
-                          letterSpacing: 1.5.r,
+                        SizedBox(height: 8.r),
+                        Text(
+                          value.systemName.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: scheme.onSurface.withValues(alpha: 0.7),
+                            fontSize: 16.r,
+                            letterSpacing: 1.5.r,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 26.r),
-                      buildNowPlayingStat(
-                        scheme: scheme,
-                        icon: Symbols.schedule_rounded,
-                        label: 'PLAY TIME',
-                        text: formatPlayTime(value.playTimeSeconds),
-                      ),
-                      if (sessionRunning) ...[
+                        SizedBox(height: 26.r),
+                        buildNowPlayingStat(
+                          scheme: scheme,
+                          icon: Symbols.schedule_rounded,
+                          label: 'PLAY TIME',
+                          text: formatPlayTime(value.playTimeSeconds),
+                        ),
+                        if (sessionRunning) ...[
+                          SizedBox(height: 12.r),
+                          buildNowPlayingStat(
+                            scheme: scheme,
+                            icon: Symbols.timer_rounded,
+                            label: 'SESSION',
+                            text: sessionTime,
+                          ),
+                        ],
                         SizedBox(height: 12.r),
                         buildNowPlayingStat(
                           scheme: scheme,
-                          icon: Symbols.timer_rounded,
-                          label: 'SESSION',
-                          text: sessionTime,
+                          icon: Symbols.history_rounded,
+                          label: 'LAST PLAYED',
+                          text: formatLastPlayed(value.lastPlayedMillis),
                         ),
+                        if (value.screenshotAccessEnabled) ...[
+                          SizedBox(height: 28.r),
+                          _buildScreenshotButton(scheme),
+                        ],
                       ],
-                      SizedBox(height: 12.r),
-                      buildNowPlayingStat(
-                        scheme: scheme,
-                        icon: Symbols.history_rounded,
-                        label: 'LAST PLAYED',
-                        text: formatLastPlayed(value.lastPlayedMillis),
-                      ),
-                      if (value.screenshotAccessEnabled) ...[
-                        SizedBox(height: 28.r),
-                        _buildScreenshotButton(scheme),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
               ],
