@@ -246,8 +246,33 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     }
   }
 
+  /// Re-entrancy lock for [_navigateToSystem], held for as long as the pushed
+  /// route is on screen.
+  ///
+  /// The grid layout has always had this guard (`MySystems.isNavigating`); the
+  /// carousel did not, so any input that reached it while it was covered — a
+  /// navigator underneath being woken by the app-resume reactivation, say —
+  /// pushed a *second* copy of the destination on top of the first. Two live
+  /// copies of the Android apps grid then answered the same A press with two
+  /// launches.
+  bool _isNavigatingToSystem = false;
+
   /// Orchestrates navigation to system-specific games lists or direct game launches.
-  void _navigateToSystem(
+  Future<void> _navigateToSystem(
+    BuildContext context,
+    SystemInfo systemInfo,
+    FileProvider fileProvider,
+  ) async {
+    if (_isNavigatingToSystem) return;
+    _isNavigatingToSystem = true;
+    try {
+      await _navigateToSystemInternal(context, systemInfo, fileProvider);
+    } finally {
+      _isNavigatingToSystem = false;
+    }
+  }
+
+  Future<void> _navigateToSystemInternal(
     BuildContext context,
     SystemInfo systemInfo,
     FileProvider fileProvider,
