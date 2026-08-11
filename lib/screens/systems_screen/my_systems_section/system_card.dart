@@ -276,14 +276,20 @@ class _SystemCardState extends State<SystemCard> {
                       )
                     : Column(
                         children: [
-                          AspectRatio(
-                            aspectRatio: 1,
+                          // Flex-split rather than a forced square: paginated
+                          // grid cells can land on any width/height ratio
+                          // depending on device size and S/M/L/XL tier, and a
+                          // fixed AspectRatio(1) here would overflow (and
+                          // squeeze the footer to nothing) whenever a cell is
+                          // shorter than it is wide.
+                          Expanded(
+                            flex: 4,
                             child: Stack(
                               key: _contentStackKey,
                               children: [_buildSystemBackground()],
                             ),
                           ),
-                          _buildSystemFooter(context),
+                          Expanded(flex: 1, child: _buildSystemFooter(context)),
                         ],
                       ),
               ),
@@ -564,22 +570,22 @@ class _SystemCardState extends State<SystemCard> {
 
   /// Renders a bottom footer with the system logo for non-game system cards.
   ///
-  /// The footer expands to fill the remaining space below the square artwork,
-  /// and the logo is auto-sized to fit while keeping its aspect ratio.
+  /// The caller ([build]) wraps this in the flex-sized `Expanded` slot below
+  /// the artwork; the logo is auto-sized via [FittedBox] to fit whatever
+  /// height that slot ends up with, so it stays fully visible rather than
+  /// clipped.
   Widget _buildSystemFooter(BuildContext context) {
     final assetLogoPath = _resolveSystemLogoPath();
 
-    return Expanded(
-      child: Container(
-        alignment: Alignment.center,
-        padding: EdgeInsets.only(top: 1.r, bottom: 1.r, left: 2.r, right: 2.r),
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: _buildSystemLogo(
-            assetLogoPath,
-            height: 128.r,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
+    return Container(
+      alignment: Alignment.center,
+      padding: EdgeInsets.only(top: 1.r, bottom: 1.r, left: 2.r, right: 2.r),
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: _buildSystemLogo(
+          assetLogoPath,
+          height: 128.r,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
