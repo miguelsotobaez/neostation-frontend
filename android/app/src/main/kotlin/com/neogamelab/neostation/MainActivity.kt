@@ -1077,6 +1077,81 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         }
     }
 
+    // Display whose Now Playing presentation was fully dismissed (not merely
+    // hidden) to free it for a game launched there via "open on second screen".
+    // Null when no such dismissal is outstanding.
+    private var secondaryDismissedForGameDisplayId: Int? = null
+
+    /**
+     * Fully removes the Now Playing presentation from [displayId] so a game
+     * launched there is not obscured by it.
+     *
+     * Unlike [hideSecondaryForApp]'s hide(), which only blanks the
+     * presentation's content, this tears the window down: a Presentation
+     * keeps its elevated z-order on its display for as long as it exists, even
+     * hidden, which left a second-screen game running underneath it but never
+     * actually visible — and the same stale window kept reporting as the
+     * topmost "home" window to the accessibility watch below, so it never
+     * detected the game and immediately re-shown itself.
+     *
+     * dismiss() also destroys the presentation's Flutter engine, so restoring
+     * it later means building a fresh one (see [restoreSecondaryAfterGame]),
+     * not just calling show() again.
+     */
+    internal fun dismissSecondaryForGame(packageName: String, displayId: Int) {
+        try {
+            subScreenPresentation?.let {
+                if (it.isShowing) {
+                    it.dismiss()
+                    secondaryDismissedForGameDisplayId = displayId
+                }
+            }
+            // requireHome = false: this display has no home/launcher of its own
+            // to fall back to, so any other topmost package on it means the
+            // game is gone.
+            ScreenshotAccessibilityService.startWatch(
+                packageName,
+                displayId,
+                requireHome = false
+            ) {
+                Handler(Looper.getMainLooper()).post { restoreSecondaryAfterGame(displayId) }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Dismissing secondary for game failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Rebuilds the Now Playing presentation on [displayId] after it was torn
+     * down by [dismissSecondaryForGame], mirroring what the sub_screen
+     * plugin's own (private, unreachable from here) launch path does on a
+     * fresh display connect.
+     */
+    private fun restoreSecondaryAfterGame(displayId: Int) {
+        ScreenshotAccessibilityService.stopWatch()
+        if (secondaryDismissedForGameDisplayId != displayId) return
+        secondaryDismissedForGameDisplayId = null
+        try {
+            val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+            val display = dm.getDisplay(displayId) ?: return
+            subScreenPresentation = createSubScreenPresentation(display)?.apply { show() }
+            onLaunchSubScreen(display)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Restoring secondary after game failed: ${e.message}")
+        }
+
+        // A second-screen game never covers the primary display, so MainActivity
+        // is never paused and onResume()'s own onGameReturned dispatch (above)
+        // never fires for it. This watch is the only signal we get that the game
+        // ended, so send the same event Flutter already listens for — it drives
+        // GameLaunchManager's whole close sequence (session end, save sync,
+        // dialog teardown), unmodified.
+        if (isGameActive) {
+            methodChannel?.invokeMethod("onGameReturned", mapOf("elapsedSeconds" to 0))
+            setGamepadBlockInternal(false, 0)
+        }
+    }
+
     internal fun getAppIcon(packageName: String, result: MethodChannel.Result) {
         Thread {
             try {

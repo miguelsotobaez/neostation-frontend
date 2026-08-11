@@ -14,6 +14,7 @@ import '../services/game_service.dart';
 import '../services/game_launch_manager.dart';
 import '../utils/gamepad_nav.dart';
 import '../constants/system_folder_names.dart';
+import 'secondary_screen_now_playing_view.dart';
 
 class GameLaunchDialog extends StatefulWidget {
   final GameModel game;
@@ -37,6 +38,13 @@ class GameLaunchDialog extends StatefulWidget {
 
 class _GameLaunchDialogState extends State<GameLaunchDialog> {
   late GamepadNavigation _dialogGamepadNav;
+
+  /// Whether the game runs on the secondary display, leaving the primary one
+  /// free to show the Now Playing view instead of the small floating dialog
+  /// (which, for a normal launch, sits unseen behind the emulator's own
+  /// activity — but here nothing covers the primary display at all).
+  bool get _showSecondScreenNowPlaying =>
+      Platform.isAndroid && widget.system.openOnSecondScreen;
 
   bool _closeCalled = false;
   bool _onGameClosedFired = false;
@@ -164,6 +172,17 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // The game runs on the secondary display, so the primary one is free —
+    // show the Now Playing view full-screen instead of the small floating
+    // dialog, which would otherwise sit visibly on top of whatever screen was
+    // open (nothing here covers the primary display the way the emulator's
+    // own activity does for a normal launch). Not user-dismissible: closing
+    // is entirely driven by the native "game ended" signal, same as the
+    // dialog's automatic close for a normal launch.
+    if (_showSecondScreenNowPlaying) {
+      return const SecondaryScreenNowPlayingView();
+    }
+
     final systemFolderName =
         (widget.system.folderName == 'all' ||
                 widget.system.folderName == SystemFolderNames.favorites) &&

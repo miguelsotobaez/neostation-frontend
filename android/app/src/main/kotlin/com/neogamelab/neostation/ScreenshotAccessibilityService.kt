@@ -40,15 +40,29 @@ class ScreenshotAccessibilityService : AccessibilityService() {
         private var watchedDisplayId: Int = -1
         @Volatile
         private var onWatchedAppClosed: (() -> Unit)? = null
+        @Volatile
+        private var watchedRequireHome: Boolean = true
 
         /**
-         * Starts watching [displayId] for the dismissal of [packageName] (a
-         * dock-launched app). When the display returns to its launcher/home,
-         * [onClosed] is invoked once. No-op if the service isn't connected.
+         * Starts watching [displayId] for the dismissal of [packageName].
+         *
+         * When [requireHome] is true (the dock-app default), [onClosed] fires
+         * only once the display has gone back to its launcher/home — the
+         * back-out case for a normal dock-launched app. A game launched via
+         * "open on second screen" has no home screen to fall back to on that
+         * display, so its callers pass false: [onClosed] fires as soon as
+         * [packageName] is no longer the topmost application window, however
+         * the display got there.
          */
-        fun startWatch(packageName: String, displayId: Int, onClosed: () -> Unit) {
+        fun startWatch(
+            packageName: String,
+            displayId: Int,
+            requireHome: Boolean = true,
+            onClosed: () -> Unit
+        ) {
             watchedPackage = packageName
             watchedDisplayId = displayId
+            watchedRequireHome = requireHome
             onWatchedAppClosed = onClosed
         }
 
@@ -93,10 +107,12 @@ class ScreenshotAccessibilityService : AccessibilityService() {
         if (displayId < 0) return
         try {
             val top = topAppPackageOnDisplay(displayId) ?: return
-            // Restore only when the display has gone back to its home/launcher
-            // (the back-out case), not when a transient dialog appears over the
-            // app.
-            if (top != watched && isHomePackage(top)) {
+            // Dock apps: restore only once the display has gone back to its
+            // home/launcher (the back-out case), not when a transient dialog
+            // appears over the app. Games (requireHome = false): the display has
+            // no home to fall back to, so any other topmost package means the
+            // game is gone.
+            if (top != watched && (!watchedRequireHome || isHomePackage(top))) {
                 val cb = onWatchedAppClosed
                 stopWatch()
                 cb?.invoke()

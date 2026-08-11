@@ -264,10 +264,12 @@ object EmulatorLauncher {
                         val options = android.app.ActivityOptions.makeBasic()
                             .setLaunchDisplayId(secondaryDisplay.displayId)
                         context.startActivity(intent, options.toBundle())
-                        // Hide the Now Playing presentation (a TYPE_PRESENTATION window
-                        // layered above normal activities on the secondary display) so
-                        // it doesn't cover the game we just launched there.
-                        (context as? MainActivity)?.hideSecondaryForApp(packageName, secondaryDisplay.displayId)
+                        // Fully dismiss (not just hide) the Now Playing presentation:
+                        // a Presentation window keeps its elevated z-order on the
+                        // secondary display for as long as it exists, even hidden, so
+                        // merely hiding it left the game running underneath but never
+                        // visible.
+                        (context as? MainActivity)?.dismissSecondaryForGame(packageName, secondaryDisplay.displayId)
                         result.success(true)
                         return
                     } catch (e: Exception) {
