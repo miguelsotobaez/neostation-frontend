@@ -41,7 +41,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     private val LAUNCHER_CHANNEL = "com.neogamelab.neostation/launcher"
     var keyListener: ((KeyEvent) -> Boolean)? = null
     var motionListener: ((MotionEvent) -> Boolean)? = null
-    private var isGameActive = false // Flag para saber si hay un juego activo
+    // A launched game still owns the foreground: set when Flutter starts a
+    // session and cleared only when the user actually comes back (onResume) or
+    // Flutter ends the session. Drives the session bookkeeping below — it must
+    // NOT expire on its own, or a session outlives the flag that describes it.
+    private var isGameActive = false
+    // Gamepad input is swallowed so a stray press during the handoff to the
+    // emulator can't leak into the UI behind it. Unlike [isGameActive] this is
+    // deliberately short-lived and self-expiring, so a launch that never hands
+    // off can't strand the pad.
+    private var gamepadBlocked = false
     private var gamepadBlockTimeout: Handler? = null // Timeout para desbloquear automáticamente
     private var methodChannel: MethodChannel? = null // Canal para comunicación con Flutter
     private var launcherMethodChannel: MethodChannel? = null // Canal para launcher
@@ -253,7 +262,9 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     setGamepadBlock(block, result)
                 }
                 "getGamepadBlockStatus" -> {
-                    result.success(isGameActive)
+                    // Reports the pad block, as the name says — not whether a
+                    // game session is open (the two now expire independently).
+                    result.success(gamepadBlocked)
                 }
                 "getGameLaunchTimestamp" -> {
                     result.success(gameLaunchTimestamp)
@@ -786,13 +797,36 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         result.success(true)
     }
 
-    private fun setGamepadBlockInternal(block: Boolean, autoUnlockDelay: Long = 30000) {
-        isGameActive = block
+    /**
+     * Blocks or releases gamepad input, and — for a real game launch
+     * ([markGameActive]) — opens or closes the session the bookkeeping in
+     * [onPause]/[onResume] hangs off.
+     *
+     * The two are separate on purpose. The pad block auto-expires after
+     * [autoUnlockDelay] so a launch that never hands off to an emulator can't
+     * leave the pad dead, but a session routinely outlasts that timeout by
+     * hours — expiring both together left every session longer than the timeout
+     * with no "game active" flag, so the return path below silently did
+     * nothing (including never clearing [gameLaunchTimestamp], which then
+     * inflated the next session's elapsed time).
+     *
+     * App launches that only want the pad quiet during the handoff — the dock
+     * and [launchPackage] — pass `markGameActive = false`.
+     */
+    private fun setGamepadBlockInternal(
+        block: Boolean,
+        autoUnlockDelay: Long = 30000,
+        markGameActive: Boolean = true
+    ) {
+        gamepadBlocked = block
+        if (markGameActive) isGameActive = block
         if (block && autoUnlockDelay > 0) {
             gamepadBlockTimeout?.removeCallbacksAndMessages(null)
             gamepadBlockTimeout = Handler(Looper.getMainLooper()).apply {
                 postDelayed(Runnable {
-                    if (isGameActive) setGamepadBlockInternal(false, 0)
+                    // Release the pad only: the game is still running, and the
+                    // session ends when the user returns, not on a timer.
+                    gamepadBlocked = false
                 }, autoUnlockDelay)
             }
         } else {
@@ -841,7 +875,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     // Gamepad event forwarding / blocking
     override fun dispatchGenericMotionEvent(motionEvent: MotionEvent): Boolean {
-        if (isGameActive) return true
+        if (gamepadBlocked) return true
         val handled = motionListener?.invoke(motionEvent) ?: false
         return if (handled) true else super.dispatchGenericMotionEvent(motionEvent)
     }
@@ -851,8 +885,8 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         if (keyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
             return true // Consumir completamente, no pasar a ningún lado
         }
-        
-        if (isGameActive) return true
+
+        if (gamepadBlocked) return true
         val handled = keyListener?.invoke(keyEvent) ?: false
         return if (handled) true else super.dispatchKeyEvent(keyEvent)
     }
@@ -984,9 +1018,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                // Block gamepad for a short duration to prevent accidental inputs on return
-                setGamepadBlockInternal(true, 2000) 
-                
+                // Block gamepad for a short duration to prevent accidental inputs on return.
+                // Not a game session: the caller owns that state, so leave isGameActive alone.
+                setGamepadBlockInternal(true, 2000, markGameActive = false)
+
                 startActivity(intent)
                 result.success(true)
             } else {
@@ -1010,8 +1045,9 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 return
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // Block gamepad briefly to avoid accidental inputs on return.
-            setGamepadBlockInternal(true, 2000)
+            // Block gamepad briefly to avoid accidental inputs on return. A dock
+            // app is not a game session, so this must not set isGameActive.
+            setGamepadBlockInternal(true, 2000, markGameActive = false)
 
             val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
             val secondaryDisplay = dm.displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }
