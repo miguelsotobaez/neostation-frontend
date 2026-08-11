@@ -4,6 +4,7 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/models/my_systems.dart';
+import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -25,6 +26,7 @@ import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/services/secondary_achievements_controller.dart';
 import '../../game_screen/my_games_list.dart';
+import '../../game_screen/game_details_card/random_game_dialog.dart';
 import 'package:neostation/models/secondary_display_state.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/widgets/native_carousel.dart';
@@ -183,6 +185,10 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       onXButton: () {
         HeaderSortDropdown.globalKey.currentState?.showDropdown();
       },
+      // Select + Y — same combo the per-system games list uses for its
+      // (system-scoped) Random Game picker; here it draws from every
+      // detected system instead of just one.
+      onSelectModifierY: _showGlobalRandomGameDialog,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
@@ -465,6 +471,145 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
         builder: (context) =>
             SystemEmulatorSettingsDialog(system: selectedSystem),
       );
+    }
+  }
+
+  /// Presents a 'Random Game' picker drawing from every detected system —
+  /// the home-screen counterpart to the per-system picker in the games list
+  /// (same Select + Y combo, same dialog, just a wider pool).
+  Future<void> _showGlobalRandomGameDialog() async {
+    if (_isGameLaunching) return;
+
+    final configProvider = Provider.of<SqliteConfigProvider>(
+      context,
+      listen: false,
+    );
+    final fileProvider = Provider.of<FileProvider>(context, listen: false);
+    final allGamesSystem = _createAllGamesSystem(
+      configProvider.detectedSystems,
+    );
+    final games = await GameService.loadGamesForSystem(allGamesSystem);
+    if (!mounted) return;
+
+    if (games.isEmpty) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.noGamesAvailable.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
+
+    // Deactivate the carousel's own gamepad layer so the dialog captures
+    // back input without it leaking through, mirroring the per-system
+    // picker's layer handling.
+    GamepadNavigationManager.pushLayer(
+      'global_random_dialog',
+      onActivate: () {},
+      onDeactivate: () {},
+    );
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => RandomGameDialog(
+        games: games,
+        systemFolderName: 'all',
+        systemRealName: null,
+        fileProvider: fileProvider,
+        onPlayGame: (selectedGame) => _launchRandomGame(selectedGame),
+      ),
+    );
+
+    // Wait a bit to prevent the button press that closed the dialog from
+    // being processed twice by the reactivated layer underneath.
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (mounted) {
+      GamepadNavigationManager.popLayer('global_random_dialog');
+    }
+  }
+
+  /// Launches a game chosen from the global random picker. [selectedGame]
+  /// always carries its own [GameModel.systemFolderName] (set by
+  /// [GameService.loadGamesForSystem]'s 'all' path), so the owning system is
+  /// resolved from that rather than from carousel selection state.
+  Future<void> _launchRandomGame(GameModel selectedGame) async {
+    final configProvider = Provider.of<SqliteConfigProvider>(
+      context,
+      listen: false,
+    );
+    final fileProvider = Provider.of<FileProvider>(context, listen: false);
+
+    final gameSystemModel = configProvider.detectedSystems
+        .cast<SystemModel?>()
+        .firstWhere(
+          (sys) => sys?.folderName == selectedGame.systemFolderName,
+          orElse: () => null,
+        );
+
+    if (gameSystemModel == null) {
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.errorSystemNotFound.getString(context),
+          type: NotificationType.error,
+        );
+      }
+      return;
+    }
+
+    try {
+      setState(() => _isGameLaunching = true);
+
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      if (context.mounted) {
+        context.read<SystemBackgroundProvider>().clear();
+      }
+
+      final syncProvider = context.read<SyncManager>().active!;
+
+      final boxartPath = SecondaryAchievementsController.resolveBoxart(
+        selectedGame,
+        gameSystemModel.primaryFolderName,
+        fileProvider,
+      );
+      // ignore: unawaited_futures
+      _achievementsController.pushForLaunch(
+        state: _secondaryDisplayState,
+        provider: context.read<RetroAchievementsProvider>(),
+        game: selectedGame,
+        systemFolderName: gameSystemModel.primaryFolderName,
+        boxartPath: boxartPath,
+      );
+
+      await launchGameWithDialog(
+        context: context,
+        game: selectedGame,
+        system: gameSystemModel,
+        fileProvider: fileProvider,
+        syncProvider: syncProvider,
+        onGameClosed: () {
+          _achievementsController.stop(hidePanel: true);
+          if (mounted) setState(() => _isGameLaunching = false);
+          Provider.of<SqliteDatabaseProvider>(context, listen: false).refresh();
+        },
+        onLaunchFailed: (ctx, r) async {
+          _achievementsController.stop(hidePanel: true);
+          if (mounted) setState(() => _isGameLaunching = false);
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.errorLaunchingGame
+              .getString(context)
+              .replaceFirst('{error}', e.toString()),
+          type: NotificationType.error,
+        );
+        setState(() => _isGameLaunching = false);
+      }
     }
   }
 
