@@ -425,6 +425,21 @@ class SqliteDatabaseService {
     }
   }
 
+  /// Retrieves whole-library statistics for the "All Games" details card.
+  static Future<Map<String, dynamic>> getLibraryStats() async {
+    try {
+      return await SqliteService.getLibraryStats();
+    } catch (e) {
+      _log.e('Error getting library stats: $e');
+      return {
+        'totalGames': 0,
+        'totalPlaytimeSeconds': 0,
+        'totalSystems': 0,
+        'mostPlayedGame': null,
+      };
+    }
+  }
+
   /// Retrieves the current ROM count for all detected systems.
   static Future<Map<String, int>> getRomCounts() async {
     try {

@@ -4679,6 +4679,42 @@ class SqliteService {
     return {'totalGames': totalGamesCount, 'systems': systems};
   }
 
+  /// Retrieves whole-library statistics for the "All Games" details card:
+  /// total games/systems, cumulative play time, and the single most-played
+  /// game. Cheap even on large libraries — three small aggregate queries,
+  /// no per-row Dart-side work.
+  static Future<Map<String, dynamic>> getLibraryStats() async {
+    final db = await instance.database;
+
+    final totals = (await db.rawQuery('''
+      SELECT COUNT(*) as total_games, COALESCE(SUM(play_time), 0) as total_playtime
+      FROM user_roms
+    ''')).first;
+
+    final systemsRow = (await db.rawQuery(
+      'SELECT COUNT(*) as count FROM user_detected_systems',
+    )).first;
+
+    final mostPlayedRows = await db.rawQuery('''
+      SELECT ur.title_name, ur.real_name, ur.filename, ur.play_time, s.real_name as system_name
+      FROM user_roms ur
+      JOIN app_systems s ON s.id = ur.app_system_id
+      WHERE ur.play_time > 0
+      ORDER BY ur.play_time DESC
+      LIMIT 1
+    ''');
+
+    return {
+      'totalGames':
+          int.tryParse(totals['total_games']?.toString() ?? '0') ?? 0,
+      'totalPlaytimeSeconds':
+          int.tryParse(totals['total_playtime']?.toString() ?? '0') ?? 0,
+      'totalSystems':
+          int.tryParse(systemsRow['count']?.toString() ?? '0') ?? 0,
+      'mostPlayedGame': mostPlayedRows.isEmpty ? null : mostPlayedRows.first,
+    };
+  }
+
   /// Identifies the current host operating system as a standardized string.
   static String getCurrentOs() {
     if (Platform.isWindows) return 'windows';

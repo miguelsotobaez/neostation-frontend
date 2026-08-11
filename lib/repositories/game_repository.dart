@@ -39,6 +39,11 @@ class GameRepository {
   static Future<Map<String, dynamic>> getStats() =>
       SqliteDatabaseService.getStats();
 
+  /// Returns whole-library statistics: totalGames, totalPlaytimeSeconds,
+  /// totalSystems, and mostPlayedGame (or null if nothing has been played).
+  static Future<Map<String, dynamic>> getLibraryStats() =>
+      SqliteDatabaseService.getLibraryStats();
+
   /// Returns ROM counts keyed by system folder name.
   static Future<Map<String, int>> getRomCounts() =>
       SqliteDatabaseService.getRomCounts();

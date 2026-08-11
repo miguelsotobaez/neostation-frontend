@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../../models/system_model.dart';
+import '../../../repositories/game_repository.dart';
+import '../../secondary_screen/now_playing_helpers.dart' show formatPlayTime;
 
 /// A premium informational sidebar component displaying system metadata.
 ///
@@ -16,20 +19,50 @@ class SystemDetails extends StatefulWidget {
 }
 
 class SystemDetailsState extends State<SystemDetails> {
+  /// Whole-library stats shown when the 'All Games' card is focused. Null
+  /// while loading or when nothing has been fetched yet.
+  Map<String, dynamic>? _libraryStats;
+
+  bool get _isAllSelected =>
+      widget.selectedSystem?.folderName.toLowerCase() == 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isAllSelected) _loadLibraryStats();
+  }
+
+  @override
+  void didUpdateWidget(SystemDetails oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final wasAllSelected =
+        oldWidget.selectedSystem?.folderName.toLowerCase() == 'all';
+    if (_isAllSelected && !wasAllSelected) {
+      _loadLibraryStats();
+    } else if (!_isAllSelected) {
+      _libraryStats = null;
+    }
+  }
+
+  Future<void> _loadLibraryStats() async {
+    final stats = await GameRepository.getLibraryStats();
+    if (mounted && _isAllSelected) setState(() => _libraryStats = stats);
+  }
+
   /// Renders hardware statistics and technical descriptions for a specific system.
   Widget _buildSystemStats(BuildContext context) {
     // Special branding for the 'ALL' (Global Library) view.
     final isAllSystem =
         widget.selectedSystem!.folderName.toLowerCase() == 'all';
-    const neoStationDescription =
-        'NeoStation is your ultimate hub for classic games. Relive the nostalgia and rediscover gaming history.';
 
     return Column(
       children: [
-        // Content Area: Prioritize hardware description or global branding.
-        if (isAllSystem ||
-            (widget.selectedSystem!.description != null &&
-                widget.selectedSystem!.description!.isNotEmpty)) ...[
+        // Content Area: library stats for 'All Games', hardware description
+        // for a specific system, both falling back to global branding.
+        if (isAllSystem) ...[
+          Expanded(child: _buildLibraryStats(context)),
+        ] else if (widget.selectedSystem!.description != null &&
+            widget.selectedSystem!.description!.isNotEmpty) ...[
           Expanded(
             child: Container(
               width: double.infinity,
@@ -47,9 +80,7 @@ class SystemDetailsState extends State<SystemDetails> {
                 ),
               ),
               child: Text(
-                isAllSystem
-                    ? neoStationDescription
-                    : widget.selectedSystem!.description!,
+                widget.selectedSystem!.description!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(
                     context,
@@ -108,6 +139,128 @@ class SystemDetailsState extends State<SystemDetails> {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  /// Whole-library stat rows shown for the 'All Games' card: total games,
+  /// cumulative play time, systems detected, and the single most-played
+  /// game. Loads once per focus via [_loadLibraryStats]; shows a spinner
+  /// for the brief window before the first result lands.
+  Widget _buildLibraryStats(BuildContext context) {
+    final stats = _libraryStats;
+    final theme = Theme.of(context);
+
+    if (stats == null) {
+      return Center(
+        child: SizedBox(
+          width: 20.r,
+          height: 20.r,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.r,
+            color: theme.colorScheme.primary.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+
+    final mostPlayed = stats['mostPlayedGame'] as Map<String, Object?>?;
+    final mostPlayedName = mostPlayed == null
+        ? null
+        : ((mostPlayed['title_name'] as String?)?.isNotEmpty == true
+              ? mostPlayed['title_name'] as String
+              : (mostPlayed['real_name'] as String?) ??
+                    (mostPlayed['filename'] as String? ?? ''));
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.3,
+        ),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.1),
+          width: 1.r,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildStatRow(
+            theme,
+            icon: Symbols.videogame_asset_rounded,
+            label: 'Games',
+            value: '${stats['totalGames']}',
+          ),
+          SizedBox(height: 10.r),
+          _buildStatRow(
+            theme,
+            icon: Symbols.dns_rounded,
+            label: 'Systems',
+            value: '${stats['totalSystems']}',
+          ),
+          SizedBox(height: 10.r),
+          _buildStatRow(
+            theme,
+            icon: Symbols.schedule_rounded,
+            label: 'Total Playtime',
+            value: formatPlayTime(stats['totalPlaytimeSeconds'] as int?),
+          ),
+          if (mostPlayedName != null && mostPlayedName.isNotEmpty) ...[
+            SizedBox(height: 10.r),
+            _buildStatRow(
+              theme,
+              icon: Symbols.local_fire_department_rounded,
+              label: 'Most Played',
+              value: mostPlayedName,
+              valueMaxLines: 2,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+    int valueMaxLines = 1,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 14.r,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        SizedBox(width: 8.r),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            fontSize: 11.r,
+          ),
+        ),
+        const Spacer(),
+        Expanded(
+          flex: 2,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: valueMaxLines,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w700,
+              fontSize: 11.r,
+            ),
+          ),
+        ),
       ],
     );
   }
