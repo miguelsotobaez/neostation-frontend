@@ -122,6 +122,17 @@
       }
     },
     {
+      "name": "Standalone Dolphin CS",
+      "unique_id": "gc.com.joeyos.dolphinemu",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.joeyos.dolphinemu/org.dolphinemu.dolphinemu.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
       "name": "RetroArch64 Dolphin",
       "default_core": true,
       "unique_id": "gc.ra64.dolphin",
