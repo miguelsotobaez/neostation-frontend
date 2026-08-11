@@ -229,6 +229,7 @@ class GameLaunchService {
                         ? List<String>.from(launchCmd['activity_flags'] as List)
                         : <String>[],
                     'keep_saf_uri': launchCmd['keep_saf_uri'] == true,
+                    'use_secondary_display': system.openOnSecondScreen,
                   });
 
               if (result == true) {
@@ -430,6 +431,7 @@ class GameLaunchService {
           },
           {'key': 'LIBRETRO', 'value': coreName, 'type': 'string'},
         ],
+        'use_secondary_display': system.openOnSecondScreen,
       });
 
       if (result == true) {
@@ -1132,6 +1134,7 @@ class GameLaunchService {
         'data': dataUri,
         'activity_flags': <String>[],
         'keep_saf_uri': false,
+        'use_secondary_display': system.openOnSecondScreen,
       });
 
       if (result == true) {

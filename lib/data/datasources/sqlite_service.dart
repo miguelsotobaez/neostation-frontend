@@ -421,7 +421,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 114;
+  static const int _databaseVersion = 115;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -470,7 +470,8 @@ class SqliteService {
              ss.hide_extension,
              ss.hide_parentheses,
              ss.hide_brackets,
-             ss.subfolder_view
+             ss.subfolder_view,
+             ss.open_on_second_screen
       FROM app_systems s
       LEFT JOIN user_system_settings ss ON s.id = ss.app_system_id
     ''');
@@ -1930,6 +1931,7 @@ class SqliteService {
         hide_logo INTEGER DEFAULT 0,
         prefer_file_name INTEGER DEFAULT 0,
         subfolder_view INTEGER DEFAULT 0,
+        open_on_second_screen INTEGER DEFAULT 0,
         esde_media_dir TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
@@ -2802,6 +2804,19 @@ class SqliteService {
     await _updateSystemSetting(systemId, 'subfolder_view', enabled ? 1 : 0);
   }
 
+  /// Sets whether this system's games should launch on the secondary display,
+  /// on Android devices that expose one (e.g. dual-screen handhelds).
+  static Future<void> setSystemOpenOnSecondScreen(
+    String systemId,
+    bool enabled,
+  ) async {
+    await _updateSystemSetting(
+      systemId,
+      'open_on_second_screen',
+      enabled ? 1 : 0,
+    );
+  }
+
   /// Retrieves the complete configuration for a system.
   static Future<Map<String, dynamic>> getSystemSettings(String systemId) async {
     final db = await instance.database;
@@ -2984,7 +2999,8 @@ class SqliteService {
              ss.custom_logo_path,
              ss.hide_logo,
              ss.prefer_file_name,
-             ss.subfolder_view
+             ss.subfolder_view,
+             ss.open_on_second_screen
       FROM app_systems s
       LEFT JOIN user_detected_systems uds ON s.id = uds.app_system_id
       LEFT JOIN user_system_settings ss ON s.id = ss.app_system_id
@@ -3153,6 +3169,7 @@ class SqliteService {
           'hide_logo',
           'prefer_file_name',
           'subfolder_view',
+          'open_on_second_screen',
         ],
         where: 'app_system_id = ?',
         whereArgs: [system.id],
@@ -3182,6 +3199,12 @@ class SqliteService {
           subfolderView:
               (int.tryParse(row['subfolder_view']?.toString() ?? '0') ?? 0) ==
               1,
+          openOnSecondScreen:
+              (int.tryParse(
+                        row['open_on_second_screen']?.toString() ?? '0',
+                      ) ??
+                      0) ==
+                  1,
         );
       }
 
@@ -3466,7 +3489,8 @@ class SqliteService {
              ss.hide_parentheses,
              ss.hide_brackets,
              ss.prefer_file_name,
-             ss.subfolder_view
+             ss.subfolder_view,
+             ss.open_on_second_screen
       FROM app_systems s
       LEFT JOIN user_system_settings ss ON s.id = ss.app_system_id
       ORDER BY s.real_name ASC

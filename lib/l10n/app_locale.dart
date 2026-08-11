@@ -114,6 +114,13 @@ mixin AppLocale {
   static const String subfolderViewSubtitle = 'subfolder_view_subtitle';
   static const String subfolderViewEnabled = 'subfolder_view_enabled';
   static const String subfolderViewDisabled = 'subfolder_view_disabled';
+  static const String openOnSecondScreen = 'open_on_second_screen';
+  static const String openOnSecondScreenSubtitle =
+      'open_on_second_screen_subtitle';
+  static const String openOnSecondScreenEnabled =
+      'open_on_second_screen_enabled';
+  static const String openOnSecondScreenDisabled =
+      'open_on_second_screen_disabled';
   static const String errorScanningSystem = 'error_scanning_system';
   static const String scrapedTitlesUsed = 'scraped_titles_used';
   static const String gameExtensionsHidden = 'game_extensions_hidden';

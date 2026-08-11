@@ -101,6 +101,11 @@ const Map<String, dynamic> appLocalePt = {
       'Agrupar ROMs em subpastas em pastas navegáveis em vez de misturá-las com os jogos',
   AppLocale.subfolderViewEnabled: 'Subpastas mostradas como pastas',
   AppLocale.subfolderViewDisabled: 'Subpastas misturadas com os jogos',
+  AppLocale.openOnSecondScreen: 'Abrir na segunda tela',
+  AppLocale.openOnSecondScreenSubtitle:
+      'Inicia os jogos deste sistema na tela secundária',
+  AppLocale.openOnSecondScreenEnabled: 'Os jogos abrem na segunda tela',
+  AppLocale.openOnSecondScreenDisabled: 'Os jogos abrem na tela principal',
   AppLocale.errorScanningSystem: 'Erro ao varrer o sistema: {error}',
   AppLocale.scrapedTitlesUsed: 'Títulos buscados serão usados se disponíveis',
   AppLocale.gameExtensionsHidden: 'Extensões de jogo serão ocultadas',

@@ -75,6 +75,12 @@ class _SystemEmulatorSettingsDialogState
 
   late SystemModel _system;
 
+  /// Whether the "open on second screen" row is shown for this system.
+  /// Android-only (it targets a secondary hardware display via the Android
+  /// `DisplayManager`) and meaningless for the virtual "all games" system.
+  bool get _showOpenOnSecondScreen =>
+      Platform.isAndroid && _system.folderName != 'all';
+
   // Focus nodes for arrow key navigation blocking
   late final FocusNode _headerCloseButtonFocusNode;
   late final FocusNode _footerCloseButtonFocusNode;
@@ -104,9 +110,10 @@ class _SystemEmulatorSettingsDialogState
     // Initialize local system state
     _system = widget.system;
     _totalGeneralItems =
-        (_system.folderName == 'all' || _system.folderName == 'android')
-        ? 4
-        : 6;
+        ((_system.folderName == 'all' || _system.folderName == 'android')
+            ? 4
+            : 6) +
+        (_showOpenOnSecondScreen ? 1 : 0);
 
     _generalScrollController = ScrollController();
     _generalItemKeys = List.generate(
@@ -254,6 +261,23 @@ class _SystemEmulatorSettingsDialogState
         (value
                 ? AppLocale.subfolderViewEnabled
                 : AppLocale.subfolderViewDisabled)
+            .getString(context),
+        type: NotificationType.info,
+      );
+    }
+  }
+
+  Future<void> _toggleOpenOnSecondScreen(bool value) async {
+    setState(() => _system = _system.copyWith(openOnSecondScreen: value));
+    await SystemRepository.setOpenOnSecondScreen(widget.system.id!, value);
+    if (mounted) {
+      await context.read<SqliteConfigProvider>().refreshSystem(_system);
+      if (!mounted) return;
+      AppNotification.showNotification(
+        context,
+        (value
+                ? AppLocale.openOnSecondScreenEnabled
+                : AppLocale.openOnSecondScreenDisabled)
             .getString(context),
         type: NotificationType.info,
       );

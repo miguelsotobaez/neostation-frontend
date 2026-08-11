@@ -99,6 +99,11 @@ const Map<String, dynamic> appLocaleId = {
       'Kelompokkan ROM dalam subfolder menjadi folder yang dapat dijelajahi alih-alih mencampurnya dengan game',
   AppLocale.subfolderViewEnabled: 'Subfolder ditampilkan sebagai folder',
   AppLocale.subfolderViewDisabled: 'Subfolder dicampur dengan game',
+  AppLocale.openOnSecondScreen: 'Buka di Layar Kedua',
+  AppLocale.openOnSecondScreenSubtitle:
+      'Jalankan game sistem ini di layar sekunder',
+  AppLocale.openOnSecondScreenEnabled: 'Game dibuka di layar kedua',
+  AppLocale.openOnSecondScreenDisabled: 'Game dibuka di layar utama',
   AppLocale.errorScanningSystem: 'Kesalahan saat memindai sistem: {error}',
   AppLocale.scrapedTitlesUsed:
       'Judul hasil scraping akan digunakan jika tersedia',

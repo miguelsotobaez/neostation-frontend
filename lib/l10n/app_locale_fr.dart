@@ -103,6 +103,12 @@ const Map<String, dynamic> appLocaleFr = {
       'Regrouper les ROMs des sous-dossiers dans des dossiers navigables au lieu de les mélanger avec les jeux',
   AppLocale.subfolderViewEnabled: 'Sous-dossiers affichés comme dossiers',
   AppLocale.subfolderViewDisabled: 'Sous-dossiers mélangés aux jeux',
+  AppLocale.openOnSecondScreen: 'Ouvrir sur le second écran',
+  AppLocale.openOnSecondScreenSubtitle:
+      'Lance les jeux de ce système sur l’écran secondaire',
+  AppLocale.openOnSecondScreenEnabled: 'Les jeux s’ouvrent sur le second écran',
+  AppLocale.openOnSecondScreenDisabled:
+      'Les jeux s’ouvrent sur l’écran principal',
   AppLocale.errorScanningSystem:
       'Erreur lors de l’analyse du système : {error}',
   AppLocale.scrapedTitlesUsed:

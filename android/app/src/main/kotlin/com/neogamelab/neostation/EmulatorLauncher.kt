@@ -30,6 +30,7 @@ object EmulatorLauncher {
         extras: List<Map<String, Any>>?,
         activityFlags: List<String>,
         keepSafUri: Boolean,
+        useSecondaryDisplay: Boolean = false,
         result: MethodChannel.Result
     ) {
         try {
@@ -255,6 +256,26 @@ object EmulatorLauncher {
 
             // Don't use resolveActivity — returns null on Android 11+ for valid apps due to
             // package visibility restrictions. Catch ActivityNotFoundException instead.
+            if (useSecondaryDisplay) {
+                val dm = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+                val secondaryDisplay = dm.displays.firstOrNull { it.displayId != android.view.Display.DEFAULT_DISPLAY }
+                if (secondaryDisplay != null) {
+                    try {
+                        val options = android.app.ActivityOptions.makeBasic()
+                            .setLaunchDisplayId(secondaryDisplay.displayId)
+                        context.startActivity(intent, options.toBundle())
+                        // Hide the Now Playing presentation (a TYPE_PRESENTATION window
+                        // layered above normal activities on the secondary display) so
+                        // it doesn't cover the game we just launched there.
+                        (context as? MainActivity)?.hideSecondaryForApp(packageName, secondaryDisplay.displayId)
+                        result.success(true)
+                        return
+                    } catch (e: Exception) {
+                        android.util.Log.w("EmulatorLauncher", "Secondary-display launch failed, falling back: ${e.message}")
+                    }
+                }
+            }
+
             context.startActivity(intent)
             result.success(true)
         } catch (e: ActivityNotFoundException) {

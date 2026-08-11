@@ -91,6 +91,9 @@ class SystemRepository {
   static Future<void> setSubfolderView(String systemId, bool value) =>
       SqliteService.setSystemSubfolderView(systemId, value);
 
+  static Future<void> setOpenOnSecondScreen(String systemId, bool value) =>
+      SqliteService.setSystemOpenOnSecondScreen(systemId, value);
+
   static Future<void> setHideExtension(String systemId, bool value) =>
       SqliteService.setSystemHideExtension(systemId, value);
 

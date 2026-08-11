@@ -94,6 +94,11 @@ class SystemModel {
   /// game list instead of being flattened in with top-level games.
   final bool subfolderView;
 
+  /// Android only: when true, this system's games launch on the secondary
+  /// display (e.g. dual-screen handhelds like the AYN Thor) instead of the
+  /// primary one.
+  final bool openOnSecondScreen;
+
   /// List of file extensions supported by this system's emulators.
   final List<String> extensions;
 
@@ -136,6 +141,7 @@ class SystemModel {
     this.hideLogo = false,
     this.preferFileName = false,
     this.subfolderView = false,
+    this.openOnSecondScreen = false,
     this.extensions = const [],
     this.folders = const [],
     this.neosync = NeoSyncConfig.empty,
@@ -318,6 +324,13 @@ class SystemModel {
           (int.tryParse((json['subfolder_view'] ?? '0').toString()) ?? 0) ==
               1 ||
           json['subfolder_view']?.toString() == 'true',
+      openOnSecondScreen:
+          (int.tryParse(
+                    (json['open_on_second_screen'] ?? '0').toString(),
+                  ) ??
+                  0) ==
+              1 ||
+          json['open_on_second_screen']?.toString() == 'true',
       extensions:
           (json['extensions'] as List?)?.map((e) => e.toString()).toList() ??
           [],
@@ -361,6 +374,7 @@ class SystemModel {
       'hide_logo': hideLogo ? 1 : 0,
       'prefer_file_name': preferFileName ? 1 : 0,
       'subfolder_view': subfolderView ? 1 : 0,
+      'open_on_second_screen': openOnSecondScreen ? 1 : 0,
       'extensions': extensions,
       'folders': folders,
       'neosync': neosync.toJson(),
@@ -398,6 +412,7 @@ class SystemModel {
     bool? hideLogo,
     bool? preferFileName,
     bool? subfolderView,
+    bool? openOnSecondScreen,
     List<String>? extensions,
     List<String>? folders,
     NeoSyncConfig? neosync,
@@ -433,6 +448,7 @@ class SystemModel {
       hideLogo: hideLogo ?? this.hideLogo,
       preferFileName: preferFileName ?? this.preferFileName,
       subfolderView: subfolderView ?? this.subfolderView,
+      openOnSecondScreen: openOnSecondScreen ?? this.openOnSecondScreen,
       extensions: extensions ?? this.extensions,
       folders: folders ?? this.folders,
       neosync: neosync ?? this.neosync,

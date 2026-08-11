@@ -530,6 +530,17 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
             enabled: _system.recursiveScan,
           ),
         ],
+        if (_showOpenOnSecondScreen) ...[
+          SizedBox(height: 4.r),
+          _buildSwitchItem(
+            index: _totalGeneralItems - 1,
+            key: _generalItemKeys[_totalGeneralItems - 1],
+            title: AppLocale.openOnSecondScreen.getString(context),
+            subtitle: AppLocale.openOnSecondScreenSubtitle.getString(context),
+            value: _system.openOnSecondScreen,
+            onChanged: _toggleOpenOnSecondScreen,
+          ),
+        ],
       ],
     );
   }

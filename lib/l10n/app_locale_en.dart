@@ -97,6 +97,11 @@ const Map<String, dynamic> appLocaleEn = {
       'Group ROMs in subfolders into browsable folders instead of mixing them with games',
   AppLocale.subfolderViewEnabled: 'Subfolders shown as folders',
   AppLocale.subfolderViewDisabled: 'Subfolders mixed with games',
+  AppLocale.openOnSecondScreen: 'Open on Second Screen',
+  AppLocale.openOnSecondScreenSubtitle:
+      'Launch this system\'s games on the secondary display',
+  AppLocale.openOnSecondScreenEnabled: 'Games open on the second screen',
+  AppLocale.openOnSecondScreenDisabled: 'Games open on the main screen',
   AppLocale.errorScanningSystem: 'Error scanning system: {error}',
   AppLocale.scrapedTitlesUsed: 'Scraped titles will be used when available',
   AppLocale.gameExtensionsHidden: 'Game extensions will be hidden',

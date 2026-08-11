@@ -348,6 +348,9 @@ class SqliteMigrations {
       case 114:
         await _migrateToVersion114(db);
         break;
+      case 115:
+        await _migrateToVersion115(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5398,6 +5401,31 @@ class SqliteMigrations {
       _log.i('Migration v114 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v114: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v115: Adds the per-system "open on second screen" flag, used
+  /// on Android dual-screen devices (e.g. the AYN Thor) to launch that
+  /// system's emulator on the secondary display instead of the primary one.
+  static Future<void> _migrateToVersion115(Database db) async {
+    _log.i(
+      'Migration v115: Adding open_on_second_screen to user_system_settings',
+    );
+    try {
+      final columns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((column) => column['name'].toString())
+          .toList();
+      if (!columns.contains('open_on_second_screen')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN open_on_second_screen INTEGER DEFAULT 0',
+        );
+      }
+      _log.i('Migration v115 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v115: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

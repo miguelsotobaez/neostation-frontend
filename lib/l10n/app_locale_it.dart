@@ -99,6 +99,12 @@ const Map<String, dynamic> appLocaleIt = {
       'Raggruppa le ROM nelle sottocartelle in cartelle navigabili invece di mescolarle con i giochi',
   AppLocale.subfolderViewEnabled: 'Sottocartelle mostrate come cartelle',
   AppLocale.subfolderViewDisabled: 'Sottocartelle mescolate ai giochi',
+  AppLocale.openOnSecondScreen: 'Apri sul secondo schermo',
+  AppLocale.openOnSecondScreenSubtitle:
+      'Avvia i giochi di questo sistema sullo schermo secondario',
+  AppLocale.openOnSecondScreenEnabled: 'I giochi si aprono sul secondo schermo',
+  AppLocale.openOnSecondScreenDisabled:
+      'I giochi si aprono sullo schermo principale',
   AppLocale.errorScanningSystem:
       'Errore durante la scansione del sistema: {error}',
   AppLocale.scrapedTitlesUsed: 'I titoli cercati verranno usati se disponibili',

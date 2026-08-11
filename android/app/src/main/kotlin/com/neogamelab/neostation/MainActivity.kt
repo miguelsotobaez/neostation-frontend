@@ -238,9 +238,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     val extras = call.argument<List<Map<String, Any>>>("extras")
                     val activityFlags = call.argument<List<String>>("activity_flags") ?: emptyList()
                     val keepSafUri = call.argument<Boolean>("keep_saf_uri") ?: false
+                    val useSecondaryDisplay = call.argument<Boolean>("use_secondary_display") ?: false
 
                     if (packageName != null) {
-                        launchGenericIntent(packageName, activityName, action, category, data, type, extras, activityFlags, keepSafUri, result)
+                        launchGenericIntent(packageName, activityName, action, category, data, type, extras, activityFlags, keepSafUri, useSecondaryDisplay, result)
                     } else {
                         result.error("INVALID_ARGUMENTS", "Package name is required", null)
                     }
@@ -762,6 +763,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         extras: List<Map<String, Any>>?,
         activityFlags: List<String>,
         keepSafUri: Boolean,
+        useSecondaryDisplay: Boolean,
         result: MethodChannel.Result
     ) {
         EmulatorLauncher.launchGenericIntent(
@@ -775,6 +777,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             extras = extras,
             activityFlags = activityFlags,
             keepSafUri = keepSafUri,
+            useSecondaryDisplay = useSecondaryDisplay,
             result = result
         )
     }
@@ -1046,7 +1049,7 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
      * (if the accessibility service is granted) watches the secondary display so
      * Now Playing is restored the moment the app is dismissed.
      */
-    private fun hideSecondaryForApp(packageName: String, displayId: Int) {
+    internal fun hideSecondaryForApp(packageName: String, displayId: Int) {
         try {
             subScreenPresentation?.let {
                 if (it.isShowing) {
