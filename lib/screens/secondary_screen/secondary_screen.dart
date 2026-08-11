@@ -536,7 +536,9 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
   void _startVideoTimer(String path) {
     _videoTimer?.cancel();
-    _videoTimer = Timer(const Duration(milliseconds: 500), () {
+    // Give the banner + logo a moment on screen before the video takes over,
+    // rather than flashing straight to video on every hover.
+    _videoTimer = Timer(const Duration(seconds: 3), () {
       _initializeVideo(path);
     });
   }
@@ -834,7 +836,19 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                                 value.gameWheel != null)
                                               buildFanartWithLogo(value),
                                           ] else ...[
-                                            if (value.gameImageBytes != null)
+                                            // Library browsing (not actively
+                                            // launching): banner + logo reads
+                                            // better at a glance than a raw
+                                            // screenshot, and is what the
+                                            // video (below, after a few
+                                            // seconds) fades in from. Falls
+                                            // back to the screenshot only when
+                                            // there's no fanart/wheel at all.
+                                            if (value.gameFanart != null ||
+                                                value.gameWheel != null)
+                                              buildFanartWithLogo(value)
+                                            else if (value.gameImageBytes !=
+                                                null)
                                               buildBackgroundBytes(
                                                 value.gameImageBytes!,
                                                 fit: BoxFit
@@ -846,10 +860,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                                 value.gameScreenshot!,
                                                 fit: BoxFit
                                                     .contain, // "se debe ver completo"
-                                              )
-                                            else if (value.gameFanart != null ||
-                                                value.gameWheel != null)
-                                              buildFanartWithLogo(value),
+                                              ),
                                           ],
                                         ],
                                       ],
