@@ -45,7 +45,12 @@ else
   echo "Warning: Keystore environment variables not set. Release build may use debug signing."
 fi
 
-flutter build apk --release $ENV_ARG
+# One APK instead of a universal one: every device NeoStation targets is arm64,
+# but plain `flutter build apk` packs armeabi-v7a and x86_64 in as well. Both
+# flags are needed: --target-platform only drops the engine and AOT libs, while
+# --split-per-abi sets abiFilters, which is what drops the plugin natives
+# Gradle packages for every ABI.
+flutter build apk --release --split-per-abi --target-platform android-arm64 $ENV_ARG
 
 # Get version from pubspec.yaml
 VERSION=$(grep 'version:' pubspec.yaml | head -1 | awk '{print $2}' | tr -d '\r')
@@ -53,8 +58,9 @@ VERSION=$(grep 'version:' pubspec.yaml | head -1 | awk '{print $2}' | tr -d '\r'
 # Create output directory
 mkdir -p "$PROJECT_ROOT/release"
 
-# Copy and rename APK
-SOURCE_APK="$PROJECT_ROOT/build/app/outputs/flutter-apk/app-release.apk"
+# Copy and rename APK. --split-per-abi renames the output to carry the ABI.
+APK_DIR="$PROJECT_ROOT/build/app/outputs/flutter-apk"
+SOURCE_APK="$APK_DIR/app-arm64-v8a-release.apk"
 DEST_APK="$PROJECT_ROOT/release/neostation-android-arm64-v8a-$VERSION.apk"
 
 if [ -f "$SOURCE_APK" ]; then
