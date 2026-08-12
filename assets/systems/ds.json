@@ -225,10 +225,10 @@
       }
     },
     {
-      "name": "Standalone WatermelonDS",
+      "name": "Standalone MelonDualDS",
       "unique_id": "ds.standalone.melonds.dual",
       "is_retroachievements_compatible": false,
-      "description": "WatermelonDS emulator",
+      "description": "MelonDS (Dual Screen Fork) build.",
       "platforms": {
         "android": {
           "launch_arguments": "-n me.magnum.melondualds/me.magnum.melonds.ui.emulator.EmulatorActivity -a me.magnum.melonds.dev.LAUNCH_ROM -d \"{file.uri}\""
@@ -243,6 +243,17 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.hydra.noods/.FileBrowser -e LaunchPath \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ds.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
         }
       }
     }

@@ -11,7 +11,12 @@ class Semaphore {
   Semaphore(this.maxCount);
 
   /// Acquires a slot in the semaphore, waiting if the [maxCount] is reached.
-  Future<void> acquire() async {
+  ///
+  /// With a [timeout], a caller that has waited that long gives up and throws
+  /// [TimeoutException] instead of waiting forever. Giving up also drops the
+  /// caller's place in the queue — otherwise a later [release] would hand its
+  /// slot to a task that no longer exists, permanently shrinking the pool.
+  Future<void> acquire({Duration? timeout}) async {
     if (_currentCount < maxCount) {
       _currentCount++;
       return;
@@ -19,7 +24,24 @@ class Semaphore {
 
     final completer = Completer<void>();
     _waitQueue.add(completer);
-    await completer.future;
+
+    if (timeout == null) {
+      await completer.future;
+      return;
+    }
+
+    try {
+      await completer.future.timeout(timeout);
+    } on TimeoutException {
+      final wasStillQueued = _waitQueue.remove(completer);
+      if (!wasStillQueued && completer.isCompleted) {
+        // A slot was granted in the same turn the timeout fired, so this
+        // caller does hold one despite giving up — hand it straight back
+        // rather than leaking it.
+        release();
+      }
+      rethrow;
+    }
   }
 
   /// Releases a slot in the semaphore and notifies the next waiting task.

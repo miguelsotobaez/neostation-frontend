@@ -75,39 +75,36 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
         theme.extension<CornerRadii>()?.radiusInternal ??
         BorderRadius.circular(8.r);
 
-    return Padding(
-      padding: EdgeInsets.only(top: 12.r),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: widget.size.r,
-        height: widget.size.r,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: cornerRadius,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 2.r,
-              offset: Offset(2.0.r, 2.0.r),
-            ),
-          ],
-        ),
-        child: Center(
-          child: AnimatedBuilder(
-            animation: _rotationController,
-            builder: (context, child) {
-              return Transform.rotate(
-                angle: status.icon == Symbols.sync_rounded
-                    ? _rotationController.value * 2 * 3.14159
-                    : 0,
-                child: child,
-              );
-            },
-            child: Icon(
-              status.icon,
-              color: status.color,
-              size: (widget.size * 0.6).r,
-            ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: widget.size.r,
+      height: widget.size.r,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: cornerRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 2.r,
+            offset: Offset(2.0.r, 2.0.r),
+          ),
+        ],
+      ),
+      child: Center(
+        child: AnimatedBuilder(
+          animation: _rotationController,
+          builder: (context, child) {
+            return Transform.rotate(
+              angle: status.icon == Symbols.sync_rounded
+                  ? _rotationController.value * 2 * 3.14159
+                  : 0,
+              child: child,
+            );
+          },
+          child: Icon(
+            status.icon,
+            color: status.color,
+            size: (widget.size * 0.6).r,
           ),
         ),
       ),

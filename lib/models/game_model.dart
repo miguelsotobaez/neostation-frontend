@@ -269,108 +269,118 @@ class GameModel {
     return getImagePath(systemFolderName, 'screenshots', fileProvider);
   }
 
+  /// Returns the media lookup keys for this game, in priority order.
+  ///
+  /// MeloNX library rows are virtual: their launch path is a URL and their
+  /// stable artwork key is the Nintendo Switch Title ID. ScreenScraper writes
+  /// files such as `01006a800016e000.jpg`, while older NeoStation resolvers
+  /// derived the lookup only from [romname]. Resolve the Title ID explicitly
+  /// so virtual MeloNX artwork is found regardless of the synthetic filename
+  /// (`*.melonx`) used by the database.
+  List<String> _mediaLookupNames() {
+    final names = <String>[];
+    final normalizedRomPath = romPath?.toLowerCase() ?? '';
+    final isMeloNxVirtual =
+        normalizedRomPath.startsWith('melonx://') ||
+        romname.toLowerCase().endsWith('.melonx');
+
+    final id = titleId?.trim();
+    if (isMeloNxVirtual && id != null && id.isNotEmpty) {
+      names.add(id);
+    }
+
+    if (!names.contains(romname)) names.add(romname);
+    return names;
+  }
+
   /// Resolves the absolute path for a specific media type (e.g., 'screenshots', 'boxart').
   ///
-  /// Attempts to find a `.png` file first, falling back to `.jpg`. Supports
-  /// both localized [FileProvider] resolution and manual filesystem checks.
+  /// Attempts to find `.png`, `.jpg`, then `.jpeg`. For MeloNX virtual games
+  /// the Nintendo Switch Title ID is tried before the synthetic ROM filename,
+  /// matching the filenames written by ScreenScraper.
   String getImagePath(
     String systemFolderName,
     String imageType, [
     FileProvider? fileProvider,
   ]) {
+    final lookupNames = _mediaLookupNames();
+
     if (fileProvider != null && fileProvider.isInitialized) {
-      final pngPath = fileProvider.getMediaPath(
-        systemFolderName,
-        imageType,
-        romname,
-        'png',
-      );
-      if (File(pngPath).existsSync()) {
-        return pngPath;
-      }
-      final jpgPath = fileProvider.getMediaPath(
-        systemFolderName,
-        imageType,
-        romname,
-        'jpg',
-      );
-      if (File(jpgPath).existsSync()) {
-        return jpgPath;
+      for (final mediaName in lookupNames) {
+        for (final extension in const ['png', 'jpg', 'jpeg']) {
+          final candidate = fileProvider.getMediaPath(
+            systemFolderName,
+            imageType,
+            mediaName,
+            extension,
+          );
+          if (File(candidate).existsSync()) return candidate;
+        }
+
+        // Fallback for filenames that must be used literally rather than
+        // extension-stripped by FileProvider.
+        for (final extension in const ['png', 'jpg', 'jpeg']) {
+          final literalCandidate = path.join(
+            fileProvider.getMediaDirectoryPath(),
+            systemFolderName,
+            imageType,
+            '$mediaName.$extension',
+          );
+          if (File(literalCandidate).existsSync()) return literalCandidate;
+        }
       }
 
-      // Fallback for files with complex extensions (e.g., 'v1.11.zip').
-      final pngPathOriginal = path.join(
-        fileProvider.getMediaDirectoryPath(),
-        systemFolderName,
-        imageType,
-        '$romname.png',
-      );
-      if (File(pngPathOriginal).existsSync()) {
-        return pngPathOriginal;
-      }
-
-      final jpgPathOriginal = path.join(
-        fileProvider.getMediaDirectoryPath(),
-        systemFolderName,
-        imageType,
-        '$romname.jpg',
-      );
-      if (File(jpgPathOriginal).existsSync()) {
-        return jpgPathOriginal;
-      }
-
-      // ES-DE read-time fallback: use the user's ES-DE downloaded_media art
-      // when NeoStation has no art of its own. A later NeoStation scrape writes
-      // into NeoStation's media folder (checked above) and takes precedence.
+      // ES-DE read-time fallback remains based on the real ROM filename.
       for (final candidate in fileProvider.getEsdeMediaCandidates(
         systemFolderName,
         imageType,
         romname,
       )) {
-        if (File(candidate).existsSync()) {
-          return candidate;
-        }
+        if (File(candidate).existsSync()) return candidate;
       }
 
-      return pngPath;
+      // Return the canonical expected path even when no file exists yet. For
+      // MeloNX this is Title-ID based, which also makes scrape cache eviction
+      // target the exact path ScreenScraper writes.
+      return fileProvider.getMediaPath(
+        systemFolderName,
+        imageType,
+        lookupNames.first,
+        'png',
+      );
     }
 
     // Manual filesystem lookup logic.
-    final baseName = _stripRomExtension(romname);
+    for (final mediaName in lookupNames) {
+      final baseName = _stripRomExtension(mediaName);
+      for (final extension in const ['png', 'jpg', 'jpeg']) {
+        final candidate = path.join(
+          'media',
+          systemFolderName,
+          imageType,
+          '$baseName.$extension',
+        );
+        if (File(candidate).existsSync()) return candidate;
+      }
 
-    final pngRelativePath = path.join(
+      for (final extension in const ['png', 'jpg', 'jpeg']) {
+        final literalCandidate = path.join(
+          'media',
+          systemFolderName,
+          imageType,
+          '$mediaName.$extension',
+        );
+        if (File(literalCandidate).existsSync()) return literalCandidate;
+      }
+    }
+
+    final fallbackBase = _stripRomExtension(lookupNames.first);
+    return path.join(
       'media',
       systemFolderName,
       imageType,
-      '$baseName.png',
+      '$fallbackBase.png',
     );
-    if (File(pngRelativePath).existsSync()) return pngRelativePath;
-
-    final jpgRelativePath = path.join(
-      'media',
-      systemFolderName,
-      imageType,
-      '$baseName.jpg',
-    );
-    if (File(jpgRelativePath).existsSync()) return jpgRelativePath;
-
-    final pngFullRelativePath = path.join(
-      'media',
-      systemFolderName,
-      imageType,
-      '$romname.png',
-    );
-    if (File(pngFullRelativePath).existsSync()) return pngFullRelativePath;
-
-    final jpgFullRelativePath = path.join(
-      'media',
-      systemFolderName,
-      imageType,
-      '$romname.jpg',
-    );
-    if (File(jpgFullRelativePath).existsSync()) return jpgFullRelativePath;
-
-    return pngRelativePath;
   }
 
   /// Sanitizes a ROM filename by stripping common extensions while preserving
@@ -393,22 +403,73 @@ class GameModel {
   }
 
   /// Resolves the absolute path to the game's preview video.
+  ///
+  /// Uses the same media-key priority as images. This is important for MeloNX
+  /// virtual rows: ScreenScraper stores videos under the Nintendo Switch
+  /// Title ID (for example `01006a800016e000.mp4`), while the database may use
+  /// a synthetic ROM name such as `01006a800016e000.melonx`.
   String getVideoPath(String systemFolderName, [FileProvider? fileProvider]) {
+    final lookupNames = _mediaLookupNames();
+
     if (fileProvider != null && fileProvider.isInitialized) {
-      final master = fileProvider.getVideoPath(systemFolderName, romname);
-      // ES-DE read-time fallback video (cheap in-memory lookup, no I/O).
+      // First resolve NeoStation's own media directory. For MeloNX the Title ID
+      // is tried first, matching the key used by the ScreenScraper downloader.
+      for (final mediaName in lookupNames) {
+        final candidate = fileProvider.getVideoPath(
+          systemFolderName,
+          mediaName,
+        );
+        if (File(candidate).existsSync()) return candidate;
+
+        // Literal fallback for keys that FileProvider must not transform.
+        final literalCandidate = path.join(
+          fileProvider.getMediaDirectoryPath(),
+          systemFolderName,
+          'videos',
+          '$mediaName.mp4',
+        );
+        if (File(literalCandidate).existsSync()) return literalCandidate;
+      }
+
+      // Keep ES-DE as a fallback based on the actual ROM filename.
       final esde = fileProvider.getEsdeVideoPath(systemFolderName, romname);
-      // No ES-DE fallback for this system: return the master path without any
-      // filesystem stat — getVideoPath is called on the scroll hot path and
-      // there is nothing to fall back to anyway.
-      if (esde == null) return master;
-      // Prefer the master video; only fall back to ES-DE when it's missing.
-      if (File(master).existsSync()) return master;
-      if (File(esde).existsSync()) return esde;
-      return master;
+      if (esde != null && File(esde).existsSync()) return esde;
+
+      // Return the canonical NeoStation path even if the file does not exist
+      // yet, so media caching and later downloads use the same Title-ID key.
+      return fileProvider.getVideoPath(
+        systemFolderName,
+        lookupNames.first,
+      );
     }
-    final baseName = _stripRomExtension(romname);
-    return path.join('media', systemFolderName, 'videos', '$baseName.mp4');
+
+    // Manual filesystem lookup logic mirrors getImagePath().
+    for (final mediaName in lookupNames) {
+      final baseName = _stripRomExtension(mediaName);
+      final candidate = path.join(
+        'media',
+        systemFolderName,
+        'videos',
+        '$baseName.mp4',
+      );
+      if (File(candidate).existsSync()) return candidate;
+
+      final literalCandidate = path.join(
+        'media',
+        systemFolderName,
+        'videos',
+        '$mediaName.mp4',
+      );
+      if (File(literalCandidate).existsSync()) return literalCandidate;
+    }
+
+    final fallbackBase = _stripRomExtension(lookupNames.first);
+    return path.join(
+      'media',
+      systemFolderName,
+      'videos',
+      '$fallbackBase.mp4',
+    );
   }
 
   /// Verifies if a preview video exists for this game.

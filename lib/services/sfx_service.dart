@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter_soloud/flutter_soloud.dart';
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -93,6 +94,12 @@ class SfxService {
         } catch (_) {}
         await SoLoud.instance.init();
       }
+
+      // SoLoud's iOS backend can activate an audio-session category that
+      // ignores the hardware Silent switch. Re-apply NeoStation's intended
+      // non-primary/ambient category after engine initialization so UI
+      // navigation sounds follow the iPhone Ring/Silent setting.
+      await ExternalFolderAccess.configureAudioSessionForSilentMode();
 
       final allPaths = [..._navSounds, _enterSound, _backSound];
       for (final path in allPaths) {
@@ -243,6 +250,16 @@ class SfxService {
       return;
     }
     try {
+      // On iOS, the hardware Ring/Silent switch can leave the native audio
+      // session/device in a state where SoLoud remains silent after the switch
+      // is turned back off. Re-assert the ambient session immediately before
+      // each UI SFX playback. While Silent Mode is enabled, iOS still suppresses
+      // the sound; once Silent Mode is disabled, this re-activation lets the
+      // next navigation sound resume without restarting NeoStation.
+      if (Platform.isIOS) {
+        await ExternalFolderAccess.configureAudioSessionForSilentMode();
+      }
+
       SoLoud.instance.play(source, volume: _volume);
     } catch (e) {
       _log.w('[SfxService] Playback error for $path: $e');

@@ -30,6 +30,9 @@ class CoreEmulatorModel {
   /// Android package name for intent-based launching (e.g., 'com.retroarch'), if applicable.
   final String? androidPackageName;
 
+  /// iOS URL scheme used to detect/open the emulator, if applicable.
+  final String? iosUrlScheme;
+
   /// Whether the emulator is actually present and usable on this device.
   ///
   /// Only a verifying enumerator sets this: `loadEmulatorsForSystem` checks the
@@ -82,6 +85,7 @@ class CoreEmulatorModel {
     this.isDefaultCore = false,
     required this.isretroAchievementsCompatible,
     this.androidPackageName,
+    this.iosUrlScheme,
     this.isInstalled = false,
     this.hasConfiguredPath = false,
   });
@@ -102,6 +106,7 @@ class CoreEmulatorModel {
       isretroAchievementsCompatible:
           (int.tryParse(map['is_ra_compatible']?.toString() ?? '0') ?? 0) == 1,
       androidPackageName: map['android_package_name']?.toString(),
+      iosUrlScheme: map['ios_url_scheme']?.toString(),
       isInstalled: (map['is_installed'] == 1 || map['is_installed'] == true),
       hasConfiguredPath:
           (map['has_configured_path'] == 1 ||
@@ -122,6 +127,7 @@ class CoreEmulatorModel {
       'is_default_core': isDefaultCore ? 1 : 0,
       'is_ra_compatible': isretroAchievementsCompatible ? 1 : 0,
       'android_package_name': androidPackageName,
+      'ios_url_scheme': iosUrlScheme,
     };
   }
 
@@ -137,6 +143,7 @@ class CoreEmulatorModel {
     bool? isDefaultCore,
     bool? isretroAchievementsCompatible,
     String? androidPackageName,
+    String? iosUrlScheme,
     bool? isInstalled,
     bool? hasConfiguredPath,
   }) {
@@ -152,6 +159,7 @@ class CoreEmulatorModel {
       isretroAchievementsCompatible:
           isretroAchievementsCompatible ?? this.isretroAchievementsCompatible,
       androidPackageName: androidPackageName ?? this.androidPackageName,
+      iosUrlScheme: iosUrlScheme ?? this.iosUrlScheme,
       isInstalled: isInstalled ?? this.isInstalled,
       hasConfiguredPath: hasConfiguredPath ?? this.hasConfiguredPath,
     );
@@ -197,6 +205,8 @@ class CoreEmulatorModel {
         return isretroAchievementsCompatible ? 1 : 0;
       case 'android_package_name':
         return androidPackageName;
+      case 'ios_url_scheme':
+        return iosUrlScheme;
       case 'is_installed':
         return isInstalled;
       case 'has_configured_path':

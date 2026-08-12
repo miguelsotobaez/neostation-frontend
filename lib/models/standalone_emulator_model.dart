@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:neostation/services/logger_service.dart';
 
 /// Represents a standalone emulator entity (as opposed to a Libretro core).
@@ -40,6 +41,11 @@ class StandaloneEmulatorModel {
   /// Android-specific: Main activity name used for direct intents.
   final String? androidActivityName;
 
+  /// iOS-specific URL scheme used to detect and open the installed app.
+  ///
+  /// Example: `armsx2` for URLs such as `armsx2://`.
+  final String? iosUrlScheme;
+
   /// User-defined absolute path to the emulator executable.
   final String? userPath;
 
@@ -60,6 +66,7 @@ class StandaloneEmulatorModel {
     required this.isretroAchievementsCompatible,
     this.androidPackageName,
     this.androidActivityName,
+    this.iosUrlScheme,
     this.userPath,
     this.isUserDefault,
   });
@@ -88,6 +95,7 @@ class StandaloneEmulatorModel {
           (int.tryParse(map['is_ra_compatible']?.toString() ?? '0') ?? 0) == 1,
       androidPackageName: safeStringCast(map['android_package_name']),
       androidActivityName: safeStringCast(map['android_activity_name']),
+      iosUrlScheme: safeStringCast(map['ios_url_scheme']),
       userPath: safeStringCast(map['emulator_path']),
       isUserDefault: map['is_user_default'] != null
           ? (int.tryParse(map['is_user_default']?.toString() ?? '0') ?? 0) == 1
@@ -106,6 +114,7 @@ class StandaloneEmulatorModel {
       'core_filename': coreFilename,
       'is_default': isDefault ? 1 : 0,
       'is_ra_compatible': isretroAchievementsCompatible ? 1 : 0,
+      'ios_url_scheme': iosUrlScheme,
     };
   }
 
@@ -122,6 +131,7 @@ class StandaloneEmulatorModel {
     bool? isretroAchievementsCompatible,
     String? androidPackageName,
     String? androidActivityName,
+    String? iosUrlScheme,
     String? userPath,
     bool? isUserDefault,
   }) {
@@ -138,6 +148,7 @@ class StandaloneEmulatorModel {
           isretroAchievementsCompatible ?? this.isretroAchievementsCompatible,
       androidPackageName: androidPackageName ?? this.androidPackageName,
       androidActivityName: androidActivityName ?? this.androidActivityName,
+      iosUrlScheme: iosUrlScheme ?? this.iosUrlScheme,
       userPath: userPath ?? this.userPath,
       isUserDefault: isUserDefault ?? this.isUserDefault,
     );
@@ -151,6 +162,20 @@ class StandaloneEmulatorModel {
   /// On desktop, checks for the existence of the executable at [userPath].
   /// On Android, performs a package name lookup via native channels.
   Future<bool> get isInstalled async {
+    if (Platform.isIOS) {
+      final scheme = iosUrlScheme?.trim();
+      if (scheme == null || scheme.isEmpty) return false;
+
+      try {
+        return await canLaunchUrl(Uri.parse('$scheme://'));
+      } catch (e) {
+        _log.e(
+          'StandaloneEmulatorModel.isInstalled: Error checking iOS scheme $scheme: $e',
+        );
+        return false;
+      }
+    }
+
     if (!Platform.isAndroid) {
       return isConfigured && userPath != null && await File(userPath!).exists();
     }

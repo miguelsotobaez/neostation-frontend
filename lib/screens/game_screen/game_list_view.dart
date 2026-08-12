@@ -13,7 +13,6 @@ import '../../utils/game_utils.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
-import '../../utils/rom_tree.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
 
@@ -35,13 +34,6 @@ class GameListView extends StatefulWidget {
   final bool isNavigatingFast;
   final VoidCallback? onGamepadReactivated;
 
-  /// Subfolder navigation: the first [folderCount] entries of [games] are folder
-  /// placeholders rendered from [folderEntries]; confirming one calls
-  /// [onFolderActivated] with its index to descend.
-  final int folderCount;
-  final List<RomFolderEntry> folderEntries;
-  final void Function(int folderIndex)? onFolderActivated;
-
   const GameListView({
     super.key,
     required this.system,
@@ -53,9 +45,6 @@ class GameListView extends StatefulWidget {
     this.isAllMode = false,
     this.isNavigatingFast = false,
     this.onGamepadReactivated,
-    this.folderCount = 0,
-    this.folderEntries = const [],
-    this.onFolderActivated,
   });
 
   @override
@@ -120,11 +109,6 @@ class GameListViewState extends State<GameListView>
           initialIndex: widget.selectedIndex,
           totalItems: widget.games.length,
         );
-        // Force the highlight layer to rebuild now that the scroll controller
-        // has clients. Without this, a short list that needs no scrolling never
-        // fires a scroll notification, so the selected row stays un-highlighted
-        // (its on-primary text/icon then looks dimmed) after a view-mode switch.
-        setState(() {});
       }
     });
   }
@@ -292,18 +276,6 @@ class GameListViewState extends State<GameListView>
                       final game = widget.games[index];
                       final isSelected = index == widget.selectedIndex;
 
-                      // Folder rows occupy the first [folderCount] slots.
-                      if (index < widget.folderCount) {
-                        return _buildFolderRow(
-                          theme,
-                          widget.folderEntries[index],
-                          game,
-                          index,
-                          isSelected,
-                          totalItemHeight,
-                        );
-                      }
-
                       return GestureDetector(
                         onTap: () {
                           // Touch users have no A button: the first tap selects
@@ -383,83 +355,6 @@ class GameListViewState extends State<GameListView>
           ),
         ),
       ],
-    );
-  }
-
-  /// Renders a navigable subfolder row (icon + name + recursive game count).
-  ///
-  /// Touch follows the same contract as the game rows: the first tap selects the
-  /// folder (so the details panel previews it), a second tap on the selected
-  /// folder descends into it.
-  Widget _buildFolderRow(
-    ThemeData theme,
-    RomFolderEntry folder,
-    GameModel placeholder,
-    int index,
-    bool isSelected,
-    double totalItemHeight,
-  ) {
-    final fg = isSelected
-        ? theme.colorScheme.onPrimary
-        : theme.colorScheme.onSurface;
-
-    return GestureDetector(
-      onTap: () {
-        if (isSelected) {
-          SfxService().playEnterSound();
-          widget.onFolderActivated?.call(index);
-          return;
-        }
-        SfxService().playNavSound();
-        widget.onGameSelected(placeholder);
-      },
-      child: Container(
-        height: totalItemHeight,
-        color: Colors.transparent,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 2.r),
-          alignment: Alignment.centerLeft,
-          child: Row(
-            children: [
-              Container(
-                margin: EdgeInsets.only(right: 4.r),
-                child: Icon(
-                  Symbols.folder_rounded,
-                  size: 12.r,
-                  fill: 1,
-                  color: isSelected ? fg : theme.colorScheme.secondary,
-                ),
-              ),
-              Expanded(
-                child: RepaintBoundary(
-                  child: Text(
-                    folder.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w500,
-                      fontSize: 11.r,
-                      color: fg,
-                      fontFamily: theme.textTheme.bodyMedium?.fontFamily,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 4.r),
-              Text(
-                '${folder.gameCount}',
-                style: TextStyle(
-                  fontSize: 9.r,
-                  color: fg.withValues(alpha: 0.7),
-                  fontFamily: theme.textTheme.bodyMedium?.fontFamily,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

@@ -122,6 +122,79 @@ void main() {
     expect(offenders, isEmpty, reason: offenders.join('\n'));
   });
 
+  test('every iOS emulator declares a non-empty url_scheme', () {
+    final offenders = <String>[];
+    for (final system in systems) {
+      for (final emu in system.emulators) {
+        final ios = emu.platforms['ios'];
+        if (ios == null) continue;
+        final schemeIsMissing =
+            ios is! Map ||
+            (ios['url_scheme']?.toString().trim().isEmpty ?? true);
+        if (schemeIsMissing) {
+          offenders.add('${system.name}: ${emu.uniqueId}');
+        }
+      }
+    }
+
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'iOS emulator definitions need url_scheme for install detection:\n'
+          '${offenders.join('\n')}',
+    );
+  });
+
+  test('PS2 exposes ARMSX2 on iOS through the armsx2 URL scheme', () {
+    final ps2 = systems.firstWhere((s) => s.name == 'ps2.json');
+    final armsx2 = ps2.emulators.firstWhere(
+      (e) => e.uniqueId == 'ps2.ios.armsx2',
+    );
+    final ios = Map<String, dynamic>.from(armsx2.platforms['ios'] as Map);
+
+    expect(ios['url_scheme'], 'armsx2');
+  });
+
+  test('Switch exposes MeloNX on iOS through the melonx URL scheme', () {
+    final switchSystem = systems.firstWhere((s) => s.name == 'switch.json');
+    final melonx = switchSystem.emulators.firstWhere(
+      (e) => e.uniqueId == 'switch.ios.melonx',
+    );
+    final ios = Map<String, dynamic>.from(melonx.platforms['ios'] as Map);
+
+    expect(ios['url_scheme'], 'melonx');
+  });
+
+  test('systems with RetroArch definitions expose one generic iOS RetroArch app', () {
+    final offenders = <String>[];
+
+    for (final system in systems) {
+      final hasRetroArchDefinition = system.emulators.any((e) {
+        final uid = e.uniqueId.toLowerCase();
+        final platformText = jsonEncode(e.platforms).toLowerCase();
+        return uid.contains('.ra.') ||
+            uid.contains('.ra32.') ||
+            uid.contains('.ra64.') ||
+            platformText.contains('retroarch');
+      });
+      if (!hasRetroArchDefinition) continue;
+
+      final iosRetroArch = system.emulators.where((e) {
+        final ios = e.platforms['ios'];
+        return ios is Map &&
+            ios['url_scheme']?.toString().toLowerCase() == 'retroarch';
+      }).toList();
+
+      if (iosRetroArch.length != 1) {
+        offenders.add(
+          '${system.name}: expected 1 generic iOS RetroArch entry, found ${iosRetroArch.length}',
+        );
+      }
+    }
+
+    expect(offenders, isEmpty, reason: offenders.join('\n'));
+  });
+
   test('the two systems fixed on this branch resolve to a single default', () {
     // Regression pins for the pair found on the AYN Thor.
     final switchSystem = systems.firstWhere((s) => s.name == 'switch.json');

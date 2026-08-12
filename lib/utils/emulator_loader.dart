@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:neostation/models/core_emulator_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
@@ -22,7 +23,27 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
     var emulators = await EmulatorRepository.getEmulatorsForSystemCurrentOs(
       systemId,
     );
-    if (Platform.isAndroid) {
+    if (Platform.isIOS) {
+      // iOS emulators are external apps, so executable-path configuration does
+      // not apply. Verify availability through each emulator's registered URL
+      // scheme instead. This prevents valid iOS entries from being shown as
+      // "Not configured" simply because they have no desktop executable path.
+      final updated = <CoreEmulatorModel>[];
+      for (final e in emulators) {
+        final scheme = e.iosUrlScheme?.trim();
+        if (scheme == null || scheme.isEmpty) {
+          updated.add(e.copyWith(isInstalled: false));
+          continue;
+        }
+        try {
+          final installed = await canLaunchUrl(Uri.parse('$scheme://'));
+          updated.add(e.copyWith(isInstalled: installed));
+        } catch (_) {
+          updated.add(e.copyWith(isInstalled: false));
+        }
+      }
+      emulators = updated;
+    } else if (Platform.isAndroid) {
       // Verification Protocol: Check native package presence via platform channel.
       final updated = <CoreEmulatorModel>[];
       for (final e in emulators) {

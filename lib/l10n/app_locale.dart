@@ -74,8 +74,6 @@ mixin AppLocale {
   static const String systemArtApplyBody = 'system_art_apply_body';
   static const String systemArtDownloading = 'system_art_downloading';
   static const String about = 'about';
-  static const String exit = 'exit';
-  static const String launcher = 'launcher';
   static const String themesSubtitle = 'themes_subtitle';
   static const String systemTheme = 'system_theme';
   static const String importTheme = 'import_theme';
@@ -110,10 +108,6 @@ mixin AppLocale {
   static const String hideBracketsSubtitle = 'hide_brackets_subtitle';
   static const String recursiveScanEnabled = 'recursive_scan_enabled';
   static const String recursiveScanDisabled = 'recursive_scan_disabled';
-  static const String subfolderView = 'subfolder_view';
-  static const String subfolderViewSubtitle = 'subfolder_view_subtitle';
-  static const String subfolderViewEnabled = 'subfolder_view_enabled';
-  static const String subfolderViewDisabled = 'subfolder_view_disabled';
   static const String errorScanningSystem = 'error_scanning_system';
   static const String scrapedTitlesUsed = 'scraped_titles_used';
   static const String gameExtensionsHidden = 'game_extensions_hidden';
@@ -195,6 +189,8 @@ mixin AppLocale {
   // Directories
   // ---------------------------------------------------------------------------
   static const String configureDirectories = 'configure_directories';
+  static const String configureLaunch = 'configure_launch';
+  static const String shortcutSetupOpenError = 'shortcut_setup_open_error';
   static const String configureRomsFolder = 'configure_roms_folder';
   static const String cannotAccessFolder = 'cannot_access_folder';
   static const String backgroundImage = 'background_image';
@@ -243,12 +239,6 @@ mixin AppLocale {
   static const String clearAll = 'clear_all';
   static const String noActiveNotifications = 'no_active_notifications';
 
-  // ---------------------------------------------------------------------------
-  // Exit
-  // ---------------------------------------------------------------------------
-  static const String exitApplication = 'exit_application';
-  static const String exitConfirmation = 'exit_confirmation';
-  static const String confirmExit = 'confirm_exit';
   static const String rescanAllFolders = 'rescan_all_folders';
   static const String rescanAllFoldersSubtitle = 'rescan_all_folders_subtitle';
 
@@ -825,8 +815,6 @@ mixin AppLocale {
   // TV directory picker
   // ---------------------------------------------------------------------------
   static const String selectStorage = 'select_storage';
-  static const String homeFolder = 'home_folder';
-  static const String filesystemRoot = 'filesystem_root';
   static const String internalStorage = 'internal_storage';
   static const String externalStorage = 'external_storage';
   static const String folderRestrictedAndroid = 'folder_restricted_android';
@@ -947,6 +935,29 @@ mixin AppLocale {
   static const String toolsSubtitle = 'tools_subtitle';
   static const String addRomFolder = 'add_rom_folder';
   static const String removeRomFolder = 'remove_rom_folder';
+
+  // iOS emulator library integration.
+  static const String iosEmuSync = 'ios_emu_sync';
+  static const String iosEmuResync = 'ios_emu_resync';
+  static const String iosEmuLinkFolder = 'ios_emu_link_folder';
+  static const String iosEmuChangeFolder = 'ios_emu_change_folder';
+  static const String iosEmuLinkingFailed = 'ios_emu_linking_failed';
+  static const String iosRetroarchSyncRequested = 'ios_retroarch_sync_requested';
+  static const String iosRetroarchUnavailable = 'ios_retroarch_unavailable';
+  static const String iosArmsx2SyncRequested = 'ios_armsx2_sync_requested';
+  static const String iosArmsx2Unavailable = 'ios_armsx2_unavailable';
+  static const String iosMelonxSyncRequested = 'ios_melonx_sync_requested';
+  static const String iosMelonxUnavailable = 'ios_melonx_unavailable';
+  static const String iosRetroarchStatusNeedsLink = 'ios_retroarch_status_needs_link';
+  static const String iosRetroarchStatusNeedsSync = 'ios_retroarch_status_needs_sync';
+  static const String iosRetroarchStatusSynced = 'ios_retroarch_status_synced';
+  static const String iosRetroarchLinkSuccess = 'ios_retroarch_link_success';
+  static const String iosArmsx2StatusNeedsLink = 'ios_armsx2_status_needs_link';
+  static const String iosArmsx2StatusNeedsSync = 'ios_armsx2_status_needs_sync';
+  static const String iosArmsx2StatusSynced = 'ios_armsx2_status_synced';
+  static const String iosArmsx2LinkSuccess = 'ios_armsx2_link_success';
+  static const String iosMelonxStatusSynced = 'ios_melonx_status_synced';
+  static const String iosMelonxStatusNeedsSync = 'ios_melonx_status_needs_sync';
 
   // Library search & filtering.
   static const String searchTitle = 'search_title';

@@ -1,0 +1,20 @@
+// Relative import to be able to reuse the C sources.
+// See the comment in ../flutter_7zip.podspec for more information.
+// This mirrors ../../macos/Classes/flutter_7zip.cpp — same C sources, iOS target.
+#include "../../src/flutter_7zip.cpp"
+#include "../../src/7zip/C/7zAlloc.c"
+#include "../../src/7zip/C/7zArcIn.c"
+#include "../../src/7zip/C/7zBuf.c"
+#include "../../src/7zip/C/7zBuf2.c"
+#include "../../src/7zip/C/7zCrc.c"
+#include "../../src/7zip/C/7zCrcOpt.c"
+#include "../../src/7zip/C/7zDec.c"
+#include "../../src/7zip/C/7zFile.c"
+#include "../../src/7zip/C/7zStream.c"
+#include "../../src/7zip/C/Bcj2.c"
+#include "../../src/7zip/C/Bra.c"
+#include "../../src/7zip/C/Bra86.c"
+#include "../../src/7zip/C/Delta.c"
+#include "../../src/7zip/C/LzmaDec.c"
+#include "../../src/7zip/C/Lzma2Dec.c"
+#include "../../src/7zip/C/CpuArch.c"

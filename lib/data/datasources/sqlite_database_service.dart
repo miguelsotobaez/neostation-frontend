@@ -761,6 +761,19 @@ class SqliteDatabaseService {
       final romsToDelete = <String>[];
       for (final rom in existingRoms) {
         final path = rom['rom_path'].toString();
+
+        // iOS external-library imports are intentional virtual rows. Their
+        // `rom_path` is a direct-launch URL rather than a file the filesystem
+        // scanner can rediscover, so a normal rescan must not prune them as
+        // "missing". Each emulator library service removes its own stale
+        // virtual rows whenever a fresh export is received.
+        final lowerPath = path.toLowerCase();
+        if (lowerPath.startsWith('armsx2://') ||
+            lowerPath.startsWith('melonx://')) {
+          knownPaths.add(path);
+          continue;
+        }
+
         if (existingRomPaths.contains(path)) {
           knownPaths.add(path);
         } else {

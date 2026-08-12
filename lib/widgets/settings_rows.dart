@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -212,8 +214,12 @@ class EmulatorRow extends StatelessWidget {
                                 color: const Color(0xFF00387D),
                               ),
                             ),
-                          // Installation Status Indicator.
-                          if (emulator != null)
+                          // iOS uses external emulator apps selected by
+                          // URL scheme. Their installation state is already
+                          // exposed in System Settings > Emulators, so avoid a
+                          // redundant "Ready / Not configured" subtitle here.
+                          // On other platforms, keep the existing status UI.
+                          if (emulator != null && !Platform.isIOS)
                             Row(
                               children: [
                                 Icon(

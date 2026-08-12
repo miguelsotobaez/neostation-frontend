@@ -4,6 +4,12 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:external_folder_access/external_folder_access.dart';
+import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/armsx2_library_service.dart';
+import 'package:neostation/services/melonx_library_service.dart';
+import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/providers/file_provider.dart';
@@ -63,10 +69,25 @@ class DirectoriesSettingsContentState
   String? _currentUserDataPath;
   bool _isLoading = true;
 
+  // iOS-only: live-linking an external folder (e.g. RetroArch's) via a
+  // persisted security-scoped bookmark, see external_folder_access. Holds
+  // the bookmark key currently being picked ('retroarch', 'armsx2', ...) so
+  // only that emulator's own button shows a spinner, rather than every card
+  // freezing at once as it would with a single shared boolean.
+  String? _linkingFolderKey;
+
   // Migration progress state (shown inline, no dialog).
   bool _isMigrating = false;
   double _migrationProgress = 0.0;
   String _migrationFile = '';
+
+  /// Whether the ES-DE import feature exists at all on this platform.
+  /// False on iOS: an ES-DE install lives in another app's sandbox, which
+  /// iOS doesn't expose the way desktop and Android do, so the whole
+  /// feature — list entries, section header, progress bar, result summary
+  /// and actions — is absent rather than present-but-disabled. Every ES-DE
+  /// entry point below is gated on this one flag.
+  static final bool _esdeSupported = !Platform.isIOS;
 
   // ES-DE import progress state (shown inline, no dialog).
   bool _isImporting = false;
@@ -139,6 +160,14 @@ class DirectoriesSettingsContentState
     }
 
     // ES-DE import actions (grouped under their own section header in build).
+    // Absent where the feature isn't supported (see [_esdeSupported]).
+    // Leaving _esdeSectionStart at -1 keeps its header out of the list too,
+    // since build() inserts that header by index match.
+    if (!_esdeSupported) {
+      _esdeSectionStart = -1;
+      return;
+    }
+
     _esdeSectionStart = _directoryItems.length;
     _directoryItems.add({
       'title': AppLocale.esdeSelectFolder,
@@ -239,6 +268,7 @@ class DirectoriesSettingsContentState
       context.read<SqliteConfigProvider>().config.esdeFolderPath;
 
   Future<void> _selectEsdeFolder() async {
+    if (!_esdeSupported) return;
     try {
       String? selected;
 
@@ -267,8 +297,7 @@ class DirectoriesSettingsContentState
           }
         }
       } else {
-        selected = await TvDirectoryPicker.pickDirectory(
-          context,
+        selected = await FilePicker.getDirectoryPath(
           dialogTitle: AppLocale.esdeSelectFolder.getString(context),
         );
       }
@@ -295,6 +324,7 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _runEsdeImport() async {
+    if (!_esdeSupported) return;
     final root = _esdePath;
     if (root.trim().isEmpty) {
       AppNotification.showNotification(
@@ -424,7 +454,7 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _resetEsdeImport() async {
-    if (_isImporting) return;
+    if (!_esdeSupported || _isImporting) return;
 
     final confirmed = await ConfirmActionDialog.show(
       context,
@@ -467,6 +497,423 @@ class DirectoriesSettingsContentState
   // ROM folder picker
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // iOS: link + sync with RetroArch
+  // ---------------------------------------------------------------------------
+
+  /// Live-links an external folder (e.g. RetroArch's) via a persisted
+  /// security-scoped bookmark instead of copying its contents in. See
+  /// ExternalFolderAccess and ConfigService.linkedExternalFolderPath.
+  /// Links a folder for the emulator identified by [bookmarkKey]. Each
+  /// emulator gets its own security-scoped bookmark natively, so linking
+  /// ARMSX2's folder never invalidates RetroArch's (the plugin originally
+  /// held a single global bookmark, which made two linked emulators
+  /// impossible).
+  Future<void> _linkExternalFolder({
+    required String bookmarkKey,
+    required String successMessage,
+  }) async {
+    if (_linkingFolderKey != null) return;
+
+    setState(() => _linkingFolderKey = bookmarkKey);
+    try {
+      final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
+        key: bookmarkKey,
+      );
+      if (selected == null || !mounted) return;
+
+      // iOS uses one shared ROM source for RetroArch and ARMSX2. Both cards
+      // therefore update the same persisted bookmark/path instead of creating
+      // a second ROM root that would be scanned twice.
+      ConfigService.linkedExternalFolderPath = selected;
+
+      final configProvider = Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      );
+      await configProvider.addRomFolder(selected, scan: true);
+      if (!mounted) return;
+
+      await _loadCurrentPaths();
+      if (!mounted) return;
+
+      AppNotification.showNotification(
+        context,
+        successMessage,
+        type: NotificationType.info,
+      );
+    } catch (e) {
+      _log.e('Link external folder failed ($bookmarkKey): $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.iosEmuLinkingFailed
+              .getString(context)
+              .replaceFirst('{error}', e.toString()),
+          type: NotificationType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _linkingFolderKey = null);
+    }
+  }
+
+  /// Triggers RetroArch's library-export protocol
+  /// (retroarch://library?scheme=neostation). RetroArch calls back
+  /// asynchronously with its full game list — see
+  /// RetroArchLibraryService.handleIncomingUri, wired up in main.dart.
+  /// This just opens the request; the actual sync completing happens in
+  /// the background and there's no reliable callback point to await here.
+  Future<void> _syncWithRetroArch() async {
+    final opened = await RetroArchLibraryService.requestLibrarySync();
+    if (!mounted) return;
+    AppNotification.showNotification(
+      context,
+      opened
+          ? AppLocale.iosRetroarchSyncRequested.getString(context)
+          : AppLocale.iosRetroarchUnavailable.getString(context),
+      type: opened ? NotificationType.info : NotificationType.error,
+    );
+  }
+
+  /// Triggers ARMSX2 iOS's library-export protocol. ARMSX2 returns to
+  /// NeoStation through neostation://armsx2 with a base64url JSON payload.
+  /// Armsx2LibraryService imports that payload directly into NeoStation's PS2
+  /// catalogue, so ARMSX2 and RetroArch can share the same ROM folder.
+  Future<void> _syncWithArmsx2() async {
+    final opened = await Armsx2LibraryService.requestLibrarySync();
+    if (!mounted) return;
+    AppNotification.showNotification(
+      context,
+      opened
+          ? AppLocale.iosArmsx2SyncRequested.getString(context)
+          : AppLocale.iosArmsx2Unavailable.getString(context),
+      type: opened ? NotificationType.info : NotificationType.error,
+    );
+  }
+
+  /// Opens the one-time Apple Shortcut setup used for ARMSX2 direct
+  /// launching. Once the shared iCloud link is published this opens the
+  /// ready-made Shortcut; until then the service opens the Shortcut editor.
+  Future<void> _configureArmsx2Launch() async {
+    final opened =
+        await IosShortcutJitLaunchService.openArmsx2ShortcutInstaller();
+    if (!mounted || opened) return;
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.shortcutSetupOpenError.getString(context),
+      type: NotificationType.error,
+    );
+  }
+
+  /// Triggers MeloNX's alternate-frontend library export. MeloNX returns a
+  /// base64url JSON GameScheme array through neostation://melonx. The service
+  /// imports it directly into NeoStation's Nintendo Switch catalogue; no ROM
+  /// folder scan or shared filesystem access is required.
+  Future<void> _syncWithMeloNX() async {
+    final opened = await MelonxLibraryService.requestLibrarySync();
+    if (!mounted) return;
+    AppNotification.showNotification(
+      context,
+      opened
+          ? AppLocale.iosMelonxSyncRequested.getString(context)
+          : AppLocale.iosMelonxUnavailable.getString(context),
+      type: opened ? NotificationType.info : NotificationType.error,
+    );
+  }
+
+  /// Opens the one-time Apple Shortcut installer used for MeloNX direct
+  /// launching. The user still confirms the import in Shortcuts; after that,
+  /// NeoStation can run the shortcut automatically for every game launch.
+  Future<void> _configureMeloNXLaunch() async {
+    final opened =
+        await IosShortcutJitLaunchService.openMeloNXShortcutInstaller();
+    if (!mounted || opened) return;
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.shortcutSetupOpenError.getString(context),
+      type: NotificationType.error,
+    );
+  }
+
+  /// Cards shown only on iOS, one per emulator NeoStation can hand games
+  /// to. Rendered as non-navigable rows at the top of the directory list
+  /// (see build) rather than as entries in [_directoryItems] — that list
+  /// drives index-sensitive section-header placement ([_esdeSectionStart]
+  /// etc.) that new entries could easily throw off without a way to
+  /// compile-check the change end to end.
+  List<Widget> _iosEmulatorCards(ThemeData theme) {
+    if (!Platform.isIOS) return const [];
+
+    return [
+      _buildIOSRetroArchSection(theme),
+      _buildIOSArmsx2Section(theme),
+      _buildIOSMeloNXSection(theme),
+    ];
+  }
+
+  /// RetroArch: link its folder, then sync its library so games launch
+  /// straight into it with one tap via its URL scheme.
+  Widget _buildIOSRetroArchSection(ThemeData theme) {
+    final isLinked = ConfigService.linkedExternalFolderPath != null;
+    final hasSynced = RetroArchLibraryService.hasSyncedLibrary;
+
+    final String statusText;
+    if (!isLinked) {
+      statusText = AppLocale.iosRetroarchStatusNeedsLink.getString(context);
+    } else if (!hasSynced) {
+      statusText = AppLocale.iosRetroarchStatusNeedsSync.getString(context);
+    } else {
+      statusText = AppLocale.iosRetroarchStatusSynced.getString(context);
+    }
+
+    return _buildIOSEmulatorCard(
+      theme: theme,
+      name: 'RetroArch',
+      icon: Symbols.sports_esports_rounded,
+      statusText: statusText,
+      isLinked: isLinked,
+      bookmarkKey: ExternalFolderAccess.defaultBookmarkKey,
+      successMessage: AppLocale.iosRetroarchLinkSuccess.getString(context),
+      trailingAction: SizedBox(
+        height: 48.r,
+        child: FilledButton.icon(
+          onPressed: !isLinked ? null : _syncWithRetroArch,
+          icon: Icon(Symbols.bolt_rounded, size: 20.r),
+          label: Text(
+            hasSynced
+                ? AppLocale.iosEmuResync.getString(context)
+                : AppLocale.iosEmuSync.getString(context),
+            style: TextStyle(fontSize: 14.r),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ARMSX2 (PS2) uses the exact same ROM source as RetroArch/NeoStation.
+  /// There is deliberately no second bookmark: Sync imports ARMSX2's exported
+  /// library into NeoStation, including PS2 games that the normal folder-based
+  /// detector cannot see because they are not inside a `ps2/` subfolder.
+  Widget _buildIOSArmsx2Section(ThemeData theme) {
+    final isLinked = ConfigService.linkedExternalFolderPath != null;
+    final hasSynced = Armsx2LibraryService.hasSyncedLibrary;
+
+    final String statusText;
+    if (!isLinked) {
+      statusText = AppLocale.iosArmsx2StatusNeedsLink.getString(context);
+    } else if (!hasSynced) {
+      statusText = AppLocale.iosArmsx2StatusNeedsSync.getString(context);
+    } else {
+      statusText = AppLocale.iosArmsx2StatusSynced.getString(context);
+    }
+
+    return _buildIOSEmulatorCard(
+      theme: theme,
+      name: 'ARMSX2',
+      icon: Symbols.stadia_controller_rounded,
+      statusText: statusText,
+      isLinked: isLinked,
+      bookmarkKey: ExternalFolderAccess.defaultBookmarkKey,
+      successMessage: AppLocale.iosArmsx2LinkSuccess.getString(context),
+      trailingAction: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 48.r,
+              child: FilledButton.icon(
+                onPressed: _syncWithArmsx2,
+                icon: Icon(Symbols.bolt_rounded, size: 20.r),
+                label: Text(
+                  hasSynced
+                ? AppLocale.iosEmuResync.getString(context)
+                : AppLocale.iosEmuSync.getString(context),
+                  style: TextStyle(fontSize: 14.r),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: 10.r),
+          Expanded(
+            child: SizedBox(
+              height: 48.r,
+              child: OutlinedButton.icon(
+                onPressed: _configureArmsx2Launch,
+                icon: Icon(Symbols.rocket_launch_rounded, size: 20.r),
+                label: Text(
+                  AppLocale.configureLaunch.getString(context),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13.r),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// MeloNX exports its own Nintendo Switch catalogue through a URL scheme,
+  /// so unlike RetroArch/ARMSX2 it does not need a linked ROM folder at all.
+  /// Sync alone imports the exported GameScheme JSON directly into NeoStation.
+  Widget _buildIOSMeloNXSection(ThemeData theme) {
+    final hasSynced = MelonxLibraryService.hasSyncedLibrary;
+
+    final statusText = hasSynced
+        ? AppLocale.iosMelonxStatusSynced.getString(context)
+        : AppLocale.iosMelonxStatusNeedsSync.getString(context);
+
+    return _buildIOSEmulatorCard(
+      theme: theme,
+      name: 'MeloNX',
+      icon: Symbols.videogame_asset_rounded,
+      statusText: statusText,
+      isLinked: true,
+      bookmarkKey: ExternalFolderAccess.defaultBookmarkKey,
+      successMessage: '',
+      showLinkButton: false,
+      trailingAction: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 48.r,
+              child: FilledButton.icon(
+                onPressed: _syncWithMeloNX,
+                icon: Icon(Symbols.bolt_rounded, size: 20.r),
+                label: Text(
+                  hasSynced
+                ? AppLocale.iosEmuResync.getString(context)
+                : AppLocale.iosEmuSync.getString(context),
+                  style: TextStyle(fontSize: 14.r),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: 10.r),
+          Expanded(
+            child: SizedBox(
+              height: 48.r,
+              child: OutlinedButton.icon(
+                onPressed:
+                    IosShortcutJitLaunchService.hasMeloNXShortcutInstaller
+                    ? _configureMeloNXLaunch
+                    : null,
+                icon: Icon(Symbols.rocket_launch_rounded, size: 20.r),
+                label: Text(
+                  AppLocale.configureLaunch.getString(context),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13.r),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shared card shell for an external emulator: name, status line, an
+  /// optional folder-link button, and an optional extra action (Sync).
+  Widget _buildIOSEmulatorCard({
+    required ThemeData theme,
+    required String name,
+    required IconData icon,
+    required String statusText,
+    required bool isLinked,
+    required String bookmarkKey,
+    required String successMessage,
+    bool showLinkButton = true,
+    Widget? trailingAction,
+  }) {
+    final isLinkingThis = _linkingFolderKey == bookmarkKey;
+    // Any pick in flight blocks the others: iOS presents one document
+    // picker at a time, and a second request while one is open is dropped.
+    final isAnyLinkInFlight = _linkingFolderKey != null;
+
+    final linkButton = SizedBox(
+      height: 48.r,
+      child: OutlinedButton.icon(
+        onPressed: isAnyLinkInFlight
+            ? null
+            : () => _linkExternalFolder(
+                bookmarkKey: bookmarkKey,
+                successMessage: successMessage,
+              ),
+        icon: isLinkingThis
+            ? SizedBox(
+                width: 18.r,
+                height: 18.r,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                isLinked ? Symbols.link_rounded : Symbols.add_link_rounded,
+                size: 20.r,
+              ),
+        label: Text(
+          isLinked
+              ? AppLocale.iosEmuChangeFolder.getString(context)
+              : AppLocale.iosEmuLinkFolder.getString(context),
+          style: TextStyle(fontSize: 14.r),
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4.r, vertical: 8.r),
+      child: Container(
+        padding: EdgeInsets.all(16.r),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.4,
+          ),
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: theme.colorScheme.primary, size: 24.r),
+                SizedBox(width: 10.r),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 16.r,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8.r),
+            Text(
+              statusText,
+              style: TextStyle(
+                fontSize: 13.r,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: 16.r),
+            Row(
+              children: [
+                if (showLinkButton) Expanded(child: linkButton),
+                if (showLinkButton && trailingAction != null)
+                  SizedBox(width: 10.r),
+                if (trailingAction != null) Expanded(child: trailingAction),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _selectRomFolder() async {
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
@@ -501,9 +948,24 @@ class DirectoriesSettingsContentState
             }
           }
         }
+      } else if (Platform.isIOS) {
+        // Same internal-folder approach as the setup wizard — no external
+        // picker on iOS, see ConfigService.getDefaultIOSRomsFolder().
+        selected = await ConfigService.getDefaultIOSRomsFolder();
+        if (selected != null &&
+            configProvider.config.romFolders.contains(selected)) {
+          if (mounted) {
+            AppNotification.showNotification(
+              context,
+              'Already using the internal roms folder. Drop ROMs into it '
+                  'via the Files app under "On My iPhone > NeoStation > roms".',
+              type: NotificationType.info,
+            );
+          }
+          return;
+        }
       } else {
-        selected = await TvDirectoryPicker.pickDirectory(
-          context,
+        selected = await FilePicker.getDirectoryPath(
           dialogTitle: AppLocale.selectRomsFolder.getString(context),
         );
       }
@@ -582,8 +1044,7 @@ class DirectoriesSettingsContentState
           }
         }
       } else {
-        selected = await TvDirectoryPicker.pickDirectory(
-          context,
+        selected = await FilePicker.getDirectoryPath(
           dialogTitle: AppLocale.selectUserDataFolder.getString(context),
           initialDirectory: _currentUserDataPath,
         );
@@ -881,6 +1342,18 @@ class DirectoriesSettingsContentState
                   // navigable item, so header insertion stays robust as the
                   // ROM-folder count changes.
                   final visualRows = <Map<String, dynamic>>[];
+
+                  // The iOS emulator cards ride inside the list rather than
+                  // sitting pinned above it: two cards plus the title left
+                  // almost no room for the directory rows on a landscape
+                  // phone, and a fixed header can't scroll out of the way.
+                  // They're not navigable rows — like section headers, they
+                  // carry no 'nav' index, so gamepad indices still line up
+                  // 1:1 with _directoryItems.
+                  for (final card in _iosEmulatorCards(theme)) {
+                    visualRows.add({'card': card});
+                  }
+
                   for (var i = 0; i < _directoryItems.length; i++) {
                     // "ROM Directories" header before add_rom (nav index 2).
                     if (i == 2) {
@@ -904,6 +1377,9 @@ class DirectoriesSettingsContentState
                     itemCount: visualRows.length,
                     itemBuilder: (context, visualIndex) {
                       final row = visualRows[visualIndex];
+                      if (row.containsKey('card')) {
+                        return row['card'] as Widget;
+                      }
                       if (row.containsKey('header')) {
                         return SettingsSectionHeader(
                           label: row['header'] as String,
@@ -1200,7 +1676,7 @@ class DirectoriesSettingsContentState
   }
 
   Widget _buildEsdeProgress(ThemeData theme) {
-    if (!_isImporting) return const SizedBox.shrink();
+    if (!_esdeSupported || !_isImporting) return const SizedBox.shrink();
     final pct = _importProgress;
     return Container(
       margin: EdgeInsets.only(bottom: 12.r),
@@ -1268,6 +1744,7 @@ class DirectoriesSettingsContentState
   }
 
   Widget _buildEsdeResultSummary(ThemeData theme) {
+    if (!_esdeSupported) return const SizedBox.shrink();
     final r = _lastEsdeResult;
     if (r == null || _isImporting) return const SizedBox.shrink();
     return Container(

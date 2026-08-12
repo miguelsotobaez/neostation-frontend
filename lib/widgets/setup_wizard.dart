@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,9 @@ import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:external_folder_access/external_folder_access.dart';
+import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
@@ -83,14 +87,22 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   //   Android: 0=UserData, 1=Permissions, 2=Folder, 3=Scanning,
   //            4=EsdeImport, 5=ArtPack
   //   Desktop: 0=UserData, 1=Folder, 2=Scanning, 3=EsdeImport, 4=ArtPack
+  //   iOS:     0=UserData, 1=Folder, 2=Scanning, 3=ArtPack (no ES-DE)
   // The Permissions step covers both All-Files access and the accessibility
   // (Screen Return) service.
   int get _stepUserData => 0;
   int get _stepPermissions => Platform.isAndroid ? 1 : -1;
   int get _stepFolder => Platform.isAndroid ? 2 : 1;
   int get _stepScanning => Platform.isAndroid ? 3 : 2;
-  int get _stepEsde => Platform.isAndroid ? 4 : 3;
-  int get _stepArtPack => Platform.isAndroid ? 5 : 4;
+  // iOS has no ES-DE step at all — an ES-DE install lives in another app's
+  // sandbox, which iOS doesn't expose. Resolving it to -1 means every
+  // `_currentStep == _stepEsde` comparison is false there, and ArtPack
+  // moves up into the slot ES-DE would have occupied so the progress dots
+  // match the steps the user actually walks through.
+  int get _stepEsde => Platform.isIOS ? -1 : (Platform.isAndroid ? 4 : 3);
+  int get _stepArtPack => Platform.isAndroid
+      ? 5
+      : (Platform.isIOS ? 3 : 4);
 
   /// The art-pack step is always the final step of the wizard.
   bool get _isLastStep => _currentStep == _stepArtPack;
@@ -267,7 +279,10 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   //          4=EsdeImport, 5=ArtPack (6 steps)
   // Desktop: 0=UserData, 1=FolderSelect, 2=Scanning, 3=EsdeImport,
   //          4=ArtPack (5 steps)
-  int get _totalSteps => Platform.isAndroid ? 6 : 5;
+  // iOS:     0=UserData, 1=FolderSelect, 2=Scanning, 3=ArtPack (4 steps)
+  int get _totalSteps => Platform.isAndroid
+      ? 6
+      : (Platform.isIOS ? 4 : 5);
 
   @override
   Widget build(BuildContext context) {
@@ -765,8 +780,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           }
         }
       } else {
-        selected = await TvDirectoryPicker.pickDirectory(
-          context,
+        selected = await FilePicker.getDirectoryPath(
           dialogTitle: AppLocale.selectUserDataFolder.getString(context),
           initialDirectory: _selectedUserDataPath,
         );
@@ -948,12 +962,35 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     final titleSize = isLandscape ? 14.r : 24.r;
     final textSize = isLandscape ? 10.r : 14.r;
 
+    // iOS doesn't have free filesystem access the way desktop/Android do —
+    // this step links + syncs RetroArch's own folder rather than browsing
+    // an arbitrary one, so it's framed around that instead of generic
+    // "pick a folder" language that doesn't match what's actually
+    // happening. See _selectFolder()'s iOS branch.
+    final String title;
+    final String description;
+    final IconData icon;
+    if (Platform.isIOS) {
+      icon = Symbols.sports_esports_rounded;
+      title = 'Link RetroArch';
+      description = _selectedFolder != null
+          ? 'Linked and synced.\n\n$_selectedFolder'
+          : 'Link RetroArch\'s own folder so NeoStation can see your '
+                'games and launch them directly with one tap.';
+    } else {
+      icon = Symbols.folder_open_rounded;
+      title = AppLocale.selectRomFolder.getString(context);
+      description = _selectedFolder != null
+          ? '${AppLocale.romFolderSelected.getString(context)}\n\n$_selectedFolder'
+          : AppLocale.chooseRomFolderDesc.getString(context);
+    }
+
     return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Symbols.folder_open_rounded,
+            icon,
             size: iconSize,
             color: _selectedFolder != null
                 ? Colors.green
@@ -962,7 +999,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           SizedBox(height: isLandscape ? 16.r : 24.r),
 
           Text(
-            AppLocale.selectRomFolder.getString(context),
+            title,
             style: TextStyle(
               fontSize: titleSize,
               fontWeight: FontWeight.bold,
@@ -972,9 +1009,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           SizedBox(height: isLandscape ? 8.r : 16.r),
 
           Text(
-            _selectedFolder != null
-                ? '${AppLocale.romFolderSelected.getString(context)}\n\n$_selectedFolder'
-                : AppLocale.chooseRomFolderDesc.getString(context),
+            description,
             style: TextStyle(
               fontSize: textSize,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -1449,8 +1484,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           }
         }
       } else {
-        selected = await TvDirectoryPicker.pickDirectory(
-          context,
+        selected = await FilePicker.getDirectoryPath(
           dialogTitle: AppLocale.esdeSelectFolder.getString(context),
         );
       }
@@ -1798,7 +1832,9 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       return AppLocale.next.getString(context);
     }
     if (_currentStep == _stepFolder) {
-      return AppLocale.selectFolder.getString(context);
+      return Platform.isIOS
+          ? (_selectedFolder != null ? 'Continue' : 'Link RetroArch')
+          : AppLocale.selectFolder.getString(context);
     }
     if (_currentStep == _stepEsde) {
       // Once an import has run, the primary action becomes "Next".
@@ -1848,8 +1884,17 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
 
     if (_currentStep == _stepScanning) {
-      // Scan finished → advance to the optional ES-DE import step.
-      setState(() => _currentStep = _stepEsde);
+      // Scan finished → advance to the optional ES-DE import step, except
+      // on iOS: ES-DE import needs picking an arbitrary external folder,
+      // which iOS's sandbox doesn't support the way desktop/Android do,
+      // and ES-DE itself isn't a realistic iOS setup anyway. Skip straight
+      // to the art-pack step, same as if the user had tapped "Skip" on the
+      // ES-DE step manually.
+      setState(
+        // ES-DE doesn't exist on iOS (_stepEsde is -1 there), so scanning
+        // hands straight over to the art-pack step.
+        () => _currentStep = Platform.isIOS ? _stepArtPack : _stepEsde,
+      );
       return;
     }
 
@@ -1947,8 +1992,44 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         if (result != null && mounted) {
           await configProvider.addRomFolder(result, scan: false);
         }
+      } else if (Platform.isIOS) {
+        // Lead with linking RetroArch's own folder here — now that
+        // launching found games works (see RetroArchLibraryService), it's
+        // the better default for anyone using RetroArch. The plain
+        // internal-folder path (ConfigService.getDefaultIOSRomsFolder,
+        // via selectRomFolder below) remains available afterwards from
+        // Settings > Directories for anyone who declines or doesn't use
+        // RetroArch — this is only about which one leads during
+        // first-run onboarding.
+        final linked = await ExternalFolderAccess.pickAndBookmarkFolder();
+        if (linked != null && mounted) {
+          ConfigService.linkedExternalFolderPath = linked;
+          await configProvider.addRomFolder(linked, scan: false);
+          result = linked;
+
+          // Immediately follow the link with a sync request — RetroArch's
+          // response arrives asynchronously (RetroArchLibraryService
+          // already triggers a rescan when it does), but that's a
+          // background event the wizard's own state won't necessarily
+          // pick up mid-setup. Tell the user a relaunch guarantees they'll
+          // see everything, rather than leaving it to chance.
+          await RetroArchLibraryService.requestLibrarySync();
+          if (mounted) {
+            AppNotification.showNotification(
+              context,
+              'Linked! If your games don\'t show up in a few seconds, '
+                  'relaunch NeoStation to see them.',
+              type: NotificationType.info,
+            );
+          }
+        } else if (mounted) {
+          // Declined/cancelled the picker — fall back to the internal
+          // default so onboarding still has somewhere to go.
+          await configProvider.selectRomFolder(scan: false);
+          result = configProvider.config.romFolder;
+        }
       } else {
-        await configProvider.selectRomFolder(scan: false, context: context);
+        await configProvider.selectRomFolder(scan: false);
         // Provider already called addRomFolder internally; read back the path
         result = configProvider.config.romFolder;
       }

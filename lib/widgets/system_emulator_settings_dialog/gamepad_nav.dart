@@ -121,14 +121,22 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
   }
 
   void _navigateLeft() {
-    if (_currentTab != 1 || Platform.isAndroid || _openMenuIndex != -1) return;
+    if (_currentTab != 1 ||
+        !_usesExecutablePicker ||
+        _openMenuIndex != -1) {
+      return;
+    }
     if (_emulatorActionIndex == 0) return;
     SfxService().playNavSound();
     rebuild(() => _emulatorActionIndex = 0);
   }
 
   void _navigateRight() {
-    if (_currentTab != 1 || Platform.isAndroid || _openMenuIndex != -1) return;
+    if (_currentTab != 1 ||
+        !_usesExecutablePicker ||
+        _openMenuIndex != -1) {
+      return;
+    }
     if (_emulatorActionIndex == 1) return;
     SfxService().playNavSound();
     rebuild(() => _emulatorActionIndex = 1);
@@ -175,7 +183,12 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
     }
     if (_currentTab == 1) {
       if (_totalEmulators == 0) return;
-      if (_emulatorActionIndex == 1 && !Platform.isAndroid) {
+
+      // iOS treats this tab as an installation-status view only. Selecting a
+      // row must not change the preferred/default emulator.
+      if (Platform.isIOS) return;
+
+      if (_emulatorActionIndex == 1 && _usesExecutablePicker) {
         final item = _displayItems[_selectedIndex];
         if (item is EmulatorStandaloneItem) {
           _configureStandalonePath(item.standalone);
@@ -199,13 +212,6 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
           widget.system.folderName != 'all' &&
           widget.system.folderName != 'android') {
         _toggleRecursiveScan(!_system.recursiveScan);
-      } else if (_generalIndex == 5 &&
-          widget.system.folderName != 'all' &&
-          widget.system.folderName != 'android') {
-        // Inert unless recursive scanning is on (no subfolders to show).
-        if (_system.recursiveScan) {
-          _toggleSubfolderView(!_system.subfolderView);
-        }
       }
     } else if (_currentTab == 2) {
       if (_appearanceIndex == 0) {

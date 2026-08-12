@@ -30,7 +30,14 @@ class ScreenscraperClient {
     if (_appVersion != null) return _appVersion!;
 
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
+      // PackageInfo.fromPlatform() crosses a platform channel, and a channel
+      // call that never answers would hang every caller behind it forever —
+      // including the login screen, which awaits the softname before it can
+      // send its first request. The identity string is cosmetic to the API,
+      // so a short wait then a fallback is strictly better than blocking.
+      final packageInfo = await PackageInfo.fromPlatform().timeout(
+        _packageInfoTimeout,
+      );
       final name = packageInfo.appName.isNotEmpty
           ? packageInfo.appName
           : 'neostation';
@@ -51,10 +58,22 @@ class ScreenscraperClient {
       _appVersion = '$name-$version-$platform';
       return _appVersion!;
     } catch (e) {
+      _log.w('Could not resolve app identity for ScreenScraper ($e) — '
+          'falling back to a generic softname.');
       _appVersion = 'neostation';
       return _appVersion!;
     }
   }
+
+  /// How long [getSoftname] waits on the platform channel before falling
+  /// back to a generic identity.
+  static const Duration _packageInfoTimeout = Duration(seconds: 5);
+
+  /// How long a request waits for a concurrency slot before giving up. Long
+  /// enough that a genuinely busy queue still drains (slow scrapes hold a
+  /// slot for the length of one HTTP call), short enough that a leaked slot
+  /// surfaces as an error instead of an endless spinner.
+  static const Duration _semaphoreAcquireTimeout = Duration(seconds: 15);
 
   /// Persistent HTTP client with SSL certificate validation bypass for legacy compatibility.
   static final http.Client _httpClient = () {
@@ -106,14 +125,27 @@ class ScreenscraperClient {
 
     int attempt = 0;
     while (attempt < maxRetries) {
+      // Tracks whether this iteration actually holds a slot, so the finally
+      // block below releases exactly once. The previous code released
+      // immediately after the GET and then released *again* from its catch
+      // blocks whenever the response handling threw (an HTTP 430 raising
+      // ScreenscraperQuotaExceededException did precisely that), handing out
+      // a slot that was never held and corrupting the pool count.
+      bool acquired = false;
       try {
-        await _requestSemaphore.acquire();
+        try {
+          await _requestSemaphore.acquire(timeout: _semaphoreAcquireTimeout);
+        } on TimeoutException {
+          throw ScreenscraperSemaphoreTimeoutException(
+            'No request slot available after '
+            '${_semaphoreAcquireTimeout.inSeconds}s',
+          );
+        }
+        acquired = true;
 
         final response = await _httpClient
             .get(url, headers: headers)
             .timeout(timeout);
-
-        _requestSemaphore.release();
 
         if (response.statusCode == 200 || response.statusCode == 403) {
           _dailyRequestsCount++;
@@ -135,8 +167,12 @@ class ScreenscraperClient {
         }
 
         return response;
+      } on ScreenscraperSemaphoreTimeoutException {
+        // Never retried: if no slot came free in 15s, hammering the same
+        // exhausted pool two more times only delays the error the caller
+        // needs to see.
+        rethrow;
       } on TimeoutException {
-        _requestSemaphore.release();
         if (attempt < maxRetries - 1) {
           final delay = Duration(milliseconds: 500 * (attempt + 1));
           await Future.delayed(delay);
@@ -145,7 +181,6 @@ class ScreenscraperClient {
         }
         rethrow;
       } catch (e) {
-        _requestSemaphore.release();
         if (attempt < maxRetries - 1) {
           final delay = Duration(milliseconds: 500 * (attempt + 1));
           _log.e(
@@ -156,6 +191,10 @@ class ScreenscraperClient {
           continue;
         }
         rethrow;
+      } finally {
+        // Runs on every exit path out of the try — return, throw, and the
+        // `continue`s that drive the retry loop.
+        if (acquired) _requestSemaphore.release();
       }
     }
 

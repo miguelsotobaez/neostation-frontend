@@ -6,7 +6,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/models/game_model.dart';
-import 'package:neostation/utils/rom_tree.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
@@ -58,24 +57,6 @@ class GamesGrid extends StatefulWidget {
     }
   }
 
-  /// Subfolder navigation: the first [folderCount] entries of [games] are folder
-  /// placeholders rendered from [folderEntries]; tapping one calls
-  /// [onFolderActivated] with its index to descend.
-  final int folderCount;
-  final List<RomFolderEntry> folderEntries;
-  final void Function(int folderIndex)? onFolderActivated;
-
-  /// Resolves on-disk cover files for the games beneath a folder, for the
-  /// folder-tile preview mosaic. [imageType] follows the current card style
-  /// ('fanarts' vs 'box2d'). Falls back to screenshots. Provided by the parent
-  /// because it owns the full game list and subfolder roots.
-  final List<File> Function(
-    String folderRelPath, {
-    required int max,
-    required String imageType,
-  })?
-  folderCoverResolver;
-
   const GamesGrid({
     super.key,
     required this.system,
@@ -91,10 +72,6 @@ class GamesGrid extends StatefulWidget {
     this.onScrape,
     this.scrapingGameRomnames = const {},
     this.scrapeProgress = const {},
-    this.folderCount = 0,
-    this.folderEntries = const [],
-    this.onFolderActivated,
-    this.folderCoverResolver,
     this.artworkVersion = 0,
   });
 
@@ -193,11 +170,6 @@ class _GamesGridState extends State<GamesGrid> {
 
   // Image dimension cache
   static final Map<String, Size?> _imageSizeCache = {};
-
-  /// Folder preview covers, keyed by "relPath|imageType" so box/fanart styles
-  /// cache independently. Resolving walks the game list and stats the disk, so
-  /// each folder tile is computed once.
-  final Map<String, List<File>> _folderCoverCache = {};
 
   // Visible index tracking for lazy dimension loading
   final Set<int> _loadedDims = {};
@@ -358,9 +330,6 @@ class _GamesGridState extends State<GamesGrid> {
   /// `_cardWidth * _heightRatioFor(i)`.
   double _heightRatioFor(int index) {
     if (_isFanart) return 1.0;
-
-    // Folder tiles are always square (no box art to measure).
-    if (index < widget.folderCount) return 1.0;
 
     final game = widget.games[index];
     // 1. From DB
@@ -735,7 +704,7 @@ class _GamesGridState extends State<GamesGrid> {
 
   /// Select + B — toggles the (session-global) vertical action-button legend.
   /// When hidden the legend slides off the left edge and the grid reflows into
-  /// the 60.r gutter.
+  /// the 72.r gutter.
   void _toggleLegend() {
     SfxService().playNavSound();
     GameLegendVisibility.toggle();
@@ -944,19 +913,7 @@ class _GamesGridState extends State<GamesGrid> {
 
   Future<void> _loadAchievementsForSelectedGame() async {
     if (widget.games.isEmpty) return;
-    final index = _selectedIndex.clamp(0, widget.games.length - 1);
-    // A folder placeholder has no hash to look up: asking RetroAchievements
-    // about it can only fail, so skip the request and clear the panel.
-    if (index < widget.folderCount) {
-      if (mounted) {
-        setState(() {
-          _currentGameInfo = null;
-          _isLoadingAchievements = false;
-        });
-      }
-      return;
-    }
-    final game = widget.games[index];
+    final game = widget.games[_selectedIndex.clamp(0, widget.games.length - 1)];
 
     if (!_hasRetroAchievementsFor(game)) {
       if (mounted) {
@@ -1077,14 +1034,14 @@ class _GamesGridState extends State<GamesGrid> {
           children: [
             Expanded(
               // Indent the grid to clear the vertical legend on the left. Select
-              // + B toggles the legend; the indent flips 60.r↔0 in a single frame
+              // + B toggles the legend; the indent flips 72.r↔0 in a single frame
               // (no animation) so there's no moving target to chase — the grid
               // reflows once and the selected card is pinned in place by the
               // scroll restore below. The reduced width makes the cards slightly
               // smaller when the legend is shown.
               child: Padding(
                 padding: EdgeInsets.only(
-                  left: GameLegendVisibility.hidden.value ? 0 : 60.r,
+                  left: GameLegendVisibility.hidden.value ? 0 : 72.r,
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -1298,11 +1255,19 @@ class _GamesGridState extends State<GamesGrid> {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
           top: 12.r,
-          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
+          bottom: 12.r,
+          left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 250),
             opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-            child: _chromeLegend!,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topLeft,
+                child: _chromeLegend!,
+              ),
+            ),
           ),
         ),
         // Touch: swipe-right from the left edge reveals a hidden legend.
@@ -1318,10 +1283,7 @@ class _GamesGridState extends State<GamesGrid> {
   void _buildSettledChrome() {
     final settledGame =
         widget.games[_settledIndex.clamp(0, widget.games.length - 1)];
-    final isFolder = _settledIndex < widget.folderCount;
-    // A folder has no hash and no video: the RetroAchievements pill and the
-    // mute pill must both stay away, or they render their empty states.
-    final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
+    final hasRa = _hasRetroAchievementsFor(settledGame);
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
         '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
@@ -1337,8 +1299,7 @@ class _GamesGridState extends State<GamesGrid> {
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
-      hasVideo: !isFolder && _hasVideoFor(settledGame),
-      isFolder: isFolder,
+      hasVideo: _hasVideoFor(settledGame),
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can animate it without invalidating this memoized subtree.
@@ -1375,10 +1336,6 @@ class _GamesGridState extends State<GamesGrid> {
     int targetWidth,
     ThemeData theme,
   ) {
-    if (index < widget.folderCount) {
-      return _buildFolderCard(index, theme);
-    }
-
     final game = widget.games[index];
 
     if (_isFanart) {
@@ -1625,95 +1582,6 @@ class _GamesGridState extends State<GamesGrid> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildFolderCard(int index, ThemeData theme) {
-    final folder = widget.folderEntries[index];
-
-    // Preview the folder with up to four covers of the games it contains,
-    // filling the tile edge-to-edge; fall back to the folder glyph when none
-    // have art on disk. The image type follows the current card style so the
-    // mosaic matches the surrounding cards. Cached per folder+style.
-    final imageType = _isFanart ? 'fanarts' : 'box2d';
-    final cacheKey = '${folder.relPath}|$imageType';
-    final covers = _folderCoverCache[cacheKey] ??=
-        widget.folderCoverResolver?.call(
-          folder.relPath,
-          max: 4,
-          imageType: imageType,
-        ) ??
-        const [];
-
-    return GestureDetector(
-      key: ValueKey('folder_${folder.relPath}'),
-      onTap: () {
-        // Same touch contract as the game cards: the first tap selects the
-        // folder, a second tap on the selected one descends into it.
-        if (index == _selectedIndex) {
-          SfxService().playEnterSound();
-          widget.onFolderActivated?.call(index);
-          return;
-        }
-        setState(() {
-          _selectedIndex = index;
-          _settledIndex = index; // discrete tap: update chrome immediately
-        });
-        _settleTimer?.cancel();
-        widget.onGameSelected(widget.games[index]);
-        SfxService().playNavSound();
-      },
-      child: RepaintBoundary(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
-          child: Container(
-            color: theme.colorScheme.surfaceContainerHighest,
-            child: covers.isEmpty
-                ? Center(
-                    child: Icon(
-                      Symbols.folder_rounded,
-                      size: 40.r,
-                      fill: 1,
-                      color: widget.system.colorAsColor,
-                    ),
-                  )
-                : _buildCoverMosaic(covers),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Fills the folder tile with 1–4 cover images: a single cover fills the
-  /// whole tile, two split it into columns, three/four stack into rows so the
-  /// mosaic always covers the entire space edge-to-edge.
-  Widget _buildCoverMosaic(List<File> covers) {
-    // SizedBox.expand + stretch on both axes is load-bearing: inside a Row the
-    // cross axis is loosely constrained, so a bare Image sizes to its intrinsic
-    // aspect ratio and leaves empty bands instead of filling its cell.
-    Widget tile(File file) => SizedBox.expand(
-      child: Image.file(
-        file,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-      ),
-    );
-
-    Widget row(List<File> files) => Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [for (final f in files) Expanded(child: tile(f))],
-    );
-
-    if (covers.length == 1) return tile(covers.first);
-    if (covers.length == 2) return row(covers);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: row(covers.sublist(0, 2))),
-        Expanded(child: row(covers.sublist(2))),
-      ],
     );
   }
 

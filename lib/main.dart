@@ -42,6 +42,14 @@ import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:neostation/screens/secondary_screen/secondary_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:external_folder_access/external_folder_access.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/armsx2_library_service.dart';
+import 'package:neostation/services/melonx_library_service.dart';
+import 'package:neostation/data/datasources/sqlite_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Politica personalizada para deshabilitar navegacion por teclado
 class NoFocusTraversalPolicy extends FocusTraversalPolicy {
@@ -182,6 +190,70 @@ Future<void> _configureImageCache() async {
 /// created them. Used by [AppNotification] for progress notifications.
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// One-time cleanup for the removed iFly integration.
+///
+/// Earlier iOS builds could import Dreamcast rows directly from iFly's ROMs
+/// folder. The integration has now been removed; this migration deletes only
+/// the exact ROM paths that were previously recorded by that feature, clears
+/// its security-scoped bookmark and removes its diagnostic files. After the
+/// first successful cleanup the preference key is gone, so subsequent launches
+/// are effectively a no-op.
+Future<void> _cleanupRemovedIflyIntegration({
+  required SqliteConfigProvider configProvider,
+  required SqliteDatabaseProvider databaseProvider,
+}) async {
+  if (!Platform.isIOS) return;
+
+  const prefsKey = 'ifly_library_paths_v1';
+  const bookmarkKey = 'ifly';
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final importedPaths = prefs.getStringList(prefsKey) ?? const <String>[];
+
+    if (importedPaths.isNotEmpty) {
+      final db = await SqliteService.getDatabase();
+      const batchSize = 100;
+      for (var i = 0; i < importedPaths.length; i += batchSize) {
+        final end = (i + batchSize < importedPaths.length)
+            ? i + batchSize
+            : importedPaths.length;
+        final batch = importedPaths.sublist(i, end);
+        final placeholders = List.filled(batch.length, '?').join(',');
+        await db.rawDelete(
+          'DELETE FROM user_roms WHERE lower(rom_path) IN ($placeholders)',
+          batch.map((value) => path.normalize(value).toLowerCase()).toList(),
+        );
+      }
+
+      await databaseProvider.loadGamesForSystem('dc');
+      await configProvider.refreshDetectedSystems();
+    }
+
+    await prefs.remove(prefsKey);
+    await ExternalFolderAccess.clearBookmark(key: bookmarkKey);
+
+    final docsDir = await getApplicationDocumentsDirectory();
+    for (final name in const [
+      'ifly_sync_debug.txt',
+      'ifly_launch_debug.txt',
+    ]) {
+      final file = File(path.join(docsDir.path, name));
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+
+    LoggerService.instance.i(
+      'Removed legacy iFly integration data (${importedPaths.length} tracked path(s)).',
+    );
+  } catch (e) {
+    // iFly is no longer part of NeoStation, so cleanup failure must never block
+    // application startup. The migration will be attempted again next launch.
+    LoggerService.instance.w('Could not clean legacy iFly integration data: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -201,6 +273,36 @@ void main() async {
   // wait happens once (behind the loading screen) rather than once per caller.
   if (Platform.isAndroid) {
     await _awaitUserDataStorage();
+  }
+
+  // iOS: re-activate access to any previously-linked external folder (e.g.
+  // RetroArch's) before anything tries to scan it. Security-scoped bookmark
+  // access doesn't survive a relaunch on its own — it has to be resolved
+  // and re-started every cold boot. A no-op if nothing has been linked.
+  if (Platform.isIOS) {
+    ConfigService.linkedExternalFolderPath =
+        await ExternalFolderAccess.resolveBookmarkedFolder();
+
+    // Same again for ARMSX2's folder, which lives under its own bookmark
+    // key so linking one emulator never invalidates the other.
+    ConfigService.linkedArmsx2FolderPath =
+        await ExternalFolderAccess.resolveBookmarkedFolder(key: 'armsx2');
+
+    // Load the last exported emulator libraries so direct-launch matching
+    // works immediately after a cold start without forcing a fresh sync.
+    await RetroArchLibraryService.loadCachedLibrary();
+    await Armsx2LibraryService.loadCachedLibrary();
+    await MelonxLibraryService.loadCachedLibrary();
+
+    // RetroArch, ARMSX2 and MeloNX return their exported libraries through the
+    // neostation:// callback scheme. external_folder_access forwards every
+    // incoming URL from iOS to this one listener; each service ignores URLs
+    // that do not belong to it.
+    ExternalFolderAccess.setIncomingUrlListener((uri) async {
+      if (await RetroArchLibraryService.handleIncomingUri(uri)) return;
+      if (await Armsx2LibraryService.handleIncomingUri(uri)) return;
+      await MelonxLibraryService.handleIncomingUri(uri);
+    });
   }
 
   // Inicializar window_manager para desktop con tamano minimo 640x480
@@ -282,6 +384,42 @@ void main() async {
     log.e('Error initializing FileProvider: $e');
   }
 
+  // TEMPORARY iOS DIAGNOSTIC — remove once the media-display issue is
+  // resolved. Writes FileProvider's post-init state to a plain text file
+  // under the app's Documents folder (readable via the Files app, "On My
+  // iPhone > NeoStation > neostation_debug.txt") since there's no Xcode
+  // console access to check this from otherwise.
+  if (Platform.isIOS) {
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final debugFile = File(path.join(docsDir.path, 'neostation_debug.txt'));
+      final buffer = StringBuffer();
+      buffer.writeln('--- NeoStation iOS debug: ${DateTime.now()} ---');
+      buffer.writeln('fileProvider.isInitialized: ${fileProvider.isInitialized}');
+      buffer.writeln('fileProvider.mediaPath: ${fileProvider.mediaPath}');
+      buffer.writeln('fileProvider.userDataPath: ${fileProvider.userDataPath}');
+      buffer.writeln('fileProvider.documentsPath: ${fileProvider.documentsPath}');
+      try {
+        final configMediaPath = await ConfigService.getMediaPath();
+        buffer.writeln('ConfigService.getMediaPath(): $configMediaPath');
+      } catch (e) {
+        buffer.writeln('ConfigService.getMediaPath() threw: $e');
+      }
+      if (fileProvider.mediaPath != null) {
+        final testDir = Directory(
+          path.join(fileProvider.mediaPath!, 'media'),
+        );
+        buffer.writeln(
+          'media dir exists at fileProvider.mediaPath/media: '
+          '${testDir.existsSync()} (${testDir.path})',
+        );
+      }
+      await debugFile.writeAsString(buffer.toString());
+    } catch (e) {
+      log.e('Failed to write iOS debug file: $e');
+    }
+  }
+
   // Inicializar localizacion con idioma persistido
   String initLang = 'en';
   try {
@@ -320,7 +458,7 @@ void main() async {
   final sqliteDatabaseProvider = SqliteDatabaseProvider();
 
   try {
-    // 1. Inicializar ConfigProvider primero (sincroniza sistemas)
+    // 1. Initialize SqliteConfigProvider first so system state is synchronized.
     await sqliteConfigProvider.initialize();
 
     // Seed the game legend visibility from persisted config and wire its
@@ -334,6 +472,13 @@ void main() async {
     await sqliteDatabaseProvider.initialize(
       romFolders: sqliteConfigProvider.config.romFolders,
       availableSystems: sqliteConfigProvider.availableSystems,
+    );
+
+    // Remove any Dreamcast rows/bookmarks left by the discontinued iFly
+    // integration. This only targets paths recorded by that feature.
+    await _cleanupRemovedIflyIntegration(
+      configProvider: sqliteConfigProvider,
+      databaseProvider: sqliteDatabaseProvider,
     );
 
     // Background scrape Windows games from Steam

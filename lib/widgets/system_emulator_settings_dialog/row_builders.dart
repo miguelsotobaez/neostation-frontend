@@ -806,8 +806,8 @@ extension _RowBuilders on _SystemEmulatorSettingsDialogState {
     final theme = Theme.of(context);
     final isPickerSelected = isSelected && _emulatorActionIndex == 1;
 
-    // Status logic (Android: installed, Desktop: configured)
-    final isConfigured = Platform.isAndroid
+    // App platforms use install state; desktop platforms use configured paths.
+    final isConfigured = _usesAppInstallState
         ? isInstalled
         : standalone.isConfigured;
 
@@ -934,7 +934,7 @@ extension _RowBuilders on _SystemEmulatorSettingsDialogState {
                                       ),
                                     ),
                                   Icon(
-                                    Platform.isAndroid
+                                    _usesAppInstallState
                                         ? (isInstalled
                                               ? Symbols.check_circle_rounded
                                               : Symbols.error_outline_rounded)
@@ -948,7 +948,7 @@ extension _RowBuilders on _SystemEmulatorSettingsDialogState {
                                   ),
                                   SizedBox(width: 4.r),
                                   Text(
-                                    Platform.isAndroid
+                                    _usesAppInstallState
                                         ? (isInstalled
                                               ? AppLocale.installed.getString(
                                                   context,
@@ -968,7 +968,7 @@ extension _RowBuilders on _SystemEmulatorSettingsDialogState {
                                           : theme.colorScheme.onSurface,
                                     ),
                                   ),
-                                  if (!Platform.isAndroid &&
+                                  if (_usesExecutablePicker &&
                                       standalone.isConfigured &&
                                       standalone.userPath != null) ...[
                                     SizedBox(width: 8.r),
@@ -996,86 +996,89 @@ extension _RowBuilders on _SystemEmulatorSettingsDialogState {
                   ),
                 ),
 
-                // Select button
-                Opacity(
-                  opacity: isDisabled ? 0.5 : 1.0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: standalone.isUserDefault == true
-                          ? customColors.successColor
-                          : Theme.of(context).colorScheme.tertiary,
-                      borderRadius:
-                          Theme.of(
-                            context,
-                          ).extension<CornerRadii>()?.radiusInternal ??
-                          BorderRadius.circular(9.r),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        canRequestFocus: false,
-                        focusColor: Colors.transparent,
-                        hoverColor: Colors.transparent,
-                        highlightColor: Colors.transparent,
-                        splashColor: Colors.transparent,
+                // On iOS the Emulators tab is informational only: NeoStation
+                // reports whether known emulator apps are installed, but does not
+                // ask the user to select a default emulator. Launch routing is
+                // handled by the corresponding iOS integration.
+                if (!Platform.isIOS)
+                  Opacity(
+                    opacity: isDisabled ? 0.5 : 1.0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: standalone.isUserDefault == true
+                            ? customColors.successColor
+                            : Theme.of(context).colorScheme.tertiary,
                         borderRadius:
                             Theme.of(
                               context,
                             ).extension<CornerRadii>()?.radiusInternal ??
                             BorderRadius.circular(9.r),
-                        onTap: (standalone.isUserDefault == true || isDisabled)
-                            ? null
-                            : () {
-                                SfxService().playEnterSound();
-                                _setStandaloneAsDefault(standalone);
-                              },
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10.r,
-                            vertical: 6.r,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (standalone.isUserDefault == true)
-                                Icon(
-                                  Symbols.check_circle_rounded,
-                                  size: 12.r,
-                                  color: theme.colorScheme.onTertiary,
-                                )
-                              else
-                                SizedBox(
-                                  height: 12.r,
-                                  width: 12.r,
-                                  child: Image.asset(
-                                    'assets/images/gamepad/Xbox_A_button.png',
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          canRequestFocus: false,
+                          focusColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          splashColor: Colors.transparent,
+                          borderRadius:
+                              Theme.of(
+                                context,
+                              ).extension<CornerRadii>()?.radiusInternal ??
+                              BorderRadius.circular(9.r),
+                          onTap:
+                              (standalone.isUserDefault == true || isDisabled)
+                              ? null
+                              : () {
+                                  SfxService().playEnterSound();
+                                  _setStandaloneAsDefault(standalone);
+                                },
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 10.r,
+                              vertical: 6.r,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (standalone.isUserDefault == true)
+                                  Icon(
+                                    Symbols.check_circle_rounded,
+                                    size: 12.r,
                                     color: theme.colorScheme.onTertiary,
-                                    colorBlendMode: BlendMode.srcIn,
+                                  )
+                                else
+                                  SizedBox(
+                                    height: 12.r,
+                                    width: 12.r,
+                                    child: Image.asset(
+                                      'assets/images/gamepad/Xbox_A_button.png',
+                                      color: theme.colorScheme.onTertiary,
+                                      colorBlendMode: BlendMode.srcIn,
+                                    ),
+                                  ),
+                                SizedBox(width: 4.r),
+                                Text(
+                                  standalone.isUserDefault == true
+                                      ? AppLocale.selected.getString(context)
+                                      : AppLocale.select.getString(context),
+                                  style: TextStyle(
+                                    fontSize: 10.r,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onTertiary,
                                   ),
                                 ),
-                              SizedBox(width: 4.r),
-                              Text(
-                                standalone.isUserDefault == true
-                                    ? AppLocale.selected.getString(context)
-                                    : AppLocale.select.getString(context),
-                                style: TextStyle(
-                                  fontSize: 10.r,
-                                  fontWeight: FontWeight.bold,
-                                  color: standalone.isUserDefault == true
-                                      ? theme.colorScheme.onTertiary
-                                      : theme.colorScheme.onTertiary,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
                 // Desktop: Folder button (Persistent)
-                if (!Platform.isAndroid)
+                if (_usesExecutablePicker)
                   Tooltip(
                     message: AppLocale.selectExecutablePath.getString(context),
                     child: Container(

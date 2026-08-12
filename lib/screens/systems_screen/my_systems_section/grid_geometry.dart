@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/models/my_systems.dart';
 
@@ -18,9 +19,16 @@ import 'package:neostation/models/my_systems.dart';
 List<List<int>> buildVirtualGrid(List<SystemInfo> cards, int cols) {
   final List<List<int>> grid = [];
 
-  // 'Recent Games' cards expand to 3x2 on high-resolution displays.
-  int getSpanW(SystemInfo card) => (card.isGame && cols >= 3) ? 3 : 1;
-  int getSpanH(SystemInfo card) => (card.isGame && cols >= 3) ? 2 : 1;
+  // 'Recent Games' cards expand to 3x2 on high-resolution displays — but
+  // not on iOS, where that hero treatment dwarfs every other card on a
+  // phone-sized screen (see the matching render-time fix in
+  // my_systems_grid.dart). Both places need to agree, or this function
+  // reserves 3x2 cells while the card only ever draws at 1x1, leaving a
+  // visible gap where the reserved-but-unused columns sit.
+  int getSpanW(SystemInfo card) =>
+      (card.isGame && cols >= 3 && !Platform.isIOS) ? 3 : 1;
+  int getSpanH(SystemInfo card) =>
+      (card.isGame && cols >= 3 && !Platform.isIOS) ? 2 : 1;
 
   for (int i = 0; i < cards.length; i++) {
     final card = cards[i];

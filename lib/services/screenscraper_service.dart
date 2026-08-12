@@ -10,6 +10,7 @@ import 'screenscraper/rom_hasher.dart';
 import 'screenscraper/media_resolver.dart';
 import 'screenscraper/screenscraper_client.dart';
 import 'screenscraper/media_downloader.dart';
+import 'screenscraper/melonx_media_fallback.dart';
 import 'screenscraper/screenscraper_exceptions.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
@@ -600,6 +601,8 @@ class ScreenScraperService {
 
       onProgress?.call(AppLocale.fetchingMetadata, 0.1);
 
+      final isMeloNxVirtual = romPath.toLowerCase().startsWith('melonx://');
+
       Map<String, dynamic>? gameInfoResult;
       int attempts = 0;
       while (attempts < 3) {
@@ -609,7 +612,9 @@ class ScreenScraperService {
           romName,
           appSystemId: appSystemId,
           maxDailyRequests: 0,
-          gameName: (systemFolder == 'android') ? gameName : null,
+          gameName: (systemFolder == 'android' || isMeloNxVirtual)
+              ? gameName
+              : null,
         );
         if (gameInfoResult != null && gameInfoResult['gameInfo'] != null) break;
         attempts++;
@@ -652,15 +657,58 @@ class ScreenScraperService {
             appSystemId: appSystemId,
             preferredLanguage: preferredLanguage,
             allowedMediaTypes: allowedMediaTypes,
-            forceOverwrite: forceOverwrite,
+            forceOverwrite: forceOverwrite || isMeloNxVirtual,
             maxDailyRequests: null,
             onProgress: (p) =>
                 onProgress?.call(AppLocale.downloadingImages, 0.2 + (p * 0.8)),
           );
 
+      var mediaSuccess = downloadResult['success'] == true;
+      if (isMeloNxVirtual) {
+        final credentials = await getSavedCredentials();
+        final gameId = gameInfo['id']?.toString() ?? '';
+        if (credentials != null && gameId.isNotEmpty) {
+          final softname = await ScreenscraperClient.getSoftname();
+          final fallbackResult =
+              await ScreenscraperMeloNxMediaFallback.ensureMediaByGameId(
+                gameId: gameId,
+                systemId: screenScraperSystemId.toString(),
+                systemFolder: systemFolder,
+                romName: romName,
+                appSystemId: appSystemId,
+                devId: _devId,
+                devPassword: _devPassword,
+                softname: softname,
+                username: credentials['username']?.toString() ?? '',
+                password: credentials['password']?.toString() ?? '',
+                allowedMediaTypes: allowedMediaTypes,
+                alreadyDownloadedTypes: [
+                  ...(downloadResult['downloadedTypes'] as List<dynamic>? ?? const [])
+                      .map((e) => e.toString()),
+                  ...(downloadResult['existingTypes'] as List<dynamic>? ?? const [])
+                      .map((e) => e.toString()),
+                ],
+                sourceMedias: medias,
+                maxDailyRequests: null,
+              );
+
+          final successfulTypes =
+              (fallbackResult['successfulTypes'] as List<dynamic>? ?? const [])
+                  .map((e) => e.toString())
+                  .toSet();
+          final requestedImageTypes = allowedMediaTypes
+              .where(
+                (type) => const ['fanart', 'ss', 'wheel', 'box2D'].contains(type),
+              )
+              .toSet();
+          mediaSuccess = requestedImageTypes.isEmpty ||
+              requestedImageTypes.any(successfulTypes.contains);
+        }
+      }
+
       return {
-        'success': downloadResult['success'] == true,
-        'message': downloadResult['success'] == true
+        'success': mediaSuccess,
+        'message': mediaSuccess
             ? AppLocale.scrapeSuccessful
             : AppLocale.scrapeMediaDownloadsFailed,
       };
@@ -865,10 +913,15 @@ class ScreenScraperService {
       final filename = rom['filename'].toString();
       final romPath = rom['rom_path'].toString();
       final titleName = rom['title_name']?.toString();
+      final isMeloNxVirtual = romPath.toLowerCase().startsWith('melonx://');
+      final displayName =
+          isMeloNxVirtual && (titleName?.trim().isNotEmpty ?? false)
+          ? titleName!.trim()
+          : filename;
 
       scrapingProvider.updateThreadProgress(
         threadId: threadId,
-        gameName: filename,
+        gameName: displayName,
         systemName: systemName,
         isActive: true,
         status: ThreadStatus.active,
@@ -885,7 +938,9 @@ class ScreenScraperService {
         filename,
         appSystemId: appSystemId,
         maxDailyRequests: maxDailyRequests,
-        gameName: (systemFolder == 'android') ? titleName : null,
+        gameName: (systemFolder == 'android' || isMeloNxVirtual)
+            ? titleName
+            : null,
       );
       var gameInfo = gameResult?['gameInfo'];
       int requestsMade = 1;
@@ -902,7 +957,7 @@ class ScreenScraperService {
 
       scrapingProvider.updateThreadProgress(
         threadId: threadId,
-        gameName: filename,
+        gameName: displayName,
         systemName: systemName,
         isActive: true,
         status: ThreadStatus.active,
@@ -943,24 +998,27 @@ class ScreenScraperService {
         if (allowedTypes.isNotEmpty) {
           scrapingProvider.updateThreadProgress(
             threadId: threadId,
-            gameName: filename,
+            gameName: displayName,
             systemName: systemName,
             isActive: true,
             status: ThreadStatus.active,
             currentStep: ThreadProcessingStep.downloadingImages,
             progress: 0.66,
           );
+          final sourceMedias = gameInfo['medias'] as List<dynamic>? ?? [];
           final res = await ScreenscraperMediaDownloader.downloadGameMedia(
             systemFolder,
             filename,
-            gameInfo['medias'] ?? [],
+            sourceMedias,
             maxThreads,
             appSystemId: appSystemId,
             preferredLanguage: preferredLanguage,
             shouldCancel: shouldCancel,
             allowedMediaTypes: allowedTypes,
             maxDailyRequests: maxDailyRequests,
-            forceOverwrite: scraperConfig['scrape_mode'].toString() == 'all',
+            forceOverwrite:
+                scraperConfig['scrape_mode'].toString() == 'all' ||
+                isMeloNxVirtual,
           );
           if (res['cancelled'] == true) {
             return {
@@ -969,14 +1027,58 @@ class ScreenScraperService {
               'requests': requestsMade,
             };
           }
-          if (res['success'] == true) {
+
+          var mediaSucceeded = res['success'] == true;
+          if (isMeloNxVirtual) {
+            final credentials = await getSavedCredentials();
+            final gameId = gameInfo['id']?.toString() ?? '';
+            if (credentials != null && gameId.isNotEmpty) {
+              final softname = await ScreenscraperClient.getSoftname();
+              final fallbackResult =
+                  await ScreenscraperMeloNxMediaFallback.ensureMediaByGameId(
+                    gameId: gameId,
+                    systemId: screenscraperSystemId.toString(),
+                    systemFolder: systemFolder,
+                    romName: filename,
+                    appSystemId: appSystemId,
+                    devId: _devId,
+                    devPassword: _devPassword,
+                    softname: softname,
+                    username: credentials['username']?.toString() ?? '',
+                    password: credentials['password']?.toString() ?? '',
+                    allowedMediaTypes: allowedTypes,
+                    alreadyDownloadedTypes: [
+                      ...(res['downloadedTypes'] as List<dynamic>? ?? const [])
+                          .map((e) => e.toString()),
+                      ...(res['existingTypes'] as List<dynamic>? ?? const [])
+                          .map((e) => e.toString()),
+                    ],
+                    sourceMedias: sourceMedias,
+                    maxDailyRequests: maxDailyRequests,
+                  );
+              final successfulTypes =
+                  (fallbackResult['successfulTypes'] as List<dynamic>? ??
+                          const [])
+                      .map((e) => e.toString())
+                      .toSet();
+              final requestedImageTypes = allowedTypes
+                  .where(
+                    (type) => const ['fanart', 'ss', 'wheel', 'box2D'].contains(type),
+                  )
+                  .toSet();
+              mediaSucceeded = requestedImageTypes.isEmpty ||
+                  requestedImageTypes.any(successfulTypes.contains);
+            }
+          }
+
+          if (mediaSucceeded) {
             await ScraperRepository.markGameFullyScraped(filename);
           }
         }
 
         scrapingProvider.updateThreadProgress(
           threadId: threadId,
-          gameName: filename,
+          gameName: displayName,
           systemName: systemName,
           isActive: false,
           status: ThreadStatus.completed,

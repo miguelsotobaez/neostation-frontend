@@ -123,12 +123,7 @@ extension _GamepadNav on _SystemGamesListState {
       length: _games.length,
       currentIndex: _selectedGameIndex,
       forward: forward,
-      // Every folder row reports the same sentinel group, so a held jump
-      // steps over the folders as one block instead of treating each folder
-      // name's initial as its own alphabet boundary.
-      letterAt: (index) => index < _folderCount
-          ? _SystemGamesListState._folderJumpGroup
-          : LetterJump.letterFor(_games[index]),
+      letterAt: (index) => LetterJump.letterFor(_games[index]),
     );
     if (target == null) return false;
 

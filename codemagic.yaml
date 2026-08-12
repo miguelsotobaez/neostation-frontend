@@ -1,0 +1,168 @@
+# Codemagic CI/CD configuration for the NeoStation iOS port.
+#
+# This mirrors .github/workflows/ios-build.yml step for step — same logic,
+# translated to Codemagic's format. Use this as a free alternative when
+# GitHub Actions' monthly macOS-minutes quota runs out (macOS runners
+# consume GitHub's quota 10x faster than Linux ones; Codemagic gives 500
+# free macOS build minutes/month on its own separate quota).
+#
+# ONE-TIME SETUP ON codemagic.io:
+#   1. Sign up free at codemagic.io, connect your GitHub account.
+#   2. Add this repository as an app.
+#   3. Codemagic auto-detects this file. Go to your app > Environment
+#      variables and add a group called "neostation_secrets" containing:
+#        SCREENSCRAPER_DEV_ID       (optional — ScreenScraper dev pseudo)
+#        SCREENSCRAPER_DEV_PASSWORD (optional — ScreenScraper dev password)
+#      Mark them "Secure" so they're encrypted at rest.
+#   4. Start a build from the Codemagic dashboard, or push to the
+#      ios-port branch (same trigger as the GitHub Actions workflow).
+#   5. Download the .ipa from the build's Artifacts tab when it finishes.
+#
+# This produces the same unsigned .ipa as the "no signing secrets"
+# fallback path in the GitHub Actions workflow — install it with
+# Sideloadly exactly the same way as before.
+
+workflows:
+  neostation-ios-unsigned:
+    name: NeoStation iOS (unsigned)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      groups:
+        - neostation_secrets
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      cancel_previous_builds: true
+
+    scripts:
+      - name: Create .env from secrets
+        script: |
+          : > .env
+          if [ -n "$SCREENSCRAPER_DEV_ID" ]; then
+            echo "SCREENSCRAPER_DEV_ID=$SCREENSCRAPER_DEV_ID" >> .env
+          fi
+          if [ -n "$SCREENSCRAPER_DEV_PASSWORD" ]; then
+            echo "SCREENSCRAPER_DEV_PASSWORD=$SCREENSCRAPER_DEV_PASSWORD" >> .env
+          fi
+
+          # Diagnostic only — confirms the secrets actually reached this
+          # build without ever printing their real values. If either shows
+          # "NOT SET", the "neostation_secrets" variable group isn't
+          # attached correctly (or the variable names/casing don't match)
+          # rather than anything wrong with the ScreenScraper account
+          # itself.
+          if [ -n "$SCREENSCRAPER_DEV_ID" ]; then
+            echo "SCREENSCRAPER_DEV_ID: SET (length ${#SCREENSCRAPER_DEV_ID})"
+          else
+            echo "SCREENSCRAPER_DEV_ID: NOT SET"
+          fi
+          if [ -n "$SCREENSCRAPER_DEV_PASSWORD" ]; then
+            echo "SCREENSCRAPER_DEV_PASSWORD: SET (length ${#SCREENSCRAPER_DEV_PASSWORD})"
+          else
+            echo "SCREENSCRAPER_DEV_PASSWORD: NOT SET"
+          fi
+          echo "--- .env file contents (values redacted) ---"
+          sed 's/=.*/=<redacted>/' .env || echo "(no .env file or it's empty)"
+
+      - name: Scaffold ios/ platform if missing
+        script: |
+          if [ ! -d "ios" ]; then
+            echo "No ios/ folder committed yet — generating one with flutter create."
+            flutter create --platforms=ios --org com.neogamelab --project-name neostation .
+          else
+            echo "ios/ already exists in the repo, skipping scaffold."
+          fi
+
+      - name: Set iOS deployment target to 18.0
+        script: |
+          sed -i '' "s/platform :ios, '13.0'/platform :ios, '18.0'/" ios/Podfile
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/IPHONEOS_DEPLOYMENT_TARGET = 18.0;/g' ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Patch Info.plist
+        script: |
+          PLIST=ios/Runner/Info.plist
+          # Landscape-only, matching the Windows/Linux/macOS/Android UI.
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeRight" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeRight" "$PLIST"
+
+          # Lets the app show up as a destination in the Files app / document
+          # picker so ROM folders can eventually be selected there (phase 2).
+          /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$PLIST" 2>/dev/null || true
+
+          # Registers neostation:// as a URL scheme this app can be opened
+          # with — RetroArch's library-export protocol calls back via
+          # neostation://retroarch?games=<base64url>, handled natively via
+          # external_folder_access's application(_:open:options:).
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string com.neogamelab.neostation" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string neostation" "$PLIST"
+
+          # External-emulator URL schemes used by NeoStation must be in
+          # LSApplicationQueriesSchemes for canOpenURL/launchUrl checks to
+          # succeed. RetroArch provides library export + direct launching;
+          # ARMSX2 provides its iOS library export + direct PS2 launch;
+          # MeloNX provides Switch library export + direct game launch.
+          /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:0 string retroarch" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:1 string shortcuts" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:2 string armsx2" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:3 string melonx" "$PLIST"
+
+          plutil -lint "$PLIST"
+
+      - name: Flutter pub get
+        script: flutter pub get
+
+      - name: Patch device_info_plus for older Xcode SDK compatibility
+        script: |
+          # device_info_plus's iOS source unconditionally calls
+          # NSProcessInfo.isiOSAppOnVision, an API that requires the iOS 26.1
+          # SDK (Xcode 26+). If Codemagic's default Xcode for this instance
+          # type is older than that, the same compile error we hit on
+          # GitHub Actions would happen here too — this patch is harmless
+          # either way (no-op if the file/line isn't found).
+          DEVICE_INFO_FILE=$(find "$HOME/.pub-cache" "$FLUTTER_ROOT/.pub-cache" -path "*device_info_plus*/FPPDeviceInfoPlusPlugin.m" 2>/dev/null | head -1)
+          if [ -n "$DEVICE_INFO_FILE" ]; then
+            echo "Patching $DEVICE_INFO_FILE"
+            sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
+          else
+            echo "device_info_plus source not found at the expected path — skipping patch (nothing to do, or plugin structure changed upstream)."
+          fi
+
+      - name: Generate app icons
+        script: dart run flutter_launcher_icons
+
+      - name: Pod install
+        script: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build unsigned .app
+        script: |
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            flutter build ios --release --no-codesign --dart-define-from-file=.env
+          mkdir -p build/ios/unsigned/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/unsigned/Payload/
+          cd build/ios/unsigned
+          zip -r ../../../NeoStation-unsigned.ipa Payload
+          echo "No signing secrets configured — NeoStation-unsigned.ipa is NOT installable as-is without a tool like Sideloadly that signs it locally with your own Apple ID."
+
+    artifacts:
+      - NeoStation-unsigned.ipa

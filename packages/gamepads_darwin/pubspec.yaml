@@ -8,6 +8,8 @@ flutter:
   plugin:
     implements: gamepads
     platforms:
+      ios:
+        pluginClass: GamepadsIosPlugin
       macos:
         pluginClass: GamepadsDarwinPlugin
 

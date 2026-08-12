@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -14,8 +16,10 @@ import 'package:neostation/widgets/settings_rows.dart';
 
 /// Per-game emulator override tab for [GameSettingsDialog].
 ///
-/// Lists 'System Default' plus every emulator available for the game's
-/// system, mirroring the behavior of the list view's settings tab.
+/// Lists the emulators available for the game's system.
+///
+/// On iOS, each supported system maps to one external emulator app, so the
+/// generic 'System Default' pseudo-option is intentionally hidden.
 class GameSettingsEmulatorTab extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
@@ -56,8 +60,15 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       ? widget.game.emulatorName
       : _activeEmulatorId as String?;
 
-  int get _totalItems =>
-      _availableEmulators.isEmpty ? 0 : 1 + _availableEmulators.length;
+  int get _totalItems {
+    if (_availableEmulators.isEmpty) return 0;
+    // iOS exposes exactly one supported external emulator app per system
+    // (RetroArch, MeloNX or ARMSX2). Do not add the desktop-style
+    // "System Default" pseudo-option there; it only creates confusion.
+    return Platform.isIOS
+        ? _availableEmulators.length
+        : 1 + _availableEmulators.length;
+  }
 
   @override
   void initState() {
@@ -94,6 +105,14 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   void trigger() {
     if (_totalItems == 0) return;
+
+    if (Platform.isIOS) {
+      final emulator = _availableEmulators[_selectedIndex];
+      if (!emulator.isInstalled) return;
+      _setEmulatorOverride(emulator);
+      return;
+    }
+
     if (_selectedIndex == 0) {
       _setEmulatorOverride(null);
       return;
@@ -189,34 +208,43 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
               ],
             ),
           ),
-          // Global System Default Option.
-          EmulatorRow(
-            key: _itemKey(0),
-            isSelected: _selectedIndex == 0,
-            label: AppLocale.systemDefault.getString(context),
-            isActive:
-                _resolvedEmulatorId == null ||
-                !_availableEmulators.any(
-                  (e) => e.uniqueId == _resolvedEmulatorId,
-                ),
-            onTap: () {
-              SfxService().playNavSound();
-              setState(() => _selectedIndex = 0);
-              _setEmulatorOverride(null);
-            },
-          ),
+          // Keep the generic "System Default" choice on platforms where
+          // multiple emulator/core choices are meaningful. On iOS there is one
+          // supported external app per system, so show only that real emulator.
+          if (!Platform.isIOS)
+            EmulatorRow(
+              key: _itemKey(0),
+              isSelected: _selectedIndex == 0,
+              label: AppLocale.systemDefault.getString(context),
+              isActive:
+                  _resolvedEmulatorId == null ||
+                  !_availableEmulators.any(
+                    (e) => e.uniqueId == _resolvedEmulatorId,
+                  ),
+              onTap: () {
+                SfxService().playNavSound();
+                setState(() => _selectedIndex = 0);
+                _setEmulatorOverride(null);
+              },
+            ),
           // Individual Emulator Options.
           ..._availableEmulators.asMap().entries.map((entry) {
             final i = entry.key;
             final e = entry.value;
+            final navIndex = Platform.isIOS ? i : i + 1;
+            final hasKnownOverride = _availableEmulators.any(
+              (candidate) => candidate.uniqueId == _resolvedEmulatorId,
+            );
             return EmulatorRow(
-              key: _itemKey(i + 1),
-              isSelected: _selectedIndex == i + 1,
+              key: _itemKey(navIndex),
+              isSelected: _selectedIndex == navIndex,
               label: e.name,
-              isActive: _resolvedEmulatorId == e.uniqueId,
+              isActive: Platform.isIOS
+                  ? (!hasKnownOverride || _resolvedEmulatorId == e.uniqueId)
+                  : _resolvedEmulatorId == e.uniqueId,
               onTap: () {
                 SfxService().playNavSound();
-                setState(() => _selectedIndex = i + 1);
+                setState(() => _selectedIndex = navIndex);
                 _setEmulatorOverride(e);
               },
               emulator: e,

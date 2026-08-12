@@ -54,14 +54,14 @@ class GameActionButtons extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: GamepadNavigation.selectHeldNotifier,
       builder: (context, selectHeld, _) {
-        return HorizontalSwipe(
+        final rail = HorizontalSwipe(
           // Swipe left on the legend to hide it (touchscreen users have no
           // Select+B chord). Reshow is a swipe-right from the screen edge,
           // handled by the host view. Hiding slides the column off-screen via
           // GameLegendVisibility.
           onSwipeLeft: GameLegendVisibility.hide,
           child: Container(
-            padding: EdgeInsets.all(6.r),
+            padding: EdgeInsets.all(8.r),
             decoration: BoxDecoration(
               // Same left-to-right falloff as the game list panel beside it,
               // so the rail and the list read as one lit surface rather than
@@ -83,7 +83,7 @@ class GameActionButtons extends StatelessWidget {
                 // gamepad, so touchscreen users can reach the chord shortcuts.
                 if (_hasChordActions) ...[
                   _buildViewToggle(context, active: selectHeld),
-                  SizedBox(height: 6.r),
+                  SizedBox(height: 8.r),
                 ],
                 ...(selectHeld
                     ? _buildChordButtons(context)
@@ -91,6 +91,36 @@ class GameActionButtons extends StatelessWidget {
               ],
             ),
           ),
+        );
+
+        // Snapshot nullable public fields into local variables. Dart can safely
+        // promote locals after the null check, whereas public widget properties
+        // cannot be promoted because they may theoretically change between reads.
+        final currentSyncProvider = syncProvider;
+        final currentSelectedGame = selectedGame;
+
+        // NeoSync is a status, not an action. Keeping it as a positioned badge
+        // means systems that support NeoSync no longer get a taller action rail
+        // than systems that do not. The action rail therefore keeps the exact
+        // same geometry on every console playlist.
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            rail,
+            if (!selectHeld &&
+                currentSyncProvider != null &&
+                currentSelectedGame != null)
+              Positioned(
+                right: -3.r,
+                bottom: -3.r,
+                child: NeoSyncStatusIcon(
+                  system: system,
+                  game: currentSelectedGame,
+                  syncProvider: currentSyncProvider,
+                  size: 18.0,
+                ),
+              ),
+          ],
         );
       },
     );
@@ -122,7 +152,6 @@ class GameActionButtons extends StatelessWidget {
 
   List<Widget> _buildDefaultButtons(BuildContext context) {
     final selectedGame = this.selectedGame;
-    final syncProvider = this.syncProvider;
     final scheme = Theme.of(context).colorScheme;
 
     return [
@@ -134,7 +163,7 @@ class GameActionButtons extends StatelessWidget {
         sound: GameActionButtonSound.back,
         onTap: onBack,
       ),
-      SizedBox(height: 6.r),
+      SizedBox(height: 8.r),
       GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_X_button.png',
         symbol: Symbols.grid_view_rounded,
@@ -143,7 +172,7 @@ class GameActionButtons extends StatelessWidget {
         sound: GameActionButtonSound.nav,
         onTap: onViewMode,
       ),
-      SizedBox(height: 6.r),
+      SizedBox(height: 8.r),
       GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
         symbol: Symbols.favorite_rounded,
@@ -152,7 +181,7 @@ class GameActionButtons extends StatelessWidget {
         sound: GameActionButtonSound.nav,
         onTap: selectedGame != null ? onFavorite : null,
       ),
-      SizedBox(height: 6.r),
+      SizedBox(height: 8.r),
       // Game settings — second-to-last option.
       GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_Menu_button.png',
@@ -162,17 +191,7 @@ class GameActionButtons extends StatelessWidget {
         sound: GameActionButtonSound.nav,
         onTap: selectedGame != null ? onSettings : null,
       ),
-      // Compact NeoSync status indicator — always the last option.
-      // The icon renders nothing (SizedBox.shrink) when sync is unavailable
-      // for this system, so its top spacing lives inside the widget to avoid
-      // leaving a dangling gap below the settings button.
-      if (syncProvider != null && selectedGame != null)
-        NeoSyncStatusIcon(
-          system: system,
-          game: selectedGame,
-          syncProvider: syncProvider,
-          size: 24.0,
-        ),
+
     ];
   }
 
@@ -192,7 +211,7 @@ class GameActionButtons extends StatelessWidget {
         sound: GameActionButtonSound.enter,
         onTap: selectedGame != null ? _withRevert(onScrape) : null,
       ),
-      SizedBox(height: 6.r),
+      SizedBox(height: 8.r),
       // Y — random game.
       GameActionButton(
         iconPath: 'assets/images/gamepad/Xbox_Y_button.png',

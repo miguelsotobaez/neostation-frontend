@@ -8,13 +8,6 @@ part of '../sqlite_config_provider.dart';
 /// class declaration, all state, lifecycle wiring, and secondary-display logic.
 /// `notifyListeners()` routes through the host's `_notify()` bridge and the
 /// static `_log` is host-qualified (both required from an extension).
-/// Bell entry for ROM roots that stopped resolving. A fixed id so consecutive
-/// scans replace the warning in place rather than stacking one per launch.
-const String _unreachableRomFoldersNotificationId = 'rom-folders-unreachable';
-
-/// Bell entry for a ROM folder refused because its path was transient.
-const String _transientRomFolderNotificationId = 'rom-folder-transient';
-
 extension SqliteConfigScanning on SqliteConfigProvider {
   /// Registers a new filesystem directory as a ROM source.
   ///
@@ -23,30 +16,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     if (folderPath.isEmpty) return;
     if (_config.romFolders.contains(folderPath)) return;
     if (_config.romFolders.length >= 5) return;
-
-    // A desktop-portal document path outlives neither the reboot nor the grant
-    // that produced it, so storing one hands the user a library that silently
-    // empties later. Refuse it at the door and say why.
-    if (isTransientPortalPath(folderPath)) {
-      _error =
-          'That folder came from a temporary desktop-portal path '
-          '($folderPath) and would stop working after a restart. '
-          'Pick it again with the built-in folder browser.';
-      SqliteConfigProvider._log.w(
-        'Rejected transient portal ROM folder: $folderPath',
-      );
-      // Settings > Directories, the screen this is normally reached from,
-      // never reads `_error` — without the bell the pick would simply appear
-      // to do nothing, which is no better than the silent failure being fixed.
-      GlobalNotificationService().show(
-        id: _transientRomFolderNotificationId,
-        title: 'ROM folder not added',
-        message: _error!,
-        type: GlobalNotificationType.error,
-      );
-      _notify();
-      return;
-    }
 
     try {
       _setLoading(true);
@@ -180,67 +149,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         return;
       }
     }
-
-    // A configured ROM root can stop resolving between scans: an unmounted
-    // drive, a deleted folder, or a desktop-portal document path whose grant
-    // expired. Off Android nothing verified that until now, so the walk found
-    // nothing and the prune phase deleted every ROM row — indistinguishable
-    // from data loss to the user. Keep the library and explain instead.
-    if (!Platform.isAndroid && _config.romFolders.isNotEmpty) {
-      final unreachable = <String>[];
-      for (final folder in _config.romFolders) {
-        if (!await Directory(folder).exists()) unreachable.add(folder);
-      }
-      if (unreachable.isNotEmpty && await _hasStoredRoms()) {
-        // A portal grant cannot be restored by plugging anything back in, so
-        // that case needs different advice from a missing drive.
-        final advice = unreachable.any(isTransientPortalPath)
-            ? 'That path came from a temporary desktop-portal grant and '
-                  'cannot come back — remove it in Settings > Directories '
-                  'and add the folder again.'
-            : 'Reconnect the drive, or remove the folder in '
-                  'Settings > Directories.';
-        final plural = unreachable.length == 1 ? '' : 's';
-        _error =
-            'Cannot reach ROM folder$plural: ${unreachable.join(', ')}. '
-            'Existing games were kept. $advice';
-        SqliteConfigProvider._log.e(
-          'Scan aborted, ${unreachable.length} unreachable ROM folder(s); '
-          'library preserved: ${unreachable.join(', ')}',
-        );
-        // The preserved library is worth nothing if the screen behind this
-        // stays blank. `_scanCompleted` is only set at the far end of a
-        // successful scan, and the systems screen renders neither the library
-        // nor the setup prompt until it flips — an early return without it
-        // leaves an empty page, which is the very symptom being fixed.
-        _scanCompleted = true;
-        // `_error` reaches only the initial-setup widget, which is shown when
-        // no systems are detected — impossible here, since this branch needs
-        // stored ROMs. The bell is the one surface that both survives the scan
-        // ending and does not need a BuildContext from this layer.
-        GlobalNotificationService().show(
-          id: _unreachableRomFoldersNotificationId,
-          title: 'ROM folder$plural unavailable',
-          message: _error!,
-          type: GlobalNotificationType.error,
-        );
-        _setScanning(false);
-        _notify();
-        return;
-      }
-      if (unreachable.isNotEmpty) {
-        // No library at risk, so scanning on is safe — but still say so.
-        SqliteConfigProvider._log.w(
-          'Unreachable ROM folder(s) ignored (no stored ROMs): '
-          '${unreachable.join(', ')}',
-        );
-      }
-    }
-
-    // Getting this far means nothing blocked the scan, so retire a warning
-    // left by an earlier one instead of leaving the user chasing a folder they
-    // have already reconnected or removed.
-    GlobalNotificationService().dismiss(_unreachableRomFoldersNotificationId);
 
     // Initialize progress
     _totalSystemsToScan = 0;
@@ -808,15 +716,25 @@ extension SqliteConfigScanning on SqliteConfigProvider {
             }
           }
         }
-      } else if (context != null && context.mounted) {
-        // Desktop: the platform picker, falling back to the in-app browser
-        // where no XDG portal backend exists (SteamOS Game Mode).
-        result = await TvDirectoryPicker.pickDirectory(
-          context,
-          dialogTitle: 'Select ROM Folder',
-        );
+      } else if (Platform.isIOS) {
+        // iOS has no reliable equivalent of Android's SAF or desktop's free
+        // filesystem access, and folder bookmarks from the system document
+        // picker don't survive relaunches reliably. Use the app's own
+        // internal Documents/roms folder instead — it's exposed to the
+        // Files app (UIFileSharingEnabled/LSSupportsOpeningDocumentsInPlace
+        // in Info.plist), so the user can drop ROMs into it directly, no
+        // picker needed. If it's already registered (very likely after the
+        // first run), rescan instead of silently doing nothing, so
+        // dropping new ROMs in via the Files app and tapping this button
+        // again actually picks them up.
+        final romsFolder = await ConfigService.getDefaultIOSRomsFolder();
+        if (_config.romFolders.contains(romsFolder)) {
+          await scanSystems();
+          return;
+        }
+        result = romsFolder;
       } else {
-        // Desktop without a context to host the fallback browser.
+        // Desktop: Use standard file picker
         result = await FilePicker.getDirectoryPath(
           dialogTitle: 'Select ROM Folder',
         );

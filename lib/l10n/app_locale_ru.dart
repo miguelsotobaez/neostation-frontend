@@ -54,8 +54,6 @@ const Map<String, dynamic> appLocaleRu = {
       'Пакет System Art будет загружен для всех систем. Это может занять некоторое время.',
   AppLocale.systemArtDownloading: 'Загрузка пакета System Art...',
   AppLocale.about: 'О программе',
-  AppLocale.exit: 'Выход',
-  AppLocale.launcher: 'Лаунчер',
   AppLocale.emulators: 'Эмуляторы',
   AppLocale.appearance: 'Внешний вид',
   AppLocale.systemsSettings: 'Системы',
@@ -94,11 +92,6 @@ const Map<String, dynamic> appLocaleRu = {
       'Рекурсивное сканирование включено. Сканирование {name}...',
   AppLocale.recursiveScanDisabled:
       'Рекурсивное сканирование выключено. Сканирование {name}...',
-  AppLocale.subfolderView: 'Показывать подпапки',
-  AppLocale.subfolderViewSubtitle:
-      'Группировать ROM в подпапках в виде просматриваемых папок, а не смешивать их с играми',
-  AppLocale.subfolderViewEnabled: 'Подпапки показаны как папки',
-  AppLocale.subfolderViewDisabled: 'Подпапки смешаны с играми',
   AppLocale.errorScanningSystem: 'Ошибка при сканировании системы: {error}',
   AppLocale.scrapedTitlesUsed:
       'Будут использоваться полученные названия, если они доступны',
@@ -190,6 +183,8 @@ const Map<String, dynamic> appLocaleRu = {
       'Отображает вкладку поиска на панели навигации',
 
   AppLocale.configureDirectories: 'Директории',
+  AppLocale.configureLaunch: 'Настроить запуск',
+  AppLocale.shortcutSetupOpenError: 'Не удалось открыть настройку запуска.',
   AppLocale.configureRomsFolder: 'Настроить папку ROM',
   AppLocale.cannotAccessFolder: 'Нет доступа к папке',
   AppLocale.backgroundImage: 'Фоновое изображение',
@@ -199,10 +194,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.logoImageSubtitle: 'jpg, png, webp | 512x512px или меньше',
   AppLocale.selectRetroArchExe: 'Выбрать исполняемый файл RetroArch',
   AppLocale.selectExecutablePath: 'Выбрать путь к исполняемому файлу',
-
-  AppLocale.exitApplication: 'Выйти из приложения',
-  AppLocale.exitConfirmation: 'Вы уверены, что хотите выйти из NeoStation?',
-  AppLocale.confirmExit: 'Подтвердить выход',
   AppLocale.rescanAllFolders: 'Пересканировать все папки ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Вручную искать новые системы и ROM',
   AppLocale.organizeMultiDiscGames: 'Организовать многодисковые игры',
@@ -803,10 +794,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.pressToClose: 'Нажмите [ESC], [ENTER] или [ПРОБЕЛ], чтобы закрыть',
 
   AppLocale.selectStorage: 'Выбрать хранилище',
-
-  AppLocale.homeFolder: 'Домашняя папка',
-
-  AppLocale.filesystemRoot: 'Файловая система',
   AppLocale.internalStorage: 'Внутренняя память',
   AppLocale.externalStorage: 'Внешняя память ({name})',
   AppLocale.folderRestrictedAndroid: 'Папка ограничена Android',
@@ -999,4 +986,27 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.wizardArtPackUnavailable:
       'Сейчас не удалось получить набор обложек. Вы можете установить его позже '
       'в Настройках, когда будете онлайн.',
+
+  // iOS emulator library integration
+  AppLocale.iosEmuSync: "Синхронизировать",
+  AppLocale.iosEmuResync: "Синхронизировать снова",
+  AppLocale.iosEmuLinkFolder: "Подключить папку",
+  AppLocale.iosEmuChangeFolder: "Изменить папку",
+  AppLocale.iosEmuLinkingFailed: "Не удалось подключить папку: {error}",
+  AppLocale.iosRetroarchSyncRequested: "Запрошена синхронизация библиотеки RetroArch. Она выполняется в фоновом режиме; подождите несколько секунд.",
+  AppLocale.iosRetroarchUnavailable: "Не удалось связаться с RetroArch. Он установлен?",
+  AppLocale.iosArmsx2SyncRequested: "Запрошена синхронизация библиотеки ARMSX2. ARMSX2 автоматически вернётся в NeoStation, когда экспорт будет готов.",
+  AppLocale.iosArmsx2Unavailable: "Не удалось связаться с ARMSX2. Он установлен?",
+  AppLocale.iosMelonxSyncRequested: "Запрошена синхронизация библиотеки Nintendo Switch из MeloNX. MeloNX автоматически вернётся в NeoStation, когда экспорт будет готов.",
+  AppLocale.iosMelonxUnavailable: "Не удалось связаться с MeloNX. Он установлен?",
+  AppLocale.iosRetroarchStatusNeedsLink: "Подключите папку RetroArch, чтобы NeoStation мог обращаться к играм напрямую, без копирования.",
+  AppLocale.iosRetroarchStatusNeedsSync: "Папка подключена. Синхронизируйте библиотеку, чтобы запускать игры прямо в RetroArch одним нажатием.",
+  AppLocale.iosRetroarchStatusSynced: "Папка подключена, библиотека синхронизирована — игры запускаются прямо в RetroArch.",
+  AppLocale.iosRetroarchLinkSuccess: "Папка подключена. NeoStation будет сканировать её напрямую, без копирования. Найденные здесь игры будут запускаться прямо в RetroArch.",
+  AppLocale.iosArmsx2StatusNeedsLink: "ARMSX2 использует ту же папку ROM, что и RetroArch. Подключите общую папку ROM, затем синхронизируйте библиотеку ARMSX2.",
+  AppLocale.iosArmsx2StatusNeedsSync: "Общая папка ROM подключена. Синхронизируйте ARMSX2, чтобы импортировать библиотеку PS2 в NeoStation.",
+  AppLocale.iosArmsx2StatusSynced: "Общая папка и библиотека ARMSX2 синхронизированы — игры PS2 запускаются прямо в ARMSX2.",
+  AppLocale.iosArmsx2LinkSuccess: "Общая папка ROM подключена. RetroArch и ARMSX2 теперь используют один источник ROM в NeoStation.",
+  AppLocale.iosMelonxStatusSynced: "Библиотека MeloNX синхронизирована — игры Nintendo Switch запускаются прямо в MeloNX.",
+  AppLocale.iosMelonxStatusNeedsSync: "Синхронизируйте MeloNX, чтобы напрямую импортировать библиотеку Nintendo Switch в NeoStation. Сканирование папки ROM не требуется.",
 };

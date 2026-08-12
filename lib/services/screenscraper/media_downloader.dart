@@ -21,6 +21,33 @@ class ScreenscraperMediaDownloader {
 
   static final _log = LoggerService.instance;
 
+  /// Removes stale artwork files that use a different image extension for the
+  /// same media key.
+  ///
+  /// This matters for virtual libraries such as MeloNX: the initial library
+  /// import can create a PNG fallback from MeloNX's `iconData`, while
+  /// ScreenScraper later downloads the real cover/fanart as JPG. NeoStation's
+  /// image resolver prefers PNG before JPG, so keeping both files makes the old
+  /// fallback permanently win even though the ScreenScraper image downloaded
+  /// successfully.
+  static Future<void> _removeCompetingImageVariants(String fullPath) async {
+    final targetExt = path.extension(fullPath).replaceFirst('.', '').toLowerCase();
+    if (!const {'png', 'jpg', 'jpeg'}.contains(targetExt)) return;
+
+    final base = path.withoutExtension(fullPath);
+    for (final ext in const ['png', 'jpg', 'jpeg']) {
+      if (ext == targetExt) continue;
+      final sibling = File('$base.$ext');
+      try {
+        if (await sibling.exists()) {
+          await sibling.delete();
+        }
+      } catch (_) {
+        // A stale sibling that cannot be removed should not abort the scrape.
+      }
+    }
+  }
+
   /// Downloads and caches a media file.
   static Future<bool> _downloadMediaFileSmart(
     String url,
@@ -33,6 +60,9 @@ class ScreenscraperMediaDownloader {
       final fullPath = path.join(userDataDir, relativePath);
       final file = File(fullPath);
       if (await file.exists() && !forceOverwrite) {
+        // Even without a re-download, make the already-selected ScreenScraper
+        // format authoritative by removing older PNG/JPG siblings.
+        await _removeCompetingImageVariants(fullPath);
         return true;
       }
 
@@ -45,6 +75,9 @@ class ScreenscraperMediaDownloader {
       if (response.statusCode == 200) {
         await file.create(recursive: true);
         await file.writeAsBytes(response.bodyBytes);
+        // The freshly downloaded ScreenScraper image must replace any older
+        // fallback that has the same media key but a different extension.
+        await _removeCompetingImageVariants(fullPath);
         return true;
       } else {
         _log.e('Error downloading media (${response.statusCode}): $url');

@@ -100,7 +100,23 @@ class FileProvider extends ChangeNotifier {
           final userDataPath = await ConfigService.getUserDataPath();
           _mediaPath = userDataPath;
         } else {
-          _mediaPath = appSupportDir.path;
+          // iOS: this used to be appSupportDir.path directly, which pointed
+          // at a completely different folder (Application Support) than
+          // where scraped media is actually written
+          // (ConfigService.getMediaPath(), under Documents — see
+          // media_resolver.dart, steam_scraper_service.dart, etc). Images
+          // would download successfully and sit on disk, but the app would
+          // never find them when rendering game art, because it was
+          // looking in the wrong sandbox folder entirely.
+          //
+          // getMediaPath() below appends `mediaFolder` ('media') back onto
+          // whatever _mediaPath is set to, so — same as the desktop branch
+          // further down — this needs to be the *parent* of
+          // ConfigService.getMediaPath()'s result (.../Documents), not that
+          // result itself (.../Documents/media), or every lookup would
+          // resolve to .../Documents/media/media/....
+          final fullMediaPath = await ConfigService.getMediaPath();
+          _mediaPath = path.dirname(fullMediaPath);
         }
       } else {
         final userDataPath = await ConfigService.getUserDataPath();

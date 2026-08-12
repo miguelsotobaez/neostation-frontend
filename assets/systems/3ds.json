@@ -294,17 +294,6 @@
       }
     },
     {
-      "name": "Standalone Mandarine-Neo",
-      "unique_id": "3ds.mandarine.neo",
-      "is_retroachievements_compatible": false,
-      "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf.",
-      "platforms": {
-        "android": {
-          "launch_arguments": "-n io.github.ptyfyre.mandarine.neo/io.github.mandarine3ds.mandarine.activities.EmulationActivity\n  -a android.intent.action.VIEW\n  -d {file.uri}\n  --activity-clear-task\n  --activity-clear-top\n"
-        }
-      }
-    },
-    {
       "name": "Standalone Citra Emu (Antutu)",
       "unique_id": "3ds.citraemu_antutu",
       "is_retroachievements_compatible": false,
@@ -345,6 +334,17 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n org.citra.citra_emu/org.citra.citra_emu.ui.EmulationActivity\n  -a android.intent.action.VIEW\n  -e GamePath {file.path}\n  --activity-clear-task\n  --activity-clear-top\n"
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "3ds.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
         }
       }
     }

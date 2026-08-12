@@ -337,6 +337,17 @@
           "args": "-L mame2010_libretro.dylib \"{file.path}\""
         }
       }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "mame.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
     }
   ],
   "neosync": {

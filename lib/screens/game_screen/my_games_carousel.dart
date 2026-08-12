@@ -7,7 +7,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
-import 'package:neostation/utils/rom_tree.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/system_background_provider.dart';
@@ -56,24 +55,6 @@ class GamesCarousel extends StatefulWidget {
     }
   }
 
-  /// Subfolder navigation: the first [folderCount] entries of [games] are folder
-  /// placeholders rendered from [folderEntries]; tapping one calls
-  /// [onFolderActivated] with its index to descend.
-  final int folderCount;
-  final List<RomFolderEntry> folderEntries;
-  final void Function(int folderIndex)? onFolderActivated;
-
-  /// Resolves on-disk cover files for the games beneath a folder, for the
-  /// folder-card preview mosaic. [imageType] follows the current card style
-  /// ('fanarts' vs 'box2d'). Falls back to screenshots. Provided by the parent
-  /// because it owns the full game list and subfolder roots.
-  final List<File> Function(
-    String folderRelPath, {
-    required int max,
-    required String imageType,
-  })?
-  folderCoverResolver;
-
   const GamesCarousel({
     super.key,
     required this.system,
@@ -89,10 +70,6 @@ class GamesCarousel extends StatefulWidget {
     this.onScrape,
     this.scrapingGameRomnames = const {},
     this.scrapeProgress = const {},
-    this.folderCount = 0,
-    this.folderEntries = const [],
-    this.onFolderActivated,
-    this.folderCoverResolver,
     this.artworkVersion = 0,
   });
 
@@ -130,11 +107,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
   Widget? _chromeLegend;
   final Map<String, double> _letterWidthCache = {};
   final Map<String, bool> _fileExistsCache = {};
-
-  /// Folder preview covers, keyed by "relPath|imageType" so box/fanart styles
-  /// cache independently. Resolving walks the game list and stats the disk, so
-  /// each folder card is computed once.
-  final Map<String, List<File>> _folderCoverCache = {};
   int _lastBgIndex = -1;
 
   static final Map<String, Size?> _imgSizeCache = {};
@@ -217,27 +189,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   static const String _favoritesLabel = '★';
 
-  /// Sentinel alphabet group for folder cards (see [_uniqueLetters]).
-  static const String _folderJumpGroup = '\u0000folder';
-
   bool get _hasFavoriteGames => widget.games.any((g) => g.isFavorite == true);
-
-  /// Whether the entry at [index] is a folder placeholder rather than a game.
-  bool _isFolderIndex(int index) => index < widget.folderCount;
-
-  /// Whether the centred card is a folder.
-  bool get _isFolderCentred => _isFolderIndex(_currentIndex);
 
   List<String> get _uniqueLetters {
     final letters = <String>[];
     if (_hasFavoriteGames) {
       letters.add(_favoritesLabel);
     }
-    for (var i = 0; i < widget.games.length; i++) {
-      // Folders are not alphabetical content — keep them out of the bar so its
-      // letters stay in order and always describe games.
-      if (_isFolderIndex(i)) continue;
-      final game = widget.games[i];
+    for (final game in widget.games) {
       if (game.isFavorite == true) continue;
 
       final displayName = game.name.isNotEmpty ? game.name : game.realname;
@@ -261,14 +220,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
   int _getFirstGameIndexForLetter(String letter) {
     if (letter == _favoritesLabel) {
       for (int i = 0; i < widget.games.length; i++) {
-        if (_isFolderIndex(i)) continue;
         if (widget.games[i].isFavorite == true) return i;
       }
       return 0;
     }
 
     for (int i = 0; i < widget.games.length; i++) {
-      if (_isFolderIndex(i)) continue;
       if (widget.games[i].isFavorite == true) continue;
       if (_getLetterForGame(widget.games[i]) == letter) return i;
     }
@@ -398,11 +355,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       length: widget.games.length,
       currentIndex: _currentIndex,
       forward: forward,
-      // Folders share one sentinel group so a held jump clears them in a
-      // single hop rather than pausing on each folder's initial.
-      letterAt: (index) => _isFolderIndex(index)
-          ? _folderJumpGroup
-          : _getLetterForGame(widget.games[index]),
+      letterAt: (index) => _getLetterForGame(widget.games[index]),
     );
     if (target == null) return false;
 
@@ -469,10 +422,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   /// burst reuses cached widget instances instead of rebuilding this chrome.
   void _buildSettledChrome() {
     final settledGame = widget.games[_settledIndex.clamp(0, _gamesLength - 1)];
-    final isFolder = _settledIndex < widget.folderCount;
-    // A folder has no hash and no video: the RetroAchievements pill and the
-    // mute pill must both stay away, or they render their empty states.
-    final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
+    final hasRa = _hasRetroAchievementsFor(settledGame);
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
         '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
@@ -488,8 +438,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       currentGameInfo: _currentGameInfo,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
-      hasVideo: !isFolder && _hasVideoFor(settledGame),
-      isFolder: isFolder,
+      hasVideo: _hasVideoFor(settledGame),
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can slide it without invalidating this memoized subtree.
@@ -563,19 +512,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   Future<void> _loadAchievementsForSelectedGame() async {
     if (widget.games.isEmpty) return;
-    final index = _currentIndex.clamp(0, widget.games.length - 1);
-    // A folder placeholder has no hash to look up: asking RetroAchievements
-    // about it can only fail, so skip the request and clear the panel.
-    if (_isFolderIndex(index)) {
-      if (mounted) {
-        setState(() {
-          _currentGameInfo = null;
-          _isLoadingAchievements = false;
-        });
-      }
-      return;
-    }
-    final game = widget.games[index];
+    final game = widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
 
     if (!_hasRetroAchievementsFor(game)) {
       if (mounted) {
@@ -676,7 +613,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
   void _scrollToCurrentLetter() {
     if (!_letterBarController.hasClients || widget.games.isEmpty) return;
 
-    if (_isFolderCentred) return;
     final currentLetter = _getLetterForGame(widget.games[_currentIndex]);
     final letters = _uniqueLetters;
     final letterIndex = letters.indexOf(currentLetter);
@@ -897,152 +833,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
   }
 
-  Widget _buildFolderCard(RomFolderEntry folder, bool isFanart) {
-    final theme = Theme.of(context);
-
-    // Preview the folder with up to four covers of the games it contains,
-    // falling back to the folder glyph when none have art on disk. The image
-    // type follows the current card style so the mosaic matches the surrounding
-    // cards (fanart vs box art). Cached per folder+style.
-    final imageType = isFanart ? 'fanarts' : 'box2d';
-    final cacheKey = '${folder.relPath}|$imageType';
-    final covers = _folderCoverCache[cacheKey] ??=
-        widget.folderCoverResolver?.call(
-          folder.relPath,
-          max: 4,
-          imageType: imageType,
-        ) ??
-        const [];
-
-    // Same footprint, radius and shadow as a game card. A fixed-size square
-    // centred in the (much larger) carousel slot read as a jumble of cropped
-    // fragments, so the card now fills the slot, the covers are inset
-    // thumbnails, and the name/count sits on a bottom scrim — where a game
-    // card carries its wheel logo.
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      margin: EdgeInsets.all(5.r),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 8.r,
-            offset: Offset(2.r, 2.r),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24.r),
-        child: ColoredBox(
-          color: theme.colorScheme.surfaceContainerHighest,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: covers.isEmpty
-                    ? Center(
-                        child: Icon(
-                          Symbols.folder_rounded,
-                          size: 96.r,
-                          fill: 1,
-                          color: widget.system.colorAsColor,
-                        ),
-                      )
-                    : Padding(
-                        padding: EdgeInsets.all(14.r),
-                        child: _buildCoverMosaic(covers),
-                      ),
-              ),
-              Container(
-                width: double.infinity,
-                color: Colors.black.withValues(alpha: 0.55),
-                padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 10.r),
-                child: Row(
-                  children: [
-                    Icon(
-                      Symbols.folder_rounded,
-                      size: 18.r,
-                      fill: 1,
-                      color: widget.system.colorAsColor,
-                    ),
-                    SizedBox(width: 8.r),
-                    Expanded(
-                      child: Text(
-                        folder.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14.r,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 8.r),
-                    Text(
-                      '${folder.gameCount}',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 12.r,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Lays 1–4 covers out as separate rounded thumbnails with gutters between
-  /// them: one cover fills the area, two split into columns, three/four fill a
-  /// 2×2. Insetting each cover rather than butting them edge to edge is what
-  /// keeps the montage legible at carousel size.
-  Widget _buildCoverMosaic(List<File> covers) {
-    final gutter = 8.r;
-
-    // SizedBox.expand + stretch on both axes is load-bearing: inside a Row the
-    // cross axis is loosely constrained, so a bare Image sizes to its intrinsic
-    // aspect ratio and leaves empty bands instead of filling its cell.
-    Widget tile(File file) => ClipRRect(
-      borderRadius: BorderRadius.circular(10.r),
-      child: SizedBox.expand(
-        child: Image.file(
-          file,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-      ),
-    );
-
-    Widget row(List<File> files) => Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < files.length; i++) ...[
-          if (i > 0) SizedBox(width: gutter),
-          Expanded(child: tile(files[i])),
-        ],
-      ],
-    );
-
-    if (covers.length == 1) return tile(covers.first);
-    if (covers.length == 2) return row(covers);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: row(covers.sublist(0, 2))),
-        SizedBox(height: gutter),
-        Expanded(child: row(covers.sublist(2))),
-      ],
-    );
-  }
-
   Widget _buildFallbackCard(GameModel game, ThemeData theme) {
     return Container(
       color: theme.colorScheme.surfaceContainerHighest,
@@ -1228,11 +1018,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final currentGame =
         widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
     final letters = _uniqueLetters;
-    // Null while a folder is centred: folders sit outside A–Z, so no chip is
-    // highlighted rather than the folder's own initial claiming one.
-    final String? currentLetter = _isFolderCentred
-        ? null
-        : _getLetterForGame(currentGame);
+    final currentLetter = _getLetterForGame(currentGame);
 
     final textStyle = TextStyle(
       color: theme.colorScheme.onSurface,
@@ -1262,28 +1048,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   itemCount: widget.games.length,
                   initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
                   itemBuilder: (context, index) {
-                    final isCentred = index == _currentIndex;
-                    if (index < widget.folderCount) {
-                      final folder = widget.folderEntries[index];
-                      return KeyedSubtree(
-                        key: ValueKey('folder_${folder.relPath}'),
-                        child: GestureDetector(
-                          // Same touch contract as the game cards: an
-                          // off-centre folder centres first, the centred one
-                          // descends into itself.
-                          onTap: () {
-                            SfxService().playNavSound();
-                            if (isCentred) {
-                              widget.onFolderActivated?.call(index);
-                            } else {
-                              _carouselKey.currentState?.animateToPage(index);
-                            }
-                          },
-                          child: _buildFolderCard(folder, isFanart),
-                        ),
-                      );
-                    }
                     final game = widget.games[index];
+                    final isCentred = index == _currentIndex;
                     return KeyedSubtree(
                       key: ValueKey(game.romname),
                       child: GestureDetector(
@@ -1321,28 +1087,27 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 padding: EdgeInsets.symmetric(horizontal: 4.r),
                 child: Stack(
                   children: [
-                    if (currentLetter != null)
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 120),
-                        curve: Curves.easeInOut,
-                        left: _getLetterBarOffset(
-                          currentLetter,
-                          letters,
-                          selectedTextStyle,
-                        ),
-                        top: 0,
-                        bottom: 0,
-                        width: _calculateLetterWidth(
-                          currentLetter,
-                          selectedTextStyle,
-                        ),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.secondary,
-                            borderRadius: BorderRadius.circular(12.r),
-                          ),
+                    AnimatedPositioned(
+                      duration: const Duration(milliseconds: 120),
+                      curve: Curves.easeInOut,
+                      left: _getLetterBarOffset(
+                        currentLetter,
+                        letters,
+                        selectedTextStyle,
+                      ),
+                      top: 0,
+                      bottom: 0,
+                      width: _calculateLetterWidth(
+                        currentLetter,
+                        selectedTextStyle,
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondary,
+                          borderRadius: BorderRadius.circular(12.r),
                         ),
                       ),
+                    ),
                     Row(
                       children: letters.map((letter) {
                         final isSelected = letter == currentLetter;
@@ -1397,11 +1162,19 @@ class _GamesCarouselState extends State<GamesCarousel> {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
           top: 12.r,
-          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
+          bottom: 12.r,
+          left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 250),
             opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-            child: _chromeLegend!,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topLeft,
+                child: _chromeLegend!,
+              ),
+            ),
           ),
         ),
         // Touch: swipe-right from the left edge reveals a hidden legend.

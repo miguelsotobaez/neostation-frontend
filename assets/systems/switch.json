@@ -209,6 +209,17 @@
           "launch_arguments": "-n org.benjisc.android/org.kenjinx.android.MainActivity -a org.kenjinx.android.LAUNCH_GAME -e bootPath \"{file.path}\"\n"
         }
       }
+    },
+    {
+      "name": "MeloNX",
+      "unique_id": "switch.ios.melonx",
+      "description": "MeloNX standalone Nintendo Switch emulator for iOS.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "melonx"
+        }
+      }
     }
   ],
   "neosync": {

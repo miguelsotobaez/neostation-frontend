@@ -12,7 +12,6 @@ extension _FavoritesReorder on _SystemGamesListState {
   /// Toggles the 'favorite' status for the selected game and re-sorts the list.
   Future<void> _toggleFavorite() async {
     if (_selectedGame == null) return;
-    if (_isFolderEntry(_selectedGame)) return;
 
     if (widget.system.folderName == 'music') {
       try {
@@ -79,27 +78,6 @@ extension _FavoritesReorder on _SystemGamesListState {
   void _reorderGamesListKeepingVisualPosition() {
     if (_selectedGame == null) return;
 
-    // In subfolder view the level (folders-first, favorites-pinned) is rebuilt
-    // wholesale rather than re-sorted in place, to preserve folder ordering.
-    if (_subfolderViewEnabled) {
-      final oldIndex = _selectedGameIndex;
-      rebuild(() {
-        _games = _buildDisplayList();
-        _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
-        if (oldIndex >= 0 && oldIndex < _games.length) {
-          _selectedGameIndex = oldIndex;
-          _selectedGame = _games[oldIndex];
-        } else if (_games.isNotEmpty) {
-          _selectedGameIndex = 0;
-          _selectedGame = _games.first;
-        }
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToSelectedItem();
-      });
-      return;
-    }
-
     final oldIndex = _selectedGameIndex;
 
     rebuild(() {
@@ -133,25 +111,6 @@ extension _FavoritesReorder on _SystemGamesListState {
   /// Sorts the list and re-anchors focus to a specific ROM.
   /// Primarily used after scraping to follow a game to its new alphabetical position.
   void _reorderGamesListFollowingGame(String romname) {
-    if (_subfolderViewEnabled) {
-      rebuild(() {
-        _games = _buildDisplayList();
-        _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
-        final newIndex = _games.indexWhere((g) => g.romname == romname);
-        if (newIndex != -1) {
-          _selectedGameIndex = newIndex;
-          _selectedGame = _games[newIndex];
-        } else if (_games.isNotEmpty) {
-          _selectedGameIndex = 0;
-          _selectedGame = _games.first;
-        }
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToSelectedItem();
-      });
-      return;
-    }
-
     rebuild(() {
       final sortedGames = List<GameModel>.from(_games);
       sortedGames.sort((a, b) {

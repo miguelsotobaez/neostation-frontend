@@ -16,7 +16,6 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:async';
-import 'dart:math';
 import '../../services/game_service.dart';
 import '../../utils/game_launch_utils.dart';
 import '../../services/music_player_service.dart';
@@ -33,7 +32,6 @@ import '../../providers/sqlite_database_provider.dart';
 import '../../providers/scraping_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
-import '../../utils/rom_tree.dart';
 import 'game_details_card/game_details_card_list.dart';
 import 'game_details_card/random_game_dialog.dart';
 import 'game_settings_dialog/game_settings_dialog.dart';
@@ -93,136 +91,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
   List<GameModel> _games = [];
   Map<GameModel, int> _gameIndexMap = {};
   GameModel? _selectedGame;
-
-  // Subfolder navigation (per-system "Show Subfolders" setting).
-  //
-  // When enabled, [_games] holds the entries for the current folder level:
-  // folder placeholders first (one per immediate subfolder), then that level's
-  // games. The placeholders let the existing index-based navigation, selection
-  // and scrolling machinery treat folders uniformly without special-casing
-  // every call site — only launch (descend), Back (ascend), preview and the row
-  // rendering branch on whether the current entry is a folder.
-  bool _subfolderViewEnabled = false;
-  String _currentRelPath = '';
-  // Absolute ROM root paths for this system (configured ROM folders joined with
-  // the system's folder name + aliases). buildRomLevel derives the folder tree
-  // by making each game's romPath relative to one of these roots.
-  List<String> _subfolderRoots = const [];
-  List<GameModel> _allGames = []; // Full flat list; source for the folder tree.
-  List<RomFolderEntry> _currentFolderEntries = []; // Folders at this level.
-  final Set<GameModel> _folderPlaceholders =
-      {}; // Identity set for folder rows.
-
-  // Folder preview mosaic: a varied-but-stable sample of the folder's covers.
-  // The sample is seeded by the folder path, so each folder consistently shows
-  // the same covers (different folders look different, but a folder doesn't
-  // reshuffle every time it's selected). Cached per relPath so scrolling back
-  // over a folder is free — resolving the covers walks the game list and hits
-  // the filesystem, which is too costly to redo every time a folder is focused.
-  final Map<String, List<File>> _folderCoverCache = {};
-
-  /// Sentinel alphabet group for folder rows: they are not part of the A–Z
-  /// ordering, so held-D-pad letter jumping treats them as a single block.
-  static const String _folderJumpGroup = '\u0000folder';
-
-  /// Whether a deep-linked [SystemGamesList.initialRomPath] has already
-  /// anchored the folder level. Applied on the first load only, so a later
-  /// refresh cannot yank the user out of the folder they are browsing.
-  bool _initialRomPathAnchored = false;
-
-  int get _folderCount => _currentFolderEntries.length;
-  bool _isFolderEntry(GameModel? g) =>
-      g != null && _folderPlaceholders.contains(g);
-
-  /// Identity for the grid/carousel views: changes only when the folder
-  /// structure changes (a folder added/removed, or a different level), so those
-  /// cache-heavy views remount and rebuild fresh after a ROM refresh — but not
-  /// on same-structure reorders (favorite toggles, post-scrape re-sorts).
-  String get _viewStructureSignature =>
-      '$_currentRelPath|$_folderCount|${_games.length}';
-
-  /// Deterministic placeholder occupying a folder's slot in [_games]. The
-  /// `romname` is derived from the folder path so selection survives reloads.
-  GameModel _folderPlaceholder(RomFolderEntry e) => GameModel(
-    romname: 'dir:${e.relPath}',
-    realname: e.name,
-    name: e.name,
-    year: '',
-    developer: '',
-    publisher: '',
-    genre: '',
-    players: '',
-    rating: 0.0,
-    romPath: e.relPath,
-  );
-
-  /// Rebuilds the visible list for [_currentRelPath]. Folders (as placeholders)
-  /// come first, then the level's games — matching [buildRomLevel]'s ordering.
-  /// When subfolder view is off this is just the flat [_allGames].
-  List<GameModel> _buildDisplayList() {
-    if (!_subfolderViewEnabled) {
-      _currentFolderEntries = const [];
-      _folderPlaceholders.clear();
-      return _allGames;
-    }
-
-    final entries = buildRomLevel(
-      games: _allGames,
-      rootFolders: _subfolderRoots,
-      currentRelPath: _currentRelPath,
-    );
-
-    final folders = <RomFolderEntry>[];
-    final placeholders = <GameModel>[];
-    final games = <GameModel>[];
-    for (final e in entries) {
-      if (e is RomFolderEntry) {
-        folders.add(e);
-        placeholders.add(_folderPlaceholder(e));
-      } else if (e is RomGameEntry) {
-        games.add(e.game);
-      }
-    }
-
-    _currentFolderEntries = folders;
-    _folderPlaceholders
-      ..clear()
-      ..addAll(placeholders);
-    return [...placeholders, ...games];
-  }
-
-  /// Rebuilds [_games] for [_currentRelPath] and anchors focus at the top.
-  void _navigateToFolderLevel(String relPath) {
-    SfxService().playNavSound();
-    _resetVideoState();
-    setState(() {
-      _currentRelPath = relPath;
-      _games = _buildDisplayList();
-      _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
-      _selectedGameIndex = 0;
-      _selectedGame = _games.isNotEmpty ? _games.first : null;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _scrollToSelectedItem();
-    });
-    _performBackgroundOperationsForSelectedGame();
-  }
-
-  /// Descends into the folder shown at [index] in the current level.
-  void _descendToFolderIndex(int index) {
-    if (index >= 0 && index < _currentFolderEntries.length) {
-      _navigateToFolderLevel(_currentFolderEntries[index].relPath);
-    }
-  }
-
-  /// Ascends one folder level (to the parent, or the system root).
-  void _ascendFolder() {
-    final rel = _currentRelPath;
-    final parent = rel.contains('/')
-        ? rel.substring(0, rel.lastIndexOf('/'))
-        : '';
-    _navigateToFolderLevel(parent);
-  }
 
   // Navigation & State orchestration.
   bool _isLoading = true;
@@ -491,9 +359,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
   void _openGameSettingsDialog() {
     final game = _selectedGame;
     if (game == null) return;
-    // Folder rows are placeholders, not ROMs — a settings dialog for one would
-    // write per-game rows keyed to a path that has no game behind it.
-    if (_isFolderEntry(game)) return;
     SfxService().playNavSound();
     showDialog(
       context: context,
@@ -542,7 +407,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Select + B — toggles the (session-global) vertical action-button legend.
   /// When hidden the legend slides off the left edge and the list sidebar +
-  /// details reflow into the reclaimed 60.r gutter.
+  /// details reflow into the reclaimed 72.r gutter.
   void _toggleLegend() {
     SfxService().playNavSound();
     GameLegendVisibility.toggle();
@@ -571,10 +436,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
     }
     _lastNavTime = now;
 
-    // Resolve current alphabetical letter for navigation overlays. Folder rows
-    // sit outside the alphabet, so they show no letter at all.
+    // Resolve current alphabetical letter for navigation overlays.
     final game = _games[newIndex];
-    final letter = _isFolderEntry(game) ? null : LetterJump.letterFor(game);
+    final letter = LetterJump.letterFor(game);
 
     setState(() {
       _selectedGameIndex = newIndex;
@@ -615,12 +479,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Orchestrates a graceful exit from the game list, synchronizing state with previous screens.
   Future<void> _goBack() async {
-    // Subfolder navigation: Back ascends one level before leaving the system.
-    if (_subfolderViewEnabled && _currentRelPath.isNotEmpty) {
-      _ascendFolder();
-      return;
-    }
-
     if (_isNavigatingBack) {
       return;
     }
@@ -1168,7 +1026,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// Builds the game carousel view with letter-based navigation.
   Widget _buildGamesCarousel() {
     return GamesCarousel(
-      key: ValueKey('carousel_$_viewStructureSignature'),
       system: widget.system,
       games: _games,
       selectedIndex: _selectedGameIndex,
@@ -1189,18 +1046,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
       artworkVersion: _artworkVersion,
-      folderCount: _folderCount,
-      folderEntries: _currentFolderEntries,
-      onFolderActivated: _descendToFolderIndex,
-      folderCoverResolver: (relPath, {required max, required imageType}) =>
-          _folderCoverFiles(relPath, max: max, imageType: imageType),
     );
   }
 
   /// Builds the game grid view with box-2d images.
   Widget _buildGamesGrid() {
     return GamesGrid(
-      key: ValueKey('grid_$_viewStructureSignature'),
       system: widget.system,
       games: _games,
       selectedIndex: _selectedGameIndex,
@@ -1221,11 +1072,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
       artworkVersion: _artworkVersion,
-      folderCount: _folderCount,
-      folderEntries: _currentFolderEntries,
-      onFolderActivated: _descendToFolderIndex,
-      folderCoverResolver: (relPath, {required max, required imageType}) =>
-          _folderCoverFiles(relPath, max: max, imageType: imageType),
     );
   }
 
@@ -1275,7 +1121,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
               width: 200.r,
               height: availableHeight,
               margin: EdgeInsets.only(
-                left: GameLegendVisibility.hidden.value ? 12.r : 60.r,
+                left: GameLegendVisibility.hidden.value ? 12.r : 72.r,
                 top: 12.r,
                 bottom: 12.r,
               ),
@@ -1330,33 +1176,41 @@ class _SystemGamesListState extends State<SystemGamesList> {
         // Floating action buttons on the left side of the game list. Select + B
         // slides this legend off the left edge (in sync with the sidebar
         // margin). The column is 40.r wide, so a 10.r inset centres it in the
-        // 60.r gutter — equal air either side of it.
+        // 72.r gutter — equal air either side of it.
         if (!isMusic)
           AnimatedPositioned(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
             top: 12.r,
-            left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
+            bottom: 12.r,
+            left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 250),
               opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-              child: Consumer<SyncManager>(
-                builder: (context, syncManager, child) {
-                  return GameActionButtons(
-                    system: widget.system,
-                    selectedGame: _selectedGame,
-                    syncProvider: syncManager.active,
-                    onBack: _goBack,
-                    onFavorite: _toggleFavorite,
-                    onViewMode: () => GameViewModeDropdown
-                        .globalKey
-                        .currentState
-                        ?.showDropdown(),
-                    onSettings: _openGameSettingsDialog,
-                    onRandom: _showRandomGameDialog,
-                    onScrape: () => _scrapeAction?.call(),
-                  );
-                },
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topLeft,
+                  child: Consumer<SyncManager>(
+                    builder: (context, syncManager, child) {
+                      return GameActionButtons(
+                        system: widget.system,
+                        selectedGame: _selectedGame,
+                        syncProvider: syncManager.active,
+                        onBack: _goBack,
+                        onFavorite: _toggleFavorite,
+                        onViewMode: () => GameViewModeDropdown
+                            .globalKey
+                            .currentState
+                            ?.showDropdown(),
+                        onSettings: _openGameSettingsDialog,
+                        onRandom: _showRandomGameDialog,
+                        onScrape: () => _scrapeAction?.call(),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),
@@ -1458,147 +1312,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       widget.system.folderName == SystemFolderNames.favorites,
                   isNavigatingFast: _isNavigatingFast,
                   onGamepadReactivated: _reactivateGamepadNavigation,
-                  folderCount: _folderCount,
-                  folderEntries: _currentFolderEntries,
-                  onFolderActivated: _descendToFolderIndex,
                 ),
         ),
-      ],
-    );
-  }
-
-  /// Right-hand panel shown while a folder row is highlighted.
-  Widget _buildFolderDetailsPanel(GameModel folder) {
-    final entry = _currentFolderEntries.firstWhere(
-      (e) => e.relPath == folder.romPath,
-      orElse: () => RomFolderEntry(
-        name: folder.name,
-        relPath: folder.romPath ?? folder.name,
-        gameCount: 0,
-      ),
-    );
-    final color = Colors.white.withValues(alpha: 0.8);
-
-    // Preview the folder with up to four covers of the games it contains,
-    // falling back to the folder glyph when none of them have art on disk.
-    // Seeded by relPath (see _folderCoverFiles) so the sample is stable per
-    // folder. Resolving the covers walks the game list and stats the disk, so
-    // it's cached per folder and skipped entirely during fast scrolling — the
-    // glyph shows immediately, and the mosaic fills in once scrolling settles
-    // (the fast-nav debounce triggers a rebuild). Cached folders stay instant.
-    List<File> covers;
-    if (_folderCoverCache.containsKey(entry.relPath)) {
-      covers = _folderCoverCache[entry.relPath]!;
-    } else if (_isNavigatingFast) {
-      covers = const [];
-    } else {
-      covers = _folderCoverFiles(entry.relPath, max: 4);
-      _folderCoverCache[entry.relPath] = covers;
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Scale the preview to the panel: fill most of the width but leave room
-        // for the name/count and keep it within the panel height.
-        final maxByWidth = constraints.maxWidth * 0.82;
-        final maxByHeight = constraints.maxHeight.isFinite
-            ? constraints.maxHeight * 0.68
-            : maxByWidth;
-        final side = min(maxByWidth, maxByHeight).clamp(200.0, 460.0);
-
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (covers.isEmpty)
-                Icon(
-                  Symbols.folder_rounded,
-                  size: side * 0.8,
-                  color: widget.system.colorAsColor,
-                  fill: 1,
-                )
-              else
-                SizedBox(
-                  width: side,
-                  height: side,
-                  child: _buildCoverMosaic(covers),
-                ),
-              SizedBox(height: 16.r),
-              Text(
-                entry.name,
-                style: TextStyle(
-                  fontSize: 18.r,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 8.r),
-              Text(
-                '${entry.gameCount}',
-                style: TextStyle(
-                  fontSize: 14.r,
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// Resolves on-disk cover files (box art, falling back to screenshot) for up
-  /// to [max] games contained beneath [folderRelPath], for the folder preview
-  /// mosaic. The contained games are shuffled with a seed derived from the
-  /// folder path, so the sample varies between folders but is stable for a
-  /// given folder across selections. Games without any art are skipped.
-  List<File> _folderCoverFiles(
-    String folderRelPath, {
-    required int max,
-    String imageType = 'box2d',
-  }) {
-    final systemFolder = widget.system.primaryFolderName;
-    final games = gamesUnderFolder(
-      games: _allGames,
-      rootFolders: _subfolderRoots,
-      folderRelPath: folderRelPath,
-    ).toList()..shuffle(Random(folderRelPath.hashCode));
-    final covers = <File>[];
-    for (final game in games) {
-      final art = game.getImagePath(systemFolder, imageType, _fileProvider);
-      if (File(art).existsSync()) {
-        covers.add(File(art));
-      } else {
-        final shot = game.getScreenshotPath(systemFolder, _fileProvider);
-        if (File(shot).existsSync()) covers.add(File(shot));
-      }
-      if (covers.length >= max) break;
-    }
-    return covers;
-  }
-
-  /// Lays out 1–4 cover images: a single cover fills the square, otherwise a
-  /// 2×2 grid (a 3-cover set leaves one cell empty).
-  Widget _buildCoverMosaic(List<File> covers) {
-    final crossAxisCount = covers.length == 1 ? 1 : 2;
-    return GridView.count(
-      crossAxisCount: crossAxisCount,
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      mainAxisSpacing: 4.r,
-      crossAxisSpacing: 4.r,
-      children: [
-        for (final file in covers)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8.r),
-            child: Image.file(
-              file,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          ),
       ],
     );
   }
@@ -1663,10 +1378,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ],
         ),
       );
-    }
-
-    if (_isFolderEntry(_selectedGame)) {
-      return _buildFolderDetailsPanel(_selectedGame!);
     }
 
     if (widget.system.folderName == 'music') {
@@ -1869,7 +1580,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
   Future<void> _scrapeSelectedGame() async {
     final game = _selectedGame;
     if (game == null || _isScrapingSelectedGame) return;
-    if (_isFolderEntry(game)) return;
 
     final scrapeSystemId = widget.system.id;
     if (scrapeSystemId == null) return;

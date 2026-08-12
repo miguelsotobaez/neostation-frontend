@@ -549,7 +549,10 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     final gen = _videoGeneration;
     VideoPlayerController? controller;
     try {
-      controller = VideoPlayerController.file(File(path));
+      controller = VideoPlayerController.file(
+        File(path),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
       await controller.initialize();
       if (!mounted || gen != _videoGeneration) {
         await controller.dispose();

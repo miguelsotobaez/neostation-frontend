@@ -47,10 +47,12 @@ class GameActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double buttonWidth = 26.0;
-    const double buttonHeight = 34.0;
-    const double badgeHeight = 18.0;
-    const double mainIconSize = 12.0;
+    // Enlarged a little for better legibility/touch visibility on the left
+    // action rail, while keeping the same overall visual style.
+    const double buttonWidth = 34.0;
+    const double buttonHeight = 44.0;
+    const double badgeHeight = 22.0;
+    const double mainIconSize = 15.0;
     final cornerRadius =
         Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
         BorderRadius.circular(14.r);
@@ -69,7 +71,7 @@ class GameActionButton extends StatelessWidget {
         onTap: isLoading || onTap == null ? null : _onTap,
         borderRadius: cornerRadius,
         child: Container(
-          margin: EdgeInsets.only(bottom: 2.r),
+          margin: EdgeInsets.only(bottom: 3.r),
           width: buttonWidth.r,
           height: buttonHeight.r,
           decoration: BoxDecoration(
@@ -85,8 +87,8 @@ class GameActionButton extends StatelessWidget {
                 color: Theme.of(
                   context,
                 ).colorScheme.shadow.withValues(alpha: 0.3),
-                blurRadius: 2.r,
-                offset: Offset(1.r, 1.r),
+                blurRadius: 3.r,
+                offset: Offset(1.5.r, 1.5.r),
               ),
             ],
           ),
@@ -126,8 +128,8 @@ class GameActionButton extends StatelessWidget {
                       child: Center(
                         child: Image.asset(
                           iconPath,
-                          width: 14.r,
-                          height: 14.r,
+                          width: 17.r,
+                          height: 17.r,
                           color: foregroundColor,
                           colorBlendMode: BlendMode.srcIn,
                         ),

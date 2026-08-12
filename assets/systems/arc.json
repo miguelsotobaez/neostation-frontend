@@ -431,6 +431,17 @@
           "launch_arguments": "-n com.seleuco.mame4d2024/com.seleuco.mame4droid.MAME4droid -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top"
         }
       }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "arc.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
     }
   ],
   "neosync": {

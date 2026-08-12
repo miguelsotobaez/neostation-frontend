@@ -4,6 +4,13 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:external_folder_access/external_folder_access.dart';
+import 'package:neostation/services/retroarch_playlist_service.dart';
+import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/armsx2_library_service.dart';
+import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../../models/game_model.dart';
 import '../../models/system_model.dart';
@@ -88,9 +95,25 @@ class GameLaunchService {
         }
       }
 
+      final isArmsx2VirtualRom =
+          Platform.isIOS &&
+          system.folderName.toLowerCase() == 'ps2' &&
+          game.romPath != null &&
+          Armsx2LibraryService.isVirtualLibraryPath(game.romPath!);
+      final isMeloNXVirtualRom =
+          Platform.isIOS &&
+          system.folderName.toLowerCase() == 'switch' &&
+          game.romPath != null &&
+          MelonxLibraryService.isVirtualLibraryPath(game.romPath!);
+
       bool romExists = false;
       if (game.romPath != null) {
-        if (Platform.isAndroid && game.romPath!.startsWith('content://')) {
+        if (isArmsx2VirtualRom || isMeloNXVirtualRom) {
+          // External iOS library imports are represented by direct-launch URLs
+          // rather than filesystem paths. They remain launchable even when
+          // NeoStation cannot see the underlying ROM file itself.
+          romExists = true;
+        } else if (Platform.isAndroid && game.romPath!.startsWith('content://')) {
           romExists = true;
         } else {
           romExists = await File(game.romPath!).exists();
@@ -103,6 +126,174 @@ class GameLaunchService {
           AppLocale.romFileNotFound.getString(context),
           game.romPath ?? AppLocale.noData.getString(context),
         );
+      }
+
+      // iOS: there's no equivalent of Android's "send an Intent with a file
+      // to any installed app", and dart:io Process is unimplemented. What
+      // *does* work — confirmed by hand on-device — is the standard iOS
+      // share sheet: RetroArch (and other emulators) register themselves as
+      // valid recipients for ROM files there. So instead of shelling out to
+      // a separate process, hand the ROM off through UIActivityViewController
+      // and let the user pick their emulator from the native share sheet.
+      // This needs one extra tap the first few times; iOS promotes
+      // frequently-used apps to the front of that list afterwards.
+      if (Platform.isIOS) {
+        GameSessionManager.registerGameLaunch(system, game, 'ios_direct_launch');
+        await FavoritesService.recordGamePlayed(game);
+
+        // Nintendo Switch: MeloNX exposes an alternate-frontend library export
+        // and direct-launch URL scheme. Imported virtual rows launch immediately;
+        // physical Switch rows can also be matched by Title ID/title name from
+        // the last MeloNX sync.
+        if (system.folderName.toLowerCase() == 'switch') {
+          try {
+            final launched = await MelonxLibraryService.launchGameByRomPath(
+              game.romPath!,
+              titleId: game.titleId,
+              titleName: game.titleName,
+            );
+            if (launched) return GameLaunchResult.success();
+          } catch (e) {
+            // Physical Switch rows can still fall through to RetroArch/Open In.
+          }
+
+          // A virtual MeloNX row has no local file to hand to another emulator
+          // if its deeplink failed. Stop here instead of trying file fallbacks.
+          if (isMeloNXVirtualRom) {
+            return GameLaunchResult.failure(
+              'Could not launch this Nintendo Switch game in MeloNX.',
+              game.romPath,
+            );
+          }
+        }
+
+        // PS2: ARMSX2 exports its own library with the exact fileName and
+        // launchURL it expects. If this ROM matches that synced library, send
+        // it straight to ARMSX2 before trying RetroArch. Restrict this branch
+        // to the PS2 system so identical filenames on unrelated systems can
+        // never be captured accidentally.
+        if (system.folderName.toLowerCase() == 'ps2') {
+          try {
+            final launched = await Armsx2LibraryService.launchGameByRomPath(
+              game.romPath!,
+            );
+            if (launched) return GameLaunchResult.success();
+          } catch (e) {
+            // Physical PS2 rows can still fall through to RetroArch/Open In.
+          }
+
+          // A virtual ARMSX2 row has no local file to hand to RetroArch or the
+          // iOS share sheet. If the deeplink failed, stop here with a useful
+          // error instead of attempting file-based fallbacks on armsx2://.
+          if (isArmsx2VirtualRom) {
+            return GameLaunchResult.failure(
+              'Could not launch this PS2 game in ARMSX2.',
+              game.romPath,
+            );
+          }
+        }
+
+        // Genuine one-tap launch via RetroArch's synced library and
+        // retroarch://game/<filename>. This remains the general iOS direct
+        // launch path for systems RetroArch knows about, and the fallback for
+        // PS2 games that are not present in ARMSX2's exported library.
+        try {
+          final launched = await RetroArchLibraryService.launchGameByRomPath(
+            game.romPath!,
+          );
+          if (launched) return GameLaunchResult.success();
+        } catch (e) {
+          // Fall through to the playlist/Open In/Share fallbacks below.
+        }
+
+        // Genuine one-tap launch: if this ROM lives in a folder we've
+        // live-linked to RetroArch's own folder (see
+        // ConfigService.linkedExternalFolderPath +
+        // external_folder_access), and RetroArch has already scanned it
+        // into one of its own playlists, move that entry to the front of
+        // content_history.lpl and trigger RetroArch's parameter-less
+        // "Resume Last Game" Shortcuts action. That action was confirmed
+        // (on-device) to accept no external input for a *specific* game —
+        // but it needs no input at all, since it just plays whatever's
+        // most recent. See RetroArchPlaylistService for the details.
+        //
+        // The exact name of the Shortcut wrapping "Resume Last Game" is a
+        // one-time setup step done by the user in the Shortcuts app.
+        // "ResumeNeoStation" is the default name expected here.
+        final linkedFolder = ConfigService.linkedExternalFolderPath;
+        if (linkedFolder != null &&
+            path.isWithin(linkedFolder, game.romPath!)) {
+          try {
+            final updated = await RetroArchPlaylistService.setAsMostRecent(
+              game.romPath!,
+            );
+            if (updated) {
+              final opened = await launchUrl(
+                Uri.parse(
+                  'shortcuts://run-shortcut?name=ResumeNeoStation',
+                ),
+              );
+              if (opened) return GameLaunchResult.success();
+            }
+          } catch (e) {
+            // Fall through to Open In / Share below rather than dead-end.
+          }
+        }
+
+        // Uses iOS's genuine "Open In" document-interaction flow rather
+        // than the general Share Sheet (which the previous version of this
+        // code used via share_plus, still available as a fallback below).
+        // "Open In" hands the file to an app that declared itself able to
+        // *own*/import that document type — the traditional "here's a
+        // file, please open it" flow, as opposed to "here's some content,
+        // do something with it" (sharing). Whether RetroArch treats these
+        // differently for a ROM its own playlist already recognizes
+        // (matched path/crc32, core resolved via "DETECT") is exactly what
+        // this is here to find out.
+        try {
+          final presented = await ExternalFolderAccess.openInMenu(
+            game.romPath!,
+          );
+          if (presented == true) {
+            return GameLaunchResult.success();
+          }
+          // Falls through to the Share Sheet below if "Open In" wasn't
+          // presented (e.g. no root view controller available) — better to
+          // still offer a working path than a dead end.
+        } catch (e) {
+          // Same — fall through to the Share Sheet fallback.
+        }
+
+        // share_plus requires a non-null sharePositionOrigin on iPad, or it
+        // can crash / hang with no visible error. Best-effort from whatever
+        // context we were handed; falls back to a small on-screen rect if
+        // the render tree isn't available for some reason.
+        Rect sharePositionOrigin = const Rect.fromLTWH(0, 0, 1, 1);
+        final renderObject = context.findRenderObject();
+        if (renderObject is RenderBox && renderObject.hasSize) {
+          sharePositionOrigin =
+              renderObject.localToGlobal(Offset.zero) & renderObject.size;
+        }
+
+        try {
+          final result = await SharePlus.instance.share(
+            ShareParams(
+              files: [XFile(game.romPath!)],
+              sharePositionOrigin: sharePositionOrigin,
+            ),
+          );
+          if (result.status == ShareResultStatus.success) {
+            return GameLaunchResult.success();
+          }
+          // `dismissed` just means the user closed the share sheet without
+          // picking anything — not an error worth surfacing as a failure.
+          return GameLaunchResult.success();
+        } catch (e) {
+          return GameLaunchResult.failure(
+            'Could not open the share sheet for this game.',
+            '$e',
+          );
+        }
       }
 
       final configFileName = '${system.folderName}.json';

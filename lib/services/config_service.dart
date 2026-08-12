@@ -19,6 +19,24 @@ import '../repositories/system_repository.dart';
 class ConfigService {
   static final _log = LoggerService.instance;
 
+  /// iOS-only: absolute path of the externally-linked folder (e.g.
+  /// RetroArch's), resolved once at app startup via
+  /// ExternalFolderAccess.resolveBookmarkedFolder() and cached here for the
+  /// rest of the session. Null if nothing has been linked yet. Used by
+  /// GameLaunchService to decide whether a ROM already lives inside
+  /// RetroArch's own sandbox (in which case launching should just open
+  /// RetroArch directly) versus NeoStation's internal roms folder (in which
+  /// case launching goes through the share sheet, see
+  /// GameLaunchService.launchGame).
+  static String? linkedExternalFolderPath;
+
+  /// iOS-only: absolute path of the folder linked for ARMSX2, resolved at
+  /// startup from its own security-scoped bookmark (key `'armsx2'`, see
+  /// ExternalFolderAccess). Kept separate from
+  /// [linkedExternalFolderPath] because each emulator has its own library
+  /// export and direct-launch URL scheme. Null if nothing is linked.
+  static String? linkedArmsx2FolderPath;
+
   /// Determines the base execution path for Windows installations.
   ///
   /// In development mode (`flutter run`), it targets the project root.
@@ -185,6 +203,93 @@ class ConfigService {
   /// Returns the platform default user-data path, ignoring any custom override.
   static Future<String> getDefaultUserDataPath() async {
     return _computeDefaultUserDataPath();
+  }
+
+  /// iOS-only: returns the app's internal default ROMs folder
+  /// (`<Documents>/roms`), creating it if it doesn't exist yet.
+  ///
+  /// iOS apps are sandboxed — there's no reliable equivalent of Android's
+  /// "pick any folder on the device" or desktop's arbitrary filesystem
+  /// access, and folder bookmarks picked via the system document picker
+  /// don't survive relaunches reliably. Instead, NeoStation exposes its own
+  /// Documents directory to the Files app (via `UIFileSharingEnabled` /
+  /// `LSSupportsOpeningDocumentsInPlace` in Info.plist), so the user can
+  /// drag ROMs in from a computer or the Files app under
+  /// "On My iPhone > NeoStation > roms", and the app always knows exactly
+  /// where to look — no picker, no lost permissions after a relaunch.
+  static Future<String> getDefaultIOSRomsFolder() async {
+    final documentsDir = await getApplicationDocumentsDirectory();
+    final romsPath = path.join(documentsDir.path, 'roms');
+
+    final romsDir = Directory(romsPath);
+    if (!await romsDir.exists()) {
+      try {
+        await romsDir.create(recursive: true);
+      } catch (e) {
+        _log.e('Failed to create default iOS roms directory: $e');
+      }
+    }
+    return romsPath;
+  }
+
+  /// iOS-only: recursively copies every file found under [sourcePath] into
+  /// NeoStation's internal roms folder ([getDefaultIOSRomsFolder]),
+  /// preserving the relative folder structure (so a source layout like
+  /// `snes/Chrono Trigger.sfc` lands at `roms/snes/Chrono Trigger.sfc`).
+  ///
+  /// This is how NeoStation "reads" another app's ROM folder (e.g.
+  /// RetroArch's) on iOS: there's no reliable way to keep a live reference
+  /// to another app's sandboxed folder across relaunches (that needs
+  /// security-scoped bookmarks, native code NeoStation doesn't have yet), so
+  /// instead this does a one-time (repeatable) import — pick the folder via
+  /// the system picker, copy what's there in. RetroArch (and most iOS
+  /// emulators) already copy a ROM into their own sandbox the moment you
+  /// share/open it with them, so this isn't introducing extra duplication
+  /// beyond what iOS's sandboxing model already requires.
+  ///
+  /// Files that already exist at the destination (same relative path) are
+  /// skipped, so re-running an import after adding a few new ROMs to the
+  /// source folder is cheap and won't reprocess everything. Per-file
+  /// failures (permissions, unreadable files, etc.) are logged and skipped
+  /// rather than aborting the whole import.
+  ///
+  /// Returns the number of files actually copied.
+  static Future<int> importFilesFromExternalFolder(String sourcePath) async {
+    final destinationRoot = await getDefaultIOSRomsFolder();
+    final sourceDir = Directory(sourcePath);
+
+    if (!await sourceDir.exists()) {
+      _log.w('importFilesFromExternalFolder: source does not exist: $sourcePath');
+      return 0;
+    }
+
+    var copiedCount = 0;
+    try {
+      await for (final entity in sourceDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+
+        try {
+          final relativePath = path.relative(entity.path, from: sourcePath);
+          final destinationPath = path.join(destinationRoot, relativePath);
+
+          final destinationFile = File(destinationPath);
+          if (await destinationFile.exists()) continue;
+
+          await destinationFile.parent.create(recursive: true);
+          await entity.copy(destinationPath);
+          copiedCount++;
+        } catch (e) {
+          _log.w('importFilesFromExternalFolder: skipped ${entity.path}: $e');
+        }
+      }
+    } catch (e) {
+      _log.e('importFilesFromExternalFolder: failed to list $sourcePath: $e');
+    }
+
+    return copiedCount;
   }
 
   /// Platform-specific strategies:

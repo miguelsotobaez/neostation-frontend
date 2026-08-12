@@ -101,55 +101,77 @@ class _GameDetailsBox2dTabState extends State<GameDetailsBox2dTab> {
       _loadImageAspectRatio(box2dPath);
     }
 
+    final borderRadius =
+        Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+        BorderRadius.circular(14.r);
+
     return Positioned(
-      left: 12.r,
-      right: 12.r,
-      top: 55.r,
-      bottom: 110.r,
-      child: Center(
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                BorderRadius.circular(14.r),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.shadow.withValues(alpha: 0.3),
-                blurRadius: 3.r,
-                offset: Offset(3.0.r, 3.0.r),
-              ),
-            ],
-            color: Colors.transparent,
-          ),
-          child: ClipRRect(
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                BorderRadius.circular(14.r),
-            clipBehavior: Clip.antiAlias,
-            child: AspectRatio(
-              aspectRatio: _imageAspectRatio,
-              child: box2dExists
-                  ? Image.file(
-                      File(box2dPath),
-                      key: ValueKey(
-                        'box2d_${widget.game.romPath ?? widget.game.romname}'
-                        '_v${widget.imageVersion}',
-                      ),
-                      fit: BoxFit.contain,
-                      cacheWidth: 640,
-                    )
-                  : Center(
-                      child: Icon(
-                        Icons.inventory_2_outlined,
-                        size: 48.r,
-                        color: Colors.white24,
-                      ),
+      // Slightly enlarge the usable area while keeping comfortable clearance
+      // from the tab bar above and the title/footer area below.
+      left: 18.r,
+      right: 18.r,
+      top: 46.r,
+      bottom: 104.r,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxWidth = constraints.maxWidth * 0.84;
+          final double maxHeight = constraints.maxHeight * 0.98;
+
+          double imageWidth = maxWidth;
+          double imageHeight = imageWidth / _imageAspectRatio;
+
+          if (imageHeight > maxHeight) {
+            imageHeight = maxHeight;
+            imageWidth = imageHeight * _imageAspectRatio;
+          }
+
+          return Align(
+            // Keep the larger cover slightly higher so it never crowds the
+            // game title below.
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: EdgeInsets.only(top: 4.r),
+              child: Container(
+                width: imageWidth,
+                height: imageHeight,
+                decoration: BoxDecoration(
+                  borderRadius: borderRadius,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.shadow.withValues(alpha: 0.3),
+                      blurRadius: 3.r,
+                      offset: Offset(3.0.r, 3.0.r),
                     ),
+                  ],
+                  color: Colors.transparent,
+                ),
+                child: ClipRRect(
+                  borderRadius: borderRadius,
+                  clipBehavior: Clip.antiAlias,
+                  child: box2dExists
+                      ? Image.file(
+                          File(box2dPath),
+                          key: ValueKey(
+                            'box2d_${widget.game.romPath ?? widget.game.romname}'
+                            '_v${widget.imageVersion}',
+                          ),
+                          fit: BoxFit.contain,
+                          cacheWidth: 768,
+                        )
+                      : Center(
+                          child: Icon(
+                            Icons.inventory_2_outlined,
+                            size: 48.r,
+                            color: Colors.white24,
+                          ),
+                        ),
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

@@ -116,7 +116,7 @@ class _GameDetailsScreenshotVideoTabState
     }
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(12.r, 55.r, 12.r, 110.r),
+      padding: EdgeInsets.fromLTRB(8.r, 40.r, 8.r, 80.r),
       child: Center(
         child: Container(
           decoration: BoxDecoration(
@@ -210,24 +210,12 @@ class _GameDetailsScreenshotVideoTabState
                                 builder: (context, configProvider, child) {
                                   final isMuted =
                                       !configProvider.config.videoSound;
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Image.asset(
-                                        'assets/images/gamepad/Xbox_View_button.png',
-                                        width: 14.r,
-                                        height: 14.r,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(width: 4.r),
-                                      Icon(
-                                        isMuted
-                                            ? Symbols.volume_off_rounded
-                                            : Symbols.volume_up_rounded,
-                                        size: 12.r,
-                                        color: Colors.white,
-                                      ),
-                                    ],
+                                  return Icon(
+                                    isMuted
+                                        ? Symbols.volume_off_rounded
+                                        : Symbols.volume_up_rounded,
+                                    size: 16.r,
+                                    color: Colors.white,
                                   );
                                 },
                               ),

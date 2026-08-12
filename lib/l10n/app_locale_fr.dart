@@ -54,8 +54,6 @@ const Map<String, dynamic> appLocaleFr = {
       'Le pack System Art sera téléchargé pour tous les systèmes. Cela peut prendre quelques instants.',
   AppLocale.systemArtDownloading: 'Téléchargement du pack System Art...',
   AppLocale.about: 'À propos',
-  AppLocale.exit: 'Quitter',
-  AppLocale.launcher: 'Lanceur',
   AppLocale.emulators: 'Émulateurs',
   AppLocale.appearance: 'Apparence',
   AppLocale.systemsSettings: 'Systèmes',
@@ -98,11 +96,6 @@ const Map<String, dynamic> appLocaleFr = {
       'Analyse récursive activée. Analyse de {name}...',
   AppLocale.recursiveScanDisabled:
       'Analyse récursive désactivée. Analyse de {name}...',
-  AppLocale.subfolderView: 'Afficher les sous-dossiers',
-  AppLocale.subfolderViewSubtitle:
-      'Regrouper les ROMs des sous-dossiers dans des dossiers navigables au lieu de les mélanger avec les jeux',
-  AppLocale.subfolderViewEnabled: 'Sous-dossiers affichés comme dossiers',
-  AppLocale.subfolderViewDisabled: 'Sous-dossiers mélangés aux jeux',
   AppLocale.errorScanningSystem:
       'Erreur lors de l’analyse du système : {error}',
   AppLocale.scrapedTitlesUsed:
@@ -195,6 +188,8 @@ const Map<String, dynamic> appLocaleFr = {
       'Affiche l’onglet de recherche dans la barre de navigation',
 
   AppLocale.configureDirectories: 'Configurer les Répertoires',
+  AppLocale.configureLaunch: 'Configurer le lancement',
+  AppLocale.shortcutSetupOpenError: 'Impossible d’ouvrir la configuration du lancement.',
   AppLocale.configureRomsFolder: 'Configurer le Dossier des ROMs',
   AppLocale.cannotAccessFolder: 'Impossible d’accéder au dossier',
   AppLocale.backgroundImage: 'Image de Fond',
@@ -204,10 +199,6 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.logoImageSubtitle: 'jpg, png, webp | 512x512px ou plus petit',
   AppLocale.selectRetroArchExe: 'Sélectionner l’exécutable RetroArch',
   AppLocale.selectExecutablePath: 'Sélectionner le chemin de l’exécutable',
-
-  AppLocale.exitApplication: 'Quitter l’Application',
-  AppLocale.exitConfirmation: 'Êtes-vous sûr de vouloir quitter NeoStation ?',
-  AppLocale.confirmExit: 'Confirmer la Sortie',
   AppLocale.rescanAllFolders: 'Analyser à nouveau tous les dossiers ROM',
   AppLocale.rescanAllFoldersSubtitle:
       'Rechercher manuellement de nouveaux systèmes et ROMs',
@@ -832,10 +823,6 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.pressToClose: 'Appuyez sur [ESC], [ENTER] ou [ESPACE] pour fermer',
 
   AppLocale.selectStorage: 'Sélectionner le Stockage',
-
-  AppLocale.homeFolder: 'Dossier personnel',
-
-  AppLocale.filesystemRoot: 'Système de fichiers',
   AppLocale.internalStorage: 'Stockage Interne',
   AppLocale.externalStorage: 'Stockage Externe ({name})',
   AppLocale.folderRestrictedAndroid: 'Dossier restreint par Android',
@@ -1034,4 +1021,27 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.wizardArtPackUnavailable:
       'Le pack visuel est actuellement inaccessible. Vous pourrez l\'installer '
       'plus tard depuis les Paramètres une fois en ligne.',
+
+  // iOS emulator library integration
+  AppLocale.iosEmuSync: "Synchroniser",
+  AppLocale.iosEmuResync: "Resynchroniser",
+  AppLocale.iosEmuLinkFolder: "Lier le dossier",
+  AppLocale.iosEmuChangeFolder: "Changer de dossier",
+  AppLocale.iosEmuLinkingFailed: "Échec de la liaison : {error}",
+  AppLocale.iosRetroarchSyncRequested: "Synchronisation de la bibliothèque RetroArch demandée. Elle s’effectue en arrière-plan ; patientez quelques secondes.",
+  AppLocale.iosRetroarchUnavailable: "Impossible de joindre RetroArch. Est-il installé ?",
+  AppLocale.iosArmsx2SyncRequested: "Synchronisation de la bibliothèque ARMSX2 demandée. ARMSX2 reviendra automatiquement dans NeoStation lorsque l’export sera prêt.",
+  AppLocale.iosArmsx2Unavailable: "Impossible de joindre ARMSX2. Est-il installé ?",
+  AppLocale.iosMelonxSyncRequested: "Synchronisation de la bibliothèque Nintendo Switch de MeloNX demandée. MeloNX reviendra automatiquement dans NeoStation lorsque l’export sera prêt.",
+  AppLocale.iosMelonxUnavailable: "Impossible de joindre MeloNX. Est-il installé ?",
+  AppLocale.iosRetroarchStatusNeedsLink: "Liez le dossier de RetroArch afin que NeoStation accède directement à vos jeux, sans copie.",
+  AppLocale.iosRetroarchStatusNeedsSync: "Dossier lié. Synchronisez la bibliothèque pour lancer les jeux directement dans RetroArch en un appui.",
+  AppLocale.iosRetroarchStatusSynced: "Dossier lié et bibliothèque synchronisée — les jeux se lancent directement dans RetroArch.",
+  AppLocale.iosRetroarchLinkSuccess: "Dossier lié. NeoStation l’analysera directement, sans copie. Les jeux trouvés ici seront lancés directement dans RetroArch.",
+  AppLocale.iosArmsx2StatusNeedsLink: "ARMSX2 utilise le même dossier de ROMs que RetroArch. Liez le dossier partagé, puis synchronisez la bibliothèque ARMSX2.",
+  AppLocale.iosArmsx2StatusNeedsSync: "Dossier de ROMs partagé lié. Synchronisez ARMSX2 pour importer la bibliothèque PS2 dans NeoStation.",
+  AppLocale.iosArmsx2StatusSynced: "Dossier partagé et bibliothèque ARMSX2 synchronisés — les jeux PS2 se lancent directement dans ARMSX2.",
+  AppLocale.iosArmsx2LinkSuccess: "Dossier de ROMs partagé lié. RetroArch et ARMSX2 utilisent désormais la même source de ROMs NeoStation.",
+  AppLocale.iosMelonxStatusSynced: "Bibliothèque MeloNX synchronisée — les jeux Nintendo Switch se lancent directement dans MeloNX.",
+  AppLocale.iosMelonxStatusNeedsSync: "Synchronisez MeloNX pour importer directement sa bibliothèque Nintendo Switch dans NeoStation. Aucune analyse de dossier de ROMs n’est nécessaire.",
 };

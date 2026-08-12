@@ -64,15 +64,6 @@ extension _SecondaryDisplay on _SystemGamesListState {
   void _performBackgroundOperationsForSelectedGame({bool force = false}) {
     if (_selectedGame == null || !mounted) return;
 
-    // Folder rows have no media/preview to resolve. Clear the primary preview
-    // AND the secondary display, otherwise the second screen keeps showing the
-    // art/video of the game that was hovered before backing out into the folder.
-    if (_isFolderEntry(_selectedGame)) {
-      _resetVideoState();
-      _clearSecondaryDisplayForFolder();
-      return;
-    }
-
     // Suppress expensive operations (video, isolates) during rapid scrolling.
     if (_isNavigatingFast && !force) {
       _updateBackground(_selectedGame!);
@@ -88,32 +79,6 @@ extension _SecondaryDisplay on _SystemGamesListState {
     _updateMusicDucking();
   }
 
-  /// Clears the secondary display's game media when a folder row is focused, so
-  /// the second screen drops back to the system/idle view instead of holding
-  /// the previously-hovered game's art and video. No-op when nothing game-like
-  /// is currently shown, to avoid redundant pushes while scrolling folders.
-  void _clearSecondaryDisplayForFolder() {
-    final state = _secondaryDisplayState;
-    if (state == null) return;
-    final current = state.value;
-    if (current != null &&
-        !current.isGameSelected &&
-        current.gameId == null &&
-        current.gameVideo == null) {
-      return;
-    }
-    // ignore: unawaited_futures
-    state.updateState(
-      isGameSelected: false,
-      clearGameId: true,
-      clearVideo: true,
-      clearFanart: true,
-      clearScreenshot: true,
-      clearWheel: true,
-      clearImageBytes: true,
-    );
-  }
-
   /// Synchronizes selection metadata and assets with secondary hardware displays.
   ///
   /// [forceMediaRefresh] forces a push even when every media path is unchanged
@@ -126,13 +91,6 @@ extension _SecondaryDisplay on _SystemGamesListState {
     bool forceMediaRefresh = false,
   }) async {
     if (_secondaryDisplayState == null || _isNavigatingBack) return;
-
-    // Folder placeholders carry no real media — never push them as a game, or
-    // the second screen would show the stale art of the last hovered game.
-    if (_isFolderEntry(game)) {
-      _clearSecondaryDisplayForFolder();
-      return;
-    }
 
     final systemFolderName =
         (widget.system.folderName == 'all' ||
@@ -477,7 +435,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
 
       final mainController = VideoPlayerController.file(
         file,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
       );
 
       await mainController.initialize();

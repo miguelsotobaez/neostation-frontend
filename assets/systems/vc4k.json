@@ -65,6 +65,17 @@
           "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mamemess\""
         }
       }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "vc4k.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
     }
   ],
   "neosync": {

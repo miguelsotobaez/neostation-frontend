@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import '../utils/gamepad_nav.dart';
 import '../services/game_service.dart';
-import '../services/logger_service.dart';
 import '../services/permission_service.dart';
 
 /// Full-screen directory/file browser for Android TV / Google TV.
@@ -47,32 +45,6 @@ class TvDirectoryPicker extends StatefulWidget {
       barrierDismissible: false,
       builder: (_) => TvDirectoryPicker(allowedExtensions: extensions),
     );
-  }
-
-  /// Picks a directory through the desktop picker, falling back to the in-app
-  /// browser when the platform cannot serve the request.
-  ///
-  /// On Linux the picker is the XDG portal, which exposes no `FileChooser`
-  /// interface in SteamOS Game Mode and **throws** rather than returning null.
-  /// That is what separates an unavailable picker from a user cancelling one:
-  /// a cancel yields null and must not reopen anything.
-  static Future<String?> pickDirectory(
-    BuildContext context, {
-    String? dialogTitle,
-    String? initialDirectory,
-  }) async {
-    try {
-      return await FilePicker.getDirectoryPath(
-        dialogTitle: dialogTitle,
-        initialDirectory: initialDirectory,
-      );
-    } catch (e) {
-      LoggerService.instance.w(
-        'Directory picker unavailable ($e); using the in-app browser',
-      );
-      if (!context.mounted) return null;
-      return show(context);
-    }
   }
 
   /// Portal-free executable picker for Linux and SteamOS Game Mode.
@@ -123,13 +95,8 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   final ScrollController _scrollController = ScrollController();
   GamepadNavigation? _gamepadNav;
 
-  // Scaled like the text inside the rows. Left unscaled these were fixed
-  // pixels wrapping `.r`-sized labels, so anywhere `.r` is above 1 the two
-  // lines of a volume row overflowed the row and printed on top of each other
-  // (the Steam Deck is the worst case at exactly 2x — 640x480 design size
-  // against a 1280x800 logical screen).
-  double get _itemHeight => (widget.executableMode ? 60.0 : 44.0).r;
-  double get _volumeRowSpacing => (widget.executableMode ? 8.0 : 0.0).r;
+  double get _itemHeight => widget.executableMode ? 60.0 : 44.0;
+  double get _volumeRowSpacing => widget.executableMode ? 8.0 : 0.0;
 
   @override
   void initState() {
@@ -159,16 +126,10 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
       onBack: _handleBack,
     );
     _gamepadNav?.initialize();
-    // Modal: this is a `showDialog` surface and must keep the controller until
-    // it is dismissed. Left non-modal, any widget mounting behind it pushes
-    // itself on top and takes the input, so the picker stops responding — or
-    // never appears to. It opens nothing on top of itself, so the manager's
-    // caveat about a modal's own children does not apply.
     GamepadNavigationManager.pushLayer(
       'tv_directory_picker',
       onActivate: () => _gamepadNav?.activate(),
       onDeactivate: () => _gamepadNav?.deactivate(),
-      modal: true,
     );
   }
 
@@ -249,127 +210,40 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
   }
 
   void _handleBack() {
-    // B unwinds the browse before it cancels it: out of a subfolder, up to its
-    // parent, back to the volume list, and only then out of the picker. Going
-    // straight out from three levels deep loses the whole descent to one press.
-    if (!_showVolumePicker) {
-      _goUp();
-      return;
-    }
     Navigator.of(context).pop();
-  }
-
-  /// Volume roots offered when browsing for a *directory* on Linux.
-  ///
-  /// The XDG portal exposes no `FileChooser` interface in SteamOS Game Mode —
-  /// `xdg-desktop-portal` selects a backend from `XDG_CURRENT_DESKTOP`, which
-  /// gamescope leaves unset — so this list is the only way to reach a ROM
-  /// folder there.
-  Future<List<_StorageVolume>> _linuxDirectoryVolumes(
-    BuildContext context,
-  ) async {
-    // Read localized labels before the first await: no context after a gap.
-    final homeLabel = AppLocale.homeFolder.getString(context);
-    final rootLabel = AppLocale.filesystemRoot.getString(context);
-    final home = Platform.environment['HOME'] ?? '';
-    final user = Platform.environment['USER'] ?? '';
-
-    final volumes = <_StorageVolume>[
-      if (home.isNotEmpty)
-        _StorageVolume(name: homeLabel, path: home, isInternal: true),
-    ];
-    final seen = <String>{for (final volume in volumes) volume.path};
-
-    // Removable and secondary media. SteamOS mounts the SD card and any USB
-    // drive at /run/media/<user>/<label>; older layouts omit the user segment
-    // and other distributions use /media or /mnt. The user-scoped roots are
-    // marked seen so the bare roots do not offer them a second time.
-    final userScoped = <String>[
-      if (user.isNotEmpty) '/run/media/$user',
-      if (user.isNotEmpty) '/media/$user',
-    ];
-    seen.addAll(userScoped);
-    for (final root in [...userScoped, '/run/media', '/media', '/mnt']) {
-      final dir = Directory(root);
-      if (!await dir.exists()) continue;
-      try {
-        for (final entry in await dir.list().toList()) {
-          if (entry is! Directory) continue;
-
-          // SteamOS leaves /run/media/<label> as a symlink to the user-scoped
-          // /run/media/<user>/<label>, so the same card arrives twice under
-          // two different paths. Dedup on the target, and offer that rather
-          // than the link.
-          String resolved;
-          try {
-            resolved = await entry.resolveSymbolicLinks();
-          } on FileSystemException {
-            continue;
-          }
-          if (!seen.add(resolved)) continue;
-
-          // Something we cannot read is no use as a starting point: SteamOS
-          // keeps a root-owned /run/media/root that would otherwise be listed
-          // and then open empty. Taking one entry is enough to prove access,
-          // and an empty directory yields none without throwing.
-          try {
-            await Directory(resolved).list(followLinks: false).take(1).toList();
-          } on FileSystemException {
-            continue;
-          }
-
-          volumes.add(
-            _StorageVolume(
-              name: resolved.split('/').last,
-              path: resolved,
-              isInternal: false,
-            ),
-          );
-        }
-      } on FileSystemException {
-        // An unreadable mount root is not fatal — keep the other volumes.
-      }
-    }
-
-    if (seen.add('/')) {
-      volumes.add(_StorageVolume(name: rootLabel, path: '/', isInternal: true));
-    }
-    return volumes;
   }
 
   Future<void> _detectVolumes(BuildContext context) async {
     final volumes = <_StorageVolume>[];
 
-    if (Platform.isLinux) {
+    if (Platform.isLinux && widget.executableMode) {
       final home = Platform.environment['HOME'] ?? '';
-      final candidates = widget.executableMode
-          ? <_StorageVolume>[
-              if (home.isNotEmpty)
-                _StorageVolume(name: 'Home', path: home, isInternal: true),
-              if (home.isNotEmpty)
-                _StorageVolume(
-                  name: 'Applications',
-                  path: '$home/Applications',
-                  isInternal: true,
-                ),
-              if (home.isNotEmpty)
-                _StorageVolume(
-                  name: 'Local binaries',
-                  path: '$home/.local/bin',
-                  isInternal: true,
-                ),
-              const _StorageVolume(
-                name: 'System binaries',
-                path: '/usr/bin',
-                isInternal: true,
-              ),
-              const _StorageVolume(
-                name: 'Host system binaries',
-                path: '/run/host/usr/bin',
-                isInternal: true,
-              ),
-            ]
-          : await _linuxDirectoryVolumes(context);
+      final candidates = <_StorageVolume>[
+        if (home.isNotEmpty)
+          _StorageVolume(name: 'Home', path: home, isInternal: true),
+        if (home.isNotEmpty)
+          _StorageVolume(
+            name: 'Applications',
+            path: '$home/Applications',
+            isInternal: true,
+          ),
+        if (home.isNotEmpty)
+          _StorageVolume(
+            name: 'Local binaries',
+            path: '$home/.local/bin',
+            isInternal: true,
+          ),
+        const _StorageVolume(
+          name: 'System binaries',
+          path: '/usr/bin',
+          isInternal: true,
+        ),
+        const _StorageVolume(
+          name: 'Host system binaries',
+          path: '/run/host/usr/bin',
+          isInternal: true,
+        ),
+      ];
       for (final candidate in candidates) {
         if (await Directory(candidate.path).exists()) volumes.add(candidate);
       }
@@ -716,7 +590,7 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
       controller: _scrollController,
       physics: const ClampingScrollPhysics(),
       itemCount: _volumes.length,
-      separatorBuilder: (_, _) => SizedBox(height: _volumeRowSpacing),
+      separatorBuilder: (_, _) => SizedBox(height: _volumeRowSpacing.r),
       itemBuilder: (context, index) {
         final vol = _volumes[index];
         final focused = _focusedIndex == index;
@@ -742,12 +616,7 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
               children: [
                 Icon(
                   vol.isInternal
-                      // A phone glyph for "Home" reads as wrong on a desktop
-                      // or a handheld PC, which is where this list is the
-                      // only way to reach a folder.
-                      ? (Platform.isAndroid
-                            ? Symbols.phone_android_rounded
-                            : Symbols.computer_rounded)
+                      ? Symbols.phone_android_rounded
                       : Symbols.sd_card_rounded,
                   color: focused
                       ? theme.colorScheme.primary
@@ -1072,10 +941,7 @@ class _TvDirectoryPickerState extends State<TvDirectoryPicker> {
               SizedBox(width: 12.r),
               _HintChip(
                 label: 'B',
-                // Inside a folder B is a level up, not a way out.
-                description: _showVolumePicker
-                    ? AppLocale.cancel.getString(context)
-                    : AppLocale.hintBack.getString(context),
+                description: AppLocale.cancel.getString(context),
               ),
             ],
           ),

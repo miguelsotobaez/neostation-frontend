@@ -11,6 +11,8 @@ flutter:
     platforms:
       android:
         default_package: gamepads_android
+      ios:
+        default_package: gamepads_darwin
       linux:
         default_package: gamepads_linux
       macos:

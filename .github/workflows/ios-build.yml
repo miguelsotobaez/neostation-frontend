@@ -1,0 +1,276 @@
+name: Build iOS (NeoStation)
+
+# Standalone workflow for the iOS port, kept separate from
+# build-and-deploy.yml so it can't break the existing release pipeline while
+# this platform is still experimental.
+#
+# WHAT THIS DOES
+#   1. Scaffolds the ios/ Xcode project via `flutter create` (it isn't
+#      committed to the repo yet — this generates it fresh on the runner
+#      every time, which avoids hand-writing a project.pbxproj).
+#   2. Patches Info.plist with the entries NeoStation needs (landscape,
+#      Files/document access, local networking for NeoSync discovery, etc).
+#   3. Runs `pod install` and `flutter build ios`.
+#   4a. If Apple signing secrets are configured (see below), exports a
+#       properly signed, installable .ipa.
+#   4b. Otherwise, builds with --no-codesign and zips the raw .app so you
+#       still get an artifact to inspect / sign yourself later in Xcode.
+#
+# REQUIRED SECRETS FOR A SIGNED, INSTALLABLE IPA
+#   IOS_CERTIFICATE_BASE64       - your .p12 signing certificate, base64-encoded
+#   IOS_CERTIFICATE_PASSWORD     - password for that .p12
+#   IOS_PROVISIONING_PROFILE_BASE64 - your .mobileprovision file, base64-encoded
+#   IOS_TEAM_ID                  - your Apple Developer Team ID
+# Without these, the workflow still runs and gives you an unsigned .app you
+# can open/sign manually in Xcode, or sideload via AltStore/Sideloadly which
+# do their own signing.
+#
+# To encode a file for a secret:
+#   base64 -i Certificates.p12 | pbcopy      (macOS)
+#   base64 -w 0 Certificates.p12             (Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ios-port
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    environment: Production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Create .env from secrets
+        env:
+          SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
+          SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
+        run: |
+          : > .env
+          if [ -n "$SCREENSCRAPER_DEV_ID" ]; then
+            echo "SCREENSCRAPER_DEV_ID=$SCREENSCRAPER_DEV_ID" >> .env
+          fi
+          if [ -n "$SCREENSCRAPER_DEV_PASSWORD" ]; then
+            echo "SCREENSCRAPER_DEV_PASSWORD=$SCREENSCRAPER_DEV_PASSWORD" >> .env
+          fi
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Scaffold ios/ platform if missing
+        run: |
+          if [ ! -d "ios" ]; then
+            echo "No ios/ folder committed yet — generating one with flutter create."
+            flutter create --platforms=ios --org com.neogamelab --project-name neostation .
+          else
+            echo "ios/ already exists in the repo, skipping scaffold."
+          fi
+
+      - name: Set iOS deployment target to 18.0
+        run: |
+          sed -i '' "s/platform :ios, '13.0'/platform :ios, '18.0'/" ios/Podfile
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/IPHONEOS_DEPLOYMENT_TARGET = 18.0;/g' ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Patch Info.plist
+        run: |
+          PLIST=ios/Runner/Info.plist
+          # Landscape-only, matching the Windows/Linux/macOS/Android UI.
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeRight" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeRight" "$PLIST"
+
+          # Lets the app show up as a destination in the Files app / document
+          # picker so ROM folders can eventually be selected there (phase 2).
+          /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$PLIST" 2>/dev/null || true
+
+          # Registers neostation:// as a URL scheme this app can be opened
+          # with — RetroArch's library-export protocol calls back via
+          # neostation://retroarch?games=<base64url>, handled natively via
+          # external_folder_access's application(_:open:options:) rather
+          # than the app_links package. Confirmed via isolation testing
+          # that these two plist additions were not what caused the
+          # "requires a selected Development Team" build failure seen
+          # earlier — that was unrelated (see IOS_PORT.md).
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string com.neogamelab.neostation" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string neostation" "$PLIST"
+
+          # External-emulator URL schemes used by NeoStation must be in
+          # LSApplicationQueriesSchemes for canOpenURL/launchUrl checks to
+          # succeed. RetroArch provides library export + direct launching;
+          # ARMSX2 provides its iOS library export + direct PS2 launch;
+          # MeloNX provides Switch library export + direct game launch.
+          /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:0 string retroarch" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:1 string shortcuts" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:2 string armsx2" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:3 string melonx" "$PLIST"
+
+          plutil -lint "$PLIST"
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Patch device_info_plus for older Xcode SDK compatibility
+        run: |
+          # device_info_plus's iOS source unconditionally calls
+          # NSProcessInfo.isiOSAppOnVision, an API that requires the iOS 26.1
+          # SDK (Xcode 26+). We're intentionally pinned to an older macOS
+          # runner (see the runs-on note above) where that selector doesn't
+          # exist in the SDK headers at all, so this fails to compile
+          # regardless of which device_info_plus version pub resolves to
+          # (confirmed on both 12.4.0 and 13.2.0). We don't use this
+          # property from Dart, so removing the line entirely is safe.
+          DEVICE_INFO_FILE=$(find "$HOME/.pub-cache" -path "*device_info_plus*/FPPDeviceInfoPlusPlugin.m" 2>/dev/null | head -1)
+          if [ -n "$DEVICE_INFO_FILE" ]; then
+            echo "Patching $DEVICE_INFO_FILE"
+            sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
+          else
+            echo "device_info_plus source not found at the expected path — skipping patch (nothing to do, or plugin structure changed upstream)."
+          fi
+
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
+
+      - name: Pod install
+        working-directory: ios
+        run: pod install --repo-update
+
+      - name: Import signing certificate & provisioning profile
+        id: signing
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$IOS_CERTIFICATE_BASE64" ] || [ -z "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
+            echo "No IOS_CERTIFICATE_BASE64 / IOS_PROVISIONING_PROFILE_BASE64 secret set."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode -o "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$RUNNER_TEMP/profile.mobileprovision"
+          cp "$RUNNER_TEMP/profile.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed IPA
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          cat > ExportOptions.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>teamID</key>
+            <string>${IOS_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
+
+          flutter build ipa --release --export-options-plist=ExportOptions.plist --dart-define-from-file=.env
+
+      - name: Build unsigned .app (no signing secrets configured)
+        if: steps.signing.outputs.signed != 'true'
+        run: |
+          set -euo pipefail
+
+          # Flutter can emit a misleading "selected Development Team" error
+          # after an otherwise useful --no-codesign device build. Configure the
+          # generated iOS project with Flutter, then let xcodebuild compile the
+          # unsigned Runner directly. This also preserves the real Xcode error
+          # output in the Actions log if compilation genuinely fails.
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --config-only \
+            --dart-define-from-file=.env
+
+          rm -rf build/ios/DerivedData build/ios/unsigned
+          mkdir -p build/ios
+
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build | tee build/ios/xcodebuild-unsigned.log
+
+          APP_PATH=$(find build/ios/DerivedData/Build/Products/Release-iphoneos \
+            -maxdepth 1 -type d -name '*.app' -print -quit)
+
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "::error::Unsigned Runner.app was not produced."
+            exit 1
+          fi
+
+          echo "Unsigned app produced at: $APP_PATH"
+          mkdir -p build/ios/unsigned/Payload
+          cp -R "$APP_PATH" build/ios/unsigned/Payload/Runner.app
+          cd build/ios/unsigned
+          zip -r ../../../NeoStation-unsigned.ipa Payload
+          echo "::warning::NeoStation-unsigned.ipa must still be signed by SideStore before installation."
+
+      - name: Upload signed IPA
+        if: steps.signing.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoStation-ios-signed
+          path: build/ios/ipa/*.ipa
+          retention-days: 14
+
+      - name: Upload unsigned build
+        if: steps.signing.outputs.signed != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoStation-ios-unsigned
+          path: NeoStation-unsigned.ipa
+          retention-days: 14

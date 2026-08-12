@@ -284,26 +284,33 @@ class _RAContentState extends State<RAContent>
           SizedBox(height: 64.r), // Space for header (32.r + margin)
           // Contenido principal
           if (!raProvider.isConnected) ...[
-            Center(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.r),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        constraints: BoxConstraints(maxWidth: 260.r),
-                        child: _buildLandscapeConnectionForm(
-                          context,
-                          raProvider,
+            SingleChildScrollView(
+              // Vertical scroll wraps the existing horizontal one so the
+              // API key field can scroll up above the on-screen keyboard
+              // instead of being clipped off-screen with no way to see
+              // what's being typed — this landscape layout previously
+              // only scrolled horizontally.
+              child: Center(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.r),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          constraints: BoxConstraints(maxWidth: 260.r),
+                          child: _buildLandscapeConnectionForm(
+                            context,
+                            raProvider,
+                          ),
                         ),
-                      ),
-                      SizedBox(width: 16.r),
-                      SizedBox(width: 300.r, child: _buildInfoBox(context)),
-                    ],
+                        SizedBox(width: 16.r),
+                        SizedBox(width: 300.r, child: _buildInfoBox(context)),
+                      ],
+                    ),
                   ),
                 ),
               ),

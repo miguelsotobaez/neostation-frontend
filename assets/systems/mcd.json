@@ -201,6 +201,17 @@
           "args": "-L picodrive_libretro.dylib \"{file.path}\""
         }
       }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "mcd.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
     }
   ],
   "neosync": {

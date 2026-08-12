@@ -941,8 +941,16 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             if (cardIdx == -1 || placedIndices.contains(cardIdx)) continue;
 
             final card = systemCards[cardIdx];
-            final spanW = (card.isGame && cols >= 3) ? 3 : 1;
-            final spanH = (card.isGame && cols >= 3) ? 2 : 1;
+            // The oversized 3x2 "hero" treatment for recent-game cards was
+            // designed for wide TV/desktop layouts. On iOS's phone-sized
+            // screens it dwarfs every other card, so keep it at the same
+            // 1x1 size as everything else there.
+            final spanW = (card.isGame && cols >= 3 && !Platform.isIOS)
+                ? 3
+                : 1;
+            final spanH = (card.isGame && cols >= 3 && !Platform.isIOS)
+                ? 2
+                : 1;
 
             final left = c * (colWidth + spX);
             final width = spanW * colWidth + (spanW - 1) * spX;

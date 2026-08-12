@@ -90,17 +90,11 @@ class SecondaryAchievementsController {
     // be delivered out-of-order AFTER the achievements push and wipe the panel
     // — the RA panel would flash in then vanish. The old comment here only
     // reasoned about nowPlayingActive; achievements are just as vulnerable.
-    // A timeout means we couldn't ask, not that the grant was revoked — the
-    // main engine is being backgrounded by the emulator right here, so slow
-    // answers are expected. Falling back to the last known state keeps this
-    // snapshot agreeing with what the provider holds; a bare `false` would
-    // disagree and make the provider's stale-echo guard answer with a second
-    // snapshot in the one window this class documents as unsafe for those.
-    bool screenshotAccess = ScreenshotService.lastKnownAccess ?? false;
+    bool screenshotAccess = false;
     try {
       screenshotAccess = await ScreenshotService.isAccessEnabled().timeout(
         const Duration(seconds: 2),
-        onTimeout: () => ScreenshotService.lastKnownAccess ?? false,
+        onTimeout: () => false,
       );
     } catch (_) {}
     if (!_active || _state != state) return;

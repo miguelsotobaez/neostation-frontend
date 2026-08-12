@@ -6,6 +6,13 @@ class ConfigRepository {
   static Future<List<String>> getUserRomFolders() =>
       SqliteService.getUserRomFolders();
 
+  /// Returns the current game view mode ('list', 'grid', etc.).
+  static Future<String> getGameViewMode() => SqliteService.getGameViewMode();
+
+  /// Persists the selected game view mode.
+  static Future<void> updateGameViewMode(String mode) =>
+      SqliteService.updateGameViewMode(mode);
+
   /// Returns the full user_config row, or null if not yet created.
   static Future<Map<String, dynamic>?> getUserConfig() =>
       SqliteService.getUserConfig();

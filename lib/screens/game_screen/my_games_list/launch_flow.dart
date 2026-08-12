@@ -145,12 +145,6 @@ extension _LaunchFlow on _SystemGamesListState {
   Future<void> _selectCurrentGame() async {
     if (_selectedGame == null) return;
 
-    // Subfolder navigation: activating a folder row descends into it.
-    if (_subfolderViewEnabled && _selectedGameIndex < _folderCount) {
-      _descendToFolderIndex(_selectedGameIndex);
-      return;
-    }
-
     // Special handling for the Integrated Music Player.
     if (widget.system.folderName == 'music') {
       final service = MusicPlayerService();
@@ -542,9 +536,7 @@ extension _LaunchFlow on _SystemGamesListState {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return RandomGameDialog(
-          games: _subfolderViewEnabled
-              ? _games.where((g) => !_isFolderEntry(g)).toList()
-              : _games,
+          games: _games,
           systemFolderName: widget.system.primaryFolderName,
           systemRealName: widget.system.realName,
           fileProvider: _fileProvider,

@@ -1,0 +1,28 @@
+name: external_folder_access
+resolution: workspace
+description: >-
+  iOS-only plugin for picking a folder exposed by another app (e.g.
+  RetroArch) and persisting security-scoped bookmark access to it, so
+  NeoStation can read that folder in place across app relaunches without
+  copying files into its own sandbox.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.9.2'
+  flutter: '>=3.35.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: ExternalFolderAccessPlugin
