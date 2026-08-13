@@ -3,15 +3,17 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:provider/provider.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../providers/file_provider.dart';
+import '../../../../providers/sqlite_config_provider.dart';
 import '../../../../services/screenscraper_service.dart';
 import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../widgets/scrolling_description_text.dart';
 
-class GameDetailsGameInfoTab extends StatefulWidget {
+class GameDetailsGameInfoTab extends StatelessWidget {
   final SystemModel system;
   final GameModel game;
   final FileProvider fileProvider;
@@ -31,84 +33,63 @@ class GameDetailsGameInfoTab extends StatefulWidget {
     required this.onScrapeGame,
   });
 
-  @override
-  State<GameDetailsGameInfoTab> createState() => _GameDetailsGameInfoTabState();
-}
+  /// ScreenScraper uses a few language identifiers that differ from the
+  /// interface language codes used by NeoStation.
+  String _descriptionLanguageForAppLanguage(String appLanguage) {
+    switch (appLanguage) {
+      case 'ja':
+        return 'jp';
+      case 'zh_Hant':
+        // ScreenScraper does not expose a separate Traditional Chinese
+        // description slot in NeoStation's current metadata model.
+        return 'zh';
+      case 'id':
+        // Indonesian descriptions are not currently stored by the scraper.
+        return 'en';
+      default:
+        return appLanguage;
+    }
+  }
 
-class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
-  static const List<String> _languageLabels = [
-    'en',
-    'es',
-    'fr',
-    'de',
-    'it',
-    'pt',
-    'jp',
-    'ko',
-    'ru',
-    'zh',
-    'nl',
-    'sv',
-    'da',
-    'fi',
-    'no',
-    'pl',
-    'hu',
-    'cs',
-    'ro',
-  ];
+  /// Returns only the description matching NeoStation's selected UI language.
+  /// If that translation does not exist, English is the sole fallback so the
+  /// UI never silently switches to another unrelated language.
+  String _descriptionForAppLanguage(BuildContext context) {
+    final appLanguage = context
+        .watch<SqliteConfigProvider>()
+        .config
+        .appLanguage;
+    final descriptionLanguage = _descriptionLanguageForAppLanguage(appLanguage);
+    final descriptions = game.descriptions;
 
-  static const Map<String, String> _languageNames = {
-    'en': 'English',
-    'es': 'Espanol',
-    'fr': 'Francais',
-    'de': 'Deutsch',
-    'it': 'Italiano',
-    'pt': 'Portugues',
-    'jp': 'Japanese',
-    'ko': 'Korean',
-    'zh': 'Chinese',
-    'nl': 'Nederlands',
-    'sv': 'Svenska',
-    'da': 'Dansk',
-    'fi': 'Suomi',
-    'no': 'Norsk',
-    'pl': 'Polski',
-    'hu': 'Magyar',
-    'cs': 'Cesky',
-    'ro': 'Romanian',
-  };
+    if (descriptions == null || descriptions.isEmpty) return '';
 
-  String _selectedLanguage = 'en';
+    final preferred = descriptions[descriptionLanguage]?.trim() ?? '';
+    if (preferred.isNotEmpty) return preferred;
 
-  List<String> _availableLanguages() {
-    final descriptions = widget.game.descriptions;
-    if (descriptions == null || descriptions.isEmpty) return [];
-    return _languageLabels
-        .where(
-          (lang) =>
-              descriptions[lang] != null && descriptions[lang]!.isNotEmpty,
-        )
-        .toList();
+    if (descriptionLanguage != 'en') {
+      final english = descriptions['en']?.trim() ?? '';
+      if (english.isNotEmpty) return english;
+    }
+
+    return '';
   }
 
   @override
   Widget build(BuildContext context) {
-    final description = widget.description;
-
-    final bool showScrapeView =
-        description.isEmpty ||
-        description == AppLocale.noDescription.getString(context) ||
-        description.trim().isEmpty;
+    final activeDescription = _descriptionForAppLanguage(context);
+    final bool showScrapeView = activeDescription.isEmpty;
 
     return Positioned(
-      left: 12.r,
-      right: 12.r,
-      top: 55.r,
-      bottom: 110.r,
+      // Keep the panel comfortably inside the iPhone landscape viewport instead
+      // of stretching almost edge-to-edge across the details area.
+      left: 18.r,
+      right: 18.r,
+      top: 58.r,
+      bottom: 128.r,
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
           borderRadius:
               Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
               BorderRadius.circular(14.r),
@@ -130,7 +111,7 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(8.r, 8.r, 8.r, 0.r),
+              padding: EdgeInsets.fromLTRB(10.r, 8.r, 10.r, 0.r),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -150,35 +131,47 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
+                      SizedBox(width: 10.r),
                       if (!showScrapeView &&
-                          !widget.isScrapingGame &&
-                          (widget.game.developer.isNotEmpty ||
-                              widget.game.players.isNotEmpty ||
-                              widget.game.year.isNotEmpty))
-                        Row(
-                          children: [
-                            if (widget.game.developer.isNotEmpty)
-                              _InfoPill(
-                                icon: Symbols.business_rounded,
-                                text: widget.game.developer,
+                          !isScrapingGame &&
+                          (game.developer.isNotEmpty ||
+                              game.players.isNotEmpty ||
+                              game.year.isNotEmpty))
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (game.developer.isNotEmpty)
+                                    _InfoPill(
+                                      icon: Symbols.business_rounded,
+                                      text: game.developer,
+                                    ),
+                                  if (game.players.isNotEmpty)
+                                    _InfoPill(
+                                      icon: Symbols.people_rounded,
+                                      text: game.players,
+                                    ),
+                                  if (game.year.isNotEmpty)
+                                    _InfoPill(
+                                      icon: Symbols.calendar_today_rounded,
+                                      text:
+                                          RegExp(
+                                            r'\d{4}',
+                                          ).stringMatch(game.year) ??
+                                          game.year,
+                                    ),
+                                ],
                               ),
-                            if (widget.game.players.isNotEmpty)
-                              _InfoPill(
-                                icon: Symbols.people_rounded,
-                                text: widget.game.players,
-                              ),
-                            if (widget.game.year.isNotEmpty)
-                              _InfoPill(
-                                icon: Symbols.calendar_today_rounded,
-                                text:
-                                    RegExp(
-                                      r'\d{4}',
-                                    ).stringMatch(widget.game.year) ??
-                                    widget.game.year,
-                              ),
-                          ],
-                        ),
+                            ),
+                          ),
+                        )
+                      else
+                        const Spacer(),
                     ],
                   ),
                   Divider(
@@ -190,20 +183,12 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                 ],
               ),
             ),
-
             Expanded(
               child: Padding(
-                padding: EdgeInsets.all(8.r),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // While scraping, the card lays ScrapingProgressPanel over
-                    // this whole region — every tab gets the same feedback, so
-                    // this tab no longer draws its own copy.
-                    return showScrapeView
-                        ? _buildNonScrapedView()
-                        : _buildScrapedView();
-                  },
-                ),
+                padding: EdgeInsets.fromLTRB(10.r, 4.r, 10.r, 10.r),
+                child: showScrapeView
+                    ? _buildNonScrapedView(context)
+                    : _buildScrapedView(context, activeDescription),
               ),
             ),
           ],
@@ -212,7 +197,7 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
     );
   }
 
-  Widget _buildNonScrapedView() {
+  Widget _buildNonScrapedView(BuildContext context) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -221,11 +206,11 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
             AppLocale.incompleteMetadata.getString(context),
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 20.r,
+              fontSize: 18.r,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 12.r),
+          SizedBox(height: 8.r),
           SizedBox(
             width: 300.r,
             child: Text(
@@ -235,16 +220,16 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                 color: Theme.of(
                   context,
                 ).colorScheme.onSurface.withValues(alpha: 0.7),
-                fontSize: 12.r,
-                height: 1.5,
+                fontSize: 11.r,
+                height: 1.4,
               ),
             ),
           ),
-          SizedBox(height: 32.r),
+          SizedBox(height: 16.r),
           FutureBuilder<bool>(
             future: ScreenScraperService.hasSavedCredentials(),
             builder: (context, snapshot) {
-              if (widget.system.folderName == 'android-apps') {
+              if (system.folderName == 'android-apps') {
                 return Text(
                   AppLocale.scrapingUnavailableAndroid.getString(context),
                   style: TextStyle(fontSize: 10.r, color: Colors.grey),
@@ -270,96 +255,19 @@ class _GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
     );
   }
 
-  Widget _buildScrapedView() {
-    final availableLanguages = _availableLanguages();
-
-    if (availableLanguages.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(12.r),
-          child: ScrollingDescriptionText(
-            text: GameUtils.cleanupDescription(widget.description),
-            style: TextStyle(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.8),
-              fontSize: 11.r,
-              height: 1.6,
-            ),
-          ),
+  Widget _buildScrapedView(BuildContext context, String activeDescription) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.r),
+      child: ScrollingDescriptionText(
+        text: GameUtils.cleanupDescription(activeDescription),
+        style: TextStyle(
+          color: Theme.of(
+            context,
+          ).colorScheme.onSurface.withValues(alpha: 0.82),
+          fontSize: 11.r,
+          height: 1.55,
         ),
-      );
-    }
-
-    final activeDesc = widget.game.getDescriptionForLanguage(_selectedLanguage);
-
-    return Column(
-      children: [
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12.r),
-            child: ScrollingDescriptionText(
-              text: GameUtils.cleanupDescription(
-                activeDesc.isNotEmpty ? activeDesc : widget.description,
-              ),
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.8),
-                fontSize: 11.r,
-                height: 1.6,
-              ),
-            ),
-          ),
-        ),
-        if (availableLanguages.length > 1)
-          Container(
-            height: 28.r,
-            margin: EdgeInsets.only(bottom: 4.r),
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: 8.r),
-              itemCount: availableLanguages.length,
-              separatorBuilder: (_, _) => SizedBox(width: 4.r),
-              itemBuilder: (context, index) {
-                final lang = availableLanguages[index];
-                final isSelected = lang == _selectedLanguage;
-                return Material(
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6.r),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedLanguage = lang;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(6.r),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8.r,
-                        vertical: 4.r,
-                      ),
-                      child: Text(
-                        _languageNames[lang] ?? lang.toUpperCase(),
-                        style: TextStyle(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : Theme.of(context).colorScheme.onSurface,
-                          fontSize: 9.r,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
@@ -387,6 +295,8 @@ class _InfoPill extends StatelessWidget {
           SizedBox(width: 4.r),
           Text(
             text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 9.r,
               color: Theme.of(
