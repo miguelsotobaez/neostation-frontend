@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo / Sega / Namco",
       "release_date": "2002-01-01",
       "description": "Arcade system board developed by Nintendo, Sega, and Namco.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "32-bit",
+      "cpu": "IBM PowerPC Gekko-derived",
+      "media": [
+        "arcade_board",
+        "optical_disc"
+      ],
+      "notable_games": [
+        "Mario Kart Arcade GP",
+        "Mario Kart Arcade GP 2",
+        "F-Zero AX",
+        "Virtua Striker 4"
+      ]
     },
     "ids": {
       "screenscraper": 155,

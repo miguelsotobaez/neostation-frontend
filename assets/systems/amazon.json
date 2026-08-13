@@ -12,7 +12,11 @@
       "manufacturer": "Amazon Game",
       "release_date": "2008-10-01",
       "description": "Amazon's digital distribution platform for PC games.",
-      "type": "virtual"
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "digital_store"
     },
     "ids": {
       "screenscraper": null,

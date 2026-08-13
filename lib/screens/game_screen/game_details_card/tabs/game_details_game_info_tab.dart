@@ -10,6 +10,8 @@ import '../../../../providers/file_provider.dart';
 import '../../../../providers/sqlite_config_provider.dart';
 import '../../../../services/screenscraper_service.dart';
 import '../../../../themes/corner_radii.dart';
+import '../../../../themes/chrome_surface.dart';
+import '../../../../widgets/neo_glass.dart';
 import '../../../../utils/game_utils.dart';
 import '../widgets/scrolling_description_text.dart';
 
@@ -87,26 +89,20 @@ class GameDetailsGameInfoTab extends StatelessWidget {
       right: 18.r,
       top: 58.r,
       bottom: 128.r,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-          borderRadius:
-              Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
-              BorderRadius.circular(14.r),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline,
-            width: 1.r,
+      child: NeoGlass(
+        role: GlassSurfaceRole.panel,
+        borderRadius:
+            Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+            BorderRadius.circular(14.r),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(
+              context,
+            ).colorScheme.shadow.withValues(alpha: 0.22),
+            blurRadius: 3.r,
+            offset: Offset(2.0.r, 2.0.r),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(
-                context,
-              ).colorScheme.shadow.withValues(alpha: 0.25),
-              blurRadius: 2.r,
-              offset: Offset(2.0.r, 2.0.r),
-            ),
-          ],
-        ),
+        ],
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

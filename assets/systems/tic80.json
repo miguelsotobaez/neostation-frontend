@@ -8,7 +8,12 @@
       "manufacturer": "Nesbox",
       "release_date": "2016-01-01",
       "description": "Open-source fantasy console with built-in editors for 8-bit games.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit VM",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "fantasy_console"
     },
     "ids": {
       "screenscraper": 222,

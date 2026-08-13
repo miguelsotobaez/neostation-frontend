@@ -8,7 +8,18 @@
       "manufacturer": "Bandai",
       "release_date": "1999-12-09",
       "description": "Color successor to the WonderSwan with a reflective TFT screen.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "NEC V30MZ",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Final Fantasy",
+        "Digimon Tamers: Battle Spirit",
+        "Judgement Silversword",
+        "Golden Axe"
+      ]
     },
     "ids": {
       "screenscraper": 45,

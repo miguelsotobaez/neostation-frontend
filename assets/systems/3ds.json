@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "2011-02-26",
       "description": "Nintendo's glasses-free 3D handheld with dual screens and touch controls.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "ARM11 MPCore + ARM9",
+      "media": [
+        "cartridge",
+        "digital"
+      ],
+      "notable_games": [
+        "Mario Kart 7",
+        "The Legend of Zelda: A Link Between Worlds",
+        "Pokémon X / Y",
+        "Animal Crossing: New Leaf"
+      ]
     },
     "ids": {
       "screenscraper": 17,

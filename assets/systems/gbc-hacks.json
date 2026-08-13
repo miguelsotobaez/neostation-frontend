@@ -8,7 +8,9 @@
       "manufacturer": "Nintendo",
       "release_date": "1998-10-21",
       "description": "Color upgrade to the Game Boy with a larger screen and palette.",
-      "type": "handheld"
+      "type": "handheld",
+      "info_inherits": "gbc",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 10,

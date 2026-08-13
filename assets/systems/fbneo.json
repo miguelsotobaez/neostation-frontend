@@ -8,7 +8,17 @@
       "manufacturer": "",
       "release_date": "1971-01-01",
       "description": "Modern arcade emulator supporting Capcom, Neo Geo and other systems.",
-      "type": "arcade"
+      "type": "arcade",
+      "media": [
+        "arcade_board"
+      ],
+      "notable_games": [
+        "Street Fighter II",
+        "Metal Slug",
+        "The King of Fighters ’98",
+        "Garou: Mark of the Wolves"
+      ],
+      "collection_kind": "emulation_platform"
     },
     "ids": {
       "screenscraper": 75,

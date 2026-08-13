@@ -132,8 +132,12 @@ class ScreenscraperMediaDownloader {
           romName,
           appSystemId,
         );
-        final fileName =
-            '$romBaseName.${bestMedia['format']?.toString() ?? 'png'}';
+        final fallbackFormat = mediaType == 'manuel' ? 'pdf' : 'png';
+        final rawFormat = bestMedia['format']?.toString().toLowerCase();
+        final fileFormat = (rawFormat == null || rawFormat.isEmpty)
+            ? fallbackFormat
+            : rawFormat;
+        final fileName = '$romBaseName.$fileFormat';
         final relativePath = '$systemFolder/$folderName/$fileName';
 
         downloadTasks.add({

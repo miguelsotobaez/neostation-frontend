@@ -720,6 +720,122 @@ class ScreenScraperService {
     }
   }
 
+  /// Downloads only the PDF manual for a single game.
+  ///
+  /// This deliberately bypasses the user's global media selection: the Manual
+  /// tab is an explicit per-game action, so a user can fetch one manual even
+  /// when batch manual scraping is disabled in ScreenScraper settings.
+  static Future<Map<String, dynamic>> downloadGameManual({
+    required String appSystemId,
+    required String romName,
+    required String systemFolder,
+    required String romPath,
+    String? gameName,
+    bool forceOverwrite = false,
+    Function(String status, double progress)? onProgress,
+  }) async {
+    try {
+      onProgress?.call(AppLocale.checkingCredentials, 0.05);
+      if (!await hasSavedCredentials()) {
+        return {'success': false, 'message': AppLocale.scrapeNoCredentials};
+      }
+
+      int? screenScraperSystemId =
+          await ScraperRepository.getScreenScraperIdByAppSystemId(appSystemId);
+      if (screenScraperSystemId == null) {
+        await syncSystemIds();
+        screenScraperSystemId =
+            await ScraperRepository.getScreenScraperIdByAppSystemId(
+              appSystemId,
+            );
+      }
+      if (screenScraperSystemId == null) {
+        return {'success': false, 'message': AppLocale.scrapeSystemNotMapped};
+      }
+
+      onProgress?.call(AppLocale.fetchingMetadata, 0.15);
+      final isMeloNxVirtual = romPath.toLowerCase().startsWith('melonx://');
+
+      Map<String, dynamic>? gameInfoResult;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
+        gameInfoResult = await fetchGameInfo(
+          screenScraperSystemId.toString(),
+          romName,
+          appSystemId: appSystemId,
+          maxDailyRequests: 0,
+          gameName: (systemFolder == 'android' || isMeloNxVirtual)
+              ? gameName
+              : null,
+        );
+        if (gameInfoResult != null && gameInfoResult['gameInfo'] != null) break;
+      }
+
+      if (gameInfoResult == null || gameInfoResult['gameInfo'] == null) {
+        return {'success': false, 'message': AppLocale.scrapeGameNotFound};
+      }
+
+      final gameInfo = gameInfoResult['gameInfo'] as Map<String, dynamic>;
+      final medias = gameInfo['medias'] as List<dynamic>? ?? const [];
+      final credentials = await getSavedCredentials();
+      final preferredLanguage = credentials?['preferred_language'] ?? 'en';
+      final regionPriority = await ScreenscraperRegionConfig.getRegionPriority();
+      final selectedManual = ScreenscraperMediaResolver.selectBestMedia(
+        medias,
+        'manuel',
+        preferredLanguage: preferredLanguage,
+        regionPriority: regionPriority,
+      );
+
+      if (selectedManual == null) {
+        return {'success': false, 'message': AppLocale.manualNotAvailable};
+      }
+
+      onProgress?.call(AppLocale.downloadingManual, 0.35);
+      final result = await ScreenscraperMediaDownloader.downloadGameMedia(
+        systemFolder,
+        romName,
+        medias,
+        1,
+        appSystemId: appSystemId,
+        preferredLanguage: preferredLanguage,
+        allowedMediaTypes: const ['manuel'],
+        forceOverwrite: forceOverwrite,
+        maxDailyRequests: null,
+        onProgress: (p) =>
+            onProgress?.call(AppLocale.downloadingManual, 0.35 + (p * 0.65)),
+      );
+
+      final cleanRomName = await ScreenscraperRomHasher.getCleanRomName(
+        romName,
+        appSystemId,
+      );
+      final mediaRoot = await ScreenscraperMediaResolver.getMediaDirectory();
+      final format = selectedManual['format']?.toString().toLowerCase();
+      final extension = (format == null || format.isEmpty) ? 'pdf' : format;
+      final manualPath = path.join(
+        mediaRoot,
+        systemFolder,
+        'manuals',
+        '$cleanRomName.$extension',
+      );
+
+      final downloaded = result['success'] == true && await File(manualPath).exists();
+      return {
+        'success': downloaded,
+        'message': downloaded
+            ? AppLocale.manualDownloaded
+            : AppLocale.manualDownloadFailed,
+        if (downloaded) 'path': manualPath,
+      };
+    } on ScreenscraperQuotaExceededException {
+      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
+    } catch (e) {
+      _log.e('Error downloading game manual: $e');
+      return {'success': false, 'message': AppLocale.manualDownloadFailed};
+    }
+  }
+
   /// Initiates a background scraping process for all detected ROMs.
   ///
   /// Coordinates system synchronization, batch processing, and thread-safe

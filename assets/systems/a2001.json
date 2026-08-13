@@ -8,7 +8,19 @@
       "manufacturer": "Emerson",
       "release_date": "1982-05-01",
       "description": "Emerson's second-generation 8-bit cartridge console.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Signetics 2650A",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Cat Trax",
+        "Space Attack",
+        "Escape",
+        "Breakaway"
+      ]
     },
     "ids": {
       "screenscraper": 94,

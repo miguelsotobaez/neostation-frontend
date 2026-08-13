@@ -12,7 +12,17 @@
       "manufacturer": "Valve",
       "release_date": "2003-09-12",
       "description": "Valve's digital distribution platform for PC games.",
-      "type": "virtual"
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Counter-Strike 2",
+        "Dota 2",
+        "Half-Life 2",
+        "Portal 2"
+      ],
+      "collection_kind": "digital_store"
     },
     "ids": {
       "screenscraper": null,

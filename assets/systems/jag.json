@@ -8,7 +8,19 @@
       "manufacturer": "Atari",
       "release_date": "1993-11-23",
       "description": "Atari's 64-bit home console with a controversial controller design.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32/64-bit",
+      "generation": 5,
+      "cpu": "Motorola 68000 + custom RISC processors",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Tempest 2000",
+        "Alien vs Predator",
+        "Rayman",
+        "Doom"
+      ]
     },
     "ids": {
       "screenscraper": 27,

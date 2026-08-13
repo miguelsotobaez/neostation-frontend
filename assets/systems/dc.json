@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "1998-11-27",
       "description": "Sega's innovative 128-bit console, first with built-in online gaming.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit CPU / 128-bit GPU",
+      "generation": 6,
+      "cpu": "Hitachi SH-4",
+      "media": [
+        "gd_rom"
+      ],
+      "notable_games": [
+        "Sonic Adventure",
+        "Shenmue",
+        "Soulcalibur",
+        "Crazy Taxi"
+      ]
     },
     "ids": {
       "screenscraper": 23,

@@ -12,7 +12,13 @@
       "manufacturer": "Microsoft",
       "release_date": "1985-11-20",
       "description": "Microsoft Windows PC games and applications.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "x86 / x64",
+      "media": [
+        "digital",
+        "optical_disc"
+      ],
+      "collection_kind": "software_platform"
     },
     "ids": {
       "screenscraper": 138,

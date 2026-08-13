@@ -8,7 +8,19 @@
       "manufacturer": "Sharp",
       "release_date": "1982-04-23",
       "description": "Sharp's Japanese 8-bit home computer with a distinctive red chassis.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Hydlide",
+        "Xanadu",
+        "Ys I",
+        "Thexder"
+      ]
     },
     "ids": {
       "screenscraper": 220,

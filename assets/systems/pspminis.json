@@ -8,7 +8,17 @@
       "manufacturer": "Sony",
       "release_date": "2009-10-01",
       "description": "Small downloadable games designed for the PlayStation Portable.",
-      "type": "handheld"
+      "type": "handheld",
+      "info_inherits": "psp",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Velocity",
+        "Age of Zombies",
+        "Where Is My Heart?",
+        "Coconut Dodge"
+      ]
     },
     "ids": {
       "screenscraper": 172,

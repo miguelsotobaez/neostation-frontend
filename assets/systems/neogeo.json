@@ -8,7 +8,19 @@
       "manufacturer": "SNK",
       "release_date": "1990-04-26",
       "description": "SNK's cartridge-based arcade system and premium home console.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16-bit",
+      "generation": 4,
+      "cpu": "Motorola 68000 + Zilog Z80",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Metal Slug",
+        "The King of Fighters ’98",
+        "Garou: Mark of the Wolves",
+        "Samurai Shodown II"
+      ]
     },
     "ids": {
       "screenscraper": 75,

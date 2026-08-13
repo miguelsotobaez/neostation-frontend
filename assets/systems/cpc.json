@@ -8,7 +8,19 @@
       "manufacturer": "Amstrad",
       "release_date": "1984-06-21",
       "description": "Amstrad's series of 8-bit home computers popular in Europe.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Gryzor",
+        "Batman",
+        "Head Over Heels",
+        "Chase H.Q."
+      ]
     },
     "ids": {
       "screenscraper": 65,

@@ -8,7 +8,19 @@
       "manufacturer": "Magnavox",
       "release_date": "1978-01-01",
       "description": "Magnavox's second-generation console with a built-in keyboard.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Intel 8048-compatible",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "K.C. Munchkin!",
+        "Pick Axe Pete!",
+        "Quest for the Rings",
+        "Freedom Fighters"
+      ]
     },
     "ids": {
       "screenscraper": 104,

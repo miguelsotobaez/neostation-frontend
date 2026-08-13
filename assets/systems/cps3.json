@@ -8,7 +8,19 @@
       "manufacturer": "Capcom",
       "release_date": "1996-01-01",
       "description": "Capcom's third arcade system board powering late 90s fighting games.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "32-bit",
+      "cpu": "Hitachi SH-2",
+      "media": [
+        "arcade_board",
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Street Fighter III: 3rd Strike",
+        "JoJo's Bizarre Adventure",
+        "Red Earth",
+        "Street Fighter III: 2nd Impact"
+      ]
     },
     "ids": {
       "screenscraper": 75,

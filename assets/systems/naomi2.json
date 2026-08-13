@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "2001-03-01",
       "description": "Upgraded Sega arcade board with superior 3D graphics processing.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "32-bit",
+      "cpu": "Hitachi SH-4",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Virtua Fighter 4",
+        "Initial D Arcade Stage",
+        "Virtua Striker 3",
+        "Beach Spikers"
+      ]
     },
     "ids": {
       "screenscraper": 230,

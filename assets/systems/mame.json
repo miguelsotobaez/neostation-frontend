@@ -8,7 +8,17 @@
       "manufacturer": "",
       "release_date": "1997-02-05",
       "description": "Multiple Arcade Machine Emulator preserving vintage arcade hardware.",
-      "type": "virtual"
+      "type": "virtual",
+      "media": [
+        "various"
+      ],
+      "notable_games": [
+        "Pac-Man",
+        "Street Fighter II",
+        "Metal Slug",
+        "Galaga"
+      ],
+      "collection_kind": "emulation_platform"
     },
     "ids": {
       "screenscraper": 75,

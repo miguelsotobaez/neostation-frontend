@@ -8,7 +8,18 @@
       "manufacturer": "Sega",
       "release_date": "1990-10-06",
       "description": "Sega's 8-bit handheld with a full-color backlit screen.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Sonic Triple Trouble",
+        "Shinobi",
+        "Columns",
+        "GG Aleste"
+      ]
     },
     "ids": {
       "screenscraper": 21,

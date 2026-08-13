@@ -8,7 +8,18 @@
       "manufacturer": "Nintendo",
       "release_date": "2001-11-16",
       "description": "Nintendo's tiny handheld themed around the Pokémon franchise.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Epson S1C88",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Pokémon Party mini",
+        "Pokémon Pinball mini",
+        "Pokémon Puzzle Collection",
+        "Togepi's Great Adventure"
+      ]
     },
     "ids": {
       "screenscraper": 211,

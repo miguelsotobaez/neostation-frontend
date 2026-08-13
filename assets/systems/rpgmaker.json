@@ -8,7 +8,17 @@
       "manufacturer": "",
       "release_date": "1992-01-01",
       "description": "Game creation tool and engine for building 2D role-playing games.",
-      "type": "virtual"
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "To the Moon",
+        "Corpse Party",
+        "Yume Nikki",
+        "OFF"
+      ],
+      "collection_kind": "game_engine"
     },
     "ids": {
       "screenscraper": 231,

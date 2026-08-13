@@ -8,7 +8,18 @@
       "manufacturer": "Welback",
       "release_date": "1993-01-01",
       "description": "Welback's 8-bit monochrome handheld console, also known as Cougar Boy.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Sharp SM83-compatible 8-bit CPU",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Snake Roy",
+        "The Brick Wall",
+        "Railway",
+        "Treasure Island"
+      ]
     },
     "ids": {
       "screenscraper": 90,

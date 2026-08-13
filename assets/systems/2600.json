@@ -8,7 +8,19 @@
       "manufacturer": "Atari",
       "release_date": "1977-09-11",
       "description": "Atari's iconic cartridge-based console that popularized home video gaming.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "MOS Technology 6507",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Space Invaders",
+        "Pitfall!",
+        "Adventure",
+        "Missile Command"
+      ]
     },
     "ids": {
       "screenscraper": 26,

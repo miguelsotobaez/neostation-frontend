@@ -12,7 +12,19 @@
       "manufacturer": "Microsoft",
       "release_date": "2001-11-15",
       "description": "Microsoft's first gaming console with Xbox Live support and DVD playback.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit x86",
+      "generation": 6,
+      "cpu": "Intel Pentium III-derived",
+      "media": [
+        "dvd"
+      ],
+      "notable_games": [
+        "Halo 2",
+        "Fable",
+        "Ninja Gaiden Black",
+        "Forza Motorsport"
+      ]
     },
     "ids": {
       "screenscraper": 32,

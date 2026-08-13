@@ -106,6 +106,64 @@ void main() {
       expect(config['scrape_metadata'], isFalse);
     });
 
+    test(
+      'adding a media type reopens fully scraped games for new_only backfill',
+      () async {
+        await db.execute(
+          "INSERT INTO user_screenscraper_metadata "
+          "(filename, app_system_id, is_fully_scraped) "
+          "VALUES ('game.smc', 'snes', 1)",
+        );
+
+        final saved = await ScraperRepository.saveEnabledMediaTypes([
+          'fanart',
+          'ss',
+          'wheel',
+          'box2D',
+          'video',
+          'manuel',
+        ]);
+        expect(saved, isTrue);
+
+        final rows = await db.rawQuery(
+          "SELECT is_fully_scraped FROM user_screenscraper_metadata "
+          "WHERE filename = 'game.smc'",
+        );
+        expect(rows.first['is_fully_scraped'], 0);
+      },
+    );
+
+    test('removing a media type keeps completed games completed', () async {
+      await ScraperRepository.saveEnabledMediaTypes([
+        'fanart',
+        'ss',
+        'wheel',
+        'box2D',
+        'video',
+        'manuel',
+      ]);
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata "
+        "(filename, app_system_id, is_fully_scraped) "
+        "VALUES ('game.smc', 'snes', 1)",
+      );
+
+      final saved = await ScraperRepository.saveEnabledMediaTypes([
+        'fanart',
+        'ss',
+        'wheel',
+        'box2D',
+        'video',
+      ]);
+      expect(saved, isTrue);
+
+      final rows = await db.rawQuery(
+        "SELECT is_fully_scraped FROM user_screenscraper_metadata "
+        "WHERE filename = 'game.smc'",
+      );
+      expect(rows.first['is_fully_scraped'], 1);
+    });
+
     test('getUnmappedSystemsCount returns correct count', () async {
       final count = await ScraperRepository.getUnmappedSystemsCount();
       expect(count, 1);

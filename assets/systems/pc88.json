@@ -8,7 +8,19 @@
       "manufacturer": "NEC",
       "release_date": "1981-10-22",
       "description": "NEC's successful Japanese 8-bit personal computer line.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "NEC μPD780 / Z80-compatible",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Thexder",
+        "Ys I",
+        "Sorcerian",
+        "Dragon Slayer"
+      ]
     },
     "ids": {
       "screenscraper": 221,

@@ -8,7 +8,20 @@
       "manufacturer": "Sega",
       "release_date": "1985-10-20",
       "description": "Sega's 8-bit console with 3D glasses support and a built-in card slot.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Zilog Z80",
+      "media": [
+        "cartridge",
+        "card"
+      ],
+      "notable_games": [
+        "Alex Kidd in Miracle World",
+        "Phantasy Star",
+        "Wonder Boy III: The Dragon’s Trap",
+        "R-Type"
+      ]
     },
     "ids": {
       "screenscraper": 2,

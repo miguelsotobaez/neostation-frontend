@@ -8,7 +8,19 @@
       "manufacturer": "Coleco",
       "release_date": "1982-08-01",
       "description": "Coleco's powerful second-generation console with arcade-quality graphics.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Donkey Kong",
+        "Zaxxon",
+        "Smurf: Rescue in Gargamel’s Castle",
+        "Venture"
+      ]
     },
     "ids": {
       "screenscraper": 48,

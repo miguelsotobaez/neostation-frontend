@@ -8,7 +8,9 @@
       "manufacturer": "Sega",
       "release_date": "1988-10-29",
       "description": "Sega's 16-bit console known as Mega Drive outside North America.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "genesis",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 1,

@@ -16,6 +16,7 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:ui';
 import '../../services/game_service.dart';
 import '../../utils/game_launch_utils.dart';
 import '../../services/music_player_service.dart';
@@ -1156,10 +1157,22 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       context,
                     ).extension<CornerRadii>()?.radiusInternal ??
                     BorderRadius.circular(9.r),
-                child: SizedBox(
-                  width: 200.r,
-                  height: availableHeight,
-                  child: _buildGamesListPanel(),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: ChromeSurface.glassBlur(
+                      context,
+                      GlassSurfaceRole.panel,
+                    ),
+                    sigmaY: ChromeSurface.glassBlur(
+                      context,
+                      GlassSurfaceRole.panel,
+                    ),
+                  ),
+                  child: SizedBox(
+                    width: 200.r,
+                    height: availableHeight,
+                    child: _buildGamesListPanel(),
+                  ),
                 ),
               ),
             ),

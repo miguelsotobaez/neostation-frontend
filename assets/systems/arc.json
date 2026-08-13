@@ -8,7 +8,16 @@
       "manufacturer": "",
       "release_date": "1971-01-01",
       "description": "Coin-operated arcade machines, the origin of modern video gaming.",
-      "type": "arcade"
+      "type": "arcade",
+      "media": [
+        "arcade_board"
+      ],
+      "notable_games": [
+        "Pac-Man",
+        "Donkey Kong",
+        "Street Fighter II",
+        "Galaga"
+      ]
     },
     "ids": {
       "screenscraper": 75,

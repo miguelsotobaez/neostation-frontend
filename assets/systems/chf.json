@@ -8,7 +8,19 @@
       "manufacturer": "Fairchild",
       "release_date": "1976-11-01",
       "description": "The first programmable ROM cartridge console and first to use a microprocessor.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Fairchild F8",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Videocart-1: Tic-Tac-Toe",
+        "Alien Invasion",
+        "Space War",
+        "Robot War / Torpedo Alley"
+      ]
     },
     "ids": {
       "screenscraper": 80,

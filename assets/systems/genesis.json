@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "1988-10-29",
       "description": "Sega's 16-bit console known as Mega Drive outside North America.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16-bit",
+      "generation": 4,
+      "cpu": "Motorola 68000 + Zilog Z80",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Sonic the Hedgehog 2",
+        "Streets of Rage 2",
+        "Gunstar Heroes",
+        "Phantasy Star IV"
+      ]
     },
     "ids": {
       "screenscraper": 1,

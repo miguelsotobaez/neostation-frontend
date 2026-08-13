@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "1986-02-21",
       "description": "Nintendo's floppy disk add-on for the Family Computer.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Ricoh 2A03/2A07",
+      "media": [
+        "floppy"
+      ],
+      "notable_games": [
+        "The Legend of Zelda",
+        "Metroid",
+        "Castlevania",
+        "Doki Doki Panic"
+      ]
     },
     "ids": {
       "screenscraper": 106,

@@ -8,7 +8,19 @@
       "manufacturer": "Atari",
       "release_date": "1995-09-01",
       "description": "CD-ROM peripheral for the Atari Jaguar with larger storage capacity.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32/64-bit",
+      "generation": 5,
+      "cpu": "Motorola 68000 + custom RISC processors",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Battlemorph",
+        "Blue Lightning",
+        "Primal Rage",
+        "Myst"
+      ]
     },
     "ids": {
       "screenscraper": 171,

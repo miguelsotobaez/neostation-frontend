@@ -8,7 +8,19 @@
       "manufacturer": "Atari",
       "release_date": "1986-05-01",
       "description": "Atari console backward-compatible with the 2600 and featuring enhanced graphics.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Atari SALLY (6502C)",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Food Fight",
+        "Ballblazer",
+        "Joust",
+        "Ms. Pac-Man"
+      ]
     },
     "ids": {
       "screenscraper": 41,

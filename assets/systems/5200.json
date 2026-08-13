@@ -8,7 +8,19 @@
       "manufacturer": "Atari",
       "release_date": "1982-11-01",
       "description": "Atari's second-generation cartridge console with analog joystick.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "MOS Technology 6502C",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Star Raiders",
+        "Pac-Man",
+        "Missile Command",
+        "Centipede"
+      ]
     },
     "ids": {
       "screenscraper": 40,

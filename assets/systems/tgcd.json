@@ -8,7 +8,18 @@
       "manufacturer": "NEC",
       "release_date": "1988-12-04",
       "description": "Western CD-ROM add-on for the TurboGrafx-16.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "pccd",
+      "generation": 4,
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Castlevania: Rondo of Blood",
+        "Ys Book I & II",
+        "Lords of Thunder",
+        "Gate of Thunder"
+      ]
     },
     "ids": {
       "screenscraper": 114,

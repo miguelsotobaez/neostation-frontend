@@ -20,6 +20,7 @@ import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 
 import 'package:neostation/themes/chrome_surface.dart';
+import 'package:neostation/widgets/neo_glass.dart';
 import '../themes/corner_radii.dart';
 
 class Header extends StatefulWidget {
@@ -211,21 +212,16 @@ class HeaderState extends State<Header> {
                     // Bumper glyphs sit outside the pill so the pill reads as a
                     // single switch and the hardware hints stay distinct from it.
                     _buildShoulderButton('LB', true),
-                    Container(
+                    SizedBox(
                       height: 32.r,
-                      padding: EdgeInsets.symmetric(horizontal: 4.r),
-                      decoration: BoxDecoration(
-                        color: ChromeSurface.fill(context),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outline,
-                          width: 1.r,
-                        ),
+                      child: NeoGlass(
+                        role: GlassSurfaceRole.chrome,
                         borderRadius:
                             Theme.of(
                               context,
                             ).extension<CornerRadii>()?.radiusExternal ??
                             BorderRadius.circular(8.r),
-                        // normal black shadow
+                        padding: EdgeInsets.symmetric(horizontal: 4.r),
                         boxShadow: [
                           BoxShadow(
                             color: Theme.of(
@@ -235,9 +231,8 @@ class HeaderState extends State<Header> {
                             offset: Offset(2.0.r, 2.0.r),
                           ),
                         ],
-                      ),
-                      child: Builder(
-                        builder: (context) {
+                        child: Builder(
+                          builder: (context) {
                           final visibleTabs = visibleNavTabs(
                             configProvider.config,
                           );
@@ -295,7 +290,8 @@ class HeaderState extends State<Header> {
                               ),
                             ],
                           );
-                        },
+                          },
+                        ),
                       ),
                     ),
                     _buildShoulderButton('RB', false),
@@ -306,23 +302,19 @@ class HeaderState extends State<Header> {
               // Steam-style system info
               Align(
                 alignment: Alignment.centerRight,
-                child: Container(
-                  margin: EdgeInsets.only(right: 8.r),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 10.r,
-                    vertical: 4.r,
-                  ),
-                  decoration: BoxDecoration(
-                    color: ChromeSurface.fill(context),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outline,
-                      width: 1.r,
-                    ),
+                child: Padding(
+                  padding: EdgeInsets.only(right: 8.r),
+                  child: NeoGlass(
+                    role: GlassSurfaceRole.chrome,
                     borderRadius:
                         Theme.of(
                           context,
                         ).extension<CornerRadii>()?.radiusExternal ??
                         BorderRadius.circular(14),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.r,
+                      vertical: 4.r,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Theme.of(
@@ -332,10 +324,9 @@ class HeaderState extends State<Header> {
                         offset: Offset(2.0.r, 2.0.r),
                       ),
                     ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       const NotificationBell(),
                       SizedBox(width: 10.r),
                       Icon(
@@ -379,6 +370,7 @@ class HeaderState extends State<Header> {
                     ],
                   ),
                 ),
+              ),
               ),
             ],
           ),

@@ -8,7 +8,19 @@
       "manufacturer": "Apple",
       "release_date": "1977-04-01",
       "description": "Apple's influential 8-bit home computer with color graphics and expansion slots.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502",
+      "media": [
+        "floppy",
+        "cassette"
+      ],
+      "notable_games": [
+        "Prince of Persia",
+        "The Oregon Trail",
+        "Ultima I",
+        "Lode Runner"
+      ]
     },
     "ids": {
       "screenscraper": 86,

@@ -383,6 +383,72 @@ class GameModel {
     );
   }
 
+  /// Resolves the local PDF manual for this game.
+  ///
+  /// Manuals follow the same media-key rules as artwork: MeloNX virtual games
+  /// prefer their stable Title ID, while regular ROMs use the ROM filename
+  /// without its system-specific extension. The canonical location is
+  /// `media/<system>/manuals/<key>.pdf`.
+  String getManualPath(
+    String systemFolderName, [
+    FileProvider? fileProvider,
+  ]) {
+    final lookupNames = _mediaLookupNames();
+
+    if (fileProvider != null && fileProvider.isInitialized) {
+      for (final mediaName in lookupNames) {
+        final candidate = fileProvider.getMediaPath(
+          systemFolderName,
+          'manuals',
+          mediaName,
+          'pdf',
+        );
+        if (File(candidate).existsSync()) return candidate;
+
+        final literalCandidate = path.join(
+          fileProvider.getMediaDirectoryPath(),
+          systemFolderName,
+          'manuals',
+          '$mediaName.pdf',
+        );
+        if (File(literalCandidate).existsSync()) return literalCandidate;
+      }
+
+      return fileProvider.getMediaPath(
+        systemFolderName,
+        'manuals',
+        lookupNames.first,
+        'pdf',
+      );
+    }
+
+    for (final mediaName in lookupNames) {
+      final baseName = _stripRomExtension(mediaName);
+      final candidate = path.join(
+        'media',
+        systemFolderName,
+        'manuals',
+        '$baseName.pdf',
+      );
+      if (File(candidate).existsSync()) return candidate;
+
+      final literalCandidate = path.join(
+        'media',
+        systemFolderName,
+        'manuals',
+        '$mediaName.pdf',
+      );
+      if (File(literalCandidate).existsSync()) return literalCandidate;
+    }
+
+    return path.join(
+      'media',
+      systemFolderName,
+      'manuals',
+      '${_stripRomExtension(lookupNames.first)}.pdf',
+    );
+  }
+
   /// Sanitizes a ROM filename by stripping common extensions while preserving
   /// potential version strings (e.g., 'v1.2'). Delegates to the single canonical
   /// implementation in [FileProvider] so extension handling stays consistent

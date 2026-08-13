@@ -12,7 +12,11 @@
       "manufacturer": "Epic",
       "release_date": "2018-12-06",
       "description": "Epic's digital distribution platform for PC games.",
-      "type": "virtual"
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "digital_store"
     },
     "ids": {
       "screenscraper": 138,

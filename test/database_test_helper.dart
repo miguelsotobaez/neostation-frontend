@@ -229,11 +229,15 @@ class DatabaseTestHelper {
         scrape_metadata INTEGER,
         scrape_images INTEGER,
         scrape_videos INTEGER,
+        scrape_media_types TEXT,
         updated_at TEXT
       )
     ''');
     await db.execute(
-      "INSERT INTO user_screenscraper_config (id, scrape_mode, scrape_metadata, scrape_images, scrape_videos) VALUES (1, 'new_only', 1, 1, 1)",
+      r'''INSERT INTO user_screenscraper_config
+        (id, scrape_mode, scrape_metadata, scrape_images, scrape_videos, scrape_media_types)
+        VALUES
+        (1, 'new_only', 1, 1, 1, '["fanart","ss","wheel","box2D","video"]')''',
     );
 
     await db.execute('''

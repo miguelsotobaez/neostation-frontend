@@ -8,7 +8,18 @@
       "manufacturer": "Sega",
       "release_date": "1991-12-12",
       "description": "Sega's CD-ROM add-on for the Genesis with enhanced sound and video.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "mcd",
+      "generation": 4,
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Sonic CD",
+        "Lunar: The Silver Star",
+        "Snatcher",
+        "Final Fight CD"
+      ]
     },
     "ids": {
       "screenscraper": 20,

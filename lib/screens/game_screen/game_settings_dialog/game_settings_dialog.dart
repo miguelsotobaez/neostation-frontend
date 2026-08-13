@@ -11,9 +11,12 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/sync/i_sync_provider.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/core_footer.dart';
+import 'package:neostation/widgets/neo_glass.dart';
+import 'package:neostation/themes/chrome_surface.dart';
 
 import 'game_settings_emulator_tab.dart';
 import 'game_settings_manage_tab.dart';
+import 'game_settings_manual_tab.dart';
 import 'game_settings_scrapping_tab.dart';
 
 /// Steam-style settings dialog for a single game, reachable from the game
@@ -24,6 +27,7 @@ import 'game_settings_scrapping_tab.dart';
 ///  * Emulator  — per-game emulator override.
 ///  * Scrapping — force rescrape plus manual metadata/artwork editing.
 ///  * Manage    — view mode, play-time reset, and game deletion.
+///  * Manual    — download and read the locally cached PDF game manual.
 class GameSettingsDialog extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
@@ -67,8 +71,9 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
   final _emulatorTabKey = GlobalKey<GameSettingsEmulatorTabState>();
   final _scrappingTabKey = GlobalKey<GameSettingsScrappingTabState>();
   final _manageTabKey = GlobalKey<GameSettingsManageTabState>();
+  final _manualTabKey = GlobalKey<GameSettingsManualTabState>();
 
-  static const _tabCount = 3;
+  static const _tabCount = 4;
 
   @override
   void initState() {
@@ -118,6 +123,8 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
         _scrappingTabKey.currentState?.moveUp();
       case 2:
         _manageTabKey.currentState?.moveUp();
+      case 3:
+        _manualTabKey.currentState?.moveUp();
     }
   }
 
@@ -129,6 +136,8 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
         _scrappingTabKey.currentState?.moveDown();
       case 2:
         _manageTabKey.currentState?.moveDown();
+      case 3:
+        _manualTabKey.currentState?.moveDown();
     }
   }
 
@@ -154,6 +163,8 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
         _scrappingTabKey.currentState?.trigger();
       case 2:
         _manageTabKey.currentState?.trigger();
+      case 3:
+        _manualTabKey.currentState?.trigger();
     }
   }
 
@@ -187,25 +198,21 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 16.r),
-      child: Container(
+      child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: 640.r, maxHeight: 480.r),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+        child: NeoGlass(
+          role: GlassSurfaceRole.modal,
           borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.1),
-          ),
           boxShadow: [
             BoxShadow(
-              color: theme.colorScheme.shadow.withValues(alpha: 0.5),
-              blurRadius: 10.r,
+              color: theme.colorScheme.shadow.withValues(alpha: 0.35),
+              blurRadius: 8.r,
               offset: const Offset(0, 4),
             ),
           ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             _buildHeader(theme, displayName),
             _buildTabsHeader(theme),
             Expanded(
@@ -237,11 +244,19 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
                     onGameUpdated: widget.onGameUpdated,
                     onGameDeleted: _handleGameDeleted,
                   ),
+                  GameSettingsManualTab(
+                    key: _manualTabKey,
+                    game: widget.game,
+                    system: widget.system,
+                    fileProvider: widget.fileProvider,
+                    isAllMode: widget.isAllMode,
+                  ),
                 ],
               ),
             ),
-            _buildFooter(theme),
-          ],
+              _buildFooter(theme),
+            ],
+          ),
         ),
       ),
     );
@@ -328,10 +343,12 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
             ),
           ),
           _buildTabItem(theme, 0, AppLocale.emulator.getString(context)),
-          SizedBox(width: 16.r),
+          SizedBox(width: 12.r),
           _buildTabItem(theme, 1, AppLocale.scraping.getString(context)),
-          SizedBox(width: 16.r),
+          SizedBox(width: 12.r),
           _buildTabItem(theme, 2, AppLocale.manage.getString(context)),
+          SizedBox(width: 12.r),
+          _buildTabItem(theme, 3, AppLocale.manual.getString(context)),
           const Spacer(),
           Padding(
             padding: EdgeInsets.only(left: 8.r),

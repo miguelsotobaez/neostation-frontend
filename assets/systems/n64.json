@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "1996-06-23",
       "description": "Nintendo's 64-bit console with a unique three-pronged controller.",
-      "type": "console"
+      "type": "console",
+      "architecture": "64-bit",
+      "generation": 5,
+      "cpu": "NEC VR4300",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Super Mario 64",
+        "The Legend of Zelda: Ocarina of Time",
+        "GoldenEye 007",
+        "Mario Kart 64"
+      ]
     },
     "ids": {
       "screenscraper": 14,

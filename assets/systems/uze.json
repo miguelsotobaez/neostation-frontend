@@ -8,7 +8,18 @@
       "manufacturer": "Uzebox",
       "release_date": "2008-01-01",
       "description": "Open-source minimalist 8-bit console based on AVR microcontrollers.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "cpu": "ATmega644",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Uzesweeper",
+        "Megatris",
+        "Frogger",
+        "Lode Runner"
+      ]
     },
     "ids": {
       "screenscraper": 216,

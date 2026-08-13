@@ -8,7 +8,20 @@
       "manufacturer": "Sony",
       "release_date": "2000-03-04",
       "description": "Sony's bestselling 128-bit DVD-playing console with backward compatibility.",
-      "type": "console"
+      "type": "console",
+      "architecture": "64-bit CPU / 128-bit SIMD",
+      "generation": 6,
+      "cpu": "Sony Emotion Engine",
+      "media": [
+        "dvd",
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Grand Theft Auto: San Andreas",
+        "Shadow of the Colossus",
+        "God of War II",
+        "Metal Gear Solid 3: Snake Eater"
+      ]
     },
     "ids": {
       "screenscraper": 58,

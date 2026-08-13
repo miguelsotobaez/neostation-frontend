@@ -8,7 +8,9 @@
       "manufacturer": "Nintendo",
       "release_date": "1989-04-21",
       "description": "Nintendo's iconic 8-bit handheld with interchangeable cartridges.",
-      "type": "handheld"
+      "type": "handheld",
+      "info_inherits": "gb",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 9,

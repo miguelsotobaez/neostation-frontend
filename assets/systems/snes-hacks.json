@@ -8,7 +8,9 @@
       "manufacturer": "Nintendo",
       "release_date": "1990-11-21",
       "description": "Nintendo's 16-bit console with Mode 7 graphics and a rich RPG library.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "snes",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 4,

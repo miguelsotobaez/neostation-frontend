@@ -8,7 +8,18 @@
       "manufacturer": "Watara",
       "release_date": "1992-01-01",
       "description": "Watara's monochrome handheld with a tiltable screen.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "8-bit 65C02-class",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Crystball",
+        "Hash Blocks",
+        "Jaguar Bomber",
+        "Alien"
+      ]
     },
     "ids": {
       "screenscraper": 107,

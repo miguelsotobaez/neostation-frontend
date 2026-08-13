@@ -8,7 +8,18 @@
       "manufacturer": "Philips",
       "release_date": "1991-12-03",
       "description": "Philips' interactive multimedia CD-based console and educational platform.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16/32-bit",
+      "cpu": "Philips 68070",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "The 7th Guest",
+        "Burn:Cycle",
+        "Hotel Mario",
+        "Zelda: The Wand of Gamelon"
+      ]
     },
     "ids": {
       "screenscraper": 133,

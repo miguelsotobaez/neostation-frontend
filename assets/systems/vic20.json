@@ -8,7 +8,19 @@
       "manufacturer": "Commodore",
       "release_date": "1980-01-01",
       "description": "Commodore's entry-level 8-bit home computer, precursor to the C64.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502",
+      "media": [
+        "cassette",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Omega Race",
+        "Radar Rat Race",
+        "Jelly Monsters",
+        "Gorf"
+      ]
     },
     "ids": {
       "screenscraper": 73,

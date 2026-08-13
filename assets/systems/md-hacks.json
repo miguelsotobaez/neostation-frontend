@@ -8,7 +8,9 @@
       "manufacturer": "Sega",
       "release_date": "1988-10-29",
       "description": "Sega's 16-bit powerhouse console, known as Genesis in North America.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "md",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 1,

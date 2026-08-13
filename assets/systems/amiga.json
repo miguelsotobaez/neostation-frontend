@@ -8,7 +8,19 @@
       "manufacturer": "Commodore",
       "release_date": "1985-07-23",
       "description": "Commodore's 16/32-bit multimedia home computer with advanced graphics and sound.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000 family",
+      "media": [
+        "floppy",
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Lemmings",
+        "The Secret of Monkey Island",
+        "Sensible Soccer",
+        "Shadow of the Beast"
+      ]
     },
     "ids": {
       "screenscraper": 64,

@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "2001-09-14",
       "description": "Nintendo's compact 128-bit console with optical mini-discs.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 6,
+      "cpu": "IBM PowerPC Gekko",
+      "media": [
+        "optical_disc"
+      ],
+      "notable_games": [
+        "Super Smash Bros. Melee",
+        "Metroid Prime",
+        "The Legend of Zelda: The Wind Waker",
+        "Mario Kart: Double Dash!!"
+      ]
     },
     "ids": {
       "screenscraper": 13,

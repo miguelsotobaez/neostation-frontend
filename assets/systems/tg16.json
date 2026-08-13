@@ -8,7 +8,18 @@
       "manufacturer": "NEC",
       "release_date": "1989-08-29",
       "description": "Western release of the PC Engine, an 8-bit console with 16-bit graphics.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "pce",
+      "generation": 4,
+      "media": [
+        "hucard"
+      ],
+      "notable_games": [
+        "Bonk's Adventure",
+        "R-Type",
+        "Splatterhouse",
+        "Bomberman ’94"
+      ]
     },
     "ids": {
       "screenscraper": 31,

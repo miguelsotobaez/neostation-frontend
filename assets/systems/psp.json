@@ -8,7 +8,19 @@
       "manufacturer": "Sony",
       "release_date": "2004-12-12",
       "description": "Sony's sleek handheld with optical UMD media and multimedia playback.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "MIPS R4000-based Allegrex",
+      "media": [
+        "umd",
+        "digital"
+      ],
+      "notable_games": [
+        "Crisis Core: Final Fantasy VII",
+        "God of War: Chains of Olympus",
+        "Monster Hunter Freedom Unite",
+        "Patapon"
+      ]
     },
     "ids": {
       "screenscraper": 61,

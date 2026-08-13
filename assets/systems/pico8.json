@@ -8,7 +8,18 @@
       "manufacturer": "Lexaloffle",
       "release_date": "2014-02-01",
       "description": "Fantasy console for creating and playing tiny retro games and demos.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit VM",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Celeste Classic",
+        "PICOHOT",
+        "High Stakes",
+        "Mai-Chan’s Sweet Buns"
+      ],
+      "collection_kind": "fantasy_console"
     },
     "ids": {
       "screenscraper": 234,

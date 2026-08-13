@@ -8,7 +8,19 @@
       "manufacturer": "Sammy",
       "release_date": "2003-01-01",
       "description": "Sammy's arcade system board based on Dreamcast hardware.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "32-bit",
+      "cpu": "Hitachi SH-4",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Metal Slug 6",
+        "The King of Fighters XI",
+        "Samurai Shodown VI",
+        "Dolphin Blue"
+      ]
     },
     "ids": {
       "screenscraper": 53,

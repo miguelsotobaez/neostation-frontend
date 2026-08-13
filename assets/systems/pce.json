@@ -8,7 +8,19 @@
       "manufacturer": "NEC",
       "release_date": "1987-10-30",
       "description": "NEC's compact 8-bit console with a 16-bit GPU, known as TurboGrafx-16 in the West.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit CPU / 16-bit GPU",
+      "generation": 4,
+      "cpu": "Hudson HuC6280",
+      "media": [
+        "hucard"
+      ],
+      "notable_games": [
+        "Bonk's Adventure",
+        "R-Type",
+        "Splatterhouse",
+        "Bomberman ’94"
+      ]
     },
     "ids": {
       "screenscraper": 31,

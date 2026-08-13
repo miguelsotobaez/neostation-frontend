@@ -8,7 +8,18 @@
       "manufacturer": "SNK",
       "release_date": "1999-10-21",
       "description": "Color successor to the Neo Geo Pocket with a crisp reflective screen.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "Toshiba TLCS-900/H",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "SNK vs. Capcom: Match of the Millennium",
+        "Metal Slug: 2nd Mission",
+        "Card Fighters’ Clash",
+        "Sonic Pocket Adventure"
+      ]
     },
     "ids": {
       "screenscraper": 82,

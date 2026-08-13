@@ -8,7 +8,9 @@
       "manufacturer": "Sega",
       "release_date": "1990-10-06",
       "description": "Sega's 8-bit handheld with a full-color backlit screen.",
-      "type": "handheld"
+      "type": "handheld",
+      "info_inherits": "gg",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 21,

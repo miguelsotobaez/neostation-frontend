@@ -8,7 +8,12 @@
       "manufacturer": "",
       "release_date": "2021-11-01",
       "description": "Low-level fantasy console for building tiny WebAssembly games.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "WebAssembly 32-bit",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "fantasy_console"
     },
     "ids": {
       "screenscraper": 262,

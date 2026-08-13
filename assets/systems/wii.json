@@ -8,7 +8,20 @@
       "manufacturer": "Nintendo",
       "release_date": "2006-11-19",
       "description": "Nintendo's motion-controlled home console with broad casual appeal.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 7,
+      "cpu": "IBM PowerPC Broadway",
+      "media": [
+        "optical_disc",
+        "digital"
+      ],
+      "notable_games": [
+        "Wii Sports",
+        "Super Mario Galaxy",
+        "The Legend of Zelda: Twilight Princess",
+        "Mario Kart Wii"
+      ]
     },
     "ids": {
       "screenscraper": 16,

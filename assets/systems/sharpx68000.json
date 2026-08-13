@@ -8,7 +8,19 @@
       "manufacturer": "Sharp",
       "release_date": "1987-04-01",
       "description": "Sharp's high-end 16-bit Japanese computer with arcade-quality graphics.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000 family",
+      "media": [
+        "floppy",
+        "hard_disk"
+      ],
+      "notable_games": [
+        "Akumajou Dracula",
+        "Cho Ren Sha 68K",
+        "Gradius II",
+        "Final Fight"
+      ]
     },
     "ids": {
       "screenscraper": 79,

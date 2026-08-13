@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "1995-07-21",
       "description": "Nintendo's table-top 32-bit console with stereoscopic 3D graphics.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "NEC V810",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Virtual Boy Wario Land",
+        "Mario's Tennis",
+        "Teleroboxer",
+        "Red Alarm"
+      ]
     },
     "ids": {
       "screenscraper": 11,

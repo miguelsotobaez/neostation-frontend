@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "1983-07-15",
       "description": "Sega's first home video game console.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Zilog Z80",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Girl's Garden",
+        "Monaco GP",
+        "Congo Bongo",
+        "Flicky"
+      ]
     },
     "ids": {
       "screenscraper": 109,

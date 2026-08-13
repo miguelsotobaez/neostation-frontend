@@ -8,7 +8,18 @@
       "manufacturer": "Bandai",
       "release_date": "1999-03-04",
       "description": "Bandai's compact monochrome handheld with a unique vertical design.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "NEC V30MZ",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Gunpey",
+        "Final Lap Special",
+        "Klonoa: Moonlight Museum",
+        "Beatmania"
+      ]
     },
     "ids": {
       "screenscraper": 45,

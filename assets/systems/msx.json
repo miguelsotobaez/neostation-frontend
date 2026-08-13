@@ -8,7 +8,20 @@
       "manufacturer": "Microsoft",
       "release_date": "1983-06-27",
       "description": "Standardized 8-bit home computer architecture led by Microsoft and ASCII.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80",
+      "media": [
+        "cartridge",
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Metal Gear",
+        "Gradius 2",
+        "The Maze of Galious",
+        "Aleste"
+      ]
     },
     "ids": {
       "screenscraper": 113,

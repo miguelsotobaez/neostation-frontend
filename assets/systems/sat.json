@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "1994-11-22",
       "description": "Sega's 32-bit CD-based console with dual-CPU architecture.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "2× Hitachi SH-2",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Panzer Dragoon Saga",
+        "NiGHTS into Dreams…",
+        "Virtua Fighter 2",
+        "Sega Rally Championship"
+      ]
     },
     "ids": {
       "screenscraper": 22,

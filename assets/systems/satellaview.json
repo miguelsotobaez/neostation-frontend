@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "1995-07-01",
       "description": "Nintendo's satellite broadcast peripheral for the Super Famicom.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16-bit",
+      "cpu": "Ricoh 5A22 (Super Famicom)",
+      "media": [
+        "broadcast",
+        "digital"
+      ],
+      "notable_games": [
+        "BS Zelda no Densetsu",
+        "Radical Dreamers",
+        "BS F-Zero Grand Prix",
+        "Sutte Hakkun"
+      ]
     },
     "ids": {
       "screenscraper": 107,

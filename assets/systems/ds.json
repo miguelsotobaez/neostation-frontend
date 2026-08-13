@@ -8,7 +8,18 @@
       "manufacturer": "Nintendo",
       "release_date": "2004-11-21",
       "description": "Nintendo's dual-screen handheld with touch and microphone input.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "ARM946E-S + ARM7TDMI",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Mario Kart DS",
+        "New Super Mario Bros.",
+        "Pokémon HeartGold / SoulSilver",
+        "The World Ends with You"
+      ]
     },
     "ids": {
       "screenscraper": 15,

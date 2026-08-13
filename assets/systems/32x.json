@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "1994-11-21",
       "description": "Sega's 32-bit add-on for the Genesis/Mega Drive with enhanced polygon graphics.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 4,
+      "cpu": "2× Hitachi SH-2",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Knuckles' Chaotix",
+        "Virtua Racing Deluxe",
+        "Star Wars Arcade",
+        "Doom"
+      ]
     },
     "ids": {
       "screenscraper": 19,

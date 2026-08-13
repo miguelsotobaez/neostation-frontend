@@ -8,7 +8,19 @@
       "manufacturer": "Panasonic",
       "release_date": "1993-10-04",
       "description": "Panasonic's 32-bit CD-based console with advanced multimedia capabilities.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "ARM60",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "The Need for Speed",
+        "Road Rash",
+        "Gex",
+        "Star Control II"
+      ]
     },
     "ids": {
       "screenscraper": 29,

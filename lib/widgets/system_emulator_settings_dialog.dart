@@ -18,6 +18,7 @@ import '../providers/sqlite_database_provider.dart';
 import '../repositories/system_repository.dart';
 import '../repositories/emulator_repository.dart';
 import '../services/config_service.dart';
+import '../services/system_info_catalog.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../utils/gamepad_nav.dart';
 import '../services/game_service.dart' show GamepadNavigationManager;
@@ -36,6 +37,7 @@ part 'system_emulator_settings_dialog/gamepad_nav.dart';
 part 'system_emulator_settings_dialog/row_builders.dart';
 part 'system_emulator_settings_dialog/chrome.dart';
 part 'system_emulator_settings_dialog/tabs.dart';
+part 'system_emulator_settings_dialog/system_info.dart';
 
 /// Steam-style dialog to configure emulators/cores for a system
 class SystemEmulatorSettingsDialog extends StatefulWidget {
@@ -860,7 +862,9 @@ class _SystemEmulatorSettingsDialogState
                         : _errorMessage != null
                         ? _buildErrorState()
                         : _buildEmulatorsTab())
-                  : _buildAppearanceTab(),
+                  : _currentTab == 2
+                  ? _buildAppearanceTab()
+                  : _buildSystemInfoTab(),
             ),
             _buildFooter(),
           ],

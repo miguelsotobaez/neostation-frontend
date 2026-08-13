@@ -8,7 +8,18 @@
       "manufacturer": "Nintendo",
       "release_date": "1980-04-28",
       "description": "Nintendo's series of single-game LCD handhelds from the early 80s.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "4-bit",
+      "cpu": "Sharp SM5xx family",
+      "media": [
+        "built_in"
+      ],
+      "notable_games": [
+        "Ball",
+        "Donkey Kong",
+        "Fire",
+        "Octopus"
+      ]
     },
     "ids": {
       "screenscraper": 52,

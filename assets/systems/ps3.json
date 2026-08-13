@@ -8,7 +8,20 @@
       "manufacturer": "Sony",
       "release_date": "2006-11-11",
       "description": "Sony's HD console with Blu-ray, Cell processor and online PlayStation Network.",
-      "type": "console"
+      "type": "console",
+      "architecture": "64-bit",
+      "generation": 7,
+      "cpu": "Cell Broadband Engine",
+      "media": [
+        "blu_ray",
+        "digital"
+      ],
+      "notable_games": [
+        "The Last of Us",
+        "Uncharted 2: Among Thieves",
+        "Metal Gear Solid 4",
+        "LittleBigPlanet"
+      ]
     },
     "ids": {
       "screenscraper": 59,

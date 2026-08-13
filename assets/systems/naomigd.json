@@ -8,7 +8,17 @@
       "manufacturer": "Sega",
       "release_date": "2001-02-01",
       "description": "Sega's GD-ROM based arcade variant of the NAOMI hardware.",
-      "type": "arcade"
+      "type": "arcade",
+      "info_inherits": "naomi",
+      "media": [
+        "gd_rom"
+      ],
+      "notable_games": [
+        "Ikaruga",
+        "Border Down",
+        "Under Defeat",
+        "Radirgy"
+      ]
     },
     "ids": {
       "screenscraper": 227,

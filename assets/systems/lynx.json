@@ -8,7 +8,18 @@
       "manufacturer": "Atari",
       "release_date": "1989-09-01",
       "description": "Atari's 16-bit color handheld with hardware sprite scaling.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "WDC 65SC02",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "California Games",
+        "Chip's Challenge",
+        "Blue Lightning",
+        "Todd's Adventures in Slime World"
+      ]
     },
     "ids": {
       "screenscraper": 28,

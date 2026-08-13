@@ -8,7 +8,19 @@
       "manufacturer": "Capcom",
       "release_date": "1993-01-01",
       "description": "Capcom's second-generation arcade board with enhanced graphics.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000 + Z80",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Super Street Fighter II Turbo",
+        "Marvel vs. Capcom",
+        "Alien vs. Predator",
+        "Darkstalkers"
+      ]
     },
     "ids": {
       "screenscraper": 75,

@@ -8,7 +8,18 @@
       "manufacturer": "Arduboy",
       "release_date": "2014-01-01",
       "description": "Credit-card sized open-source handheld based on the Arduino platform.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "ATmega32U4",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Arduventure",
+        "Circuit Dude",
+        "Mystic Balloon",
+        "Catacombs of the Damned"
+      ]
     },
     "ids": {
       "screenscraper": 263,

@@ -8,7 +8,19 @@
       "manufacturer": "Capcom",
       "release_date": "1988-01-01",
       "description": "Capcom's first cartridge-based arcade system board.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "16-bit",
+      "cpu": "Motorola 68000 + Z80",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Street Fighter II",
+        "Final Fight",
+        "Ghouls 'n Ghosts",
+        "Strider"
+      ]
     },
     "ids": {
       "screenscraper": 75,

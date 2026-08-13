@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "1983-07-15",
       "description": "Nintendo's 8-bit console that revived the North American video game industry.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Ricoh 2A03/2A07",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Super Mario Bros. 3",
+        "The Legend of Zelda",
+        "Metroid",
+        "Mega Man 2"
+      ]
     },
     "ids": {
       "screenscraper": 3,

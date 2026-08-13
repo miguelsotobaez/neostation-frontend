@@ -8,7 +8,20 @@
       "manufacturer": "Commodore",
       "release_date": "1982-08-01",
       "description": "Commodore's bestselling 8-bit home computer with SID sound and sprites.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6510",
+      "media": [
+        "cassette",
+        "floppy",
+        "cartridge"
+      ],
+      "notable_games": [
+        "The Last Ninja",
+        "Impossible Mission",
+        "International Karate",
+        "Boulder Dash"
+      ]
     },
     "ids": {
       "screenscraper": 66,

@@ -8,7 +8,19 @@
       "manufacturer": "NEC",
       "release_date": "1982-10-22",
       "description": "NEC's dominant Japanese 16/32-bit business and gaming computer line.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "NEC V30 / Intel x86 family",
+      "media": [
+        "floppy",
+        "cd_rom"
+      ],
+      "notable_games": [
+        "YU-NO",
+        "Touhou: Lotus Land Story",
+        "Rusty",
+        "Brandish"
+      ]
     },
     "ids": {
       "screenscraper": 208,

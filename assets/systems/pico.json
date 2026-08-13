@@ -8,7 +8,18 @@
       "manufacturer": "Sega",
       "release_date": "1993-10-01",
       "description": "Sega's educational console for children with a pen-based tablet.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16-bit",
+      "cpu": "Motorola 68000",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Sonic's Gameworld",
+        "Tails and the Music Maker",
+        "The Lion King: Adventures at Pride Rock",
+        "Ecco Jr. and the Great Ocean Treasure Hunt"
+      ]
     },
     "ids": {
       "screenscraper": 250,

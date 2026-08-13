@@ -8,7 +8,19 @@
       "manufacturer": "Acorn",
       "release_date": "1981-12-01",
       "description": "Acorn's 8-bit educational home computer commissioned by the BBC.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Elite",
+        "Repton",
+        "Chuckie Egg",
+        "Exile"
+      ]
     },
     "ids": {
       "screenscraper": 37,

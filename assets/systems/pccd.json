@@ -8,7 +8,17 @@
       "manufacturer": "NEC",
       "release_date": "1988-12-04",
       "description": "CD-ROM add-on for the PC Engine with enhanced audio and video.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "pce",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Castlevania: Rondo of Blood",
+        "Ys Book I & II",
+        "Lords of Thunder",
+        "Gate of Thunder"
+      ]
     },
     "ids": {
       "screenscraper": 114,

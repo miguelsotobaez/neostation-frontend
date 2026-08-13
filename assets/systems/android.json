@@ -8,7 +8,12 @@
       "manufacturer": "Google",
       "release_date": "2008-09-23",
       "description": "Google's Linux-based mobile operating system for smartphones and tablets.",
-      "type": "virtual"
+      "type": "virtual",
+      "architecture": "ARM / x86 / x64",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "software_platform"
     },
     "ids": {
       "screenscraper": null,

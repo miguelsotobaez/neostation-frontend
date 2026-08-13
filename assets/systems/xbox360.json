@@ -8,7 +8,20 @@
       "manufacturer": "Microsoft",
       "release_date": "2005-11-22",
       "description": "Microsoft's HD console with Xbox Live and a vast multimedia ecosystem.",
-      "type": "console"
+      "type": "console",
+      "architecture": "64-bit PowerPC",
+      "generation": 7,
+      "cpu": "IBM Xenon",
+      "media": [
+        "dvd",
+        "digital"
+      ],
+      "notable_games": [
+        "Halo 3",
+        "Gears of War",
+        "Forza Motorsport 4",
+        "Lost Odyssey"
+      ]
     },
     "ids": {
       "screenscraper": 33,

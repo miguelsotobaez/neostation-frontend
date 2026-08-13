@@ -8,7 +8,18 @@
       "manufacturer": "SNK",
       "release_date": "1998-10-28",
       "description": "SNK's monochrome handheld with a microswitch joystick.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "Toshiba TLCS-900/H",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "King of Fighters R-1",
+        "Samurai Shodown!",
+        "Neo Geo Cup ’98",
+        "Baseball Stars"
+      ]
     },
     "ids": {
       "screenscraper": 25,

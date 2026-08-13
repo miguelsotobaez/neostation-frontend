@@ -8,7 +8,19 @@
       "manufacturer": "Interton",
       "release_date": "1978-01-01",
       "description": "Interton's P2000-clone console with interchangeable cartridges.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Signetics 2650A",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Air / Sea Attack",
+        "Chess",
+        "Grand Prix",
+        "Space Laser"
+      ]
     },
     "ids": {
       "screenscraper": 281,

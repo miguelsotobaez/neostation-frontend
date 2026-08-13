@@ -8,7 +8,8 @@
       "manufacturer": "",
       "release_date": "1900-01-01",
       "description": "Collection of favorite games across all systems.",
-      "type": "virtual"
+      "type": "virtual",
+      "collection_kind": "favorites"
     },
     "ids": {
       "screenscraper": null,

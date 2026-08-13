@@ -8,7 +8,18 @@
       "manufacturer": "Nintendo",
       "release_date": "2001-03-21",
       "description": "Nintendo's 32-bit handheld with shoulder buttons and backward compatibility.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "ARM7TDMI",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Pokémon Emerald",
+        "Metroid Fusion",
+        "Advance Wars",
+        "The Legend of Zelda: The Minish Cap"
+      ]
     },
     "ids": {
       "screenscraper": 12,

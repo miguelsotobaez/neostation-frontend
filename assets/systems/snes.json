@@ -8,7 +8,19 @@
       "manufacturer": "Nintendo",
       "release_date": "1990-11-21",
       "description": "Nintendo's 16-bit console with Mode 7 graphics and a rich RPG library.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16-bit",
+      "generation": 4,
+      "cpu": "Ricoh 5A22",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Super Mario World",
+        "Chrono Trigger",
+        "The Legend of Zelda: A Link to the Past",
+        "Super Metroid"
+      ]
     },
     "ids": {
       "screenscraper": 4,

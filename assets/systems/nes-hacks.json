@@ -8,7 +8,9 @@
       "manufacturer": "Nintendo",
       "release_date": "1983-07-15",
       "description": "Nintendo's 8-bit console that revived the North American video game industry.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "nes",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 3,

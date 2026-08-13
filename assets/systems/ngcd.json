@@ -8,7 +8,17 @@
       "manufacturer": "SNK",
       "release_date": "1994-09-09",
       "description": "SNK's CD-based Neo Geo console with cheaper media and Red Book audio.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "neogeo",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Metal Slug",
+        "The King of Fighters ’98",
+        "Garou: Mark of the Wolves",
+        "Samurai Shodown II"
+      ]
     },
     "ids": {
       "screenscraper": 70,

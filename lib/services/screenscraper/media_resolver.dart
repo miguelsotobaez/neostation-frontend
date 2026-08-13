@@ -45,6 +45,8 @@ class ScreenscraperMediaResolver {
         return 'wheels';
       case 'box2D':
         return 'box2d';
+      case 'manuel':
+        return 'manuals';
       default:
         return mediaType;
     }

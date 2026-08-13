@@ -8,7 +8,19 @@
       "manufacturer": "Commodore",
       "release_date": "1984-01-01",
       "description": "Commodore's budget home computer with 16 colors and built-in software.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 7501/8501",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Mercenary",
+        "Kikstart",
+        "Treasure Island",
+        "Saboteur!"
+      ]
     },
     "ids": {
       "screenscraper": 99,

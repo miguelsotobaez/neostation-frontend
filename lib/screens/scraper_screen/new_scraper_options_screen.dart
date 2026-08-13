@@ -336,7 +336,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
     if (selectedKey == AppLocale.scraping) return 1;
     if (selectedKey == AppLocale.scrapeMode) return 2;
-    if (selectedKey == AppLocale.media) return 5;
+    if (selectedKey == AppLocale.media) return 6;
     if (selectedKey == AppLocale.region) {
       return _regionKey.currentState?.getItemCount ?? 0;
     }

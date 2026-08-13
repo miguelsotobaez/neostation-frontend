@@ -8,7 +8,19 @@
       "manufacturer": "Sinclair",
       "release_date": "1982-04-23",
       "description": "Sinclair's iconic 8-bit computer with colorful rubber keys and a huge software library.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Manic Miner",
+        "Jet Set Willy",
+        "Knight Lore",
+        "Saboteur!"
+      ]
     },
     "ids": {
       "screenscraper": 76,

@@ -8,7 +8,18 @@
       "manufacturer": "Atari",
       "release_date": "1985-06-01",
       "description": "Atari's 16-bit home computer with MIDI support and GEM graphical interface.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000",
+      "media": [
+        "floppy"
+      ],
+      "notable_games": [
+        "Dungeon Master",
+        "Another World",
+        "Lemmings",
+        "Sensible Soccer"
+      ]
     },
     "ids": {
       "screenscraper": 42,

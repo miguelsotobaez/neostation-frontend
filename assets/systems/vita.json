@@ -8,7 +8,19 @@
       "manufacturer": "Sony",
       "release_date": "2011-12-17",
       "description": "Sony's powerful handheld with a 5-inch OLED touchscreen.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "ARM Cortex-A9 MPCore",
+      "media": [
+        "cartridge",
+        "digital"
+      ],
+      "notable_games": [
+        "Persona 4 Golden",
+        "Uncharted: Golden Abyss",
+        "Gravity Rush",
+        "Tearaway"
+      ]
     },
     "ids": {
       "screenscraper": 62,

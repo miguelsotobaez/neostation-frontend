@@ -8,7 +8,18 @@
       "manufacturer": "Palm",
       "release_date": "1996-04-01",
       "description": "Palm OS handheld platform for personal digital assistants.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Bejeweled",
+        "Space Trader",
+        "Warfare Incorporated",
+        "Zap!2016"
+      ],
+      "collection_kind": "software_platform"
     },
     "ids": {
       "screenscraper": 219,

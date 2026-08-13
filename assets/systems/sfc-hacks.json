@@ -8,7 +8,9 @@
       "manufacturer": "Nintendo",
       "release_date": "1990-11-21",
       "description": "Nintendo's 16-bit Super Famicom, the Japanese version of the SNES.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "sfc",
+      "collection_kind": "rom_hacks"
     },
     "ids": {
       "screenscraper": 4,

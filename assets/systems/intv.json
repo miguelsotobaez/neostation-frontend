@@ -8,7 +8,19 @@
       "manufacturer": "Mattel",
       "release_date": "1979-12-03",
       "description": "Mattel's 16-bit home console with a numeric keypad and voice synthesis.",
-      "type": "console"
+      "type": "console",
+      "architecture": "16-bit",
+      "generation": 2,
+      "cpu": "GI CP1610",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Astrosmash",
+        "BurgerTime",
+        "Advanced Dungeons & Dragons",
+        "Utopia"
+      ]
     },
     "ids": {
       "screenscraper": 115,

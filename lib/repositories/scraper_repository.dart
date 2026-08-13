@@ -977,7 +977,39 @@ class ScraperRepository {
 
   static Future<bool> saveEnabledMediaTypes(List<String> types) async {
     try {
-      return await saveScraperConfig({'scrape_media_types': jsonEncode(types)});
+      // `is_fully_scraped` reflects completion for the media selection that was
+      // active when the game was last scraped. Enabling a new media type later
+      // (for example manuals) must therefore reopen completed games; otherwise
+      // `new_only` filters them out before ScreenScraper can backfill that media.
+      // Removing a media type does not invalidate completion.
+      final previousTypes = (await getEnabledMediaTypes()).toSet();
+      final nextTypes = types.toSet();
+      final addedTypes = nextTypes.difference(previousTypes);
+
+      final saved = await saveScraperConfig({
+        'scrape_media_types': jsonEncode(types),
+      });
+      if (!saved) return false;
+
+      if (addedTypes.isNotEmpty) {
+        final db = await SqliteService.getDatabase();
+        final resetCount = await db.update(
+          'user_screenscraper_metadata',
+          {
+            'is_fully_scraped': 0,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'is_fully_scraped = ?',
+          whereArgs: [1],
+        );
+        _log.i(
+          'Enabled new ScreenScraper media types '
+          '${addedTypes.join(', ')}; reset $resetCount completed game(s) '
+          'so new_only can backfill the newly requested media.',
+        );
+      }
+
+      return true;
     } catch (e) {
       _log.e('Error saving enabled media types: $e');
       return false;

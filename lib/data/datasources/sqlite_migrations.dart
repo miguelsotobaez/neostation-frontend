@@ -339,6 +339,9 @@ class SqliteMigrations {
       case 111:
         await _migrateToVersion111(db);
         break;
+      case 112:
+        await _migrateToVersion112(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5321,4 +5324,60 @@ class SqliteMigrations {
       rethrow;
     }
   }
+
+  /// Migration v112: repairs ScreenScraper completion state for users who
+  /// already enabled PDF manuals before this fix.
+  ///
+  /// Older builds could leave every game at `is_fully_scraped = 1`, so
+  /// `new_only` skipped the whole library even though manuals had never been
+  /// downloaded. The reset is conditional: users who keep manuals disabled do
+  /// not pay for an unnecessary library rescan. Future media additions are
+  /// handled generically by ScraperRepository.saveEnabledMediaTypes().
+  static Future<void> _migrateToVersion112(Database db) async {
+    _log.i('Migration v112: Repairing ScreenScraper completion state for manuals');
+    try {
+      final tables = db.select(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name IN ('user_screenscraper_config', 'user_screenscraper_metadata')",
+      );
+      if (tables.length < 2) {
+        _log.i('Migration v112: ScreenScraper tables missing, nothing to do');
+        return;
+      }
+
+      final configColumns = db
+          .select('PRAGMA table_info(user_screenscraper_config)')
+          .map((row) => row['name'].toString())
+          .toSet();
+      if (!configColumns.contains('scrape_media_types')) {
+        _log.i('Migration v112: scrape_media_types column missing, nothing to do');
+        return;
+      }
+
+      final configRows = db.select(
+        'SELECT scrape_media_types FROM user_screenscraper_config WHERE id = 1 LIMIT 1',
+      );
+      if (configRows.isEmpty) return;
+
+      final selected = configRows.first['scrape_media_types']?.toString() ?? '';
+      if (!selected.contains('"manuel"')) {
+        _log.i('Migration v112: manuals are disabled; completion state unchanged');
+        return;
+      }
+
+      db.execute(
+        'UPDATE user_screenscraper_metadata '
+        'SET is_fully_scraped = 0, updated_at = CURRENT_TIMESTAMP '
+        'WHERE is_fully_scraped = 1',
+      );
+      _log.i(
+        'Migration v112: reset completed games so new_only can backfill manuals',
+      );
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v112: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
 }

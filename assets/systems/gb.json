@@ -8,7 +8,18 @@
       "manufacturer": "Nintendo",
       "release_date": "1989-04-21",
       "description": "Nintendo's iconic 8-bit handheld with interchangeable cartridges.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Sharp LR35902",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Tetris",
+        "Pokémon Red / Blue",
+        "The Legend of Zelda: Link's Awakening",
+        "Super Mario Land 2"
+      ]
     },
     "ids": {
       "screenscraper": 9,

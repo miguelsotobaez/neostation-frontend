@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../../themes/corner_radii.dart';
+import '../../../themes/chrome_surface.dart';
+import '../../../widgets/neo_glass.dart';
 import '../../../widgets/shaders/shader_gif_widget.dart';
 import '../../../widgets/shaders/music_card_shader_background.dart';
 import '../../../utils/image_utils.dart';
@@ -210,26 +212,16 @@ class _SystemCardState extends State<SystemCard> {
       padding: EdgeInsets.all(2.r),
       child: MouseRegion(
         cursor: SystemMouseCursors.basic,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
-                BorderRadius.circular(14.r),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline,
-              width: 1.r,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.shadow.withValues(alpha: 0.1),
-                blurRadius: 4.r,
-                offset: Offset(2.0.r, 2.0.r),
-              ),
-            ],
-          ),
+        child: NeoGlass(
+          role: GlassSurfaceRole.card,
+          // The systems screen can display many cards simultaneously. A
+          // BackdropFilter per card was the source of the navigation slowdown,
+          // so cards use the lightweight glass path: transparent tint + rim.
+          enableBackdropBlur: false,
+          showSheen: false,
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
+              BorderRadius.circular(14.r),
           child: ClipRRect(
             borderRadius:
                 Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
@@ -390,18 +382,18 @@ class _SystemCardState extends State<SystemCard> {
                 cacheWidth: widget.backgroundCacheWidth,
                 errorBuilder: (context, error, stackTrace) => Stack(
                   children: [
-                    Container(color: Theme.of(context).colorScheme.surface),
+                    Container(color: Colors.transparent),
                     Container(
-                      color: widget.info.color1AsColor?.withValues(alpha: 0.4),
+                      color: widget.info.color1AsColor?.withValues(alpha: 0.26),
                     ),
                   ],
                 ),
               )
             : Stack(
                 children: [
-                  Container(color: Theme.of(context).colorScheme.surface),
+                  Container(color: Colors.transparent),
                   Container(
-                    color: widget.info.color1AsColor?.withValues(alpha: 0.4),
+                    color: widget.info.color1AsColor?.withValues(alpha: 0.26),
                   ),
                 ],
               ),

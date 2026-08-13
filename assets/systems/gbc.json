@@ -8,7 +8,18 @@
       "manufacturer": "Nintendo",
       "release_date": "1998-10-21",
       "description": "Color upgrade to the Game Boy with a larger screen and palette.",
-      "type": "handheld"
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Sharp LR35902",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Pokémon Crystal",
+        "The Legend of Zelda: Oracle of Ages / Seasons",
+        "Wario Land 3",
+        "Shantae"
+      ]
     },
     "ids": {
       "screenscraper": 10,

@@ -8,7 +8,20 @@
       "manufacturer": "Nintendo",
       "release_date": "2017-03-03",
       "description": "Nintendo's hybrid console for TV and portable play.",
-      "type": "console"
+      "type": "console",
+      "architecture": "64-bit",
+      "generation": 8,
+      "cpu": "NVIDIA Tegra X1 (ARMv8)",
+      "media": [
+        "cartridge",
+        "digital"
+      ],
+      "notable_games": [
+        "The Legend of Zelda: Breath of the Wild",
+        "Super Mario Odyssey",
+        "Mario Kart 8 Deluxe",
+        "Animal Crossing: New Horizons"
+      ]
     },
     "ids": {
       "screenscraper": 225,

@@ -8,7 +8,15 @@
       "manufacturer": "Sega",
       "release_date": "1985-10-20",
       "description": "Sega's third-generation 8-bit console, predecessor to the Master System.",
-      "type": "console"
+      "type": "console",
+      "info_inherits": "sms",
+      "generation": 3,
+      "notable_games": [
+        "Alex Kidd in Miracle World",
+        "Phantasy Star",
+        "Wonder Boy III: The Dragon’s Trap",
+        "R-Type"
+      ]
     },
     "ids": {
       "screenscraper": 2,

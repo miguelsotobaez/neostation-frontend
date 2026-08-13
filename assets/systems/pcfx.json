@@ -8,7 +8,19 @@
       "manufacturer": "NEC",
       "release_date": "1994-12-23",
       "description": "NEC's 32-bit CD-based successor to the PC Engine with FMV focus.",
-      "type": "console"
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "NEC V810",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Battle Heat",
+        "Chip Chan Kick!",
+        "Team Innocent",
+        "Zenki FX"
+      ]
     },
     "ids": {
       "screenscraper": 72,

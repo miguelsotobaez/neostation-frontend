@@ -8,7 +8,19 @@
       "manufacturer": "Sega",
       "release_date": "1998-09-01",
       "description": "Sega's arcade board based on Dreamcast hardware with JAMMA connectivity.",
-      "type": "arcade"
+      "type": "arcade",
+      "architecture": "32-bit",
+      "cpu": "Hitachi SH-4",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Crazy Taxi",
+        "Marvel vs. Capcom 2",
+        "Virtua Tennis",
+        "Ikaruga"
+      ]
     },
     "ids": {
       "screenscraper": 56,

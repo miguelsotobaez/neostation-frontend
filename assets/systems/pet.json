@@ -8,7 +8,19 @@
       "manufacturer": "Commodore",
       "release_date": "1977-01-01",
       "description": "Commodore's first all-in-one home computer with a built-in cassette drive.",
-      "type": "computer"
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Dungeon",
+        "Space Invaders",
+        "Star Trek",
+        "Lunar Lander"
+      ]
     },
     "ids": {
       "screenscraper": 240,

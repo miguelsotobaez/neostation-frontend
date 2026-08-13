@@ -8,7 +8,18 @@
       "manufacturer": "GCE",
       "release_date": "1982-11-01",
       "description": "Unique vector-graphics home console with an integrated screen.",
-      "type": "console"
+      "type": "console",
+      "architecture": "8-bit",
+      "cpu": "Motorola 68A09",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Mine Storm",
+        "Scramble",
+        "Armor Attack",
+        "Star Castle"
+      ]
     },
     "ids": {
       "screenscraper": 102,
