@@ -23,6 +23,12 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          # Pinned, not `channel: stable`. An unpinned stable silently moves
+          # under CI: 3.47.0 shipped a `dart format` that relaid out a file
+          # nobody had touched and an `unawaited_return_in_try_block` lint that
+          # fires in four existing files, so main went red without a commit.
+          # Bump this deliberately, in its own PR, with the fallout fixed.
+          flutter-version: '3.44.9'
           channel: 'stable'
           cache: true
 

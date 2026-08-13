@@ -19,6 +19,12 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          # Pinned, not `channel: stable`. An unpinned stable silently moves
+          # under CI: 3.47.0 shipped a `dart format` that relaid out a file
+          # nobody had touched and an `unawaited_return_in_try_block` lint that
+          # fires in four existing files, so main went red without a commit.
+          # Bump this deliberately, in its own PR, with the fallout fixed.
+          flutter-version: '3.44.9'
           channel: 'stable'
           cache: true
 
@@ -80,13 +86,14 @@ jobs:
         if: matrix.target != 'linux-arm'
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.44.9'
           channel: 'stable'
           cache: true
 
       - name: Setup Flutter (ARM64 Manual)
         if: matrix.target == 'linux-arm'
         run: |
-          git clone -b stable --depth 1 https://github.com/flutter/flutter.git $HOME/flutter
+          git clone -b 3.44.9 --depth 1 https://github.com/flutter/flutter.git $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
           export PATH="$HOME/flutter/bin:$PATH"
           flutter config --no-analytics
