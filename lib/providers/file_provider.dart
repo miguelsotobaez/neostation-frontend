@@ -343,7 +343,7 @@ class FileProvider extends ChangeNotifier {
     try {
       final directory = Directory(directoryPath);
       if (await directory.exists()) {
-        return directory.list().toList();
+        return await directory.list().toList();
       }
       return [];
     } catch (e) {
