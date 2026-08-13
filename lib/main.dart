@@ -21,7 +21,7 @@ import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
 import 'package:neostation/services/startup_theme_cache.dart';
-import 'package:neostation/widgets/shimmering_logo.dart';
+import 'package:neostation/widgets/splash_status_layout.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -492,27 +492,12 @@ class _StartupScaffoldState extends State<_StartupScaffold> {
               : (_, event) => widget.onKeyEvent!(event),
           // Animated mode pins the logo at the exact screen centre — the same
           // spot the Android 12+ splash icon occupies — with the status text
-          // hung below centre, so the native→Flutter handoff and the later
-          // screens never move the logo. The error screen keeps the simpler
-          // centred column with the wordmark.
+          // hung below it, so the native→Flutter handoff and the later screens
+          // never move the logo. Shared with the scan splash so the
+          // text/progress zone is one fixed place all intro. The error screen
+          // keeps the simpler centred column with the wordmark.
           child: widget.animatedLogo
-              ? Stack(
-                  children: [
-                    const Center(child: ShimmeringLogo()),
-                    Align(
-                      // Same offset as the scan splash's progress detail so
-                      // the text/progress zone is one fixed place all intro.
-                      alignment: const Alignment(0, 0.55),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: children,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
+              ? SplashStatusLayout(children: children)
               : Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),

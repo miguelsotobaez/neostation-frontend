@@ -5,7 +5,7 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
-import 'package:neostation/widgets/shimmering_logo.dart';
+import 'package:neostation/widgets/splash_status_layout.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import 'my_systems_section/my_systems_grid.dart';
 import 'my_systems_section/initial_setup_widget.dart';
@@ -127,66 +127,48 @@ class _SystemContentState extends State<SystemContent> {
   ) {
     // The logo sits at the exact screen centre — the same spot it occupies on
     // the native splash and the startup screens — with the progress detail
-    // hung below centre, so nothing shifts across the whole intro sequence.
-    return Stack(
+    // hung below it, so nothing shifts across the whole intro sequence.
+    return SplashStatusLayout(
+      // Track the scan only once it is actually progressing. During the
+      // waiting-for-storage phase progress sits at 0, which would park the
+      // glint off-screen and leave the logo frozen for up to 30s — keep the
+      // ambient sweep running until there's real movement.
+      progress: configProvider.isScanning && configProvider.scanProgress > 0
+          ? configProvider.scanProgress
+          : null,
       children: [
-        Center(
-          child: ShimmeringLogo(
-            // Track the scan only once it is actually progressing. During the
-            // waiting-for-storage phase progress sits at 0, which would park
-            // the glint off-screen and leave the logo frozen for up to 30s —
-            // keep the ambient sweep running until there's real movement.
-            progress:
-                configProvider.isScanning && configProvider.scanProgress > 0
-                ? configProvider.scanProgress
-                : null,
-          ),
-        ),
-        if (configProvider.isScanning)
-          Align(
-            // 0.55 clears the 280-wide logo's bottom edge (~0.40 on the Thor's
-            // ~467dp-tall logical screen) with comfortable breathing room.
-            alignment: const Alignment(0, 0.55),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 480),
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 220,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: configProvider.scanProgress,
-                        minHeight: 3,
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    configProvider.scanStatus.isNotEmpty
-                        ? configProvider.scanStatus
-                        : AppLocale.scanningSystemsRoms.getString(context),
-                    // 17 to match the startup screen's status line — the
-                    // theme's bodySmall (12) reads too small at couch distance.
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontSize: 17,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+        if (configProvider.isScanning) ...[
+          SizedBox(
+            width: 220,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: configProvider.scanProgress,
+                minHeight: 3,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          Text(
+            configProvider.scanStatus.isNotEmpty
+                ? configProvider.scanStatus
+                : AppLocale.scanningSystemsRoms.getString(context),
+            // 17 to match the startup screen's status line — the theme's
+            // bodySmall (12) reads too small at couch distance.
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontSize: 17,
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ],
     );
   }
