@@ -265,6 +265,13 @@ const Map<String, dynamic> appLocaleIt = {
       'Interrotto: {matched} gioco/giochi abbinati finora.',
   AppLocale.rematchAchievementsFailed:
       'Impossibile abbinare i giochi RetroAchievements: {error}',
+  AppLocale.raFixMatch: 'Correggi abbinamento',
+  AppLocale.raFixMatchTitle: 'Scegli il gioco giusto',
+  AppLocale.raFixMatchSearchHint: 'Cerca titoli RetroAchievements',
+  AppLocale.raFixMatchNoResults: 'Nessun gioco corrispondente trovato.',
+  AppLocale.raFixMatchUseAutomatic: 'Usa abbinamento automatico',
+  AppLocale.raFixMatchUpdated: 'Abbinamento aggiornato.',
+  AppLocale.raFixMatchAchievements: '{count} obiettivi',
   AppLocale.notifications: 'Notifiche',
   AppLocale.clearAll: 'Cancella tutto',
   AppLocale.noActiveNotifications: 'Nessuna notifica attiva',

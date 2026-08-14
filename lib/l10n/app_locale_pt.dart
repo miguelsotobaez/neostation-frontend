@@ -263,6 +263,13 @@ const Map<String, dynamic> appLocalePt = {
       'Parado: {matched} jogo(s) associado(s) até agora.',
   AppLocale.rematchAchievementsFailed:
       'Falha ao associar jogos do RetroAchievements: {error}',
+  AppLocale.raFixMatch: 'Corrigir associação',
+  AppLocale.raFixMatchTitle: 'Escolhe o jogo correto',
+  AppLocale.raFixMatchSearchHint: 'Procurar títulos do RetroAchievements',
+  AppLocale.raFixMatchNoResults: 'Não foram encontrados jogos correspondentes.',
+  AppLocale.raFixMatchUseAutomatic: 'Usar associação automática',
+  AppLocale.raFixMatchUpdated: 'Associação atualizada.',
+  AppLocale.raFixMatchAchievements: '{count} conquistas',
   AppLocale.notifications: 'Notificações',
   AppLocale.clearAll: 'Limpar tudo',
   AppLocale.noActiveNotifications: 'Nenhuma notificação ativa',

@@ -255,6 +255,13 @@ const Map<String, dynamic> appLocaleEn = {
       'Stopped: {matched} game(s) matched so far.',
   AppLocale.rematchAchievementsFailed:
       'Failed to match RetroAchievements games: {error}',
+  AppLocale.raFixMatch: 'Fix match',
+  AppLocale.raFixMatchTitle: 'Choose the right game',
+  AppLocale.raFixMatchSearchHint: 'Search RetroAchievements titles',
+  AppLocale.raFixMatchNoResults: 'No matching games found.',
+  AppLocale.raFixMatchUseAutomatic: 'Use automatic matching',
+  AppLocale.raFixMatchUpdated: 'Game match updated.',
+  AppLocale.raFixMatchAchievements: '{count} achievements',
   AppLocale.notifications: 'Notifications',
   AppLocale.clearAll: 'Clear all',
   AppLocale.noActiveNotifications: 'No active notifications',

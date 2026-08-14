@@ -235,7 +235,10 @@ class DatabaseTestHelper {
         game_id INTEGER,
         console_id TEXT,
         console_name TEXT,
-        title TEXT
+        title TEXT,
+        num_achievements INTEGER,
+        num_leaderboards INTEGER,
+        points INTEGER
       )
     ''');
 

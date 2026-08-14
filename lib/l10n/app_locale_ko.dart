@@ -215,6 +215,13 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rematchAchievementsStopped: '중지됨: 지금까지 {matched}개를 매칭했습니다.',
   AppLocale.rematchAchievementsFailed:
       'RetroAchievements 게임을 매칭하지 못했습니다: {error}',
+  AppLocale.raFixMatch: '매칭 수정',
+  AppLocale.raFixMatchTitle: '올바른 게임 선택',
+  AppLocale.raFixMatchSearchHint: 'RetroAchievements 제목 검색',
+  AppLocale.raFixMatchNoResults: '일치하는 게임이 없습니다.',
+  AppLocale.raFixMatchUseAutomatic: '자동 매칭 사용',
+  AppLocale.raFixMatchUpdated: '게임 매칭을 업데이트했습니다.',
+  AppLocale.raFixMatchAchievements: '업적 {count}개',
   AppLocale.notifications: '알림',
   AppLocale.clearAll: '모두 지우기',
   AppLocale.noActiveNotifications: '활성 알림 없음',

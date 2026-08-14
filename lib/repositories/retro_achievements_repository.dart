@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../models/database_game_model.dart';
+import '../models/ra_game_list_entry.dart';
 import '../models/ra_match_candidate.dart';
 import '../models/retro_achievements_dashboard_models.dart';
 
@@ -189,6 +190,64 @@ class RetroAchievementsRepository {
       ORDER BY s.folder_name, ur.filename
     ''');
     return rows.map((r) => RaMatchCandidate.fromRow(Map.from(r))).toList();
+  }
+
+  // ── Manual match search ───────────────────────────────────────────────────
+
+  /// Searches the bundled RA snapshot for games on [consoleRaId] whose title
+  /// matches [query], for the "this isn't the right game" picker.
+  ///
+  /// The table holds one row per registered hash, so results are collapsed to
+  /// one entry per game. Main sets sort ahead of subsets and hacks, which is
+  /// what the user almost always wants; the rest are still listed.
+  static Future<List<RaGameListEntry>> searchRaGamesByTitle(
+    String consoleRaId,
+    String query, {
+    int limit = 60,
+  }) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return [];
+
+    final db = await SqliteService.getDatabase();
+    final pattern = '%${trimmed.replaceAll(' ', '%')}%';
+    final rows = await db.rawQuery(
+      '''
+      SELECT game_id, title,
+             MAX(num_achievements) AS num_achievements,
+             MAX(points) AS points
+      FROM app_ra_game_list
+      WHERE console_id = ? AND title LIKE ?
+      GROUP BY game_id, title
+      ORDER BY
+        CASE WHEN title LIKE '%[Subset%' THEN 1 ELSE 0 END,
+        CASE WHEN title LIKE '~%' THEN 1 ELSE 0 END,
+        LENGTH(title) ASC,
+        title ASC
+      LIMIT ?
+      ''',
+      [consoleRaId, pattern, limit],
+    );
+    return rows.map((r) => RaGameListEntry.fromRow(Map.from(r))).toList();
+  }
+
+  /// Returns the snapshot entry for [gameId], or null when the bundled
+  /// database has no row for it.
+  static Future<RaGameListEntry?> getRaGameById(int gameId) async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery(
+      '''
+      SELECT game_id, title,
+             MAX(num_achievements) AS num_achievements,
+             MAX(points) AS points
+      FROM app_ra_game_list
+      WHERE game_id = ?
+      GROUP BY game_id, title
+      LIMIT 1
+      ''',
+      [gameId],
+    );
+    if (rows.isEmpty) return null;
+    return RaGameListEntry.fromRow(Map.from(rows.first));
   }
 
   // ── Game ID lookups (for RA game matching) ────────────────────────────────

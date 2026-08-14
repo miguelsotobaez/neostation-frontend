@@ -300,6 +300,79 @@ void main() {
       });
     });
 
+    group('manual match search', () {
+      setUp(() async {
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title, num_achievements, points) VALUES ('h1', 100, '7', 'NES', 'Super Mario Bros.', 30, 400)",
+        );
+        // Same game, second registered hash: the picker must not list it twice.
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title, num_achievements, points) VALUES ('h2', 100, '7', 'NES', 'Super Mario Bros.', 30, 400)",
+        );
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title, num_achievements, points) VALUES ('h3', 101, '7', 'NES', 'Super Mario Bros. [Subset - Bonus]', 12, 100)",
+        );
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title, num_achievements, points) VALUES ('h4', 102, '12', 'PlayStation', 'Super Mario Bros. Ported', 5, 50)",
+        );
+      });
+
+      test('collapses a game to one entry regardless of hash count', () async {
+        final results = await RetroAchievementsRepository.searchRaGamesByTitle(
+          '7',
+          'Super Mario',
+        );
+
+        expect(results.where((r) => r.gameId == 100).length, 1);
+        expect(results.first.title, 'Super Mario Bros.');
+        expect(results.first.numAchievements, 30);
+        expect(results.first.points, 400);
+      });
+
+      test('sorts main sets ahead of subsets', () async {
+        final results = await RetroAchievementsRepository.searchRaGamesByTitle(
+          '7',
+          'Super Mario',
+        );
+
+        expect(results.map((r) => r.gameId), [100, 101]);
+        expect(results.last.isSubset, isTrue);
+      });
+
+      test('stays within the requested console', () async {
+        final results = await RetroAchievementsRepository.searchRaGamesByTitle(
+          '7',
+          'Super Mario',
+        );
+
+        expect(results.any((r) => r.gameId == 102), isFalse);
+      });
+
+      test('matches across word gaps', () async {
+        final results = await RetroAchievementsRepository.searchRaGamesByTitle(
+          '7',
+          'mario bros',
+        );
+
+        expect(results, isNotEmpty);
+      });
+
+      test('returns nothing for an empty query', () async {
+        expect(
+          await RetroAchievementsRepository.searchRaGamesByTitle('7', '   '),
+          isEmpty,
+        );
+      });
+
+      test('getRaGameById returns the snapshot entry', () async {
+        final entry = await RetroAchievementsRepository.getRaGameById(100);
+
+        expect(entry?.title, 'Super Mario Bros.');
+        expect(entry?.numAchievements, 30);
+        expect(await RetroAchievementsRepository.getRaGameById(999), isNull);
+      });
+    });
+
     test('findRAHashByConsoleName returns hash and gameId', () async {
       await db.execute(
         "INSERT INTO app_ra_game_list (hash, game_id, console_name, title) VALUES ('deadbeef', 99, 'Nintendo Entertainment System', 'Mario')",

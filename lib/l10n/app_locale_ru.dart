@@ -261,6 +261,13 @@ const Map<String, dynamic> appLocaleRu = {
       'Остановлено: сопоставлено игр — {matched}.',
   AppLocale.rematchAchievementsFailed:
       'Не удалось сопоставить игры RetroAchievements: {error}',
+  AppLocale.raFixMatch: 'Исправить сопоставление',
+  AppLocale.raFixMatchTitle: 'Выберите нужную игру',
+  AppLocale.raFixMatchSearchHint: 'Поиск по названиям RetroAchievements',
+  AppLocale.raFixMatchNoResults: 'Подходящих игр не найдено.',
+  AppLocale.raFixMatchUseAutomatic: 'Использовать автоматическое сопоставление',
+  AppLocale.raFixMatchUpdated: 'Сопоставление обновлено.',
+  AppLocale.raFixMatchAchievements: 'достижений: {count}',
   AppLocale.notifications: 'Уведомления',
   AppLocale.clearAll: 'Очистить все',
   AppLocale.noActiveNotifications: 'Нет активных уведомлений',

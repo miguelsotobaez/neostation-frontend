@@ -255,6 +255,13 @@ const Map<String, dynamic> appLocaleId = {
       'Dihentikan: {matched} game cocok sejauh ini.',
   AppLocale.rematchAchievementsFailed:
       'Gagal mencocokkan game RetroAchievements: {error}',
+  AppLocale.raFixMatch: 'Perbaiki kecocokan',
+  AppLocale.raFixMatchTitle: 'Pilih game yang benar',
+  AppLocale.raFixMatchSearchHint: 'Cari judul RetroAchievements',
+  AppLocale.raFixMatchNoResults: 'Tidak ada game yang cocok.',
+  AppLocale.raFixMatchUseAutomatic: 'Gunakan pencocokan otomatis',
+  AppLocale.raFixMatchUpdated: 'Kecocokan game diperbarui.',
+  AppLocale.raFixMatchAchievements: '{count} prestasi',
   AppLocale.notifications: 'Notifikasi',
   AppLocale.clearAll: 'Hapus semua',
   AppLocale.noActiveNotifications: 'Tidak ada notifikasi aktif',

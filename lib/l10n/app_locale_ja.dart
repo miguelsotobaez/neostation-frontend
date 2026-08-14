@@ -217,6 +217,13 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rematchAchievementsStopped: '停止しました: これまでに {matched} 本を照合しました。',
   AppLocale.rematchAchievementsFailed:
       'RetroAchievements のゲームを照合できませんでした: {error}',
+  AppLocale.raFixMatch: '照合を修正',
+  AppLocale.raFixMatchTitle: '正しいゲームを選択',
+  AppLocale.raFixMatchSearchHint: 'RetroAchievements のタイトルを検索',
+  AppLocale.raFixMatchNoResults: '一致するゲームが見つかりません。',
+  AppLocale.raFixMatchUseAutomatic: '自動照合を使う',
+  AppLocale.raFixMatchUpdated: 'ゲームの照合を更新しました。',
+  AppLocale.raFixMatchAchievements: '実績 {count} 個',
   AppLocale.notifications: '通知',
   AppLocale.clearAll: 'すべてクリア',
   AppLocale.noActiveNotifications: 'アクティブな通知はありません',

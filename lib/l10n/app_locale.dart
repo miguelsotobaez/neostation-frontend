@@ -262,6 +262,14 @@ mixin AppLocale {
       'rematch_achievements_stopped';
   static const String rematchAchievementsFailed = 'rematch_achievements_failed';
 
+  static const String raFixMatch = 'ra_fix_match';
+  static const String raFixMatchTitle = 'ra_fix_match_title';
+  static const String raFixMatchSearchHint = 'ra_fix_match_search_hint';
+  static const String raFixMatchNoResults = 'ra_fix_match_no_results';
+  static const String raFixMatchUseAutomatic = 'ra_fix_match_use_automatic';
+  static const String raFixMatchUpdated = 'ra_fix_match_updated';
+  static const String raFixMatchAchievements = 'ra_fix_match_achievements';
+
   // ---------------------------------------------------------------------------
   // Notification center
   // ---------------------------------------------------------------------------

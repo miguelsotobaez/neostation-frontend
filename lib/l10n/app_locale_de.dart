@@ -266,6 +266,13 @@ const Map<String, dynamic> appLocaleDe = {
       'Abgebrochen: bisher {matched} Spiel(e) zugeordnet.',
   AppLocale.rematchAchievementsFailed:
       'RetroAchievements-Spiele konnten nicht zugeordnet werden: {error}',
+  AppLocale.raFixMatch: 'Zuordnung korrigieren',
+  AppLocale.raFixMatchTitle: 'Das richtige Spiel auswählen',
+  AppLocale.raFixMatchSearchHint: 'RetroAchievements-Titel suchen',
+  AppLocale.raFixMatchNoResults: 'Keine passenden Spiele gefunden.',
+  AppLocale.raFixMatchUseAutomatic: 'Automatische Zuordnung verwenden',
+  AppLocale.raFixMatchUpdated: 'Zuordnung aktualisiert.',
+  AppLocale.raFixMatchAchievements: '{count} Achievements',
   AppLocale.notifications: 'Benachrichtigungen',
   AppLocale.clearAll: 'Alle löschen',
   AppLocale.noActiveNotifications: 'Keine aktiven Benachrichtigungen',
