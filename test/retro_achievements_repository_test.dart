@@ -90,9 +90,13 @@ void main() {
       );
 
       final result = await db.rawQuery(
-        "SELECT id_ra FROM user_roms WHERE rom_path = '/roms/nes/a.nes'",
+        "SELECT id_ra, ra_match_source FROM user_roms WHERE rom_path = '/roms/nes/a.nes'",
       );
       expect(result.first['id_ra'], 1234);
+      expect(
+        result.first['ra_match_source'],
+        RetroAchievementsRepository.raMatchHash,
+      );
     });
 
     group('getGameIdByHash', () {
@@ -146,6 +150,74 @@ void main() {
         );
       });
     });
+
+    test('setManualRomRaMatch marks the row as manually matched', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+      );
+
+      await RetroAchievementsRepository.setManualRomRaMatch(
+        '/roms/nes/a.nes',
+        555,
+      );
+
+      expect(
+        await RetroAchievementsRepository.getRomRaMatchSource(
+          '/roms/nes/a.nes',
+        ),
+        RetroAchievementsRepository.raMatchManual,
+      );
+    });
+
+    test('updateRomRaGameId does not overwrite a manual match', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+      );
+      await RetroAchievementsRepository.setManualRomRaMatch(
+        '/roms/nes/a.nes',
+        555,
+      );
+
+      await RetroAchievementsRepository.updateRomRaGameId(
+        '/roms/nes/a.nes',
+        1234,
+      );
+
+      final result = await db.rawQuery(
+        "SELECT id_ra, ra_match_source FROM user_roms WHERE rom_path = '/roms/nes/a.nes'",
+      );
+      expect(result.first['id_ra'], 555);
+      expect(
+        result.first['ra_match_source'],
+        RetroAchievementsRepository.raMatchManual,
+      );
+    });
+
+    test(
+      'clearManualRomRaMatch re-opens the row to automatic matching',
+      () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+        );
+        await RetroAchievementsRepository.setManualRomRaMatch(
+          '/roms/nes/a.nes',
+          555,
+        );
+
+        await RetroAchievementsRepository.clearManualRomRaMatch(
+          '/roms/nes/a.nes',
+        );
+        await RetroAchievementsRepository.updateRomRaGameId(
+          '/roms/nes/a.nes',
+          1234,
+        );
+
+        final result = await db.rawQuery(
+          "SELECT id_ra FROM user_roms WHERE rom_path = '/roms/nes/a.nes'",
+        );
+        expect(result.first['id_ra'], 1234);
+      },
+    );
 
     test('findRAHashByConsoleName returns hash and gameId', () async {
       await db.execute(

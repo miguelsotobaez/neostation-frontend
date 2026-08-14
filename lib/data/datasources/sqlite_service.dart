@@ -422,7 +422,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 125;
+  static const int _databaseVersion = 126;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1890,6 +1890,7 @@ class SqliteService {
         ra_hash TEXT,
         ss_hash TEXT,
         id_ra INTEGER,
+        ra_match_source TEXT,
         is_favorite INTEGER DEFAULT 0,
         is_hidden INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,

@@ -83,12 +83,60 @@ class RetroAchievementsRepository {
   static Future<void> updateRomRaHash(String romPath, String hash) =>
       SqliteService.updateRomRaHash(romPath, hash);
 
-  static Future<void> updateRomRaGameId(String romPath, int? gameId) async {
+  /// How a ROM's RetroAchievements match was established. Persisted in
+  /// `user_roms.ra_match_source`; only [raMatchManual] survives an automatic
+  /// re-match.
+  static const String raMatchHash = 'hash';
+  static const String raMatchFilename = 'filename';
+  static const String raMatchTitle = 'title';
+  static const String raMatchManual = 'manual';
+
+  /// SQL fragment guarding automatic writes against overwriting a user's pick.
+  static const String _notManuallyMatched =
+      "(ra_match_source IS NULL OR ra_match_source != '$raMatchManual')";
+
+  static Future<void> updateRomRaGameId(
+    String romPath,
+    int? gameId, {
+    String matchSource = raMatchHash,
+  }) async {
     final db = await SqliteService.getDatabase();
-    await db.rawUpdate('UPDATE user_roms SET id_ra = ? WHERE rom_path = ?', [
-      gameId,
-      romPath,
-    ]);
+    await db.rawUpdate(
+      'UPDATE user_roms SET id_ra = ?, ra_match_source = ? '
+      'WHERE rom_path = ? AND $_notManuallyMatched',
+      [gameId, matchSource, romPath],
+    );
+  }
+
+  /// Records a match the user chose by hand. Unlike the automatic paths this
+  /// always writes, and marks the row so later re-match passes leave it alone.
+  static Future<void> setManualRomRaMatch(String romPath, int gameId) async {
+    final db = await SqliteService.getDatabase();
+    await db.rawUpdate(
+      'UPDATE user_roms SET id_ra = ?, ra_match_source = ? WHERE rom_path = ?',
+      [gameId, raMatchManual, romPath],
+    );
+  }
+
+  /// Clears a manual override so the ROM is eligible for automatic matching again.
+  static Future<void> clearManualRomRaMatch(String romPath) async {
+    final db = await SqliteService.getDatabase();
+    await db.rawUpdate(
+      'UPDATE user_roms SET id_ra = NULL, ra_match_source = NULL '
+      'WHERE rom_path = ?',
+      [romPath],
+    );
+  }
+
+  /// Returns the match source for [romPath], or null if never matched.
+  static Future<String?> getRomRaMatchSource(String romPath) async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery(
+      'SELECT ra_match_source FROM user_roms WHERE rom_path = ? LIMIT 1',
+      [romPath],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['ra_match_source']?.toString();
   }
 
   // ── Game ID lookups (for RA game matching) ────────────────────────────────
@@ -159,16 +207,25 @@ class RetroAchievementsRepository {
   }
 
   /// Updates user_roms ra_hash and id_ra for a ROM identified by [filename] and [systemId].
+  ///
+  /// The hash is always refreshed; the match itself is left alone when the user
+  /// set it by hand, so a re-hash pass never discards a manual choice.
   static Future<void> updateRomRAData(
     String filename,
     String systemId,
     String hash,
-    int? gameId,
-  ) async {
+    int? gameId, {
+    String matchSource = raMatchHash,
+  }) async {
     final db = await SqliteService.getDatabase();
     await db.rawUpdate(
-      'UPDATE user_roms SET ra_hash = ?, id_ra = ? WHERE filename = ? AND app_system_id = ?',
-      [hash, gameId, filename, systemId],
+      'UPDATE user_roms SET ra_hash = ? WHERE filename = ? AND app_system_id = ?',
+      [hash, filename, systemId],
+    );
+    await db.rawUpdate(
+      'UPDATE user_roms SET id_ra = ?, ra_match_source = ? '
+      'WHERE filename = ? AND app_system_id = ? AND $_notManuallyMatched',
+      [gameId, matchSource, filename, systemId],
     );
   }
 

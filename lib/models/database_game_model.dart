@@ -41,6 +41,11 @@ class DatabaseGameModel {
   /// Computed RetroAchievements hash used for game identification.
   final String? raHash;
 
+  /// How the RetroAchievements match was established: 'hash', 'filename',
+  /// 'title' or 'manual'. NULL for matches made before this was recorded.
+  /// Only 'manual' is protected from automatic re-matching.
+  final String? raMatchSource;
+
   /// Computed ScreenScraper MD5/SHA1 hash used for metadata scraping.
   final String? ssHash;
 
@@ -108,6 +113,7 @@ class DatabaseGameModel {
     this.lastPlayed,
     this.playTime = 0,
     this.raHash,
+    this.raMatchSource,
     this.ssHash,
     this.systemFolderName,
     this.systemRealName,
@@ -191,6 +197,8 @@ class DatabaseGameModel {
           ) ??
           0,
       raHash: (json['ra_hash'] ?? json['raId'])?.toString(),
+      raMatchSource: (json['ra_match_source'] ?? json['raMatchSource'])
+          ?.toString(),
       ssHash: (json['ss_hash'] ?? json['ssId'])?.toString(),
       systemFolderName: (json['system_folder_name'] ?? json['systemFolderName'])
           ?.toString(),
@@ -248,6 +256,7 @@ class DatabaseGameModel {
       'lastPlayed': lastPlayed?.toIso8601String(),
       'playTime': playTime,
       'raHash': raHash,
+      'raMatchSource': raMatchSource,
       'ssHash': ssHash,
       'systemFolderName': systemFolderName,
       'systemRealName': systemRealName,
@@ -284,6 +293,7 @@ class DatabaseGameModel {
     DateTime? lastPlayed,
     int? playTime,
     String? raHash,
+    String? raMatchSource,
     String? ssHash,
     String? systemFolderName,
     String? systemRealName,
@@ -316,6 +326,7 @@ class DatabaseGameModel {
       lastPlayed: lastPlayed ?? this.lastPlayed,
       playTime: playTime ?? this.playTime,
       raHash: raHash ?? this.raHash,
+      raMatchSource: raMatchSource ?? this.raMatchSource,
       ssHash: ssHash ?? this.ssHash,
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,

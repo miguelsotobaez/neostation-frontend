@@ -478,6 +478,9 @@ class SqliteMigrations {
       case 125:
         await _migrateToVersion125(db);
         break;
+      case 126:
+        await _migrateToVersion126(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5924,6 +5927,37 @@ class SqliteMigrations {
       _log.i('Migration v118 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v118: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v126: Records how a ROM's RetroAchievements match was
+  /// established, in `user_roms.ra_match_source`.
+  ///
+  /// Values: 'hash', 'filename', 'title' or 'manual'. A NULL means the match
+  /// predates this column. Only 'manual' is protected: bulk re-hash and
+  /// re-match passes must never overwrite a match a user chose by hand.
+  ///
+  /// Numbered above every version main has already shipped (125 at the time of
+  /// writing): a slot at or below main's floor never fires on a device that
+  /// migrated past it, and the column would silently never appear. Idempotent
+  /// — the column is added only when absent — so it doubles as the backfill
+  /// for any database that took an earlier numbering of this branch.
+  static Future<void> _migrateToVersion126(Database db) async {
+    _log.i('Migration v126: Adding ra_match_source to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_match_source')) {
+        db.execute('ALTER TABLE user_roms ADD COLUMN ra_match_source TEXT');
+        _log.i('Column ra_match_source added via v126');
+      } else {
+        _log.i('Column ra_match_source already exists');
+      }
+      _log.i('Migration v126 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v126: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
