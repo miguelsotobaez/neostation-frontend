@@ -79,6 +79,7 @@ class DatabaseTestHelper {
         ss_hash TEXT,
         id_ra INTEGER,
         ra_match_source TEXT,
+        ra_hash_skipped TEXT,
         is_favorite INTEGER DEFAULT 0,
         is_hidden INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,

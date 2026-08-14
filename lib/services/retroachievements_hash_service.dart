@@ -132,11 +132,25 @@ class RetroAchievementsHashService {
     void Function(int processed, int total, String label)? onProgress,
     bool Function()? isCancelled,
   }) async {
-    final candidates = mode == RaRematchMode.lookupOnly
+    var candidates = mode == RaRematchMode.lookupOnly
         ? await RetroAchievementsRepository.getRomsNeedingRaGameId()
         : await RetroAchievementsRepository.getRomsNeedingRaHash(
             includeDiscSystems: includeDiscSystems,
           );
+
+    // Everything hashable is done, but some ROMs were parked as unhashable on
+    // an earlier run. Give those one more go — the user may have restored a
+    // missing file or replaced a bad dump since — rather than leaving them
+    // permanently invisible.
+    if (mode == RaRematchMode.hashMissing && candidates.isEmpty) {
+      final reopened = await RetroAchievementsRepository.clearRaHashSkips();
+      if (reopened > 0) {
+        _log.i('RA re-match: retrying $reopened previously skipped ROMs');
+        candidates = await RetroAchievementsRepository.getRomsNeedingRaHash(
+          includeDiscSystems: includeDiscSystems,
+        );
+      }
+    }
 
     final total = candidates.length;
     int processed = 0;
@@ -172,8 +186,15 @@ class RetroAchievementsHashService {
             matched++;
           }
         } else {
-          final hash = await _hashCandidate(candidate);
+          final attempt = await _hashCandidate(candidate);
+          final hash = attempt.hash;
           if (hash == null) {
+            // Park it with the reason, so the next run does not walk it again
+            // and the gap stays visible instead of looking like a stall.
+            await RetroAchievementsRepository.markRomRaHashSkipped(
+              candidate.romPath,
+              attempt.skipReason ?? RetroAchievementsRepository.raSkipError,
+            );
             skipped++;
           } else {
             hashed++;
@@ -193,6 +214,12 @@ class RetroAchievementsHashService {
         }
       } catch (e) {
         _log.e('RA re-match failed for ${candidate.label}: $e');
+        if (mode == RaRematchMode.hashMissing) {
+          await RetroAchievementsRepository.markRomRaHashSkipped(
+            candidate.romPath,
+            RetroAchievementsRepository.raSkipError,
+          );
+        }
         skipped++;
       }
 
@@ -215,23 +242,32 @@ class RetroAchievementsHashService {
     );
   }
 
-  /// Hashes a single bulk-pass candidate, or returns null when the ROM cannot
-  /// usefully be hashed (missing, oversized, a disc image, or extraction
-  /// failed).
-  static Future<String?> _hashCandidate(RaMatchCandidate candidate) async {
+  /// Hashes a single bulk-pass candidate.
+  ///
+  /// Returns the hash, or the reason it could not be produced so the caller can
+  /// park the ROM instead of retrying it on every run.
+  static Future<({String? hash, String? skipReason})> _hashCandidate(
+    RaMatchCandidate candidate,
+  ) async {
     if (isDiscContainer(candidate.romPath)) {
       // A disc image needs RA's own disc hashing, not a hash of the container.
-      return null;
+      return (hash: null, skipReason: RetroAchievementsRepository.raSkipDisc);
     }
 
     if (!await OptimizedMd5Utils.fileExists(candidate.romPath)) {
       _log.w('File not found, skipping: ${candidate.romPath}');
-      return null;
+      return (
+        hash: null,
+        skipReason: RetroAchievementsRepository.raSkipMissing,
+      );
     }
 
     if (await OptimizedMd5Utils.getFileSize(candidate.romPath) >
         maxFileSizeBytes) {
-      return null;
+      return (
+        hash: null,
+        skipReason: RetroAchievementsRepository.raSkipOversize,
+      );
     }
 
     String romPathToProcess = candidate.romPath;
@@ -247,7 +283,10 @@ class RetroAchievementsHashService {
       );
       if (extractedPath == null) {
         _log.w('Failed to extract, skipping: ${candidate.label}');
-        return null;
+        return (
+          hash: null,
+          skipReason: RetroAchievementsRepository.raSkipExtractFailed,
+        );
       }
       romPathToProcess = extractedPath;
     }
@@ -259,7 +298,13 @@ class RetroAchievementsHashService {
         'gameName': candidate.label,
         'token': RootIsolateToken.instance!,
       });
-      return (hash != null && hash.isNotEmpty) ? hash : null;
+      if (hash == null || hash.isEmpty) {
+        return (
+          hash: null,
+          skipReason: RetroAchievementsRepository.raSkipError,
+        );
+      }
+      return (hash: hash, skipReason: null);
     } finally {
       if (isArchive) {
         await ArchiveService.cleanupTempFolder(

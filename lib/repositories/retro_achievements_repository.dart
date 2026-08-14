@@ -143,6 +143,13 @@ class RetroAchievementsRepository {
 
   // ── Bulk match candidates ─────────────────────────────────────────────────
 
+  /// Reasons a ROM could not be hashed, stored in `user_roms.ra_hash_skipped`.
+  static const String raSkipMissing = 'missing';
+  static const String raSkipOversize = 'oversize';
+  static const String raSkipDisc = 'disc';
+  static const String raSkipExtractFailed = 'extract_failed';
+  static const String raSkipError = 'error';
+
   /// Rows to feed the bulk hashing pass: ROMs on a RetroAchievements-capable
   /// system that have never been hashed.
   ///
@@ -150,8 +157,12 @@ class RetroAchievementsRepository {
   /// primary executable rather than the whole image, so hashing a `.chd`/`.iso`
   /// end to end produces a value that matches nothing while reading far more
   /// data than the cartridge library put together.
+  ///
+  /// ROMs parked by an earlier run (see [markRomRaHashSkipped]) are excluded
+  /// too, so a file that can never be hashed does not reappear every run.
   static Future<List<RaMatchCandidate>> getRomsNeedingRaHash({
     bool includeDiscSystems = false,
+    bool includeSkipped = false,
   }) async {
     final db = await SqliteService.getDatabase();
     final rows = await db.rawQuery('''
@@ -163,10 +174,52 @@ class RetroAchievementsRepository {
       WHERE (ur.ra_hash IS NULL OR ur.ra_hash = '')
         AND ur.rom_path IS NOT NULL AND ur.rom_path != ''
         AND s.ra_id IS NOT NULL
+        ${includeSkipped ? '' : 'AND ur.ra_hash_skipped IS NULL'}
         ${includeDiscSystems ? '' : 'AND COALESCE(s.multidisc, 0) = 0'}
       ORDER BY s.folder_name, ur.filename
     ''');
     return rows.map((r) => RaMatchCandidate.fromRow(Map.from(r))).toList();
+  }
+
+  /// Records that [romPath] could not be hashed and why, so the bulk pass stops
+  /// revisiting it on every run.
+  static Future<void> markRomRaHashSkipped(
+    String romPath,
+    String reason,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    await db.rawUpdate(
+      'UPDATE user_roms SET ra_hash_skipped = ? WHERE rom_path = ?',
+      [reason, romPath],
+    );
+  }
+
+  /// Clears every skip marker so a later pass retries them — for when the user
+  /// has fixed the underlying problem (restored a file, replaced a bad dump).
+  /// Returns the number of rows re-opened.
+  static Future<int> clearRaHashSkips() async {
+    final db = await SqliteService.getDatabase();
+    return db.rawUpdate(
+      'UPDATE user_roms SET ra_hash_skipped = NULL '
+      'WHERE ra_hash_skipped IS NOT NULL',
+    );
+  }
+
+  /// Skip reasons and how many ROMs each accounts for, so the gap can be
+  /// reported rather than silently absorbed.
+  static Future<Map<String, int>> getRaHashSkipCounts() async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery('''
+      SELECT ra_hash_skipped AS reason, COUNT(*) AS count
+      FROM user_roms
+      WHERE ra_hash_skipped IS NOT NULL
+      GROUP BY ra_hash_skipped
+    ''');
+    return {
+      for (final row in rows)
+        row['reason'].toString():
+            int.tryParse(row['count']?.toString() ?? '') ?? 0,
+    };
   }
 
   /// How much of the hashable library has been hashed, for progress that
@@ -187,6 +240,7 @@ class RetroAchievementsRepository {
       JOIN app_systems s ON ur.app_system_id = s.id
       WHERE ur.rom_path IS NOT NULL AND ur.rom_path != ''
         AND s.ra_id IS NOT NULL
+        AND ur.ra_hash_skipped IS NULL
         ${includeDiscSystems ? '' : 'AND COALESCE(s.multidisc, 0) = 0'}
     ''');
     if (rows.isEmpty) return (eligible: 0, hashed: 0);

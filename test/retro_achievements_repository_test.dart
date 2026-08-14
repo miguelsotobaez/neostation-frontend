@@ -291,6 +291,97 @@ void main() {
         expect(candidates.first.raHash, 'aaa');
       });
 
+      test('getRomsNeedingRaHash parks ROMs marked unhashable', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('gone.nes', '/roms/nes/gone.nes', 'nes')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('ok.nes', '/roms/nes/ok.nes', 'nes')",
+        );
+
+        await RetroAchievementsRepository.markRomRaHashSkipped(
+          '/roms/nes/gone.nes',
+          RetroAchievementsRepository.raSkipMissing,
+        );
+
+        final candidates =
+            await RetroAchievementsRepository.getRomsNeedingRaHash();
+        expect(candidates.map((c) => c.filename), ['ok.nes']);
+
+        // The row is still reachable when a retry is asked for explicitly.
+        final withSkipped =
+            await RetroAchievementsRepository.getRomsNeedingRaHash(
+              includeSkipped: true,
+            );
+        expect(withSkipped.length, 2);
+      });
+
+      test('clearRaHashSkips re-opens parked ROMs', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('gone.nes', '/roms/nes/gone.nes', 'nes')",
+        );
+        await RetroAchievementsRepository.markRomRaHashSkipped(
+          '/roms/nes/gone.nes',
+          RetroAchievementsRepository.raSkipMissing,
+        );
+
+        final reopened = await RetroAchievementsRepository.clearRaHashSkips();
+
+        expect(reopened, 1);
+        expect(
+          (await RetroAchievementsRepository.getRomsNeedingRaHash()).length,
+          1,
+        );
+      });
+
+      test('getRaHashSkipCounts groups the gap by reason', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('b.nes', '/roms/nes/b.nes', 'nes')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('c.nes', '/roms/nes/c.nes', 'nes')",
+        );
+
+        await RetroAchievementsRepository.markRomRaHashSkipped(
+          '/roms/nes/a.nes',
+          RetroAchievementsRepository.raSkipMissing,
+        );
+        await RetroAchievementsRepository.markRomRaHashSkipped(
+          '/roms/nes/b.nes',
+          RetroAchievementsRepository.raSkipMissing,
+        );
+        await RetroAchievementsRepository.markRomRaHashSkipped(
+          '/roms/nes/c.nes',
+          RetroAchievementsRepository.raSkipOversize,
+        );
+
+        expect(await RetroAchievementsRepository.getRaHashSkipCounts(), {
+          RetroAchievementsRepository.raSkipMissing: 2,
+          RetroAchievementsRepository.raSkipOversize: 1,
+        });
+      });
+
+      test('getRaHashCoverage leaves parked ROMs out of the total', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) VALUES ('done.nes', '/roms/nes/done.nes', 'nes', 'abc')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('gone.nes', '/roms/nes/gone.nes', 'nes')",
+        );
+        await RetroAchievementsRepository.markRomRaHashSkipped(
+          '/roms/nes/gone.nes',
+          RetroAchievementsRepository.raSkipMissing,
+        );
+
+        // A ROM that can never be hashed must not hold the bar below 100%.
+        final coverage = await RetroAchievementsRepository.getRaHashCoverage();
+        expect(coverage.eligible, 1);
+        expect(coverage.hashed, 1);
+      });
+
       test('getRaHashCoverage reports library-wide progress', () async {
         await db.execute(
           "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) VALUES ('done.nes', '/roms/nes/done.nes', 'nes', 'abc')",

@@ -481,6 +481,9 @@ class SqliteMigrations {
       case 126:
         await _migrateToVersion126(db);
         break;
+      case 127:
+        await _migrateToVersion127(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5958,6 +5961,36 @@ class SqliteMigrations {
       _log.i('Migration v126 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v126: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v127: Records why a ROM could not be hashed, in
+  /// `user_roms.ra_hash_skipped`.
+  ///
+  /// A ROM that cannot produce a hash — the file is gone, it is over the size
+  /// cap, it is a disc image, or extraction failed — writes nothing, so the
+  /// bulk pass would revisit it on every single run and its candidate list
+  /// would never empty. Storing the reason takes those rows out of the queue
+  /// and makes the gap diagnosable rather than invisible.
+  ///
+  /// Values: 'missing', 'oversize', 'disc', 'extract_failed', 'error'.
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion127(Database db) async {
+    _log.i('Migration v127: Adding ra_hash_skipped to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_hash_skipped')) {
+        db.execute('ALTER TABLE user_roms ADD COLUMN ra_hash_skipped TEXT');
+        _log.i('Column ra_hash_skipped added via v127');
+      } else {
+        _log.i('Column ra_hash_skipped already exists');
+      }
+      _log.i('Migration v127 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v127: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
