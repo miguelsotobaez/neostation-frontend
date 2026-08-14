@@ -4,8 +4,6 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:archive/archive.dart';
 import 'package:neostation/services/logger_service.dart';
-import '../repositories/retro_achievements_repository.dart';
-import '../repositories/system_repository.dart';
 import '../services/saf_directory_service.dart';
 import '../services/archive_service.dart';
 import 'dart:convert';
@@ -539,73 +537,6 @@ class OptimizedMd5Utils {
     } catch (e) {
       _log.e('Error calculating N64 MD5: $e');
       rethrow;
-    }
-  }
-
-  /// Orchestrates a RetroAchievements hash lookup and persists the result in the database.
-  ///
-  /// Strategy:
-  /// 1. Attempt fuzzy search by filename.
-  /// 2. If no match, calculate the full MD5 and query by hash.
-  static Future<String?> lookupSystemHashAndSave({
-    required String filenameWithoutExtension,
-    required String systemFolderName,
-    required String romPath,
-    required String emulatorName,
-    required String consoleName,
-  }) async {
-    try {
-      final systemResult = await SystemRepository.getSystemByFolderName(
-        systemFolderName,
-      );
-      if (systemResult == null) return null;
-      final systemId = systemResult.id;
-
-      // Fuzzy search by filename (excluding region tags).
-      final cleanedFilename = filenameWithoutExtension
-          .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
-          .trim();
-      final likePattern = '%${cleanedFilename.replaceAll(' ', '%')}%';
-
-      final raEntry = await RetroAchievementsRepository.findRAHashByConsoleName(
-        consoleName,
-        likePattern,
-        preferHackMatches: cleanedFilename.toLowerCase().contains('hack'),
-      );
-
-      if (raEntry != null) {
-        await RetroAchievementsRepository.updateRomRAData(
-          filenameWithoutExtension,
-          systemId!,
-          raEntry.hash,
-          raEntry.gameId,
-        );
-        return raEntry.hash;
-      }
-
-      if (!await fileExists(romPath)) return null;
-
-      // Fallback: search by full MD5.
-      final bytes = await readAllBytes(romPath);
-      final md5Hash = crypto.md5.convert(bytes).toString();
-      final gameId = await RetroAchievementsRepository.getGameIdByHash(
-        md5Hash,
-        systemResult.raId!.toString(),
-      );
-
-      if (gameId != null) {
-        await RetroAchievementsRepository.updateRomRAData(
-          filenameWithoutExtension,
-          systemId!,
-          md5Hash,
-          gameId,
-        );
-        return md5Hash;
-      }
-      return null;
-    } catch (e) {
-      _log.e('Error during RA hash lookup for $consoleName: $e');
-      return null;
     }
   }
 

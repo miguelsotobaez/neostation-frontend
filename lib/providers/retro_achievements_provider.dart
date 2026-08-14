@@ -11,7 +11,6 @@ import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
 import '../models/retro_achievements_user_awards.dart';
 import 'retro_achievements_credentials.dart';
-import 'retroachievements/strategy_factory.dart';
 
 /// Provider responsible for managing the integration with RetroAchievements.org.
 ///
@@ -574,22 +573,6 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-  }
-
-  /// Calculates the RetroAchievements-specific hash for a given ROM file.
-  Future<String?> calculateRomRAHash(String filePath, String? systemId) async {
-    return await _calculateRAHash(filePath, systemId);
-  }
-
-  /// Internal logic to dispatch hash calculation to the appropriate platform strategy.
-  Future<String?> _calculateRAHash(String filePath, String? systemId) async {
-    try {
-      final strategy = RetroAchievementsStrategyFactory.getStrategy(systemId);
-      return await strategy.calculateHash(filePath);
-    } catch (e) {
-      _log.e('Error calculating RA hash for $filePath: $e');
-      return null;
-    }
   }
 
   void _setLoading(bool loading) {
