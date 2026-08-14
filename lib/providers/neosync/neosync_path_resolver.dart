@@ -488,7 +488,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     if (!await dir.exists()) return [];
 
     try {
-      return dir
+      return await dir
           .list(recursive: true)
           .where((entity) => entity is File)
           .cast<File>()

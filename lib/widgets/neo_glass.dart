@@ -1,13 +1,12 @@
 import 'dart:ui' as ui;
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 /// A performant, dependency-free frosted-glass surface.
 ///
 /// It replicates the cheap "frosted" path of the liquid-glass packages we
 /// evaluated: a single engine [BackdropFilter] blur pass over a translucent
-/// tint, clipped to the panel's own shape, with a hairline border and a
-/// canvas-drawn specular rim.
+/// tint, clipped to the panel's own shape, with a canvas-drawn specular rim.
 ///
 /// Deliberately does NOT do the expensive parts of a full liquid-glass
 /// package — refraction, distortion, chromatic aberration and the shader that
@@ -15,15 +14,19 @@ import 'package:flutter/material.dart';
 /// the previous dependency heavy on low-end GPUs (Android TV included). The
 /// engine blur is optimized and clipped to the small panel area, so this stays
 /// cheap even when the content behind the glass changes every frame.
+///
+/// Structure is intentionally flat: the frosted surface is one clipped node
+/// and the rim is a single [CustomPaint] foreground pass on top of it — no
+/// stacked sibling layer, no per-pass painters.
 class NeoGlass extends StatelessWidget {
   const NeoGlass({
     super.key,
     required this.child,
     this.cornerRadius = 14,
-    this.blur = 3,
+    this.blur = 2,
     this.tint,
     this.padding,
-    this.rimIntensity = 0.5,
+    this.rimIntensity = 1,
   });
 
   final Widget child;
@@ -52,17 +55,12 @@ class NeoGlass extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // Semi-transparent so the image behind shows through and the rim (drawn
     // beneath it) glows with the backdrop's colours.
     final glassTint =
-        tint ?? theme.scaffoldBackgroundColor.withValues(alpha: 0.8);
-    final borderRadius = BorderRadius.circular(cornerRadius);
+        tint ??
+        Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.8);
 
-    // Layered so the rim can sit OUTSIDE the card:
-    //  1. the frosted surface is clipped to the rounded shape
-    //  2. the rim is painted over/around it (blend modes reach the backdrop
-    //     image behind the card), extending beyond the card's edge.
     Widget surface = ColoredBox(
       color: glassTint,
       child: padding != null ? Padding(padding: padding!, child: child) : child,
@@ -77,107 +75,71 @@ class NeoGlass extends StatelessWidget {
       );
     }
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        ClipRRect(
-          borderRadius: borderRadius,
-          child: surface,
-        ),
-        // External rim: drawn outside the clipped surface so the border sits
-        // around the card, blending with the backdrop image behind it.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: _GlassRimPainter(
-                cornerRadius: cornerRadius,
-                intensity: rimIntensity,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return CustomPaint(
+      foregroundPainter: rimIntensity > 0
+          ? _GlassRimPainter(
+              cornerRadius: cornerRadius,
+              intensity: rimIntensity,
+            )
+          : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(cornerRadius),
+        child: surface,
+      ),
     );
   }
 }
 
 /// Paints the glass rim: a soft specular highlight sweeping with the light
-/// direction plus a sharp inner edge, matching how the liquid-glass packages
-/// shade their borders — but in plain Canvas.
+/// direction, matching how the liquid-glass packages shade their borders — but
+/// in a single plain-Canvas stroke blended over the backdrop.
 class _GlassRimPainter extends CustomPainter {
-  const _GlassRimPainter({required this.cornerRadius, required this.intensity});
+  _GlassRimPainter({required this.cornerRadius, required this.intensity})
+    : _colors = [
+        Colors.white.withValues(alpha: 0.96 * intensity),
+        Colors.white.withValues(alpha: 0.64 * intensity),
+        Colors.white.withValues(alpha: 0.16 * intensity),
+      ];
 
   final double cornerRadius;
   final double intensity;
+
+  // Precomputed, size-independent gradient stops (alpha depends only on
+  // [intensity]); the shader itself is built per paint from the panel size.
+  final List<Color> _colors;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (intensity <= 0) return;
 
     // Rounded-rect outline offset OUTWARD by half the stroke width, so the
-    // whole border sits outside the card's edge (external, not inset/middle).
-    // The rim is painted outside the ClipRRect, so nothing clips it.
-    Path outsetOutline(double strokeWidth) {
-      final extent = strokeWidth / 2;
-      final rect = (Offset.zero & size).inflate(extent);
-      return Path()
-        ..addRRect(
-          RRect.fromRectAndRadius(
-            rect,
-            Radius.circular(cornerRadius + extent),
-          ),
-        );
-    }
-
-    final bounds = Offset.zero & size;
+    // border sits outside the card's edge (external, not inset/middle) and
+    // blends with the backdrop image behind the card.
+    final strokeWidth = 2.h;
+    final extent = strokeWidth / 2;
+    final rect = (Offset.zero & size).inflate(extent);
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius + extent)),
+      );
 
     // Light from the top-left. The rim stays light all around — it only fades
-    // in strength towards the far edge, it never turns dark.
-    final light = Alignment.topLeft;
-    final sweep = LinearGradient(
-      begin: light,
-      end: Alignment.bottomRight,
-      colors: [
-        Colors.white.withValues(alpha: 0.60 * intensity),
-        Colors.white.withValues(alpha: 0.40 * intensity),
-        Colors.white.withValues(alpha: 0.20 * intensity),
-        Colors.white.withValues(alpha: 0.35 * intensity),
-      ],
-      stops: const [0.0, 0.3, 0.6, 0.9],
-    ).createShader(bounds);
-
-    // Pass 1: soft outer glow — composited with BlendMode.overlay over the
-    // image behind the glass, so the edge reads as the backdrop colour lifted
+    // in strength towards the far edge, it never turns dark. Blended with
+    // BlendMode.overlay so the edge reads as the backdrop colour lifted
     // brighter (overlay preserves the hue instead of washing it to white).
     canvas.drawPath(
-      outsetOutline(1.2.h),
+      path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2.h
-        ..isAntiAlias = true
-        ..blendMode = BlendMode.overlay
-        ..shader = sweep,
-    );
-
-    // Pass 2: sharper inner border line — backdrop-tinted via overlay, brightest
-    // near the light and fading to a faint highlight on the far side.
-    canvas.drawPath(
-      outsetOutline(0.9.h),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.9.h
+        ..strokeWidth = strokeWidth
         ..isAntiAlias = true
         ..blendMode = BlendMode.overlay
         ..shader = LinearGradient(
-          begin: light,
+          begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.70 * intensity),
-            Colors.white.withValues(alpha: 0.35 * intensity),
-            Colors.white.withValues(alpha: 0.20 * intensity),
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(bounds),
+          colors: _colors,
+          stops: const [0.0, 0.60, 1.0],
+        ).createShader(Offset.zero & size),
     );
   }
 

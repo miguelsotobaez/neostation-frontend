@@ -1290,6 +1290,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       context,
                     ).extension<CornerRadii>()?.radiusExternalRadius ??
                     14.r,
+                blur: 2,
                 child: _buildGamesListPanel(),
               ),
             ),

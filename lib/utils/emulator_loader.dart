@@ -45,13 +45,11 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
                 e.isRetroArch &&
                 e.coreFilename != null &&
                 e.coreFilename!.isNotEmpty) {
-              final coreInstalled = await ch.invokeMethod<bool>(
-                'isCoreInstalled',
-                {
-                  'packageName': e.androidPackageName,
-                  'coreFilename': e.coreFilename,
-                },
-              );
+              final coreInstalled = await ch
+                  .invokeMethod<bool>('isCoreInstalled', {
+                    'packageName': e.androidPackageName,
+                    'coreFilename': e.coreFilename,
+                  });
               if (coreInstalled != null) installed = coreInstalled;
             }
             updated.add(e.copyWith(isInstalled: installed));

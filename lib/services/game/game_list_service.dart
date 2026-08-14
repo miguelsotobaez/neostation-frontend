@@ -125,7 +125,7 @@ class GameListService {
   static Future<List<GameModel>> loadGamesForSystem(SystemModel system) async {
     try {
       if (system.folderName == SystemFolderNames.favorites) {
-        return _loadFavoriteGames();
+        return await _loadFavoriteGames();
       }
 
       if (system.folderName == 'all') {

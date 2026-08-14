@@ -76,6 +76,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
                     context,
                   ).extension<CornerRadii>()?.radiusExternalRadius ??
                   12.r,
+              blur: 2,
               child: SizedBox(
                 height: 36.r,
                 child: Padding(

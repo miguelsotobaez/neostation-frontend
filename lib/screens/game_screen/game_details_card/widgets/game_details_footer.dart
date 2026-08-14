@@ -339,6 +339,7 @@ class GameDetailsFooter extends StatelessWidget {
                   context,
                 ).extension<CornerRadii>()?.radiusExternalRadius ??
                 14.r,
+            blur: 2,
             child: SizedBox(
               width: 120.r + (availableWidth - 120.r) * t,
               height: 45.r,
@@ -457,6 +458,7 @@ class _SteamStyleRating extends StatelessWidget {
       cornerRadius:
           Theme.of(context).extension<CornerRadii>()?.radiusExternalRadius ??
           14.r,
+      blur: 2,
       child: SizedBox(
         height: 45.r,
         child: Padding(
@@ -523,6 +525,7 @@ class _PlayTimePill extends StatelessWidget {
       cornerRadius:
           Theme.of(context).extension<CornerRadii>()?.radiusExternalRadius ??
           14.r,
+      blur: 2,
       child: SizedBox(
         height: 45.r,
         child: Padding(

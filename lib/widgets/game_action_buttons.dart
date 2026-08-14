@@ -69,6 +69,7 @@ class GameActionButtons extends StatelessWidget {
                   context,
                 ).extension<CornerRadii>()?.radiusExternalRadius ??
                 14.r,
+            blur: 2,
             padding: const EdgeInsets.all(6),
             child: Column(
               mainAxisSize: MainAxisSize.min,

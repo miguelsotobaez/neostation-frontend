@@ -218,6 +218,7 @@ class HeaderState extends State<Header> {
                             context,
                           ).extension<CornerRadii>()?.radiusExternalRadius ??
                           8.r,
+                      blur: 2,
                       child: SizedBox(
                         height: 32.r,
                         child: Padding(
@@ -306,6 +307,7 @@ class HeaderState extends State<Header> {
                           context,
                         ).extension<CornerRadii>()?.radiusExternalRadius ??
                         14.r,
+                    blur: 2,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 4,
