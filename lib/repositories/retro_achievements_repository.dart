@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../models/database_game_model.dart';
+import '../models/ra_match_candidate.dart';
 import '../models/retro_achievements_dashboard_models.dart';
 
 /// Repository for RetroAchievements data access.
@@ -137,6 +138,57 @@ class RetroAchievementsRepository {
     );
     if (rows.isEmpty) return null;
     return rows.first['ra_match_source']?.toString();
+  }
+
+  // ── Bulk match candidates ─────────────────────────────────────────────────
+
+  /// Rows to feed the bulk hashing pass: ROMs on a RetroAchievements-capable
+  /// system that have never been hashed.
+  ///
+  /// Disc-based systems are excluded by default. RA identifies a disc by its
+  /// primary executable rather than the whole image, so hashing a `.chd`/`.iso`
+  /// end to end produces a value that matches nothing while reading far more
+  /// data than the cartridge library put together.
+  static Future<List<RaMatchCandidate>> getRomsNeedingRaHash({
+    bool includeDiscSystems = false,
+  }) async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery('''
+      SELECT ur.rom_path, ur.filename, ur.ra_hash,
+             s.folder_name AS system_folder_name,
+             s.ra_id AS system_ra_id
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      WHERE (ur.ra_hash IS NULL OR ur.ra_hash = '')
+        AND ur.rom_path IS NOT NULL AND ur.rom_path != ''
+        AND s.ra_id IS NOT NULL
+        ${includeDiscSystems ? '' : 'AND COALESCE(s.multidisc, 0) = 0'}
+      ORDER BY s.folder_name, ur.filename
+    ''');
+    return rows.map((r) => RaMatchCandidate.fromRow(Map.from(r))).toList();
+  }
+
+  /// Rows the cheap lookup-only pass can fix: a hash is already stored but no
+  /// game id was ever resolved from it. No file I/O is needed to retry these,
+  /// so this is safe to run after the bundled RA database changes.
+  ///
+  /// Manually matched rows are excluded — they are already correct by
+  /// definition, and re-running the lookup on them would be wasted work.
+  static Future<List<RaMatchCandidate>> getRomsNeedingRaGameId() async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery('''
+      SELECT ur.rom_path, ur.filename, ur.ra_hash,
+             s.folder_name AS system_folder_name,
+             s.ra_id AS system_ra_id
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      WHERE ur.ra_hash IS NOT NULL AND ur.ra_hash != ''
+        AND ur.id_ra IS NULL
+        AND s.ra_id IS NOT NULL
+        AND $_notManuallyMatched
+      ORDER BY s.folder_name, ur.filename
+    ''');
+    return rows.map((r) => RaMatchCandidate.fromRow(Map.from(r))).toList();
   }
 
   // ── Game ID lookups (for RA game matching) ────────────────────────────────

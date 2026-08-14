@@ -219,6 +219,87 @@ void main() {
       },
     );
 
+    group('bulk match candidates', () {
+      setUp(() async {
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name, ra_id, multidisc) VALUES ('ps1', 'PlayStation', 'ps1', '12', 1)",
+        );
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name, ra_id) VALUES ('windows', 'Windows', 'windows', NULL)",
+        );
+      });
+
+      test('getRomsNeedingRaHash returns only unhashed cartridge ROMs', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('new.nes', '/roms/nes/new.nes', 'nes')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) VALUES ('done.nes', '/roms/nes/done.nes', 'nes', 'abc123')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) VALUES ('empty.nes', '/roms/nes/empty.nes', 'nes', '')",
+        );
+
+        final candidates =
+            await RetroAchievementsRepository.getRomsNeedingRaHash();
+
+        expect(
+          candidates.map((c) => c.filename),
+          unorderedEquals(['new.nes', 'empty.nes']),
+        );
+        expect(candidates.first.systemRaId, '7');
+        expect(candidates.first.systemFolderName, 'nes');
+      });
+
+      test('getRomsNeedingRaHash excludes disc systems by default', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('disc.chd', '/roms/ps1/disc.chd', 'ps1')",
+        );
+
+        expect(await RetroAchievementsRepository.getRomsNeedingRaHash(), []);
+
+        final withDiscs =
+            await RetroAchievementsRepository.getRomsNeedingRaHash(
+              includeDiscSystems: true,
+            );
+        expect(withDiscs.map((c) => c.filename), ['disc.chd']);
+      });
+
+      test('getRomsNeedingRaHash skips systems RA does not support', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('game.exe', '/roms/windows/game.exe', 'windows')",
+        );
+
+        expect(await RetroAchievementsRepository.getRomsNeedingRaHash(), []);
+      });
+
+      test('getRomsNeedingRaGameId returns hashed but unmatched ROMs', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) VALUES ('pending.nes', '/roms/nes/pending.nes', 'nes', 'aaa')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, id_ra) VALUES ('matched.nes', '/roms/nes/matched.nes', 'nes', 'bbb', 42)",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('nohash.nes', '/roms/nes/nohash.nes', 'nes')",
+        );
+
+        final candidates =
+            await RetroAchievementsRepository.getRomsNeedingRaGameId();
+
+        expect(candidates.map((c) => c.filename), ['pending.nes']);
+        expect(candidates.first.raHash, 'aaa');
+      });
+
+      test('getRomsNeedingRaGameId leaves manual matches alone', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, ra_match_source) VALUES ('mine.nes', '/roms/nes/mine.nes', 'nes', 'ccc', 'manual')",
+        );
+
+        expect(await RetroAchievementsRepository.getRomsNeedingRaGameId(), []);
+      });
+    });
+
     test('findRAHashByConsoleName returns hash and gameId', () async {
       await db.execute(
         "INSERT INTO app_ra_game_list (hash, game_id, console_name, title) VALUES ('deadbeef', 99, 'Nintendo Entertainment System', 'Mario')",
