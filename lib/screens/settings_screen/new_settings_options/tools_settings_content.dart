@@ -8,6 +8,7 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/config_repository.dart';
+import 'package:neostation/repositories/retro_achievements_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/global_notification_service.dart';
@@ -432,6 +433,14 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
 
       bool isCancelled() => _rematchCancelled;
 
+      // The pass resumes: hashed ROMs are excluded from the candidate query, so
+      // a stopped run picks up where it left off. Report progress against the
+      // whole hashable library rather than the work left in this run, or the
+      // bar restarts at 0% every time and reads as if nothing was kept.
+      final coverage = await RetroAchievementsRepository.getRaHashCoverage();
+      final alreadyHashed = coverage.hashed;
+      final eligible = coverage.eligible;
+
       // Cheap pass: no file I/O, just retry the local lookup for ROMs that
       // already carry a hash.
       final lookup = await RetroAchievementsHashService.rematchLibrary(
@@ -443,7 +452,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
             id: notificationId,
             message: localeLookingUp,
             type: GlobalNotificationType.info,
-            progress: processed / total,
+            progress: eligible > 0 ? alreadyHashed / eligible : null,
           );
         },
       );
@@ -459,7 +468,9 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                   id: notificationId,
                   message: localeHashing.replaceFirst('{filename}', label),
                   type: GlobalNotificationType.info,
-                  progress: processed / total,
+                  progress: eligible > 0
+                      ? ((alreadyHashed + processed) / eligible).clamp(0.0, 1.0)
+                      : processed / total,
                 );
               },
             );

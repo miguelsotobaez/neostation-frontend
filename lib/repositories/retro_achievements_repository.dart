@@ -169,6 +169,33 @@ class RetroAchievementsRepository {
     return rows.map((r) => RaMatchCandidate.fromRow(Map.from(r))).toList();
   }
 
+  /// How much of the hashable library has been hashed, for progress that
+  /// reflects the library rather than the work left in one run.
+  ///
+  /// Without this the progress bar restarts at 0% on every run — the pass
+  /// resumes correctly (hashed ROMs are excluded from the candidate query) but
+  /// a per-run percentage makes it look like it started over.
+  static Future<({int eligible, int hashed})> getRaHashCoverage({
+    bool includeDiscSystems = false,
+  }) async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery('''
+      SELECT COUNT(*) AS eligible,
+             SUM(CASE WHEN ur.ra_hash IS NOT NULL AND ur.ra_hash != ''
+                      THEN 1 ELSE 0 END) AS hashed
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      WHERE ur.rom_path IS NOT NULL AND ur.rom_path != ''
+        AND s.ra_id IS NOT NULL
+        ${includeDiscSystems ? '' : 'AND COALESCE(s.multidisc, 0) = 0'}
+    ''');
+    if (rows.isEmpty) return (eligible: 0, hashed: 0);
+    return (
+      eligible: int.tryParse(rows.first['eligible']?.toString() ?? '') ?? 0,
+      hashed: int.tryParse(rows.first['hashed']?.toString() ?? '') ?? 0,
+    );
+  }
+
   /// Rows the cheap lookup-only pass can fix: a hash is already stored but no
   /// game id was ever resolved from it. No file I/O is needed to retry these,
   /// so this is safe to run after the bundled RA database changes.

@@ -291,6 +291,34 @@ void main() {
         expect(candidates.first.raHash, 'aaa');
       });
 
+      test('getRaHashCoverage reports library-wide progress', () async {
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) VALUES ('done.nes', '/roms/nes/done.nes', 'nes', 'abc')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('todo.nes', '/roms/nes/todo.nes', 'nes')",
+        );
+        // Disc and non-RA rows are outside the denominator.
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('d.chd', '/roms/ps1/d.chd', 'ps1')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('g.exe', '/roms/windows/g.exe', 'windows')",
+        );
+
+        final coverage = await RetroAchievementsRepository.getRaHashCoverage();
+
+        expect(coverage.eligible, 2);
+        expect(coverage.hashed, 1);
+      });
+
+      test('getRaHashCoverage handles an empty library', () async {
+        final coverage = await RetroAchievementsRepository.getRaHashCoverage();
+
+        expect(coverage.eligible, 0);
+        expect(coverage.hashed, 0);
+      });
+
       test('getRomsNeedingRaGameId leaves manual matches alone', () async {
         await db.execute(
           "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, ra_match_source) VALUES ('mine.nes', '/roms/nes/mine.nes', 'nes', 'ccc', 'manual')",
