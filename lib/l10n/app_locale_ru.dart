@@ -245,6 +245,22 @@ const Map<String, dynamic> appLocaleRu = {
       ' {count} запис(ь/ей), импортированных из ES-DE, оставлены нетронутыми.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Не удалось очистить потерянные метаданные: {error}',
+  AppLocale.rematchAchievements: 'Сопоставить игры RetroAchievements',
+  AppLocale.rematchAchievementsSubtitle:
+      'Проверяет всю библиотеку на наличие наборов достижений, а не по одной игре',
+  AppLocale.rematchAchievementsWarning:
+      'Каждый несопоставленный ROM будет прочитан для опознания — на большой библиотеке это займёт время. Выберите ещё раз, чтобы остановить. Дисковые системы пока пропускаются. Ничего не перемещается и не удаляется.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Проверка игр, для которых уже есть хеш...',
+  AppLocale.rematchAchievementsHashing: 'Опознаётся {filename}',
+  AppLocale.rematchAchievementsDone:
+      'Готово: сопоставлено игр — {matched}, впервые опознано — {hashed}.',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Все поддерживаемые игры уже проверены.',
+  AppLocale.rematchAchievementsStopped:
+      'Остановлено: сопоставлено игр — {matched}.',
+  AppLocale.rematchAchievementsFailed:
+      'Не удалось сопоставить игры RetroAchievements: {error}',
   AppLocale.notifications: 'Уведомления',
   AppLocale.clearAll: 'Очистить все',
   AppLocale.noActiveNotifications: 'Нет активных уведомлений',

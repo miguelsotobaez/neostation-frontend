@@ -201,6 +201,16 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
       '保留了 {count} 筆從 ES-DE 匯入的項目。',
   AppLocale.cleanOrphanedMetadataFailed: '清理孤立中介資料失敗：{error}',
+  AppLocale.rematchAchievements: '比對 RetroAchievements 遊戲',
+  AppLocale.rematchAchievementsSubtitle: '掃描整個遊戲庫尋找成就組合，不必逐一開啟遊戲',
+  AppLocale.rematchAchievementsWarning:
+      '將讀取每個尚未比對的 ROM 以辨識它，遊戲庫較大時可能需要一段時間。再次選擇即可停止。光碟類系統暫不處理。不會移動或刪除任何檔案。',
+  AppLocale.rematchAchievementsLookingUp: '正在檢查已有雜湊值的遊戲…',
+  AppLocale.rematchAchievementsHashing: '正在辨識 {filename}',
+  AppLocale.rematchAchievementsDone: '完成：比對 {matched} 個遊戲，新辨識 {hashed} 個。',
+  AppLocale.rematchAchievementsNothingToDo: '所有支援的遊戲都已檢查過。',
+  AppLocale.rematchAchievementsStopped: '已停止：目前已比對 {matched} 個遊戲。',
+  AppLocale.rematchAchievementsFailed: '比對 RetroAchievements 遊戲失敗：{error}',
   AppLocale.notifications: '通知',
   AppLocale.clearAll: '清除全部',
   AppLocale.noActiveNotifications: '沒有活動通知',

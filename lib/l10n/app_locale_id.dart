@@ -239,6 +239,22 @@ const Map<String, dynamic> appLocaleId = {
       '{count} entri yang diimpor dari ES-DE dibiarkan tidak terubah.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Gagal membersihkan metadata yatim: {error}',
+  AppLocale.rematchAchievements: 'Cocokkan Game RetroAchievements',
+  AppLocale.rematchAchievementsSubtitle:
+      'Memeriksa seluruh pustaka untuk set prestasi, bukan satu game per satu',
+  AppLocale.rematchAchievementsWarning:
+      'Setiap ROM yang belum cocok akan dibaca untuk diidentifikasi, dan ini bisa memakan waktu pada pustaka besar. Pilih lagi untuk menghentikan. Sistem berbasis disc dilewati untuk sekarang. Tidak ada yang dipindahkan atau dihapus.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Memeriksa game yang sudah memiliki hash...',
+  AppLocale.rematchAchievementsHashing: 'Mengidentifikasi {filename}',
+  AppLocale.rematchAchievementsDone:
+      'Selesai: {matched} game cocok, {hashed} baru diidentifikasi.',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Semua game yang didukung sudah diperiksa.',
+  AppLocale.rematchAchievementsStopped:
+      'Dihentikan: {matched} game cocok sejauh ini.',
+  AppLocale.rematchAchievementsFailed:
+      'Gagal mencocokkan game RetroAchievements: {error}',
   AppLocale.notifications: 'Notifikasi',
   AppLocale.clearAll: 'Hapus semua',
   AppLocale.noActiveNotifications: 'Tidak ada notifikasi aktif',

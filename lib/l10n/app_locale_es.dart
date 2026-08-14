@@ -251,6 +251,22 @@ const Map<String, dynamic> appLocaleEs = {
       ' {count} entrada(s) de ES-DE se dejaron intactas.',
   AppLocale.cleanOrphanedMetadataFailed:
       'No se pudo limpiar la metadata huérfana: {error}',
+  AppLocale.rematchAchievements: 'Emparejar juegos de RetroAchievements',
+  AppLocale.rematchAchievementsSubtitle:
+      'Revisa toda la biblioteca en busca de sets de logros, en vez de juego por juego',
+  AppLocale.rematchAchievementsWarning:
+      'Se leerá cada ROM sin emparejar para identificarla, lo que puede tardar en bibliotecas grandes. Selecciónalo de nuevo para detenerlo. Los sistemas de disco se omiten por ahora. No se mueve ni se elimina nada.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Comprobando los juegos que ya tienen hash...',
+  AppLocale.rematchAchievementsHashing: 'Identificando {filename}',
+  AppLocale.rematchAchievementsDone:
+      'Listo: {matched} juego(s) emparejado(s), {hashed} identificado(s) por primera vez.',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Todos los juegos compatibles ya se han comprobado.',
+  AppLocale.rematchAchievementsStopped:
+      'Detenido: {matched} juego(s) emparejado(s) hasta ahora.',
+  AppLocale.rematchAchievementsFailed:
+      'No se pudieron emparejar los juegos de RetroAchievements: {error}',
   AppLocale.notifications: 'Notificaciones',
   AppLocale.clearAll: 'Borrar todo',
   AppLocale.noActiveNotifications: 'No hay notificaciones activas',

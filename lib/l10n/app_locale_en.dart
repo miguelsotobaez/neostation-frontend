@@ -239,6 +239,22 @@ const Map<String, dynamic> appLocaleEn = {
       ' {count} ES-DE entr(y/ies) were left untouched.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Failed to clean orphaned metadata: {error}',
+  AppLocale.rematchAchievements: 'Match RetroAchievements Games',
+  AppLocale.rematchAchievementsSubtitle:
+      'Check your whole library for achievement sets, instead of one game at a time',
+  AppLocale.rematchAchievementsWarning:
+      'This reads every unmatched ROM to identify it, which can take a while on a large library. Select it again to stop. Disc-based systems are skipped for now. Nothing is moved or deleted.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Looking up games that are already hashed...',
+  AppLocale.rematchAchievementsHashing: 'Identifying {filename}',
+  AppLocale.rematchAchievementsDone:
+      'Done: {matched} game(s) matched, {hashed} newly identified.',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Every supported game has already been checked.',
+  AppLocale.rematchAchievementsStopped:
+      'Stopped: {matched} game(s) matched so far.',
+  AppLocale.rematchAchievementsFailed:
+      'Failed to match RetroAchievements games: {error}',
   AppLocale.notifications: 'Notifications',
   AppLocale.clearAll: 'Clear all',
   AppLocale.noActiveNotifications: 'No active notifications',

@@ -12,6 +12,7 @@ import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/global_notification_service.dart';
 import 'package:neostation/services/metadata_cleanup_service.dart';
+import 'package:neostation/services/retroachievements_hash_service.dart';
 import 'package:neostation/services/rom_folder_organizer_service.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
@@ -38,6 +39,8 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   static final _log = LoggerService.instance;
   bool _isOrganizingMultiDisc = false;
   bool _isCleaningMetadata = false;
+  bool _isRematchingAchievements = false;
+  bool _rematchCancelled = false;
   List<String> _currentRomFolders = [];
 
   @override
@@ -55,7 +58,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     }
   }
 
-  int getItemCount() => 2;
+  int getItemCount() => 3;
 
   void scrollToIndex(int index) {}
 
@@ -65,6 +68,8 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         _organizeMultiDiscGames();
       case 1:
         _cleanOrphanedMetadata();
+      case 2:
+        _rematchAchievements();
     }
   }
 
@@ -366,6 +371,152 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     }
   }
 
+  /// Walks the whole library looking for RetroAchievements matches, instead of
+  /// waiting for the user to open each game.
+  ///
+  /// Runs the cheap pass first — ROMs that already carry a hash but never
+  /// resolved to a game id cost nothing but a local lookup — then hashes the
+  /// ROMs that have never been hashed at all. Selecting the row again while it
+  /// runs stops it after the current ROM.
+  Future<void> _rematchAchievements() async {
+    if (_isRematchingAchievements) {
+      setState(() => _rematchCancelled = true);
+      return;
+    }
+
+    final localeTitle = AppLocale.rematchAchievements.getString(context);
+    final localeWarning = AppLocale.rematchAchievementsWarning.getString(
+      context,
+    );
+    final localeLookingUp = AppLocale.rematchAchievementsLookingUp.getString(
+      context,
+    );
+    final localeHashing = AppLocale.rematchAchievementsHashing.getString(
+      context,
+    );
+    final localeDone = AppLocale.rematchAchievementsDone.getString(context);
+    final localeNothingToDo = AppLocale.rematchAchievementsNothingToDo
+        .getString(context);
+    final localeStopped = AppLocale.rematchAchievementsStopped.getString(
+      context,
+    );
+    final localeFailed = AppLocale.rematchAchievementsFailed.getString(context);
+    final localeConfirm = AppLocale.confirm.getString(context);
+
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: localeTitle,
+      body: localeWarning,
+      confirmLabel: localeConfirm,
+      icon: Symbols.emoji_events_rounded,
+      accentColor: Theme.of(context).colorScheme.primary,
+    );
+    if (confirmed != true || !mounted) return;
+
+    String? completionMessage;
+    NotificationType? completionType;
+    const notificationId = 'rematch_achievements';
+
+    try {
+      setState(() {
+        _isRematchingAchievements = true;
+        _rematchCancelled = false;
+      });
+
+      GlobalNotificationService().show(
+        id: notificationId,
+        message: localeLookingUp,
+        type: GlobalNotificationType.info,
+        progress: 0,
+      );
+
+      bool isCancelled() => _rematchCancelled;
+
+      // Cheap pass: no file I/O, just retry the local lookup for ROMs that
+      // already carry a hash.
+      final lookup = await RetroAchievementsHashService.rematchLibrary(
+        mode: RaRematchMode.lookupOnly,
+        isCancelled: isCancelled,
+        onProgress: (processed, total, _) {
+          if (total == 0) return;
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: localeLookingUp,
+            type: GlobalNotificationType.info,
+            progress: processed / total,
+          );
+        },
+      );
+
+      // Expensive pass: hash the ROMs that have never been hashed.
+      final hashPass = lookup.cancelled
+          ? null
+          : await RetroAchievementsHashService.rematchLibrary(
+              isCancelled: isCancelled,
+              onProgress: (processed, total, label) {
+                if (total == 0) return;
+                GlobalNotificationService().update(
+                  id: notificationId,
+                  message: localeHashing.replaceFirst('{filename}', label),
+                  type: GlobalNotificationType.info,
+                  progress: processed / total,
+                );
+              },
+            );
+
+      final matched = lookup.matched + (hashPass?.matched ?? 0);
+      final hashed = hashPass?.hashed ?? 0;
+      final cancelled = lookup.cancelled || (hashPass?.cancelled ?? false);
+      final examined = lookup.total + (hashPass?.total ?? 0);
+
+      if (cancelled) {
+        completionMessage = localeStopped.replaceFirst(
+          '{matched}',
+          matched.toString(),
+        );
+        completionType = NotificationType.info;
+      } else if (examined == 0) {
+        completionMessage = localeNothingToDo;
+        completionType = NotificationType.info;
+      } else {
+        completionMessage = localeDone
+            .replaceFirst('{matched}', matched.toString())
+            .replaceFirst('{hashed}', hashed.toString());
+        completionType = matched > 0
+            ? NotificationType.success
+            : NotificationType.info;
+      }
+    } catch (e, stackTrace) {
+      _log.e(
+        'Failed to re-match RetroAchievements: $e',
+        stackTrace: stackTrace,
+      );
+      completionMessage = localeFailed.replaceFirst('{error}', e.toString());
+      completionType = NotificationType.error;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRematchingAchievements = false;
+          _rematchCancelled = false;
+        });
+        if (completionMessage != null && completionType != null) {
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: completionMessage,
+            type: completionType == NotificationType.success
+                ? GlobalNotificationType.success
+                : completionType == NotificationType.error
+                ? GlobalNotificationType.error
+                : GlobalNotificationType.info,
+            progress: null,
+          );
+        }
+      } else {
+        GlobalNotificationService().dismiss(notificationId);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSelected =
@@ -390,6 +541,10 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
               final metadataProgress = _progressFor(
                 notifications,
                 'clean_orphaned_metadata',
+              );
+              final rematchProgress = _progressFor(
+                notifications,
+                'rematch_achievements',
               );
 
               return ListView(
@@ -432,6 +587,30 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     belowContent: _buildInlineProgress(
                       context,
                       metadataProgress,
+                    ),
+                  ),
+                  SettingsCardRow(
+                    icon: Symbols.emoji_events_rounded,
+                    title: AppLocale.rematchAchievements.getString(context),
+                    subtitle: AppLocale.rematchAchievementsSubtitle.getString(
+                      context,
+                    ),
+                    subtitleMaxLines: 2,
+                    selected:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == 2,
+                    onTap: () => _rematchAchievements(),
+                    trailing: SettingsActionButton(
+                      icon: _isRematchingAchievements
+                          ? Symbols.stop_rounded
+                          : Symbols.emoji_events_rounded,
+                      selected:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == 2,
+                    ),
+                    belowContent: _buildInlineProgress(
+                      context,
+                      rematchProgress,
                     ),
                   ),
                 ],

@@ -201,6 +201,16 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
       '保留了 {count} 条从 ES-DE 导入的条目。',
   AppLocale.cleanOrphanedMetadataFailed: '清理孤立元数据失败：{error}',
+  AppLocale.rematchAchievements: '匹配 RetroAchievements 游戏',
+  AppLocale.rematchAchievementsSubtitle: '扫描整个库来查找成就集，而不是逐个打开游戏',
+  AppLocale.rematchAchievementsWarning:
+      '将读取每个尚未匹配的 ROM 以识别它，库较大时可能需要一些时间。再次选择即可停止。光盘类系统暂不处理。不会移动或删除任何文件。',
+  AppLocale.rematchAchievementsLookingUp: '正在检查已有哈希的游戏…',
+  AppLocale.rematchAchievementsHashing: '正在识别 {filename}',
+  AppLocale.rematchAchievementsDone: '完成：匹配 {matched} 个游戏，新识别 {hashed} 个。',
+  AppLocale.rematchAchievementsNothingToDo: '所有受支持的游戏都已检查过。',
+  AppLocale.rematchAchievementsStopped: '已停止：目前已匹配 {matched} 个游戏。',
+  AppLocale.rematchAchievementsFailed: '匹配 RetroAchievements 游戏失败：{error}',
   AppLocale.notifications: '通知',
   AppLocale.clearAll: '清除全部',
   AppLocale.noActiveNotifications: '没有活动通知',

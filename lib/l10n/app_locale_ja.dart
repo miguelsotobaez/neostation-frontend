@@ -205,6 +205,18 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
       '{count} 件の ES-DE からインポートしたエントリはそのまま残されています。',
   AppLocale.cleanOrphanedMetadataFailed: '孤立したメタデータの削除に失敗しました: {error}',
+  AppLocale.rematchAchievements: 'RetroAchievements のゲームを照合',
+  AppLocale.rematchAchievementsSubtitle: 'ゲームを1本ずつ開かずに、ライブラリ全体から実績セットを探します',
+  AppLocale.rematchAchievementsWarning:
+      '未照合の ROM をすべて読み込んで識別します。ライブラリが大きい場合は時間がかかります。もう一度選択すると停止します。ディスク系のシステムは現時点では対象外です。ファイルの移動や削除は行いません。',
+  AppLocale.rematchAchievementsLookingUp: 'ハッシュ済みのゲームを確認中...',
+  AppLocale.rematchAchievementsHashing: '{filename} を識別中',
+  AppLocale.rematchAchievementsDone:
+      '完了: {matched} 本を照合し、{hashed} 本を新たに識別しました。',
+  AppLocale.rematchAchievementsNothingToDo: '対応するゲームはすべて確認済みです。',
+  AppLocale.rematchAchievementsStopped: '停止しました: これまでに {matched} 本を照合しました。',
+  AppLocale.rematchAchievementsFailed:
+      'RetroAchievements のゲームを照合できませんでした: {error}',
   AppLocale.notifications: '通知',
   AppLocale.clearAll: 'すべてクリア',
   AppLocale.noActiveNotifications: 'アクティブな通知はありません',

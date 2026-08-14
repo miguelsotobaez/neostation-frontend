@@ -204,6 +204,17 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
       '{count}개의 ES-DE 에서 가져온 항목은 그대로 유지되었습니다.',
   AppLocale.cleanOrphanedMetadataFailed: '고아 메타데이터 정리 실패: {error}',
+  AppLocale.rematchAchievements: 'RetroAchievements 게임 매칭',
+  AppLocale.rematchAchievementsSubtitle: '게임을 하나씩 열지 않고 라이브러리 전체에서 업적 세트를 찾습니다',
+  AppLocale.rematchAchievementsWarning:
+      '아직 매칭되지 않은 모든 ROM을 읽어 식별합니다. 라이브러리가 크면 시간이 걸릴 수 있습니다. 다시 선택하면 중지됩니다. 디스크 기반 시스템은 현재 제외됩니다. 파일을 옮기거나 삭제하지 않습니다.',
+  AppLocale.rematchAchievementsLookingUp: '이미 해시된 게임을 확인하는 중...',
+  AppLocale.rematchAchievementsHashing: '{filename} 식별 중',
+  AppLocale.rematchAchievementsDone: '완료: {matched}개 매칭, {hashed}개 새로 식별했습니다.',
+  AppLocale.rematchAchievementsNothingToDo: '지원되는 게임은 모두 확인했습니다.',
+  AppLocale.rematchAchievementsStopped: '중지됨: 지금까지 {matched}개를 매칭했습니다.',
+  AppLocale.rematchAchievementsFailed:
+      'RetroAchievements 게임을 매칭하지 못했습니다: {error}',
   AppLocale.notifications: '알림',
   AppLocale.clearAll: '모두 지우기',
   AppLocale.noActiveNotifications: '활성 알림 없음',

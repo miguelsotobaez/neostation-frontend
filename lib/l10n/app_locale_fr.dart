@@ -255,6 +255,22 @@ const Map<String, dynamic> appLocaleFr = {
       ' {count} entrée(s) importée(s) depuis ES-DE ont été laissées intactes.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Échec du nettoyage des métadonnées orphelines : {error}',
+  AppLocale.rematchAchievements: 'Associer les jeux RetroAchievements',
+  AppLocale.rematchAchievementsSubtitle:
+      'Analyse toute la bibliothèque à la recherche de sets de succès, au lieu d\'un jeu à la fois',
+  AppLocale.rematchAchievementsWarning:
+      'Chaque ROM non associée est lue pour être identifiée, ce qui peut prendre du temps sur une grande bibliothèque. Sélectionnez à nouveau pour arrêter. Les systèmes à disque sont ignorés pour l\'instant. Rien n\'est déplacé ni supprimé.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Vérification des jeux déjà hachés...',
+  AppLocale.rematchAchievementsHashing: 'Identification de {filename}',
+  AppLocale.rematchAchievementsDone:
+      'Terminé : {matched} jeu(x) associé(s), {hashed} nouvellement identifié(s).',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Tous les jeux pris en charge ont déjà été vérifiés.',
+  AppLocale.rematchAchievementsStopped:
+      'Arrêté : {matched} jeu(x) associé(s) jusqu\'ici.',
+  AppLocale.rematchAchievementsFailed:
+      'Échec de l\'association des jeux RetroAchievements : {error}',
   AppLocale.notifications: 'Notifications',
   AppLocale.clearAll: 'Tout effacer',
   AppLocale.noActiveNotifications: 'Aucune notification active',
