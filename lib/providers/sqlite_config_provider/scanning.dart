@@ -15,6 +15,10 @@ const String _unreachableRomFoldersNotificationId = 'rom-folders-unreachable';
 /// Bell entry for a ROM folder refused because its path was transient.
 const String _transientRomFolderNotificationId = 'rom-folder-transient';
 
+/// Bell entry for a desktop scan that had no ROM root left to walk. A fixed id
+/// for the same reason as [_unreachableRomFoldersNotificationId].
+const String _noRomFoldersNotificationId = 'rom-folders-missing';
+
 extension SqliteConfigScanning on SqliteConfigProvider {
   /// Registers a new filesystem directory as a ROM source.
   ///
@@ -237,10 +241,50 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       }
     }
 
+    // The same silence covers the case where no root is configured at all.
+    // `_isFastScan` below turns an empty folder list into a scan that walks
+    // nothing and still reports success: that is deliberate on Android, where
+    // the virtual Android Apps systems are injected regardless, but off
+    // Android it leaves nothing to scan and no way to tell. The list can empty
+    // itself without the user removing anything — a blanket config save that
+    // carried no folders (fixed in #316, but older databases already lost
+    // theirs), or a `loadConfig` failure falling back to `ConfigModel.empty` —
+    // while Settings > Directories reads the folder table directly and so
+    // still shows a folder that is configured as far as the user can tell.
+    // Every scan is then a no-op that flickers past, and the library keeps
+    // working from stored `rom_path` rows, so nothing new is ever picked up.
+    if (!Platform.isAndroid &&
+        _config.romFolders.isEmpty &&
+        await _hasStoredRoms()) {
+      _error =
+          'No ROM folder is configured, so there was nothing to scan. '
+          'Existing games were kept. Add your ROM folder again in '
+          'Settings > Directories.';
+      SqliteConfigProvider._log.e(
+        'Scan aborted, no ROM folders configured while the library holds '
+        'ROMs; library preserved',
+      );
+      // Same reasoning as the unreachable-roots branch above: flip
+      // `_scanCompleted` so the systems screen renders the preserved library,
+      // and report through the bell because `_error` only reaches the
+      // initial-setup widget.
+      _scanCompleted = true;
+      GlobalNotificationService().show(
+        id: _noRomFoldersNotificationId,
+        title: 'No ROM folder configured',
+        message: _error!,
+        type: GlobalNotificationType.error,
+      );
+      _setScanning(false);
+      _notify();
+      return;
+    }
+
     // Getting this far means nothing blocked the scan, so retire a warning
     // left by an earlier one instead of leaving the user chasing a folder they
     // have already reconnected or removed.
     GlobalNotificationService().dismiss(_unreachableRomFoldersNotificationId);
+    GlobalNotificationService().dismiss(_noRomFoldersNotificationId);
 
     // Initialize progress
     _totalSystemsToScan = 0;
