@@ -305,52 +305,76 @@ class HeaderState extends State<Header> {
                                 NavTab.values[widget.selectedTabIndex],
                               );
 
-                              return Stack(
-                                children: [
-                                  // Moving indicator
-                                  AnimatedPositioned(
-                                    left:
-                                        (selectedSlot < 0 ? 0 : selectedSlot) *
-                                        32.r,
-                                    top: 4.r,
-                                    bottom: 4.r,
-                                    width: 32.r,
-                                    duration: const Duration(milliseconds: 160),
-                                    curve: Curves.easeInOut,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        borderRadius:
-                                            Theme.of(context)
-                                                .extension<CornerRadii>()
-                                                ?.radiusInternal ??
-                                            BorderRadius.circular(4.r),
-                                      ),
-                                    ),
-                                  ),
-                                  // Tab buttons
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
+                              // The indicator and the icon tints share ONE
+                              // animation. Flipping a tab's tint the instant
+                              // the selection changed, while the indicator took
+                              // 160ms to slide over, left the incoming icon
+                              // drawn in `onPrimary` on bare surface (and the
+                              // outgoing one in `onSurface` under the pill that
+                              // had not left yet) for the whole slide — read as
+                              // a flash on every tab change, and badly so once
+                              // a held bumper cycles faster than the slide.
+                              // Tinting from the ANIMATED position instead
+                              // keeps each icon's colour matched to how much of
+                              // the pill is actually under it.
+                              return TweenAnimationBuilder<double>(
+                                tween: Tween<double>(
+                                  end: (selectedSlot < 0 ? 0 : selectedSlot)
+                                      .toDouble(),
+                                ),
+                                duration: const Duration(milliseconds: 160),
+                                curve: Curves.easeInOut,
+                                builder: (context, slot, _) {
+                                  return Stack(
                                     children: [
-                                      for (final tab in visibleTabs)
-                                        SizedBox(
-                                          width: 32.r,
-                                          height: 32.r,
-                                          child: _buildTabButton(
-                                            context,
-                                            tab.index,
-                                            navTabSpec(tab).icon,
-                                            navTabSpec(
-                                              tab,
-                                            ).labelKey.getString(context),
-                                            iconData: navTabSpec(tab).iconData,
+                                      // Moving indicator
+                                      Positioned(
+                                        left: slot * 32.r,
+                                        top: 4.r,
+                                        bottom: 4.r,
+                                        width: 32.r,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                            borderRadius:
+                                                Theme.of(context)
+                                                    .extension<CornerRadii>()
+                                                    ?.radiusInternal ??
+                                                BorderRadius.circular(4.r),
                                           ),
                                         ),
+                                      ),
+                                      // Tab buttons
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          for (final (index, tab)
+                                              in visibleTabs.indexed)
+                                            SizedBox(
+                                              width: 32.r,
+                                              height: 32.r,
+                                              child: _buildTabButton(
+                                                context,
+                                                tab.index,
+                                                navTabSpec(tab).icon,
+                                                navTabSpec(
+                                                  tab,
+                                                ).labelKey.getString(context),
+                                                iconData: navTabSpec(
+                                                  tab,
+                                                ).iconData,
+                                                coverage:
+                                                    (1.0 - (slot - index).abs())
+                                                        .clamp(0.0, 1.0),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ],
-                                  ),
-                                ],
+                                  );
+                                },
                               );
                             },
                           ),
@@ -486,17 +510,23 @@ class HeaderState extends State<Header> {
   //
   // Most tabs use a webp asset; [iconData] is the fallback for tabs with no
   // matching asset (Search), rendered at the same box size and tint.
+  //
+  // [coverage] is how much of the sliding indicator currently sits under this
+  // tab (1 = fully covered, 0 = uncovered). The tint follows it so the icon is
+  // only `onPrimary` where the pill has actually arrived.
   Widget _buildTabButton(
     BuildContext context,
     int tabIndex,
     String? icon,
     String label, {
     IconData? iconData,
+    required double coverage,
   }) {
-    final bool isSelected = tabIndex == widget.selectedTabIndex;
-    final Color tint = isSelected
-        ? Theme.of(context).colorScheme.onPrimary
-        : Theme.of(context).colorScheme.onSurface;
+    final Color tint = Color.lerp(
+      Theme.of(context).colorScheme.onSurface,
+      Theme.of(context).colorScheme.onPrimary,
+      coverage,
+    )!;
 
     return Material(
       color: Colors.transparent,

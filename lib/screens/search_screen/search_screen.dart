@@ -192,6 +192,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Timer? _remoteTimer;
 
+  /// Deferred first load, cancelled if the tab is left before it fires.
+  Timer? _initialLoadTimer;
+
   /// Incremented per issued search; a response whose sequence no longer matches
   /// is a stale in-flight request and is dropped rather than rendered.
   int _remoteSeq = 0;
@@ -253,9 +256,13 @@ class _SearchScreenState extends State<SearchScreen> {
         onDeactivate: () => _gamepadNav.deactivate(),
       );
 
-      // Wait for the tab indicator animation (160ms AnimatedPositioned)
-      // to finish before starting any database work.
-      Future.delayed(const Duration(milliseconds: 250), _loadGames);
+      // Wait for the tab indicator animation to finish before starting any
+      // database work. Held as a cancellable timer, not a bare Future.delayed:
+      // a bumper held through the tab strip mounts and disposes this screen in
+      // passing, and an uncancelled delay still ran the full-library query for
+      // every pass — several of them landing on whichever tab the user actually
+      // stopped on.
+      _initialLoadTimer = Timer(const Duration(milliseconds: 250), _loadGames);
     });
 
     if (Platform.isAndroid) {
@@ -266,6 +273,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void dispose() {
     GamepadNavigationManager.popLayer('search_screen');
+    _initialLoadTimer?.cancel();
     _remoteTimer?.cancel();
     _achievementsController.dispose();
     _gamepadNav.dispose();
@@ -278,6 +286,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _loadGames() async {
+    if (!mounted) return;
+
     // Games the user hid are dropped here: search is a game list like any
     // other, so a hidden game must not surface through it either.
     final games = (await GameRepository.getAllGames())
