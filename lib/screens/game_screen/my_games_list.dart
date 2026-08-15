@@ -360,10 +360,36 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
     MusicPlayerService().addListener(_onMusicPlayerStateChanged);
 
+    GameService.deviceScreenOn.addListener(_onDeviceScreenPowerChanged);
+
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryDisplayChanged);
     }
+  }
+
+  /// Tears the preview video down when the device screen goes off, and brings
+  /// it back on wake.
+  ///
+  /// NeoStation runs as a HOME launcher, so the activity is never paused on
+  /// lock and nothing else stops this player: it would keep decoding — and,
+  /// with video sound on and no second screen to defer to, keep playing audio —
+  /// behind a dark screen for as long as the device slept.
+  void _onDeviceScreenPowerChanged() {
+    if (!mounted) return;
+    if (!GameService.deviceScreenOn.value) {
+      _stopVideoAndCleanup();
+      return;
+    }
+    // Back awake: re-arm the preview for whatever is still selected. Never
+    // while a game owns the foreground — the screen came back on for the
+    // emulator, not for us.
+    if (_selectedGame == null ||
+        _isGameLaunching ||
+        GameService.isGameLaunchInProgress) {
+      return;
+    }
+    _startVideoTimer();
   }
 
   @override
@@ -386,6 +412,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _scrapingProvider.removeListener(_onScrapingUpdated);
     MusicPlayerService().removeListener(_onMusicPlayerStateChanged);
     GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
+    GameService.deviceScreenOn.removeListener(_onDeviceScreenPowerChanged);
 
     // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onSecondaryDisplayChanged);

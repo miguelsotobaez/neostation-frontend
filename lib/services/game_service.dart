@@ -48,6 +48,15 @@ class GameService {
   /// suspended while locked. `true` = screen on, `false` = screen off.
   static void Function(bool screenOn)? onScreenStateChanged;
 
+  /// Whether the device screen is on, mirrored from the same native bridge.
+  ///
+  /// A callback slot only serves one listener; this notifier serves the rest.
+  /// Screens that own media need it because NeoStation runs as a HOME launcher:
+  /// the activity is never paused on lock, so a preview video keeps decoding —
+  /// and, with video sound on, keeps playing audio — behind a dark screen until
+  /// something tears it down.
+  static final ValueNotifier<bool> deviceScreenOn = ValueNotifier<bool>(true);
+
   /// Initializes the platform-specific listener for Android game lifecycle events.
   static void initializeAndroidGameListener() {
     if (!Platform.isAndroid) return;
@@ -65,9 +74,14 @@ class GameService {
       } else if (call.method == 'onDeviceScreenOff') {
         // As a HOME launcher we are not paused on lock, so this is the only
         // reliable signal to release background resources while locked.
+        deviceScreenOn.value = false;
         MusicPlayerService().appPaused();
         onScreenStateChanged?.call(false);
       } else if (call.method == 'onDeviceScreenOn') {
+        // Published unconditionally: listeners that must not act behind a
+        // running game (the preview video) check that themselves, and leaving
+        // the notifier stuck on false would strand them after the game exits.
+        deviceScreenOn.value = true;
         // Skip restore while a game owns the foreground — the game-return
         // (lifecycle resumed) path re-opens everything. Restoring here would
         // reopen the audio engine (and restart music/websocket) behind the

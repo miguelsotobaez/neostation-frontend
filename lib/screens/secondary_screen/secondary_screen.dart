@@ -151,6 +151,10 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onStateChanged);
+      // Direct, ordered screen on/off edges from the native presentation. See
+      // [_deviceAwake] for why the shared-state flag alone isn't trusted.
+      SecondaryAppsService.listenForScreenState();
+      SecondaryAppsService.deviceScreenOn.addListener(_onScreenPowerChanged);
       // Signal that the secondary screen is active — but only after the initial
       // state sync. Pushing it while the synced value is still null makes
       // updateState fall back to the WELCOME default and clobber the real
@@ -243,16 +247,22 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _maybeStartCelebration(state);
     _syncDockMount(state);
 
-    if (state.isGameLaunching) {
+    // A launch is under way, or a game session is running and this screen is
+    // showing Now Playing: either way there is nothing for the preview to do.
+    // nowPlayingActive is checked as well as isGameLaunching because it stays
+    // true for the whole session, so a late or out-of-order snapshot arriving
+    // mid-game — the transport gives no ordering guarantee — can no longer
+    // start a trailer playing over the game the user is actually playing.
+    if (state.isGameLaunching || state.nowPlayingActive) {
       _stopVideo();
       return;
     }
 
     // Device asleep (lid closed / screen off): tear down the preview so its
     // audio output device stops and the CPU can deep-sleep. This engine never
-    // receives Android lifecycle callbacks, so deviceScreenOn (bridged from the
-    // native ACTION_SCREEN_ON/OFF receiver) is the only reliable signal.
-    if (!state.deviceScreenOn) {
+    // receives Android lifecycle callbacks, so the bridged screen state is the
+    // only "device is asleep" signal there is — see [_deviceAwake].
+    if (!_deviceAwake(state)) {
       _stopVideo();
       _currentVideoPath = null; // force a fresh start when the screen wakes
       return;
@@ -272,6 +282,40 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         _videoController!.setVolume(state.isVideoMuted ? 0.0 : 1.0);
       }
     }
+  }
+
+  /// Whether the device screen is on, according to *both* signals that carry
+  /// that fact to this engine.
+  ///
+  /// [SecondaryDisplayStateData.deviceScreenOn] rides the cross-engine shared
+  /// state, which ships whole snapshots with no ordering guarantee: a snapshot
+  /// another producer built moments before the screen went off can land after
+  /// the screen-off write and flip the flag back to `true` — and nothing
+  /// corrects it until the next real screen event, so the preview video would
+  /// restart seconds after the lid closed and keep playing audio in the dark.
+  /// [SecondaryAppsService.deviceScreenOn] is fed by direct, ordered channel
+  /// calls from the native presentation and can't be clobbered, so requiring
+  /// both means one stale snapshot can no longer wake the preview.
+  bool _deviceAwake(SecondaryDisplayStateData state) =>
+      state.deviceScreenOn && SecondaryAppsService.deviceScreenOn.value;
+
+  /// Reacts to a native screen on/off edge. Off tears the preview down (and
+  /// freezes the session clock) immediately, without waiting for a shared-state
+  /// push that may never come; on re-runs the normal state handling so the
+  /// preview and the clock resume exactly as they do on any other update.
+  void _onScreenPowerChanged() {
+    final state = _secondaryDisplayState?.value;
+    debugPrint(
+      'SecondaryScreen: native screen edge — '
+      'on=${SecondaryAppsService.deviceScreenOn.value}',
+    );
+    if (SecondaryAppsService.deviceScreenOn.value) {
+      if (state != null) _onStateChanged();
+      return;
+    }
+    _stopVideo();
+    _currentVideoPath = null; // force a fresh start when the screen wakes
+    if (state != null) _applySessionPower(state);
   }
 
   /// Whether the app dock (and its all-apps launcher) belongs on screen: the
@@ -499,7 +543,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// native ACTION_SCREEN_ON/OFF receiver. Without this the [Stopwatch] keeps
   /// accruing wall-clock time while the device sleeps.
   void _applySessionPower(SecondaryDisplayStateData state) {
-    if (!state.deviceScreenOn) {
+    if (!_deviceAwake(state)) {
       // Screen off: freeze the counter where it is.
       if (_sessionWatch.isRunning) {
         _playTimeTicker?.cancel();
@@ -552,6 +596,23 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     try {
       controller = VideoPlayerController.file(File(path));
       await controller.initialize();
+      if (!mounted || gen != _videoGeneration) {
+        await controller.dispose();
+        return;
+      }
+
+      // Last line of defence before any audio comes out: ask the display itself
+      // whether it is lit. Every flag that got us here was pushed from another
+      // process and can be stale; this one cannot. Without it, a snapshot that
+      // resurrects "screen on" after the lid closed would start the trailer
+      // playing in the dark — audible, and burning an OLED panel nobody can see.
+      if (!await SecondaryAppsService.isDisplayOn()) {
+        debugPrint(
+          'SecondaryScreen: display is off — preview video start suppressed',
+        );
+        await controller.dispose();
+        return;
+      }
       if (!mounted || gen != _videoGeneration) {
         await controller.dispose();
         return;
@@ -610,6 +671,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   void dispose() {
     // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onStateChanged);
+    SecondaryAppsService.deviceScreenOn.removeListener(_onScreenPowerChanged);
     _celebrationTimer?.cancel();
     _playTimeTicker?.cancel();
     _dimTimer?.cancel();

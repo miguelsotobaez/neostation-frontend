@@ -164,10 +164,12 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 when (intent?.action) {
                     android.content.Intent.ACTION_SCREEN_OFF -> {
                         pushDeviceScreenOn(false)
+                        notifySecondaryScreenState(false)
                         notifyFlutterScreenState(false)
                     }
                     android.content.Intent.ACTION_SCREEN_ON -> {
                         pushDeviceScreenOn(true)
+                        notifySecondaryScreenState(true)
                         notifyFlutterScreenState(true)
                     }
                 }
@@ -193,6 +195,23 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             SharedStateManager.updateState(type, current)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "pushDeviceScreenOn: ${e.message}")
+        }
+    }
+
+    /// Delivers the screen on/off edge straight to the secondary engine, on its
+    /// own channel. [pushDeviceScreenOn] mirrors the same fact into the shared
+    /// state, but that transport ships whole snapshots between two engines with
+    /// no ordering guarantee: a snapshot another producer built moments before
+    /// the screen went off can land after this write and resurrect
+    /// `deviceScreenOn: true`, leaving the bottom screen convinced the device is
+    /// awake — which is how a preview video's audio kept playing with the lid
+    /// shut. This edge cannot be clobbered, so the secondary engine treats it as
+    /// the authority and only ever plays when BOTH agree the screen is on.
+    private fun notifySecondaryScreenState(on: Boolean) {
+        try {
+            (subScreenPresentation as? SecondaryAppsPresentation)?.notifyScreenState(on)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "notifySecondaryScreenState: ${e.message}")
         }
     }
 
