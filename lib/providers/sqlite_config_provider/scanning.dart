@@ -126,8 +126,17 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
     // granted or revoked between scans, but not during one.
     SafDirectoryService.resetFastWalkAvailability();
+    // Settle fast-scan mode before anything reports it. `_config.romFolders`
+    // cannot change for the rest of this call, so deciding here is the same
+    // decision the scan phase used to make further down — except the line
+    // below now describes the scan actually about to run. It used to print the
+    // value left by provider init, so the first scan after a folder was added
+    // logged `romFolders=1, fastScan=true`: self-contradictory, and misleading
+    // in exactly the situation this log line exists to diagnose.
+    _isFastScan = _config.romFolders.isEmpty;
     SqliteConfigProvider._log.i(
-      'scanSystems starting (romFolders=${_config.romFolders.length}, fastScan=$_isFastScan)',
+      'scanSystems starting (romFolders=${_config.romFolders.length}, '
+      'fastScan=$_isFastScan)',
     );
 
     // Verify permissions in Android BEFORE scanning
@@ -296,8 +305,8 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // Reload from synchronized database during initialization
       await _loadAvailableSystems();
 
-      // Detect if we are in "Fast Scan" mode (without ROM folders)
-      _isFastScan = _config.romFolders.isEmpty;
+      // Fast Scan mode (no ROM folders) was settled before the opening log
+      // line, so that it and this agree.
       final bool isFastScan = _isFastScan;
 
       // Detect systems
