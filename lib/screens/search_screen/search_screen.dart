@@ -2115,8 +2115,13 @@ class _SearchScreenState extends State<SearchScreen> {
 
     if (status == RemoteStatus.unsupported ||
         status == RemoteStatus.noEquivalent) {
+      // Two dimensions gate the remote section, so the notice has to name the
+      // one that did it. Rating takes precedence when both are set: clearing it
+      // then reveals the achievements notice, which is the next thing to clear.
       final text = status == RemoteStatus.unsupported
-          ? AppLocale.searchRatingLocalOnly.getString(context)
+          ? (_rating != null
+                ? AppLocale.searchRatingLocalOnly.getString(context)
+                : AppLocale.searchAchievementsLocalOnly.getString(context))
           : AppLocale.searchNoRommEquivalent
                 .getString(context)
                 .replaceFirst('{value}', _remoteUnmatchedFilter ?? '');

@@ -1073,6 +1073,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.sourceLocal: 'Auf diesem Gerät',
   AppLocale.searchRatingLocalOnly:
       'Der Bewertungsfilter gilt nur für lokale Spiele',
+  AppLocale.searchAchievementsLocalOnly:
+      'Der Erfolgsfilter gilt nur für lokale Spiele',
   AppLocale.searchNoRommEquivalent:
       'RomM kennt „{value}“ nicht unter diesem Namen',
   AppLocale.resetPlayTimeConfirm: 'Spielzeit zurücksetzen',

@@ -1120,6 +1120,8 @@ mixin AppLocale {
   static const String raCoverageNoSet = 'ra_coverage_no_set';
   static const String raCoverageNotChecked = 'ra_coverage_not_checked';
   static const String raCoverageDiscPending = 'ra_coverage_disc_pending';
+  static const String searchAchievementsLocalOnly =
+      'search_achievements_local_only';
   static const String filterAny = 'filter_any';
   static const String filterSource = 'filter_source';
   static const String sourceLocal = 'source_local';

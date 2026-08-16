@@ -1037,6 +1037,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.sourceLocal: 'On this device',
   AppLocale.searchRatingLocalOnly:
       'The rating filter applies to local games only',
+  AppLocale.searchAchievementsLocalOnly:
+      'The achievements filter applies to local games only',
   AppLocale.searchNoRommEquivalent: 'RomM has nothing filed under “{value}”',
   AppLocale.resetPlayTimeConfirm: 'Reset Play Time',
   AppLocale.resetPlayTimeConfirmBody:

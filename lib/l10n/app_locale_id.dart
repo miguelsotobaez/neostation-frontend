@@ -1045,6 +1045,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.sourceLocal: 'Di perangkat ini',
   AppLocale.searchRatingLocalOnly:
       'Filter peringkat hanya berlaku untuk gim lokal',
+  AppLocale.searchAchievementsLocalOnly:
+      'Filter prestasi hanya berlaku untuk gim lokal',
   AppLocale.searchNoRommEquivalent:
       'RomM tidak punya apa pun dengan nama “{value}”',
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',

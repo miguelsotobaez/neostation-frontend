@@ -931,6 +931,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.sourceLocal: '本机',
   AppLocale.searchRatingLocalOnly: '评分筛选仅适用于本地游戏',
   AppLocale.searchNoRommEquivalent: 'RomM 中没有归类为“{value}”的内容',
+  AppLocale.searchAchievementsLocalOnly: '成就筛选仅适用于本地游戏',
   AppLocale.resetPlayTimeConfirm: '重置游戏时间',
   AppLocale.resetPlayTimeConfirmBody: '这将永久将此游戏记录的游戏时间重置为零。此操作无法撤销。',
   AppLocale.removeRomFolderConfirmBody: '这将从您的库来源中移除此 ROM 文件夹。磁盘上的文件不会被删除。',

@@ -948,6 +948,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.sourceLocal: 'この端末',
   AppLocale.searchRatingLocalOnly: '評価フィルターはローカルのゲームにのみ適用されます',
   AppLocale.searchNoRommEquivalent: 'RomM に「{value}」に該当するものはありません',
+  AppLocale.searchAchievementsLocalOnly: '実績フィルターはローカルのゲームにのみ適用されます',
   AppLocale.resetPlayTimeConfirm: 'プレイ時間をリセット',
   AppLocale.resetPlayTimeConfirmBody:
       'このゲームの記録されたプレイ時間を完全にゼロにリセットします。この操作は元に戻せません。',

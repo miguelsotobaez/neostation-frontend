@@ -1042,6 +1042,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.sourceLocal: 'На этом устройстве',
   AppLocale.searchRatingLocalOnly:
       'Фильтр рейтинга применяется только к локальным играм',
+  AppLocale.searchAchievementsLocalOnly:
+      'Фильтр достижений применяется только к локальным играм',
   AppLocale.searchNoRommEquivalent: 'В RomM ничего не отнесено к «{value}»',
   AppLocale.resetPlayTimeConfirm: 'Сбросить время игры',
   AppLocale.resetPlayTimeConfirmBody:
