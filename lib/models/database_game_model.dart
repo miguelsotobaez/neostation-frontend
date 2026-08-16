@@ -23,6 +23,16 @@ class DatabaseGameModel {
   /// Unique identifier on RetroAchievements.org.
   final int? idRa;
 
+  /// The system's RetroAchievements console id, or null when they do not cover
+  /// it. Carried on the game so a view can tell "no set for this game" from
+  /// "no sets for this whole system" without a systems lookup.
+  final String? systemRaId;
+
+  /// How many achievements the bundled RetroAchievements snapshot lists for
+  /// [idRa]. Null until the ROM is matched; read from the local snapshot, so it
+  /// costs no API call.
+  final int? raNumAchievements;
+
   /// Name of the standalone emulator or libretro core used to launch this game.
   final String? emulatorName;
 
@@ -107,6 +117,8 @@ class DatabaseGameModel {
     this.isFavorite = false,
     this.isHidden = false,
     this.idRa,
+    this.systemRaId,
+    this.raNumAchievements,
     this.emulatorName,
     this.emulatorPath,
     this.coreName,
@@ -183,6 +195,11 @@ class DatabaseGameModel {
               'true' ||
           (json['is_hidden'] ?? json['isHidden'] ?? 0).toString() == '1',
       idRa: int.tryParse((json['id_ra'] ?? json['idRa'] ?? '').toString()),
+      systemRaId: (json['system_ra_id'] ?? json['systemRaId'])?.toString(),
+      raNumAchievements: int.tryParse(
+        (json['ra_num_achievements'] ?? json['raNumAchievements'] ?? '')
+            .toString(),
+      ),
       emulatorName: (json['emulator_name'] ?? json['emulatorName'])?.toString(),
       emulatorPath: (json['emulator_path'] ?? json['emulatorPath'])?.toString(),
       coreName: (json['core_name'] ?? json['coreName'])?.toString(),
@@ -250,6 +267,8 @@ class DatabaseGameModel {
       'isFavorite': isFavorite,
       'isHidden': isHidden,
       'idRa': idRa,
+      'systemRaId': systemRaId,
+      'raNumAchievements': raNumAchievements,
       'emulatorName': emulatorName,
       'emulatorPath': emulatorPath,
       'coreName': coreName,
@@ -287,6 +306,8 @@ class DatabaseGameModel {
     bool? isFavorite,
     bool? isHidden,
     int? idRa,
+    String? systemRaId,
+    int? raNumAchievements,
     String? emulatorName,
     String? emulatorPath,
     String? coreName,
@@ -320,6 +341,8 @@ class DatabaseGameModel {
       isFavorite: isFavorite ?? this.isFavorite,
       isHidden: isHidden ?? this.isHidden,
       idRa: idRa ?? this.idRa,
+      systemRaId: systemRaId ?? this.systemRaId,
+      raNumAchievements: raNumAchievements ?? this.raNumAchievements,
       emulatorName: emulatorName ?? this.emulatorName,
       emulatorPath: emulatorPath ?? this.emulatorPath,
       coreName: coreName ?? this.coreName,

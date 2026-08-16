@@ -232,14 +232,18 @@ class DatabaseTestHelper {
 
     await db.execute('''
       CREATE TABLE app_ra_game_list (
+        id INTEGER,
         hash TEXT,
         game_id INTEGER,
         console_id TEXT,
         console_name TEXT,
         title TEXT,
-        num_achievements INTEGER,
-        num_leaderboards INTEGER,
-        points INTEGER
+        image_icon TEXT,
+        num_achievements INTEGER NOT NULL DEFAULT 0,
+        num_leaderboards INTEGER NOT NULL DEFAULT 0,
+        points INTEGER NOT NULL DEFAULT 0,
+        date_modified TEXT,
+        forum_topic_id INTEGER
       )
     ''');
 

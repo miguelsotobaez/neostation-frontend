@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../providers/file_provider.dart';
+import '../utils/ra_coverage.dart';
 import 'database_game_model.dart';
 
 /// Represents a unified game entity combining metadata, filesystem info, and database state.
@@ -66,6 +67,18 @@ class GameModel {
   /// Computed RetroAchievements hash used for game identification.
   final String? raHash;
 
+  /// Unique identifier on RetroAchievements.org, once the ROM has been matched.
+  final int? idRa;
+
+  /// The system's RetroAchievements console id, or null when they do not cover
+  /// it. Lets a view tell "no set for this game" from "no sets for this whole
+  /// system" without a systems lookup.
+  final String? systemRaId;
+
+  /// How many achievements the bundled snapshot lists for [idRa]. Read from the
+  /// local snapshot, so a tile can show it without an API call.
+  final int? raNumAchievements;
+
   /// Platform-specific Title ID (e.g., for Switch or PS Vita).
   final String? titleId;
 
@@ -113,6 +126,9 @@ class GameModel {
     this.emulatorPath,
     this.coreName,
     this.raHash,
+    this.idRa,
+    this.systemRaId,
+    this.raNumAchievements,
     this.systemId,
     this.systemFolderName,
     this.systemRealName,
@@ -176,6 +192,9 @@ class GameModel {
       emulatorPath: db.emulatorPath,
       coreName: db.coreName,
       raHash: db.raHash,
+      idRa: db.idRa,
+      systemRaId: db.systemRaId,
+      raNumAchievements: db.raNumAchievements,
       systemId: db.appSystemId,
       systemFolderName: db.systemFolderName,
       systemRealName: db.systemRealName,
@@ -187,6 +206,17 @@ class GameModel {
       showRomFileNameSubtitle: false,
     );
   }
+
+  /// What is known locally about this ROM's RetroAchievements coverage.
+  ///
+  /// Derived entirely from persisted columns, so it is safe to read while
+  /// building a tile — no network call and no database round trip.
+  RaCoverage get raCoverage => raCoverageOf(
+    systemRaId: systemRaId,
+    filename: romname,
+    raHash: raHash,
+    idRa: idRa,
+  );
 
   /// Converts the model instance into a JSON-compatible map.
   Map<String, dynamic> toJson() {
@@ -226,6 +256,9 @@ class GameModel {
     String? emulatorPath,
     String? coreName,
     String? raHash,
+    int? idRa,
+    String? systemRaId,
+    int? raNumAchievements,
     String? systemId,
     String? systemFolderName,
     String? systemRealName,
@@ -256,6 +289,9 @@ class GameModel {
       emulatorPath: emulatorPath ?? this.emulatorPath,
       coreName: coreName ?? this.coreName,
       raHash: raHash ?? this.raHash,
+      idRa: idRa ?? this.idRa,
+      systemRaId: systemRaId ?? this.systemRaId,
+      raNumAchievements: raNumAchievements ?? this.raNumAchievements,
       systemId: systemId ?? this.systemId,
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,
