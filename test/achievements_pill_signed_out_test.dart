@@ -24,17 +24,21 @@ class _FakeRaProvider extends RetroAchievementsProvider {
   bool get isConnected => _connected;
 }
 
-GameModel _game() => GameModel(
-  romname: 'Sonic The Hedgehog.gg',
-  realname: 'Sonic The Hedgehog',
-  name: 'Sonic The Hedgehog',
-  year: '',
-  developer: '',
-  publisher: '',
-  genre: '',
-  players: '',
-  rating: 0,
-);
+GameModel _game({int? idRa, String? systemRaId, int? raNumAchievements}) =>
+    GameModel(
+      romname: 'Sonic The Hedgehog.gg',
+      realname: 'Sonic The Hedgehog',
+      name: 'Sonic The Hedgehog',
+      year: '',
+      developer: '',
+      publisher: '',
+      genre: '',
+      players: '',
+      rating: 0,
+      idRa: idRa,
+      systemRaId: systemRaId,
+      raNumAchievements: raNumAchievements,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +55,8 @@ void main() {
   Future<void> pumpFooter(
     WidgetTester tester, {
     required bool connected,
+    GameModel? game,
+    bool isLoading = false,
   }) async {
     // The footer lays out against the full window width in the real app; give
     // the test the same room or its Row overflows and never builds the pill.
@@ -75,9 +81,10 @@ void main() {
               body: SizedBox(
                 width: 1280,
                 child: GameViewFooter(
-                  game: _game(),
+                  game: game ?? _game(),
                   onPlay: () {},
                   hasRetroAchievements: true,
+                  isLoadingAchievements: isLoading,
                   onShowAchievements: () {},
                 ),
               ),
@@ -119,5 +126,115 @@ void main() {
       isTrue,
       reason: 'only the known 1px overflow may be swallowed here',
     );
+  });
+
+  group('the total comes from the local snapshot, not the network', () {
+    // A matched ROM carries its achievement count in the bundled snapshot, so
+    // the pill can show the total with no API call. Only the earned half needs
+    // the network, and until it lands the pill must not imply a progress it
+    // has not fetched.
+    GameModel matched() =>
+        _game(idRa: 1234, systemRaId: '15', raNumAchievements: 45);
+
+    testWidgets('shows the total while the earned count is outstanding', (
+      tester,
+    ) async {
+      await pumpFooter(
+        tester,
+        connected: true,
+        game: matched(),
+        isLoading: true,
+      );
+
+      expect(find.text('\u2013/45'), findsOneWidget);
+      expect(
+        find.text(AppLocale.en[AppLocale.loading]!.toUpperCase()),
+        findsNothing,
+        reason: 'the total is already known — do not spin for it',
+      );
+      tester.takeException();
+    });
+
+    testWidgets('never renders a zero it has not fetched', (tester) async {
+      await pumpFooter(
+        tester,
+        connected: true,
+        game: matched(),
+        isLoading: true,
+      );
+
+      expect(
+        find.text('0/45'),
+        findsNothing,
+        reason: '0/45 claims the user has earned none, which is unknown here',
+      );
+      tester.takeException();
+    });
+
+    testWidgets('an unmatched ROM still reports none once the lookup ran', (
+      tester,
+    ) async {
+      await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
+
+      expect(
+        find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
+        findsOneWidget,
+      );
+      tester.takeException();
+    });
+
+    testWidgets('a local count is ignored unless the ROM is matched', (
+      tester,
+    ) async {
+      // raNumAchievements without an id_ra should never happen, but if a stale
+      // row carried one the pill must not advertise a set for an unmatched ROM.
+      await pumpFooter(
+        tester,
+        connected: true,
+        game: _game(systemRaId: '15', raNumAchievements: 45),
+      );
+
+      expect(find.text('\u2013/45'), findsNothing);
+      expect(
+        find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
+        findsOneWidget,
+      );
+      tester.takeException();
+    });
+  });
+
+  group('the progress bar only animates while something is outstanding', () {
+    double? barValue(WidgetTester tester) => tester
+        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+        .value;
+
+    testWidgets('a settled "no achievements" sits still and empty', (
+      tester,
+    ) async {
+      // An indeterminate bar reads as "still fetching". This state is an
+      // answer, not a wait: the lookup ran and came back empty.
+      await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
+
+      expect(barValue(tester), 0.0);
+      tester.takeException();
+    });
+
+    testWidgets('a known total with no earned count keeps animating', (
+      tester,
+    ) async {
+      await pumpFooter(
+        tester,
+        connected: true,
+        game: _game(idRa: 1234, systemRaId: '15', raNumAchievements: 45),
+        isLoading: true,
+      );
+
+      expect(
+        barValue(tester),
+        isNull,
+        reason: 'the earned half is still outstanding',
+      );
+      tester.takeException();
+    });
   });
 }

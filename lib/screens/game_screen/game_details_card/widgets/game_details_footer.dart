@@ -17,6 +17,7 @@ import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../../../../widgets/marquee_text.dart';
 import '../../music/music_player.dart';
+import 'package:neostation/utils/ra_coverage.dart';
 
 /// A sticky footer component for the game details card that provides actionable controls and status summaries.
 ///
@@ -320,19 +321,30 @@ class GameDetailsFooter extends StatelessWidget {
     // rests at 120.r. The width is animated so toggling eases in/out.
     final bool legendHidden = GameLegendVisibility.hidden.value;
     final bool expand = legendHidden || !hasPlayTime;
-    final bool noAchievements =
-        !isLoadingAchievements &&
-        (currentGameInfo == null || currentGameInfo!.numAchievements == 0);
+    // The bundled snapshot already records how many achievements a matched
+    // game has, so the total costs no network call — only the user's earned
+    // count does. See _CompactAchievementsIndicator, which does the same.
+    final int localTotal = game.raCoverage == RaCoverage.matched
+        ? (game.raNumAchievements ?? 0)
+        : 0;
+    final int total = currentGameInfo?.numAchievements ?? localTotal;
+    final int? awarded = currentGameInfo?.numAwardedToUser;
+    final bool knowsProgress = awarded != null && currentGameInfo != null;
 
-    final int awarded = currentGameInfo?.numAwardedToUser ?? 0;
-    final int total = currentGameInfo?.numAchievements ?? 0;
-    final double progress = total > 0 ? awarded / total : 0.0;
+    final bool noAchievements = !isLoadingAchievements && total == 0;
 
-    final String progressText = isLoadingAchievements
-        ? AppLocale.loading.getString(context)
-        : (noAchievements
-              ? AppLocale.noAchievements.getString(context)
-              : '$awarded/$total');
+    // A dash rather than a zero while the earned count is outstanding.
+    final String progressText = total > 0
+        ? (knowsProgress ? '$awarded/$total' : '\u2013/$total')
+        : (isLoadingAchievements
+              ? AppLocale.loading.getString(context)
+              : AppLocale.noAchievements.getString(context));
+
+    // Indeterminate only while something is genuinely outstanding; a settled
+    // "no achievements" gets an empty, still bar. See the compact pill.
+    final double? progress = knowsProgress && total > 0
+        ? awarded / total
+        : (total > 0 || isLoadingAchievements ? null : 0.0);
 
     final theme = Theme.of(context);
     final Color statusColor = noAchievements
@@ -456,7 +468,7 @@ class GameDetailsFooter extends StatelessWidget {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(4.r),
                           child: LinearProgressIndicator(
-                            value: isLoadingAchievements ? null : progress,
+                            value: progress,
                             minHeight: 5.r,
                             backgroundColor: theme.colorScheme.onSurface
                                 .withValues(alpha: 0.1),
