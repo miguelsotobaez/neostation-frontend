@@ -99,6 +99,21 @@ class RetroAchievementsResolver {
     required bool hasSpecificGenerator,
     String? md5Hash,
   }) async {
+    // Strategy 0: a match the user chose by hand wins over every automatic
+    // strategy, here as well as in RetroAchievementsHelper — otherwise the
+    // secondary display and the main UI disagree about which game is running.
+    final romPath = game.romPath;
+    if (romPath != null && romPath.isNotEmpty) {
+      try {
+        final manualId = await RetroAchievementsRepository.getManualRomRaGameId(
+          romPath,
+        );
+        if (manualId != null && manualId != 0) return manualId;
+      } catch (e) {
+        _log.e('RA resolver: manual match lookup failed: $e');
+      }
+    }
+
     // Strategy 1: exact hash match against the local RA database.
     if (md5Hash != null && md5Hash.isNotEmpty) {
       try {

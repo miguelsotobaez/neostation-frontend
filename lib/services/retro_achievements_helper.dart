@@ -101,6 +101,21 @@ class RetroAchievementsHelper {
     required SystemModel effectiveSystem,
     required bool isAllMode,
   }) async {
+    // Strategy 0: a match the user chose by hand wins over every automatic
+    // strategy. Without this the pick is stored and then overridden on the
+    // next read, because hashing re-derives the automatic answer every time.
+    final romPath = game.romPath;
+    if (romPath != null && romPath.isNotEmpty) {
+      try {
+        final manualId = await RetroAchievementsRepository.getManualRomRaGameId(
+          romPath,
+        );
+        if (manualId != null) return manualId;
+      } catch (e) {
+        _log.e('Manual match lookup failure: $e');
+      }
+    }
+
     // Strategy 1: Exact hash matching against the local RA database.
     if (md5Hash != null && md5Hash.isNotEmpty) {
       try {

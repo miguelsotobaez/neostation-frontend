@@ -169,6 +169,63 @@ void main() {
       );
     });
 
+    test('getManualRomRaGameId returns the id the user picked', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+      );
+      await RetroAchievementsRepository.setManualRomRaMatch(
+        '/roms/nes/a.nes',
+        555,
+      );
+
+      expect(
+        await RetroAchievementsRepository.getManualRomRaGameId(
+          '/roms/nes/a.nes',
+        ),
+        555,
+      );
+    });
+
+    test('getManualRomRaGameId ignores an automatic match', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+      );
+      await RetroAchievementsRepository.updateRomRaGameId(
+        '/roms/nes/a.nes',
+        1234,
+      );
+
+      // Only a hand-picked match may pre-empt hashing; an automatic id must
+      // stay re-derivable so a better snapshot can correct it.
+      expect(
+        await RetroAchievementsRepository.getManualRomRaGameId(
+          '/roms/nes/a.nes',
+        ),
+        isNull,
+      );
+    });
+
+    test('getManualRomRaGameId is null once the pick is cleared', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",
+      );
+      await RetroAchievementsRepository.setManualRomRaMatch(
+        '/roms/nes/a.nes',
+        555,
+      );
+
+      await RetroAchievementsRepository.clearManualRomRaMatch(
+        '/roms/nes/a.nes',
+      );
+
+      expect(
+        await RetroAchievementsRepository.getManualRomRaGameId(
+          '/roms/nes/a.nes',
+        ),
+        isNull,
+      );
+    });
+
     test('updateRomRaGameId does not overwrite a manual match', () async {
       await db.execute(
         "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('a.nes', '/roms/nes/a.nes', 'nes')",

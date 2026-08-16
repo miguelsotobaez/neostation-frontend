@@ -130,6 +130,26 @@ class RetroAchievementsRepository {
     );
   }
 
+  /// Returns the game id the user chose by hand for [romPath], or null when
+  /// the match was established automatically (or not at all).
+  ///
+  /// Every resolution path must consult this before hashing: the automatic
+  /// strategies re-derive an id from the ROM's hash on every read, so without
+  /// this check a hand-picked match is written to the database and then
+  /// silently ignored by the screen that offered the choice.
+  static Future<int?> getManualRomRaGameId(String romPath) async {
+    final db = await SqliteService.getDatabase();
+    final rows = await db.rawQuery(
+      'SELECT id_ra FROM user_roms '
+      'WHERE rom_path = ? AND ra_match_source = ? LIMIT 1',
+      [romPath, raMatchManual],
+    );
+    if (rows.isEmpty) return null;
+    final value = rows.first['id_ra'];
+    if (value == null) return null;
+    return int.tryParse(value.toString());
+  }
+
   /// Returns the match source for [romPath], or null if never matched.
   static Future<String?> getRomRaMatchSource(String romPath) async {
     final db = await SqliteService.getDatabase();
