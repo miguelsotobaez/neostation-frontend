@@ -287,45 +287,12 @@ class GameModel {
     FileProvider? fileProvider,
   ]) {
     if (fileProvider != null && fileProvider.isInitialized) {
-      final pngPath = fileProvider.getMediaPath(
+      final owned = _existingNeoStationImagePath(
+        fileProvider,
         systemFolderName,
         imageType,
-        romname,
-        'png',
       );
-      if (File(pngPath).existsSync()) {
-        return pngPath;
-      }
-      final jpgPath = fileProvider.getMediaPath(
-        systemFolderName,
-        imageType,
-        romname,
-        'jpg',
-      );
-      if (File(jpgPath).existsSync()) {
-        return jpgPath;
-      }
-
-      // Fallback for files with complex extensions (e.g., 'v1.11.zip').
-      final pngPathOriginal = path.join(
-        fileProvider.getMediaDirectoryPath(),
-        systemFolderName,
-        imageType,
-        '$romname.png',
-      );
-      if (File(pngPathOriginal).existsSync()) {
-        return pngPathOriginal;
-      }
-
-      final jpgPathOriginal = path.join(
-        fileProvider.getMediaDirectoryPath(),
-        systemFolderName,
-        imageType,
-        '$romname.jpg',
-      );
-      if (File(jpgPathOriginal).existsSync()) {
-        return jpgPathOriginal;
-      }
+      if (owned != null) return owned;
 
       // ES-DE read-time fallback: use the user's ES-DE downloaded_media art
       // when NeoStation has no art of its own. A later NeoStation scrape writes
@@ -340,10 +307,82 @@ class GameModel {
         }
       }
 
-      return pngPath;
+      return fileProvider.getMediaPath(
+        systemFolderName,
+        imageType,
+        romname,
+        'png',
+      );
     }
 
     // Manual filesystem lookup logic.
+    return _manualImagePath(systemFolderName, imageType);
+  }
+
+  /// Resolves the path new art for [imageType] must be *written* to.
+  ///
+  /// Always inside NeoStation's own `media/` directory: an existing NeoStation
+  /// file when there is one (so replacing art keeps the same file), otherwise
+  /// the default `.png` destination. Unlike [getImagePath] this never returns a
+  /// path inside ES-DE's `downloaded_media/`, which is the user's own library
+  /// and must stay untouched — writing there would destroy their ES-DE art
+  /// (e.g. a miximage) instead of shadowing it.
+  String getWritableImagePath(
+    String systemFolderName,
+    String imageType, [
+    FileProvider? fileProvider,
+  ]) {
+    if (fileProvider != null && fileProvider.isInitialized) {
+      return _existingNeoStationImagePath(
+            fileProvider,
+            systemFolderName,
+            imageType,
+          ) ??
+          fileProvider.getMediaPath(
+            systemFolderName,
+            imageType,
+            romname,
+            'png',
+          );
+    }
+
+    return _manualImagePath(systemFolderName, imageType);
+  }
+
+  /// The existing NeoStation-owned media file for [imageType], or null when
+  /// NeoStation has no art of its own for this ROM.
+  String? _existingNeoStationImagePath(
+    FileProvider fileProvider,
+    String systemFolderName,
+    String imageType,
+  ) {
+    for (final extension in const ['png', 'jpg']) {
+      final candidate = fileProvider.getMediaPath(
+        systemFolderName,
+        imageType,
+        romname,
+        extension,
+      );
+      if (File(candidate).existsSync()) return candidate;
+    }
+
+    // Fallback for files with complex extensions (e.g., 'v1.11.zip').
+    for (final extension in const ['png', 'jpg']) {
+      final candidate = path.join(
+        fileProvider.getMediaDirectoryPath(),
+        systemFolderName,
+        imageType,
+        '$romname.$extension',
+      );
+      if (File(candidate).existsSync()) return candidate;
+    }
+
+    return null;
+  }
+
+  /// Relative-path lookup used when no initialized [FileProvider] is available.
+  /// Resolves inside NeoStation's `media/` folder only.
+  String _manualImagePath(String systemFolderName, String imageType) {
     final baseName = _stripRomExtension(romname);
 
     final pngRelativePath = path.join(
