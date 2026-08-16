@@ -99,5 +99,43 @@ void main() {
         isEmpty,
       );
     });
+
+    test('never offers a miximage for any media type', () {
+      // Miximages are composites (screenshot + box + marquee baked together),
+      // so they misrepresent every slot NeoStation renders — worst of all the
+      // fanart background, over which the wheel is drawn a second time.
+      for (final type in const [
+        'box2d',
+        'wheels',
+        'screenshots',
+        'fanarts',
+        'videos',
+      ]) {
+        expect(
+          provider.getEsdeMediaCandidates('snes', type, 'sonic.smc'),
+          isNot(contains(contains('miximages'))),
+          reason: '$type must not fall back to an ES-DE miximage',
+        );
+      }
+    });
+
+    test('screenshots fall back to titlescreens only', () {
+      expect(
+        provider.getEsdeMediaCandidates('snes', 'screenshots', 'sonic.smc'),
+        [
+          '/esde/downloaded_media/snes/screenshots/sonic.png',
+          '/esde/downloaded_media/snes/screenshots/sonic.jpg',
+          '/esde/downloaded_media/snes/titlescreens/sonic.png',
+          '/esde/downloaded_media/snes/titlescreens/sonic.jpg',
+        ],
+      );
+    });
+
+    test('fanarts resolve from the fanart category alone', () {
+      expect(provider.getEsdeMediaCandidates('snes', 'fanarts', 'sonic.smc'), [
+        '/esde/downloaded_media/snes/fanart/sonic.png',
+        '/esde/downloaded_media/snes/fanart/sonic.jpg',
+      ]);
+    });
   });
 }
