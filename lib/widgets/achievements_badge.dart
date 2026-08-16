@@ -44,6 +44,12 @@ class AchievementsBadge extends StatelessWidget {
       game.raCoverage == RaCoverage.matched &&
       (game.raNumAchievements ?? 0) > 0;
 
+  /// Trophy and count share one colour on purpose: the badge sits on artwork
+  /// that is already busy, so it reads as a single mark rather than an icon with
+  /// a label stuck to it. A coloured trophy also competes with the box art it is
+  /// drawn over, and there is no second state for a colour to distinguish.
+  static const Color _plateForeground = Colors.white;
+
   @override
   Widget build(BuildContext context) {
     if (!showsFor(game)) return const SizedBox.shrink();
@@ -70,13 +76,13 @@ class AchievementsBadge extends StatelessWidget {
             Icon(
               Symbols.emoji_events_rounded,
               size: 12.r,
-              color: Colors.orangeAccent,
+              color: _plateForeground,
             ),
             SizedBox(width: 3.r),
             Text(
               '$total',
               style: TextStyle(
-                color: Colors.white,
+                color: _plateForeground,
                 fontSize: 9.r,
                 fontWeight: FontWeight.w700,
               ),

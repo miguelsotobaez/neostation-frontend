@@ -376,9 +376,12 @@ class GameListViewState extends State<GameListView>
                                     padding: EdgeInsets.only(left: 4.r),
                                     child: AchievementsBadge.inline(
                                       game: game,
+                                      // The same colour as the row's title, so
+                                      // the trophy reads as part of the line
+                                      // rather than a warning next to it.
                                       color: isSelected
                                           ? theme.colorScheme.onPrimary
-                                          : Colors.orangeAccent,
+                                          : theme.colorScheme.onSurface,
                                     ),
                                   ),
                               ],
