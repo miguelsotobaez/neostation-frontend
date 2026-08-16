@@ -65,40 +65,6 @@ enum _FocusRegion { search, filters, results, filterMenu, action }
 /// as a local one.
 enum _ResultAction { goTo, play, download }
 
-/// One line in the results list.
-///
-/// Local games, the "On RomM" divider, remote ROMs and the remote section's
-/// loading / error / load-more line all share a single flat list so the
-/// existing index-based gamepad navigation and fixed-extent scroll maths keep
-/// working unchanged. Rows the user can't focus (the header, the spinner) are
-/// simply left out of the focusable index.
-sealed class _ResultRow {
-  const _ResultRow();
-}
-
-class _LocalRow extends _ResultRow {
-  const _LocalRow(this.game);
-  final DatabaseGameModel game;
-}
-
-class _RemoteHeaderRow extends _ResultRow {
-  const _RemoteHeaderRow();
-}
-
-class _RemoteRow extends _ResultRow {
-  const _RemoteRow(this.rom);
-  final RommRom rom;
-}
-
-/// The remote section's trailing line: a spinner, an error, "load more", or a
-/// note that the active filters can't be applied to RomM results.
-enum _RemoteStatus { loading, error, loadMore, unsupported, noEquivalent }
-
-class _RemoteStatusRow extends _ResultRow {
-  const _RemoteStatusRow(this.status);
-  final _RemoteStatus status;
-}
-
 class _SearchScreenState extends State<SearchScreen> {
   late GamepadNavigation _gamepadNav;
 
@@ -210,8 +176,10 @@ class _SearchScreenState extends State<SearchScreen> {
   final Map<int, bool> _remoteDownloaded = {};
 
   /// Rows as rendered, and the subset of their indices that can take focus.
-  List<_ResultRow> _rows = const [];
-  List<int> _focusable = const [];
+  ///
+  /// [_resultIndex] is a position in `_rowModel.focusable`, never in
+  /// `_rowModel.rows` — see [ResultRows].
+  ResultRows _rowModel = ResultRows.empty;
 
   // Resolved box-art path per ROM (null == no art); see [_resolveBoxArt].
   final Map<String, String?> _artCache = {};
@@ -348,56 +316,27 @@ class _SearchScreenState extends State<SearchScreen> {
     _searchIndex = _searchIndex.clamp(0, _lastSearchIndex);
   }
 
-  /// Rebuilds the flat row list from the local results plus the RomM section,
-  /// keeping the focused row index in range.
-  ///
-  /// The chip filters deliberately do not narrow the RomM section: [RommRom]
-  /// carries no developer, year or rating, so applying those criteria remotely
-  /// would silently drop everything. Remote results answer the text query only,
-  /// which is also all the server itself matches on.
+  /// Rebuilds the flat row list via [buildResultRows], keeping the focused row
+  /// index in range.
   void _rebuildRows() {
-    final rows = <_ResultRow>[..._results.map(_LocalRow.new)];
-
-    if (_remoteSectionVisible) {
-      rows.add(const _RemoteHeaderRow());
-
-      if (!_criteria.rommFilterable) {
-        // A rating filter is active and can't be evaluated remotely; say so
-        // instead of listing rows the filter never touched.
-        rows.add(const _RemoteStatusRow(_RemoteStatus.unsupported));
-      } else if (_remoteUnmatchedFilter != null) {
-        rows.add(const _RemoteStatusRow(_RemoteStatus.noEquivalent));
-      } else {
-        rows.addAll(_visibleRemote.map(_RemoteRow.new));
-        if (_remoteError != null) {
-          rows.add(const _RemoteStatusRow(_RemoteStatus.error));
-        } else if (_remoteLoading) {
-          rows.add(const _RemoteStatusRow(_RemoteStatus.loading));
-        } else if (_remoteHasMore) {
-          rows.add(const _RemoteStatusRow(_RemoteStatus.loadMore));
-        }
-      }
-    }
-
-    _rows = rows;
-    _focusable = [
-      for (var i = 0; i < rows.length; i++)
-        if (_isFocusableRow(rows[i])) i,
-    ];
+    _rowModel = buildResultRows(
+      results: _results,
+      remoteSectionVisible: _remoteSectionVisible,
+      rommFilterable: _criteria.rommFilterable,
+      unmatchedFilter: _remoteUnmatchedFilter,
+      visibleRemote: _visibleRemote,
+      hasError: _remoteError != null,
+      isLoading: _remoteLoading,
+      hasMore: _remoteHasMore,
+    );
 
     if (_resultIndex >= _focusable.length) {
       _resultIndex = _focusable.isEmpty ? 0 : _focusable.length - 1;
     }
   }
 
-  /// Headers and the spinner are skipped by Up/Down; everything else stops.
-  bool _isFocusableRow(_ResultRow row) => switch (row) {
-    _LocalRow() => true,
-    _RemoteRow() => true,
-    _RemoteStatusRow(:final status) =>
-      status == _RemoteStatus.loadMore || status == _RemoteStatus.error,
-    _RemoteHeaderRow() => false,
-  };
+  List<ResultRow> get _rows => _rowModel.rows;
+  List<int> get _focusable => _rowModel.focusable;
 
   /// Fetched RomM results that survive the filters RomM couldn't apply itself.
   ///
@@ -487,8 +426,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// The row currently holding focus, or null when the list is empty.
-  _ResultRow? get _focusedRow =>
-      _resultIndex < _focusable.length ? _rows[_focusable[_resultIndex]] : null;
+  ResultRow? get _focusedRow => _rowModel.rowAtSelection(_resultIndex);
 
   // ── RomM search ───────────────────────────────────────────────────────────
 
@@ -916,10 +854,10 @@ class _SearchScreenState extends State<SearchScreen> {
     final row = _focusedRow;
     switch (row) {
       case null:
-      case _RemoteHeaderRow():
+      case RemoteHeaderRow():
         return;
 
-      case _LocalRow(:final game):
+      case LocalRow(:final game):
         setState(() {
           _actionTarget = game;
           _actionRemoteTarget = null;
@@ -929,16 +867,16 @@ class _SearchScreenState extends State<SearchScreen> {
         });
         SfxService().playNavSound();
 
-      case _RemoteStatusRow(:final status):
+      case RemoteStatusRow(:final status):
         // The error row doubles as a retry button.
-        if (status == _RemoteStatus.error) {
+        if (status == RemoteStatus.error) {
           _runRemoteSearch(reset: true);
-        } else if (status == _RemoteStatus.loadMore) {
+        } else if (status == RemoteStatus.loadMore) {
           _loadMoreRemote();
         }
         SfxService().playNavSound();
 
-      case _RemoteRow(:final rom):
+      case RemoteRow(:final rom):
         SfxService().playNavSound();
         final local = (_remoteDownloaded[rom.id] ?? false)
             ? await _localGameForRemote(rom)
@@ -1215,20 +1153,22 @@ class _SearchScreenState extends State<SearchScreen> {
     SfxService().playNavSound();
   }
 
-  /// Touch handler for a result row.
+  /// Touch handler for a result row, keyed by its index in [_rows].
   ///
   /// Follows the same two-step contract as the games list/grid: touch users
   /// have no A button, so the first tap only moves the selection onto the row
-  /// and a second tap on that same row confirms it — here opening the
-  /// Go-to-game / Play chooser, exactly as [_handleSelect] does.
-  void _handleResultTap(int index) {
+  /// and a second tap on that same row confirms it. The confirm hands off to
+  /// [_selectFocusedRow] rather than opening the chooser itself, so touch and
+  /// the A button always offer the same actions for a given row.
+  void _handleResultTap(int rowIndex) {
+    // Selection is tracked as an index into _focusable, not into _rows: the
+    // RomM header is rendered but not selectable, so the two diverge as soon
+    // as remote results are on screen.
+    final index = _rowModel.focusableIndexOfRow(rowIndex);
+    if (index < 0) return;
+
     if (_region == _FocusRegion.results && _resultIndex == index) {
-      SfxService().playEnterSound();
-      setState(() {
-        _actionTarget = _results[index];
-        _actionIndex = 0;
-        _region = _FocusRegion.action;
-      });
+      _selectFocusedRow();
       return;
     }
 
@@ -2063,10 +2003,10 @@ class _SearchScreenState extends State<SearchScreen> {
       itemExtent: _resultExtent.r,
       itemCount: _rows.length,
       itemBuilder: (context, index) => switch (_rows[index]) {
-        _LocalRow(:final game) => _buildResultTile(theme, game, index),
-        _RemoteHeaderRow() => _buildRemoteHeader(theme),
-        _RemoteRow(:final rom) => _buildRemoteTile(theme, rom, index),
-        _RemoteStatusRow(:final status) => _buildRemoteStatus(
+        LocalRow(:final game) => _buildResultTile(theme, game, index),
+        RemoteHeaderRow() => _buildRemoteHeader(theme),
+        RemoteRow(:final rom) => _buildRemoteTile(theme, rom, index),
+        RemoteStatusRow(:final status) => _buildRemoteStatus(
           theme,
           status,
           index,
@@ -2126,11 +2066,11 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// The RomM section's trailing line: spinner, tappable error, or load-more.
-  Widget _buildRemoteStatus(ThemeData theme, _RemoteStatus status, int index) {
+  Widget _buildRemoteStatus(ThemeData theme, RemoteStatus status, int index) {
     final scheme = theme.colorScheme;
     final isFocused = _rowFocused(index);
 
-    if (status == _RemoteStatus.loading) {
+    if (status == RemoteStatus.loading) {
       return Center(
         child: SizedBox(
           width: 18.r,
@@ -2140,9 +2080,9 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    if (status == _RemoteStatus.unsupported ||
-        status == _RemoteStatus.noEquivalent) {
-      final text = status == _RemoteStatus.unsupported
+    if (status == RemoteStatus.unsupported ||
+        status == RemoteStatus.noEquivalent) {
+      final text = status == RemoteStatus.unsupported
           ? AppLocale.searchRatingLocalOnly.getString(context)
           : AppLocale.searchNoRommEquivalent
                 .getString(context)
@@ -2172,7 +2112,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    final isError = status == _RemoteStatus.error;
+    final isError = status == RemoteStatus.error;
     return GestureDetector(
       onTap: () => isError ? _runRemoteSearch(reset: true) : _loadMoreRemote(),
       child: Padding(
@@ -2238,63 +2178,67 @@ class _SearchScreenState extends State<SearchScreen> {
       if (rom.genre != null && rom.genre!.trim().isNotEmpty) rom.genre!.trim(),
     ];
 
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 3.r),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 6.r),
-        decoration: BoxDecoration(
-          color: isFocused
-              ? scheme.primary.withValues(alpha: 0.18)
-              : scheme.surface.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: isFocused ? scheme.primary : Colors.transparent,
-            width: 2.r,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _handleResultTap(index),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 3.r),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 6.r),
+          decoration: BoxDecoration(
+            color: isFocused
+                ? scheme.primary.withValues(alpha: 0.18)
+                : scheme.surface.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(
+              color: isFocused ? scheme.primary : Colors.transparent,
+              width: 2.r,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            _buildRemoteCover(theme, rom),
-            SizedBox(width: 10.r),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    rom.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.r,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                  if (subtitleParts.isNotEmpty)
+          child: Row(
+            children: [
+              _buildRemoteCover(theme, rom),
+              SizedBox(width: 10.r),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitleParts.join('  •  '),
+                      rom.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11.r,
-                        color: scheme.onSurface.withValues(alpha: 0.6),
+                        fontSize: 13.r,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
                       ),
                     ),
-                ],
+                    if (subtitleParts.isNotEmpty)
+                      Text(
+                        subtitleParts.join('  •  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.r,
+                          color: scheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            SizedBox(width: 8.r),
-            Icon(
-              downloaded
-                  ? Symbols.check_circle_rounded
-                  : Symbols.cloud_download_rounded,
-              size: 16.r,
-              color: downloaded
-                  ? scheme.primary
-                  : scheme.onSurface.withValues(alpha: 0.45),
-            ),
-          ],
+              SizedBox(width: 8.r),
+              Icon(
+                downloaded
+                    ? Symbols.check_circle_rounded
+                    : Symbols.cloud_download_rounded,
+                size: 16.r,
+                color: downloaded
+                    ? scheme.primary
+                    : scheme.onSurface.withValues(alpha: 0.45),
+              ),
+            ],
+          ),
         ),
       ),
     );

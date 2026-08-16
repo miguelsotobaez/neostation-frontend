@@ -1,4 +1,5 @@
 import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/romm_rom.dart';
 
 /// Pure search / filter logic backing the library-wide [SearchScreen].
 ///
@@ -343,6 +344,126 @@ List<int> _ratingFacet(List<DatabaseGameModel> games, SearchCriteria criteria) {
   final active = criteria.rating;
   if (active != null) scores.add(active);
   return scores.toList()..sort();
+}
+
+/// One line in the results list.
+///
+/// Local games, the "On RomM" divider, remote ROMs and the remote section's
+/// loading / error / load-more line all share a single flat list so the
+/// existing index-based gamepad navigation and fixed-extent scroll maths keep
+/// working unchanged. Rows the user can't focus (the header, the spinner) are
+/// simply left out of the focusable index.
+sealed class ResultRow {
+  const ResultRow();
+}
+
+class LocalRow extends ResultRow {
+  const LocalRow(this.game);
+  final DatabaseGameModel game;
+}
+
+class RemoteHeaderRow extends ResultRow {
+  const RemoteHeaderRow();
+}
+
+class RemoteRow extends ResultRow {
+  const RemoteRow(this.rom);
+  final RommRom rom;
+}
+
+/// The remote section's trailing line: a spinner, an error, "load more", or a
+/// note that the active filters can't be applied to RomM results.
+enum RemoteStatus { loading, error, loadMore, unsupported, noEquivalent }
+
+class RemoteStatusRow extends ResultRow {
+  const RemoteStatusRow(this.status);
+  final RemoteStatus status;
+}
+
+/// Headers and the spinner are skipped by Up/Down; everything else stops.
+bool isFocusableRow(ResultRow row) => switch (row) {
+  LocalRow() => true,
+  RemoteRow() => true,
+  RemoteStatusRow(:final status) =>
+    status == RemoteStatus.loadMore || status == RemoteStatus.error,
+  RemoteHeaderRow() => false,
+};
+
+/// The rendered rows plus the subset of their indices that can take focus.
+///
+/// The two index spaces are deliberately separate and must not be used
+/// interchangeably: [rows] is what the list builder renders, while selection is
+/// tracked as a position in [focusable]. They coincide only while the results
+/// are local-only — as soon as the unfocusable RomM header is present, every
+/// row below it sits at a different index in each. Translate with
+/// [focusableIndexOfRow].
+class ResultRows {
+  const ResultRows({required this.rows, required this.focusable});
+
+  final List<ResultRow> rows;
+  final List<int> focusable;
+
+  static const ResultRows empty = ResultRows(rows: [], focusable: []);
+
+  /// The selection index for a row at [rowIndex] in [rows], or -1 when that row
+  /// can't take focus (the RomM header, the spinner).
+  int focusableIndexOfRow(int rowIndex) => focusable.indexOf(rowIndex);
+
+  /// The row [selectionIndex] points at, or null when the list is empty.
+  ResultRow? rowAtSelection(int selectionIndex) =>
+      selectionIndex >= 0 && selectionIndex < focusable.length
+      ? rows[focusable[selectionIndex]]
+      : null;
+}
+
+/// Builds the flat row list from the local results plus the RomM section.
+///
+/// The chip filters deliberately do not narrow the RomM section beyond what
+/// [visibleRemote] already carries: [RommRom] has no rating, so applying that
+/// criterion remotely would silently drop everything. The caller reports that
+/// case through [rommFilterable] instead, and a filter value RomM's vocabulary
+/// has no entry for through [unmatchedFilter] — each replaces the remote rows
+/// with a single explanatory line rather than an unexplained empty list.
+ResultRows buildResultRows({
+  required List<DatabaseGameModel> results,
+  bool remoteSectionVisible = false,
+  bool rommFilterable = true,
+  String? unmatchedFilter,
+  List<RommRom> visibleRemote = const [],
+  bool hasError = false,
+  bool isLoading = false,
+  bool hasMore = false,
+}) {
+  final rows = <ResultRow>[...results.map(LocalRow.new)];
+
+  if (remoteSectionVisible) {
+    rows.add(const RemoteHeaderRow());
+
+    if (!rommFilterable) {
+      // A rating filter is active and can't be evaluated remotely; say so
+      // instead of listing rows the filter never touched.
+      rows.add(const RemoteStatusRow(RemoteStatus.unsupported));
+    } else if (unmatchedFilter != null) {
+      rows.add(const RemoteStatusRow(RemoteStatus.noEquivalent));
+    } else {
+      rows.addAll(visibleRemote.map(RemoteRow.new));
+      if (hasError) {
+        rows.add(const RemoteStatusRow(RemoteStatus.error));
+      } else if (isLoading) {
+        rows.add(const RemoteStatusRow(RemoteStatus.loading));
+      } else if (hasMore) {
+        rows.add(const RemoteStatusRow(RemoteStatus.loadMore));
+      }
+    }
+  }
+
+  return ResultRows(
+    rows: rows,
+    focusable: [
+      for (var i = 0; i < rows.length; i++)
+        if (isFocusableRow(rows[i])) i,
+    ],
+  );
 }
 
 /// Cycles through [options] with an "Any" (null) slot at the head, moving by
