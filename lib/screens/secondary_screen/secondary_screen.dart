@@ -667,6 +667,19 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     }
   }
 
+  /// Whether the game layer is currently showing letterboxed media, so the
+  /// bars around it need [buildMediaMatte] instead of the theme background.
+  ///
+  /// True for the preview video and for the contain-fitted screenshot (either
+  /// source: pushed bytes or a file path). Deliberately false for the
+  /// fanart/logo fallback — fanart is cover-fitted so it leaves no bars, and a
+  /// logo-only game is just a wheel centred on the app background, which the
+  /// matte would darken for no gain.
+  bool _showsLetterboxedMedia(SecondaryDisplayStateData value) =>
+      (_showVideo && _videoController != null) ||
+      value.gameImageBytes != null ||
+      value.gameScreenshot != null;
+
   @override
   void dispose() {
     // Shared singleton — detach our listener, never dispose the instance.
@@ -867,6 +880,13 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                               Stack(
                                 fit: StackFit.expand,
                                 children: [
+                                  // Backs the letterboxed media below, so the
+                                  // bars around a 4:3 snap aren't the theme's
+                                  // (possibly white) background.
+                                  buildMediaMatte(
+                                    context,
+                                    visible: _showsLetterboxedMedia(value),
+                                  ),
                                   AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 256),
                                     transitionBuilder: (child, animation) =>

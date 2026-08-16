@@ -40,6 +40,40 @@ Widget buildDefaultBackground() {
   return const SizedBox.shrink();
 }
 
+/// How far the media matte blends the theme background towards black.
+const double _matteBlend = 0.88;
+
+/// Dark matte for letterboxed game media — the preview video and the
+/// contain-fitted screenshot — drawn above the app background and below the
+/// media itself.
+///
+/// Without it the bars around a 4:3 snap on this wide panel show the theme's
+/// background, so a light theme frames a dark, moving video in white: the eye
+/// adapts to the bright surround and the video reads as muddy. Blending the
+/// theme background most of the way to black keeps a hint of the user's theme
+/// rather than punching a black hole in the UI, and is a no-op for the dark and
+/// OLED themes that already sit near black.
+///
+/// A flat [ColoredBox] rather than a blurred copy of the frame: compositing
+/// over this panel's video layer is what stalled the main display's raster
+/// thread before, so the backdrop stays free of extra layers.
+///
+/// Fades on the same 256ms curve as the media it backs, so a screenshot giving
+/// way to the video stays a single crossfade.
+Widget buildMediaMatte(BuildContext context, {required bool visible}) {
+  return AnimatedOpacity(
+    opacity: visible ? 1.0 : 0.0,
+    duration: const Duration(milliseconds: 256),
+    child: ColoredBox(
+      color: Color.lerp(
+        Theme.of(context).scaffoldBackgroundColor,
+        Colors.black,
+        _matteBlend,
+      )!,
+    ),
+  );
+}
+
 /// Offset of the wheel logo's drop shadow on the secondary display.
 ///
 /// Derived from the main screen's treatment rather than picked by eye: it
