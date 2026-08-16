@@ -14,6 +14,7 @@ import '../../providers/sqlite_config_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../utils/rom_tree.dart';
+import '../../widgets/achievements_badge.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
 
@@ -370,6 +371,16 @@ class GameListViewState extends State<GameListView>
                                     ),
                                   ),
                                 ),
+                                if (AchievementsBadge.showsFor(game))
+                                  Padding(
+                                    padding: EdgeInsets.only(left: 4.r),
+                                    child: AchievementsBadge.inline(
+                                      game: game,
+                                      color: isSelected
+                                          ? theme.colorScheme.onPrimary
+                                          : Colors.orangeAccent,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

@@ -16,6 +16,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/letter_jump.dart';
 import 'package:neostation/screens/app_screen.dart';
+import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
@@ -848,6 +849,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
+            if (AchievementsBadge.showsFor(game))
+              Positioned(
+                top: 8.r,
+                left: 8.r,
+                child: AchievementsBadge(game: game),
+              ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               Positioned(
                 left: 0,
@@ -1123,6 +1130,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
+            if (AchievementsBadge.showsFor(game))
+              Positioned(
+                top: 8.r,
+                left: 8.r,
+                child: AchievementsBadge(game: game),
+              ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               _buildScrapeProgress(game),
           ],
@@ -1190,6 +1203,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
                           color: Colors.redAccent,
                         ),
                       ),
+                    ),
+                  if (AchievementsBadge.showsFor(game))
+                    Positioned(
+                      top: 8.r,
+                      left: 8.r,
+                      child: AchievementsBadge(game: game),
                     ),
                   if (widget.scrapingGameRomnames.contains(game.romname))
                     Positioned(

@@ -13,6 +13,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_utils.dart';
+import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
@@ -1447,6 +1448,12 @@ class _GamesGridState extends State<GamesGrid> {
                   ),
                 ),
               ),
+            if (AchievementsBadge.showsFor(game))
+              Positioned(
+                top: 6.r,
+                left: 6.r,
+                child: AchievementsBadge(game: game),
+              ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               Positioned(
                 left: 0,
@@ -1612,6 +1619,12 @@ class _GamesGridState extends State<GamesGrid> {
                         color: Colors.redAccent,
                       ),
                     ),
+                  ),
+                if (AchievementsBadge.showsFor(game))
+                  Positioned(
+                    top: 6.r,
+                    left: 6.r,
+                    child: AchievementsBadge(game: game),
                   ),
                 if (widget.scrapingGameRomnames.contains(game.romname))
                   Positioned(
