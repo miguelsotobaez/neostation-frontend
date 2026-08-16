@@ -425,7 +425,11 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         _game = widget.game;
         _cloudSyncEnabled = _game.cloudSyncEnabled ?? true;
         _currentGameInfo = null;
-        _isLoadingAchievements = false;
+        // Nothing has been asked about this game yet — and during a fast scroll
+        // the lookup below is deferred entirely, so the answer may be a while
+        // coming. Saying "not loading" here let the footer read a null
+        // gameInfo as "no achievements" for every game the cursor passed over.
+        _isLoadingAchievements = true;
 
         if (_effectiveSystem.folderName == 'android') {
           _androidAppIconFuture = AndroidService.getAppIcon(
