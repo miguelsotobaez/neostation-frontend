@@ -175,6 +175,9 @@ mixin AppLocale {
   static const String sfxVolumeHigh = 'sfx_volume_high';
   static const String use12HourClock = 'use_12_hour_clock';
   static const String use12HourClockSubtitle = 'use_12_hour_clock_subtitle';
+  static const String showAchievementsBadge = 'show_achievements_badge';
+  static const String showAchievementsBadgeSubtitle =
+      'show_achievements_badge_subtitle';
   static const String fullscreenMode = 'fullscreen_mode';
   static const String fullscreenModeSubtitle = 'fullscreen_mode_subtitle';
   static const String allFilesAccess = 'all_files_access';

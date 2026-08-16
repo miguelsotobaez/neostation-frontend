@@ -202,6 +202,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // SFX Sounds
     count++; // SFX volume (dimmed, but still navigable, while SFX are off)
     count++; // 12-Hour Clock
+    count++; // Achievement badges on game tiles
     count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
@@ -289,6 +290,15 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     if (index == currentItemIndex) {
       configProvider.updateUse12HourClock(
         !configProvider.config.use12HourClock,
+      );
+      return;
+    }
+    currentItemIndex++;
+
+    // Protocol: Achievement badges on game tiles.
+    if (index == currentItemIndex) {
+      configProvider.updateShowAchievementsBadge(
+        !configProvider.config.showAchievementsBadge,
       );
       return;
     }
@@ -615,6 +625,32 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                         context
                             .read<SqliteConfigProvider>()
                             .updateUse12HourClock(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Achievement badges on game tiles.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    onTap: () => selectItem(index),
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.showAchievementsBadge.getString(context),
+                    subtitle: AppLocale.showAchievementsBadgeSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.showAchievementsBadge,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateShowAchievementsBadge(value);
                       },
                       activeColor: theme.colorScheme.primary,
                     ),

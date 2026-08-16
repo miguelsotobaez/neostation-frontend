@@ -165,6 +165,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.use12HourClock: '12-часовой формат',
   AppLocale.use12HourClockSubtitle:
       'Показывать время в 12-часовом формате с AM/PM вместо 24-часового',
+  AppLocale.showAchievementsBadge: 'Значки достижений',
+  AppLocale.showAchievementsBadgeSubtitle:
+      'Показывать количество достижений на играх, сопоставленных с RetroAchievements',
   AppLocale.fullscreenMode: 'Полноэкранный режим',
   AppLocale.fullscreenModeSubtitle:
       'Отображать приложение в полноэкранном режиме',

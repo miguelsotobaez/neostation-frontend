@@ -110,6 +110,11 @@ class _GamesGridState extends State<GamesGrid> {
   int _crossAxisCount = 5;
   bool _isNavigatingFast = false;
 
+  // Read once per build from the user's setting rather than per tile: the tile
+  // builders run for every visible card, and a `context.select` there would
+  // subscribe each one of them separately.
+  bool _showAchievementsBadge = false;
+
   // RetroAchievements info for the selected game (shown in the footer pill).
   GameInfoAndUserProgress? _currentGameInfo;
   bool _isLoadingAchievements = false;
@@ -1043,6 +1048,13 @@ class _GamesGridState extends State<GamesGrid> {
 
   @override
   Widget build(BuildContext context) {
+    // `select` rather than `watch`: the grid is the perf-sensitive view, and
+    // watching the whole config would rebuild it on every unrelated settings
+    // write — including the details-card tab, which persists on each L1/R1.
+    _showAchievementsBadge = context.select<SqliteConfigProvider, bool>(
+      (p) => p.config.showAchievementsBadge,
+    );
+
     if (widget.games.isEmpty) {
       return Center(
         child: Column(
@@ -1455,7 +1467,7 @@ class _GamesGridState extends State<GamesGrid> {
                   ),
                 ),
               ),
-            if (AchievementsBadge.showsFor(game))
+            if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
               Positioned(
                 top: 6.r,
                 left: 6.r,
@@ -1627,7 +1639,7 @@ class _GamesGridState extends State<GamesGrid> {
                       ),
                     ),
                   ),
-                if (AchievementsBadge.showsFor(game))
+                if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
                   Positioned(
                     top: 6.r,
                     left: 6.r,

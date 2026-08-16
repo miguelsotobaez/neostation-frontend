@@ -179,6 +179,14 @@ class ConfigModel {
   /// by the ES-DE import and read-time fallback artwork resolution.
   final String esdeFolderPath;
 
+  /// Whether library tiles show the RetroAchievements achievement count.
+  ///
+  /// Off by default: the badge only appears on ROMs matched to a
+  /// RetroAchievements game, so before the match tool has run it would be
+  /// missing from nearly every tile and read as a broken feature rather than an
+  /// empty one.
+  final bool showAchievementsBadge;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -221,6 +229,7 @@ class ConfigModel {
     this.dockEnabled = true,
     this.dockSlotCount = 3,
     this.esdeFolderPath = '',
+    this.showAchievementsBadge = false,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -405,6 +414,16 @@ class ConfigModel {
               .clamp(dockMinSlotCount, dockMaxSlotCount),
       esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
           .toString(),
+      // Absent key => 0 => off, which is also the column default: a config
+      // written before the badge existed leaves the feature opt-in.
+      showAchievementsBadge:
+          (json['showAchievementsBadge'] ??
+                      json['show_achievements_badge'] ??
+                      0)
+                  .toString() ==
+              '1' ||
+          (json['showAchievementsBadge'] ?? false).toString().toLowerCase() ==
+              'true',
     );
   }
 
@@ -457,6 +476,7 @@ class ConfigModel {
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
       'esdeFolderPath': esdeFolderPath,
+      'showAchievementsBadge': showAchievementsBadge,
     };
   }
 
@@ -503,6 +523,7 @@ class ConfigModel {
     bool? dockEnabled,
     int? dockSlotCount,
     String? esdeFolderPath,
+    bool? showAchievementsBadge,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -547,6 +568,8 @@ class ConfigModel {
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
       esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
+      showAchievementsBadge:
+          showAchievementsBadge ?? this.showAchievementsBadge,
     );
   }
 

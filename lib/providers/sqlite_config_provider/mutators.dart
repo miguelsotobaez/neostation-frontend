@@ -84,6 +84,13 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether library tiles show the RetroAchievements badge.
+  Future<void> updateShowAchievementsBadge(bool value) async {
+    _config = _config.copyWith(showAchievementsBadge: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Persists whether the game action-button legend is hidden (Select + B).
   Future<void> updateLegendHidden(bool value) async {
     _config = _config.copyWith(legendHidden: value);

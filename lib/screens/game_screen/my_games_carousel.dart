@@ -108,6 +108,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
   int _currentIndex = 0;
   late GamepadNavigation _gamepadNav;
 
+  // Set from the config this view already watches in build(); the card builders
+  // below read it rather than looking the provider up per card.
+  bool _showAchievementsBadge = false;
+
   // RetroAchievements info for the selected game (shown in the footer pill).
   GameInfoAndUserProgress? _currentGameInfo;
   bool _isLoadingAchievements = false;
@@ -856,7 +860,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
-            if (AchievementsBadge.showsFor(game))
+            if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
               Positioned(
                 top: 8.r,
                 left: 8.r,
@@ -1137,7 +1141,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
-            if (AchievementsBadge.showsFor(game))
+            if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
               Positioned(
                 top: 8.r,
                 left: 8.r,
@@ -1211,7 +1215,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
                         ),
                       ),
                     ),
-                  if (AchievementsBadge.showsFor(game))
+                  if (_showAchievementsBadge &&
+                      AchievementsBadge.showsFor(game))
                     Positioned(
                       top: 8.r,
                       left: 8.r,
@@ -1250,6 +1255,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
     final config = context.watch<SqliteConfigProvider>().config;
     final isFanart = config.gameCarouselCardStyle != 'box';
+    _showAchievementsBadge = config.showAchievementsBadge;
     final theme = Theme.of(context);
     final currentGame =
         widget.games[_currentIndex.clamp(0, widget.games.length - 1)];

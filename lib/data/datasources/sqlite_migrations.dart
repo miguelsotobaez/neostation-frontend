@@ -484,6 +484,9 @@ class SqliteMigrations {
       case 127:
         await _migrateToVersion127(db);
         break;
+      case 128:
+        await _migrateToVersion128(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -5991,6 +5994,37 @@ class SqliteMigrations {
       _log.i('Migration v127 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v127: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v128: Adds `user_config.show_achievements_badge`, the opt-in for
+  /// the achievement count drawn on library tiles.
+  ///
+  /// Defaults to 0 — off. The badge is only as complete as the library's
+  /// RetroAchievements matching, so on a library nothing has hashed yet it
+  /// would be absent from almost every tile and read as broken. Users who have
+  /// run the match tool turn it on.
+  ///
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion128(Database db) async {
+    _log.i('Migration v128: Adding show_achievements_badge to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('show_achievements_badge')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN show_achievements_badge '
+          'INTEGER DEFAULT 0',
+        );
+        _log.i('Column show_achievements_badge added via v128');
+      } else {
+        _log.i('Column show_achievements_badge already exists');
+      }
+      _log.i('Migration v128 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v128: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

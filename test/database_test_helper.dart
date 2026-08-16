@@ -148,7 +148,8 @@ class DatabaseTestHelper {
         dock_slot_count INTEGER DEFAULT 3,
         now_playing_dim_delay INTEGER DEFAULT 3,
         now_playing_dim_level INTEGER DEFAULT 100,
-        fanart_dim_level INTEGER DEFAULT 25
+        fanart_dim_level INTEGER DEFAULT 25,
+        show_achievements_badge INTEGER DEFAULT 0
       )
     ''');
 

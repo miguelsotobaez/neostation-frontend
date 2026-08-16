@@ -141,6 +141,9 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.sfxVolumeHigh: '大',
   AppLocale.use12HourClock: '12時間表示',
   AppLocale.use12HourClockSubtitle: '24時間表示ではなく、AM/PM付きの12時間表示で時刻を表示します',
+  AppLocale.showAchievementsBadge: '実績バッジ',
+  AppLocale.showAchievementsBadgeSubtitle:
+      'RetroAchievements と一致したゲームに実績数を表示します',
   AppLocale.fullscreenMode: 'フルスクリーンモード',
   AppLocale.fullscreenModeSubtitle: 'アプリをフルスクリーンで表示',
   AppLocale.allFilesAccess: 'すべてのファイルへのアクセス',

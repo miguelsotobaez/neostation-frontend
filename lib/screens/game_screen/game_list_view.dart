@@ -73,6 +73,10 @@ class GameListViewState extends State<GameListView>
   // Constants for pixel-perfect highlight positioning.
   static const double _itemHeightBase = 26.0;
 
+  // Read once per build rather than per row: the row builder runs for every
+  // visible entry, and a provider lookup there would subscribe each one.
+  bool _showAchievementsBadge = false;
+
   /// Public API to trigger list scrolling from the parent widget.
   void scrollToIndex(
     int index, {
@@ -214,6 +218,12 @@ class GameListViewState extends State<GameListView>
 
   @override
   Widget build(BuildContext context) {
+    // `select` rather than `watch`: this view rebuilds on every selection move,
+    // and watching the whole config would add unrelated settings writes to that.
+    _showAchievementsBadge = context.select<SqliteConfigProvider, bool>(
+      (p) => p.config.showAchievementsBadge,
+    );
+
     final theme = Theme.of(context);
     final itemHeight = _itemHeightBase.r;
     final totalItemHeight = itemHeight;
@@ -371,7 +381,8 @@ class GameListViewState extends State<GameListView>
                                     ),
                                   ),
                                 ),
-                                if (AchievementsBadge.showsFor(game))
+                                if (_showAchievementsBadge &&
+                                    AchievementsBadge.showsFor(game))
                                   Padding(
                                     padding: EdgeInsets.only(left: 4.r),
                                     child: AchievementsBadge.inline(

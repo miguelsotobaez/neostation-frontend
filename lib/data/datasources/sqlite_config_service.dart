@@ -250,6 +250,12 @@ class SqliteConfigService {
                     25)
                 .clamp(0, 100),
         esdeFolderPath: userConfig?['esde_folder_path']?.toString() ?? '',
+        showAchievementsBadge:
+            (int.tryParse(
+                  userConfig?['show_achievements_badge']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -310,6 +316,7 @@ class SqliteConfigService {
         nowPlayingDimLevel: config.nowPlayingDimLevel,
         fanartDimLevel: config.fanartDimLevel,
         esdeFolderPath: config.esdeFolderPath,
+        showAchievementsBadge: config.showAchievementsBadge ? 1 : 0,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

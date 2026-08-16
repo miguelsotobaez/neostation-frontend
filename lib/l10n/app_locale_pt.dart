@@ -168,6 +168,9 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.use12HourClock: 'Relógio de 12 horas',
   AppLocale.use12HourClockSubtitle:
       'Mostrar o relógio no formato de 12 horas com AM/PM em vez de 24 horas',
+  AppLocale.showAchievementsBadge: 'Emblemas de conquistas',
+  AppLocale.showAchievementsBadgeSubtitle:
+      'Mostrar o número de conquistas nos jogos associados ao RetroAchievements',
   AppLocale.fullscreenMode: 'Modo Tela Cheia',
   AppLocale.fullscreenModeSubtitle: 'Exibe o aplicativo em tela cheia',
   AppLocale.allFilesAccess: 'Acesso a Todos os Arquivos',

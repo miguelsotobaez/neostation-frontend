@@ -139,6 +139,8 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.sfxVolumeHigh: '高',
   AppLocale.use12HourClock: '12小时制',
   AppLocale.use12HourClockSubtitle: '以 12 小时制（AM/PM）显示时间，而非 24 小时制',
+  AppLocale.showAchievementsBadge: '成就徽章',
+  AppLocale.showAchievementsBadgeSubtitle: '在已匹配 RetroAchievements 的游戏上显示成就数量',
   AppLocale.fullscreenMode: '全屏模式',
   AppLocale.fullscreenModeSubtitle: '以全屏模式显示应用',
   AppLocale.allFilesAccess: '所有文件访问权限',

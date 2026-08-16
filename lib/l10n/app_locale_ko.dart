@@ -140,6 +140,9 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.sfxVolumeHigh: '높음',
   AppLocale.use12HourClock: '12시간제 사용',
   AppLocale.use12HourClockSubtitle: '시계를 24시간제가 아닌 오전/오후 12시간제로 표시합니다',
+  AppLocale.showAchievementsBadge: '업적 배지',
+  AppLocale.showAchievementsBadgeSubtitle:
+      'RetroAchievements와 일치한 게임에 업적 개수를 표시합니다',
   AppLocale.fullscreenMode: '전체 화면 모드',
   AppLocale.fullscreenModeSubtitle: '앱을 전체 화면으로 표시합니다',
   AppLocale.allFilesAccess: '모든 파일 액세스',
