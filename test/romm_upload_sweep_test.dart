@@ -94,7 +94,7 @@ class _FakeRommService extends RommService {
     int romId,
     File file, {
     String? emulator,
-    int? slot,
+    String? slot,
     String? deviceId,
     bool overwrite = true,
   }) async {
@@ -133,7 +133,7 @@ class _FakeRommService extends RommService {
     int romId,
     File file, {
     String? emulator,
-    int? slot,
+    String? slot,
     String? deviceId,
     bool overwrite = true,
   }) async => throw UnimplementedError('no states in these tests');

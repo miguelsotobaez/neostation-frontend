@@ -276,13 +276,20 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         _svc.listSaves(romId: romId),
         _svc.listStates(romId: romId),
       ]);
-      remote = [...results[0], ...results[1]];
+      // Collapse a slot's version history before anything looks at the listing,
+      // so the pairing loop and the remote-only pass below agree on which asset
+      // represents each local file.
+      remote = latestPerLocalName([...results[0], ...results[1]]);
     } catch (e) {
       _log.e('RomM listSaves/listStates failed for ${game.romname}: $e');
       return GameSyncStatus.error;
     }
 
-    final matchedRemote = <int>{}; // asset ids already paired with a local file
+    // Assets already paired with a local file. Keyed by kind *and* id: the two
+    // endpoints number their rows independently, so a bare id would let a save
+    // mask a state that happens to share it.
+    final matchedRemote = <String>{};
+    String remoteKey(RommAsset a) => '${a.isState ? 's' : 'f'}:${a.id}';
     int uploaded = 0, downloaded = 0, coreMismatched = 0;
     bool anyLocal = localFiles.isNotEmpty;
     bool anyRemote = remote.isNotEmpty;
@@ -293,12 +300,14 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       final baseName = path.basename(local.filePath);
       RommAsset? match;
       for (final a in remote) {
-        if (a.isState == isState && a.fileName == baseName) {
+        // The remote name is normalised, never the local one: a slotted asset
+        // is `Game [2026-07-24_01-20-16].srm` server-side and `Game.srm` here.
+        if (a.isState == isState && localNameForAsset(a) == baseName) {
           match = a;
           break;
         }
       }
-      if (match != null) matchedRemote.add(match.id);
+      if (match != null) matchedRemote.add(remoteKey(match));
 
       final localMs = local.lastModified.millisecondsSinceEpoch;
       final recorded = await SyncRepository.getSyncState(
@@ -372,7 +381,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     // 2) Remote-only files → download.
     for (final a in remote) {
       if (statusOnly || uploadOnly) break;
-      if (matchedRemote.contains(a.id)) continue;
+      if (matchedRemote.contains(remoteKey(a))) continue;
       final r = await _download(
         game,
         a,
@@ -500,6 +509,74 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     return RegExp(r'^\.[A-Za-z0-9]{1,5}$').hasMatch(ext)
         ? romname.substring(0, dot)
         : romname;
+  }
+
+  /// RomM's server-applied version tag, copied verbatim from its own
+  /// `DATETIME_TAG_PATTERN` (`backend/endpoints/saves.py`, RomM 5.1.0).
+  static final RegExp _datetimeTag = RegExp(
+    r' \[\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\]',
+  );
+
+  /// The local filename [asset] belongs under, with RomM's datetime tag removed.
+  ///
+  /// RomM renames every save uploaded with a `slot` to
+  /// `<name> [YYYY-MM-DD_HH-MM-SS].<ext>`: the tag is how it versions a slot, so
+  /// filenames are deliberately *not* the identity server-side. Locally they are
+  /// the whole identity — RetroArch loads `<rom>.srm` and nothing else — so
+  /// writing the tagged name produces a file the emulator ignores and this
+  /// provider then refuses to sync ([syncableSaves] rejects exactly those names).
+  /// Left unfixed, the emulator boots a fresh save and the post-close hook
+  /// uploads that blank file as the copy every device syncs from.
+  ///
+  /// Two rules, both deliberate:
+  ///
+  /// * **Strip the datetime pattern, never RomM's `file_name_no_tags`.** That
+  ///   field looks like the built-in answer but strips *every* trailing bracket
+  ///   group, so `Pokemon - Pisces [Hack] [2026-07-24_01-20-16].srm` comes back
+  ///   as `Pokemon - Pisces` — losing a `[Hack]` suffix that is a permanent part
+  ///   of the name RetroArch expects. Replacing the pattern is also what the
+  ///   server itself does before re-tagging.
+  /// * **Saves only.** `/api/states` has no slot parameter and never tags, so a
+  ///   bracketed timestamp in a state's name is the name, not a version tag.
+  @visibleForTesting
+  static String localNameForAsset(RommAsset asset) => asset.isState
+      ? asset.fileName
+      : asset.fileName.replaceAll(_datetimeTag, '');
+
+  /// Collapses a remote listing to one asset per local filename, newest first.
+  ///
+  /// A slot accrues a row per upload, so a server can hold dozens of versions of
+  /// one save — all of which normalise to the same local name. Without this the
+  /// provider downloads every one of them in turn, each overwriting the last,
+  /// and the file left on disk is whichever happened to be listed last.
+  ///
+  /// Newest by `updated_at` wins, ties broken by the higher (later) asset id.
+  /// Saves and states are kept apart, matching how they are paired.
+  ///
+  /// Note what this does to a server holding *both* an old untagged NeoStation
+  /// asset and a newer slotted lineage: they collapse together, the newer one
+  /// wins, and the untagged asset is simply never matched again. That is the
+  /// intended migration — it stays put as a backup. If the untagged asset is
+  /// instead the newer one, it keeps winning until another client writes to the
+  /// slot. Pairing always follows the newest asset, so the *bytes* converge even
+  /// while the row being updated alternates between the two lineages.
+  @visibleForTesting
+  static List<RommAsset> latestPerLocalName(List<RommAsset> remote) {
+    final best = <String, RommAsset>{};
+    for (final a in remote) {
+      final key = '${a.isState ? 's' : 'f'}:${localNameForAsset(a)}';
+      final current = best[key];
+      if (current == null ||
+          a.updatedAtMs > current.updatedAtMs ||
+          (a.updatedAtMs == current.updatedAtMs && a.id > current.id)) {
+        best[key] = a;
+      }
+    }
+    // Preserve the server's ordering for the survivors; only duplicates go.
+    // Identity, not id: `/api/saves` and `/api/states` number their rows
+    // independently, so a save and a state can share an id.
+    final kept = Set<RommAsset>.identity()..addAll(best.values);
+    return remote.where(kept.contains).toList();
   }
 
   String _subfolderOf(LocalSaveFile local) {
@@ -631,11 +708,16 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       // Placement comes from this device's own RetroArch layout, never from the
       // asset's `emulator` field — that value belongs to whichever device
       // created the asset and says nothing about where this one reads saves.
+      //
+      // The *name* comes from [localNameForAsset], not the asset: RomM's
+      // datetime tag is server-side versioning, and a file written under it is
+      // one the emulator will never load.
       final prefix = asset.isState ? 'states' : 'saves';
       final sub = await _localSubfolder(game, asset.isState, localFiles);
+      final localName = localNameForAsset(asset);
       final relativeName = sub.isNotEmpty
-          ? '$prefix/$sub/${asset.fileName}'
-          : '$prefix/${asset.fileName}';
+          ? '$prefix/$sub/$localName'
+          : '$prefix/$localName';
       final targets = await _resolveTargets(game, relativeName);
       if (targets.isEmpty) {
         _log.w('RomM download: no local target for ${asset.fileName}');

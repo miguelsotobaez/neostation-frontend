@@ -916,11 +916,15 @@ class RommService {
   }
 
   /// Uploads [file] as a save for [romId] (`POST /api/saves`, field `saveFile`).
+  ///
+  /// [slot] is a stable *name* (RomM's own example is `autosave`), not a number.
+  /// Passing one opts the save into RomM's `(rom_id, slot)` pairing — and into
+  /// server-side renaming, since RomM datetime-tags every slotted upload.
   Future<RommAsset> uploadSave(
     int romId,
     File file, {
     String? emulator,
-    int? slot,
+    String? slot,
     String? deviceId,
     bool overwrite = true,
   }) => _uploadAsset(
@@ -937,11 +941,14 @@ class RommService {
 
   /// Uploads [file] as a save state for [romId] (`POST /api/states`, field
   /// `stateFile`).
+  ///
+  /// [slot] is accepted for symmetry with [uploadSave] only — `/api/states` has
+  /// no slot parameter, so RomM ignores it and never tags a state's filename.
   Future<RommAsset> uploadState(
     int romId,
     File file, {
     String? emulator,
-    int? slot,
+    String? slot,
     String? deviceId,
     bool overwrite = true,
   }) => _uploadAsset(
@@ -1035,7 +1042,7 @@ class RommService {
     required int romId,
     required File file,
     String? emulator,
-    int? slot,
+    String? slot,
     String? deviceId,
     required bool overwrite,
     required bool isState,
@@ -1045,7 +1052,7 @@ class RommService {
       'overwrite': '$overwrite',
     };
     if (emulator != null && emulator.isNotEmpty) params['emulator'] = emulator;
-    if (slot != null) params['slot'] = '$slot';
+    if (slot != null && slot.isNotEmpty) params['slot'] = slot;
     if (deviceId != null && deviceId.isNotEmpty) params['device_id'] = deviceId;
     final uri = Uri.parse(
       '$_baseUrl$basePath',

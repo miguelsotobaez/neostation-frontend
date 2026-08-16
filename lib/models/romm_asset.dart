@@ -24,8 +24,16 @@ class RommAsset {
   /// Emulator label the asset is associated with, if any.
   final String? emulator;
 
-  /// Save slot, for emulators that expose multiple slots.
-  final int? slot;
+  /// Sync slot the asset belongs to, when the uploading client sent one.
+  ///
+  /// A **name**, not a number: RomM declares `slot: str | None` and suggests a
+  /// stable label such as `autosave`. Saves are paired server-side on
+  /// `(rom_id, slot)`, and a slotted upload is renamed to
+  /// `<name> [YYYY-MM-DD_HH-MM-SS].<ext>` — `RomMSyncProvider.localNameForAsset`
+  /// undoes that when choosing where to write the file locally.
+  /// Null means an archival, manual upload (RomM excludes those from pairing).
+  /// States never carry a slot; `/api/states` has no such parameter.
+  final String? slot;
 
   /// Server-relative URL to fetch the raw bytes
   /// (`/api/raw/assets/{file_path}/{file_name}?timestamp=...`). This is the
@@ -62,7 +70,7 @@ class RommAsset {
       createdAt: _parseTimestamp(json['created_at']),
       updatedAt: _parseTimestamp(json['updated_at']),
       emulator: json['emulator']?.toString(),
-      slot: int.tryParse((json['slot'] ?? '').toString()),
+      slot: _nonEmpty(json['slot']),
       downloadPath: json['download_path']?.toString(),
       isState: isState,
     );
@@ -70,6 +78,15 @@ class RommAsset {
 
   /// Milliseconds-since-epoch of [updatedAt], or 0 when unknown.
   int get updatedAtMs => updatedAt?.millisecondsSinceEpoch ?? 0;
+
+  /// A trimmed string, or null when the field is absent or blank.
+  ///
+  /// `""` and `null` mean the same thing for a slot — no slot — and collapsing
+  /// them here keeps every caller from having to test for both.
+  static String? _nonEmpty(dynamic raw) {
+    final s = raw?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
+  }
 
   /// Parses a RomM ISO-8601 timestamp, treating an offset-less string as UTC.
   ///

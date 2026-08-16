@@ -247,7 +247,7 @@ void main() {
         'created_at': '2026-01-01T00:00:00.000Z',
         'updated_at': '2026-02-02T12:00:00.000Z',
         'emulator': 'snes9x',
-        'slot': 2,
+        'slot': 'autosave',
         'download_path': '/api/raw/assets/x/Game.srm',
       }, isState: false);
       expect(a.id, 10);
@@ -255,7 +255,10 @@ void main() {
       expect(a.fileSizeBytes, 8192);
       expect(a.contentHash, 'abc');
       expect(a.emulator, 'snes9x');
-      expect(a.slot, 2);
+      // A slot is a *name*, not a number: RomM declares `slot: str | None` and
+      // pairs saves on `(rom_id, slot)`. Parsing it as an int turned every
+      // named slot into null — indistinguishable from an archival upload.
+      expect(a.slot, 'autosave');
       expect(a.downloadPath, '/api/raw/assets/x/Game.srm');
       expect(a.isState, isFalse);
       expect(a.updatedAt, DateTime.parse('2026-02-02T12:00:00.000Z'));
@@ -278,11 +281,23 @@ void main() {
         'id': '11',
         'file_name': 'g.srm',
         'file_size_bytes': '256',
-        'slot': '3',
+        'slot': 3,
       }, isState: false);
       expect(a.id, 11);
       expect(a.fileSizeBytes, 256);
-      expect(a.slot, 3);
+      // A numerically-named slot is still a name.
+      expect(a.slot, '3');
+    });
+
+    test('reads a blank slot as no slot at all', () {
+      // '' and null both mean "archival, unpaired upload" to RomM; collapsing
+      // them here spares every caller from testing for both.
+      final a = RommAsset.fromJson({
+        'id': 12,
+        'file_name': 'g.srm',
+        'slot': '',
+      }, isState: false);
+      expect(a.slot, isNull);
     });
 
     test('parses an offset-less (naive) timestamp as UTC, not device-local', () {
