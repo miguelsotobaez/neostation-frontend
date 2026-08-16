@@ -67,11 +67,11 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   void selectItem(int index) {
     switch (index) {
       case 0:
-        _organizeMultiDiscGames();
+        _rematchAchievements();
       case 1:
         _cleanOrphanedMetadata();
       case 2:
-        _rematchAchievements();
+        _organizeMultiDiscGames();
     }
   }
 
@@ -569,20 +569,23 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                 physics: const ClampingScrollPhysics(),
                 children: [
                   SettingsCardRow(
-                    icon: Symbols.folder_managed_rounded,
-                    title: AppLocale.organizeMultiDiscGames.getString(context),
-                    subtitle: AppLocale.organizeMultiDiscGamesSubtitle
-                        .getString(context),
+                    icon: Symbols.emoji_events_rounded,
+                    title: AppLocale.rematchAchievements.getString(context),
+                    subtitle: AppLocale.rematchAchievementsSubtitle.getString(
+                      context,
+                    ),
                     subtitleMaxLines: 2,
                     selected: isSelected,
-                    onTap: () => _organizeMultiDiscGames(),
+                    onTap: () => _rematchAchievements(),
                     trailing: SettingsActionButton(
-                      icon: Symbols.folder_managed_rounded,
+                      icon: _isRematchingAchievements
+                          ? Symbols.pause_rounded
+                          : Symbols.emoji_events_rounded,
                       selected: isSelected,
                     ),
                     belowContent: _buildInlineProgress(
                       context,
-                      multiDiscProgress,
+                      rematchProgress,
                     ),
                   ),
                   SettingsCardRow(
@@ -608,27 +611,24 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     ),
                   ),
                   SettingsCardRow(
-                    icon: Symbols.emoji_events_rounded,
-                    title: AppLocale.rematchAchievements.getString(context),
-                    subtitle: AppLocale.rematchAchievementsSubtitle.getString(
-                      context,
-                    ),
+                    icon: Symbols.folder_managed_rounded,
+                    title: AppLocale.organizeMultiDiscGames.getString(context),
+                    subtitle: AppLocale.organizeMultiDiscGamesSubtitle
+                        .getString(context),
                     subtitleMaxLines: 2,
                     selected:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == 2,
-                    onTap: () => _rematchAchievements(),
+                    onTap: () => _organizeMultiDiscGames(),
                     trailing: SettingsActionButton(
-                      icon: _isRematchingAchievements
-                          ? Symbols.pause_rounded
-                          : Symbols.emoji_events_rounded,
+                      icon: Symbols.folder_managed_rounded,
                       selected:
                           widget.isContentFocused &&
                           widget.selectedContentIndex == 2,
                     ),
                     belowContent: _buildInlineProgress(
                       context,
-                      rematchProgress,
+                      multiDiscProgress,
                     ),
                   ),
                 ],
