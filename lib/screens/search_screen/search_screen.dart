@@ -87,6 +87,7 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _year;
   int? _rating;
   String? _source;
+  String? _achievements;
 
   _FocusRegion _region = _FocusRegion.search;
   int _barIndex = 0;
@@ -296,6 +297,7 @@ class _SearchScreenState extends State<SearchScreen> {
       year: _year,
       rating: _rating,
       source: _source,
+      achievements: _achievements,
     );
 
     _criteria = criteria;
@@ -597,6 +599,7 @@ class _SearchScreenState extends State<SearchScreen> {
       if (shown('developer')) 'developer',
       if (shown('genre')) 'genre',
       if (shown('year')) 'year',
+      if (shown(kFilterAchievements)) kFilterAchievements,
     ];
   }
 
@@ -612,6 +615,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _genre,
         _year,
         _source,
+        _achievements,
       ].where((v) => v != null).length +
       (_rating != null ? 1 : 0);
 
@@ -1094,9 +1098,13 @@ class _SearchScreenState extends State<SearchScreen> {
       key == 'genre' ||
       key == 'developer';
 
-  List<String> _menuOptions(String key) => key == kFilterSource
-      ? const [kSourceLocal, kSourceRomm]
-      : _mergedOptions(key);
+  List<String> _menuOptions(String key) => switch (key) {
+    kFilterSource => const [kSourceLocal, kSourceRomm],
+    // Coverage buckets are ordered by meaning, not alphabetically, and RomM has
+    // no vocabulary to merge in — take the facet list as it stands.
+    kFilterAchievements => _facets.achievements,
+    _ => _mergedOptions(key),
+  };
 
   String? _currentFilterValue(String key) => switch (key) {
     kFilterSource => _source,
@@ -1104,6 +1112,7 @@ class _SearchScreenState extends State<SearchScreen> {
     'developer' => _developer,
     'genre' => _genre,
     'year' => _year,
+    kFilterAchievements => _achievements,
     _ => null,
   };
 
@@ -1119,6 +1128,8 @@ class _SearchScreenState extends State<SearchScreen> {
         _genre = value;
       case 'year':
         _year = value;
+      case kFilterAchievements:
+        _achievements = value;
     }
   }
 
@@ -1147,6 +1158,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _year = null;
       _rating = null;
       _source = null;
+      _achievements = null;
       _recompute();
     });
     _scheduleRemoteSearch();
@@ -1927,6 +1939,7 @@ class _SearchScreenState extends State<SearchScreen> {
     'genre' => AppLocale.filterGenre.getString(context),
     'rating' => AppLocale.filterRating.getString(context),
     'year' => AppLocale.filterYear.getString(context),
+    kFilterAchievements => AppLocale.filterAchievements.getString(context),
     _ => key,
   };
 
@@ -1938,6 +1951,9 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     if (key == kFilterSource) {
       return [any, ..._menuOptions(key).map(_sourceDisplay)];
+    }
+    if (key == kFilterAchievements) {
+      return [any, ..._menuOptions(key).map(_achievementsDisplay)];
     }
     return [any, ..._menuOptions(key)];
   }
@@ -1953,6 +1969,19 @@ class _SearchScreenState extends State<SearchScreen> {
     _ => AppLocale.filterAny.getString(context),
   };
 
+  /// Display label for a [kFilterAchievements] value ([RaCoverage] names).
+  ///
+  /// Each label says what is actually known: only [RaCoverage.noSet] claims the
+  /// game has no achievements, because it is the one bucket where the ROM was
+  /// hashed and RetroAchievements answered.
+  String _achievementsDisplay(String value) => switch (value) {
+    'matched' => AppLocale.raCoverageMatched.getString(context),
+    'noSet' => AppLocale.raCoverageNoSet.getString(context),
+    'notChecked' => AppLocale.raCoverageNotChecked.getString(context),
+    'pendingDiscSupport' => AppLocale.raCoverageDiscPending.getString(context),
+    _ => AppLocale.filterAny.getString(context),
+  };
+
   bool _isFilterActive(String key) => switch (key) {
     kFilterSource => _source != null,
     'platform' => _platform != null,
@@ -1960,6 +1989,7 @@ class _SearchScreenState extends State<SearchScreen> {
     'genre' => _genre != null,
     'year' => _year != null,
     'rating' => _rating != null,
+    kFilterAchievements => _achievements != null,
     _ => false,
   };
 
@@ -1980,6 +2010,9 @@ class _SearchScreenState extends State<SearchScreen> {
       case 'rating':
         final t = _rating;
         return t == null ? any : _ratingDisplay(t);
+      case kFilterAchievements:
+        final a = _achievements;
+        return a == null ? any : _achievementsDisplay(a);
       default:
         return any;
     }
