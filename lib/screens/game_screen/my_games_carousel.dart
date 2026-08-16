@@ -474,9 +474,16 @@ class _GamesCarouselState extends State<GamesCarousel> {
     // A folder has no hash and no video: the RetroAchievements pill and the
     // mute pill must both stay away, or they render their empty states.
     final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
+    // Mid-burst the cursor has left the settled game, so the loaded verdict
+    // belongs to a game the user is no longer on. Reporting it as this game's
+    // is how the pill came to read "No achievements" for most of a fast scroll.
+    // Treat unsettled as still loading — the signature flips once on the way
+    // out and once on the way back, so the memoization survives the burst.
+    final settled = _currentIndex == _settledIndex;
+    final loadingRa = _isLoadingAchievements || !settled;
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
-        '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
+        '|$hasRa|$loadingRa|${identityHashCode(_currentGameInfo)}';
     if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
       return;
     }
@@ -485,8 +492,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
       game: settledGame,
       onPlay: widget.onPlay,
       hasRetroAchievements: hasRa,
-      isLoadingAchievements: _isLoadingAchievements,
-      currentGameInfo: _currentGameInfo,
+      isLoadingAchievements: loadingRa,
+      currentGameInfo: settled ? _currentGameInfo : null,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
       hasVideo: !isFolder && _hasVideoFor(settledGame),
