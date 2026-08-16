@@ -253,7 +253,7 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rematchAchievementsSubtitle:
       'Controlla l\'intera libreria alla ricerca di set di obiettivi, invece di un gioco alla volta',
   AppLocale.rematchAchievementsWarning:
-      'Ogni ROM non abbinata verrà letta per identificarla e su librerie grandi può richiedere tempo. Selezionalo di nuovo per interrompere. I sistemi a disco sono esclusi per ora. Nulla viene spostato o eliminato.',
+      'Questo legge ogni ROM non associata per identificarla, il che può richiedere tempo su una libreria grande. Selezionalo di nuovo per mettere in pausa: tutto ciò che è stato trovato viene mantenuto e riavviandolo riprende da dove si era interrotto. I sistemi su disco vengono ignorati per ora. Nulla viene spostato o eliminato.',
   AppLocale.rematchAchievementsSignedOut:
       'L\'abbinamento funziona anche senza aver effettuato l\'accesso, ma devi accedere a RetroAchievements per vedere i risultati.',
   AppLocale.rematchAchievementsLookingUp:
@@ -263,8 +263,8 @@ const Map<String, dynamic> appLocaleIt = {
       'Fatto: {matched} gioco/giochi abbinati, {hashed} identificati per la prima volta.',
   AppLocale.rematchAchievementsNothingToDo:
       'Tutti i giochi supportati sono già stati controllati.',
-  AppLocale.rematchAchievementsStopped:
-      'Interrotto: {matched} gioco/giochi abbinati finora.',
+  AppLocale.rematchAchievementsPaused:
+      'In pausa: {matched} gioco/giochi associati finora. Eseguilo di nuovo per continuare.',
   AppLocale.rematchAchievementsFailed:
       'Impossibile abbinare i giochi RetroAchievements: {error}',
   AppLocale.raFixMatch: 'Correggi abbinamento',

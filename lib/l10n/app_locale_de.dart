@@ -254,7 +254,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rematchAchievementsSubtitle:
       'Durchsucht die gesamte Bibliothek nach Achievement-Sets, statt Spiel für Spiel',
   AppLocale.rematchAchievementsWarning:
-      'Dabei wird jede noch nicht zugeordnete ROM eingelesen, um sie zu identifizieren. Bei großen Bibliotheken kann das dauern. Erneut auswählen, um abzubrechen. CD-basierte Systeme werden vorerst übersprungen. Es wird nichts verschoben oder gelöscht.',
+      'Dies liest jedes nicht zugeordnete ROM aus, um es zu identifizieren, was bei einer großen Bibliothek eine Weile dauern kann. Erneut auswählen, um zu pausieren: Alle bisherigen Treffer bleiben erhalten, und ein erneuter Start macht dort weiter, wo er aufgehört hat. Disc-basierte Systeme werden vorerst übersprungen. Es wird nichts verschoben oder gelöscht.',
   AppLocale.rematchAchievementsSignedOut:
       'Der Abgleich läuft auch im abgemeldeten Zustand, aber du musst dich bei RetroAchievements anmelden, um die Ergebnisse zu sehen.',
   AppLocale.rematchAchievementsLookingUp:
@@ -264,8 +264,8 @@ const Map<String, dynamic> appLocaleDe = {
       'Fertig: {matched} Spiel(e) zugeordnet, {hashed} neu identifiziert.',
   AppLocale.rematchAchievementsNothingToDo:
       'Alle unterstützten Spiele wurden bereits geprüft.',
-  AppLocale.rematchAchievementsStopped:
-      'Abgebrochen: bisher {matched} Spiel(e) zugeordnet.',
+  AppLocale.rematchAchievementsPaused:
+      'Pausiert: bisher {matched} Spiel(e) zugeordnet. Erneut starten, um fortzufahren.',
   AppLocale.rematchAchievementsFailed:
       'RetroAchievements-Spiele konnten nicht zugeordnet werden: {error}',
   AppLocale.raFixMatch: 'Zuordnung korrigieren',

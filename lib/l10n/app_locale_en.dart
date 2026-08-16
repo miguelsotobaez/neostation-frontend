@@ -243,7 +243,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rematchAchievementsSubtitle:
       'Check your whole library for achievement sets, instead of one game at a time',
   AppLocale.rematchAchievementsWarning:
-      'This reads every unmatched ROM to identify it, which can take a while on a large library. Select it again to stop. Disc-based systems are skipped for now. Nothing is moved or deleted.',
+      'This reads every unmatched ROM to identify it, which can take a while on a large library. Select it again to pause: everything matched so far is kept, and running it again carries on where it left off. Disc-based systems are skipped for now. Nothing is moved or deleted.',
   AppLocale.rematchAchievementsSignedOut:
       'Matching runs while you are signed out, but you need to sign in to RetroAchievements to see the results.',
   AppLocale.rematchAchievementsLookingUp:
@@ -253,8 +253,8 @@ const Map<String, dynamic> appLocaleEn = {
       'Done: {matched} game(s) matched, {hashed} newly identified.',
   AppLocale.rematchAchievementsNothingToDo:
       'Every supported game has already been checked.',
-  AppLocale.rematchAchievementsStopped:
-      'Stopped: {matched} game(s) matched so far.',
+  AppLocale.rematchAchievementsPaused:
+      'Paused: {matched} game(s) matched so far. Run it again to carry on.',
   AppLocale.rematchAchievementsFailed:
       'Failed to match RetroAchievements games: {error}',
   AppLocale.raFixMatch: 'Fix match',

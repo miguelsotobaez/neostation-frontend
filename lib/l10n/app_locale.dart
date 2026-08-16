@@ -260,8 +260,7 @@ mixin AppLocale {
   static const String rematchAchievementsDone = 'rematch_achievements_done';
   static const String rematchAchievementsNothingToDo =
       'rematch_achievements_nothing_to_do';
-  static const String rematchAchievementsStopped =
-      'rematch_achievements_stopped';
+  static const String rematchAchievementsPaused = 'rematch_achievements_paused';
   static const String rematchAchievementsFailed = 'rematch_achievements_failed';
 
   static const String raFixMatch = 'ra_fix_match';

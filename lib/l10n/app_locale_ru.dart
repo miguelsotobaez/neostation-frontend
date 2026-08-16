@@ -249,7 +249,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rematchAchievementsSubtitle:
       'Проверяет всю библиотеку на наличие наборов достижений, а не по одной игре',
   AppLocale.rematchAchievementsWarning:
-      'Каждый несопоставленный ROM будет прочитан для опознания — на большой библиотеке это займёт время. Выберите ещё раз, чтобы остановить. Дисковые системы пока пропускаются. Ничего не перемещается и не удаляется.',
+      'Читает каждый несопоставленный ROM, чтобы определить его; на большой библиотеке это может занять время. Выберите ещё раз, чтобы приостановить: всё найденное сохраняется, а повторный запуск продолжит с того же места. Дисковые системы пока пропускаются. Ничего не перемещается и не удаляется.',
   AppLocale.rematchAchievementsSignedOut:
       'Сопоставление работает и без входа в аккаунт, но чтобы увидеть результаты, нужно войти в RetroAchievements.',
   AppLocale.rematchAchievementsLookingUp:
@@ -259,8 +259,8 @@ const Map<String, dynamic> appLocaleRu = {
       'Готово: сопоставлено игр — {matched}, впервые опознано — {hashed}.',
   AppLocale.rematchAchievementsNothingToDo:
       'Все поддерживаемые игры уже проверены.',
-  AppLocale.rematchAchievementsStopped:
-      'Остановлено: сопоставлено игр — {matched}.',
+  AppLocale.rematchAchievementsPaused:
+      'Приостановлено: сопоставлено игр — {matched}. Запустите ещё раз, чтобы продолжить.',
   AppLocale.rematchAchievementsFailed:
       'Не удалось сопоставить игры RetroAchievements: {error}',
   AppLocale.raFixMatch: 'Исправить сопоставление',

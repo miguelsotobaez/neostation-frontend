@@ -208,7 +208,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rematchAchievements: 'RetroAchievements のゲームを照合',
   AppLocale.rematchAchievementsSubtitle: 'ゲームを1本ずつ開かずに、ライブラリ全体から実績セットを探します',
   AppLocale.rematchAchievementsWarning:
-      '未照合の ROM をすべて読み込んで識別します。ライブラリが大きい場合は時間がかかります。もう一度選択すると停止します。ディスク系のシステムは現時点では対象外です。ファイルの移動や削除は行いません。',
+      '一致していない ROM をすべて読み込んで識別します。大きなライブラリでは時間がかかることがあります。もう一度選択すると一時停止します。それまでに一致したものはすべて保持され、再実行すると中断した所から続きます。ディスク系システムは現在スキップされます。ファイルの移動や削除は行いません。',
   AppLocale.rematchAchievementsSignedOut:
       'ログアウトしていても照合は実行されますが、結果を見るには RetroAchievements にログインする必要があります。',
   AppLocale.rematchAchievementsLookingUp: 'ハッシュ済みのゲームを確認中...',
@@ -216,7 +216,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rematchAchievementsDone:
       '完了: {matched} 本を照合し、{hashed} 本を新たに識別しました。',
   AppLocale.rematchAchievementsNothingToDo: '対応するゲームはすべて確認済みです。',
-  AppLocale.rematchAchievementsStopped: '停止しました: これまでに {matched} 本を照合しました。',
+  AppLocale.rematchAchievementsPaused:
+      '一時停止: これまでに {matched} 件一致しました。再実行すると続きから再開します。',
   AppLocale.rematchAchievementsFailed:
       'RetroAchievements のゲームを照合できませんでした: {error}',
   AppLocale.raFixMatch: '照合を修正',

@@ -255,7 +255,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rematchAchievementsSubtitle:
       'Revisa toda la biblioteca en busca de sets de logros, en vez de juego por juego',
   AppLocale.rematchAchievementsWarning:
-      'Se leerá cada ROM sin emparejar para identificarla, lo que puede tardar en bibliotecas grandes. Selecciónalo de nuevo para detenerlo. Los sistemas de disco se omiten por ahora. No se mueve ni se elimina nada.',
+      'Esto lee cada ROM sin coincidencia para identificarla, lo que puede tardar en una biblioteca grande. Selecciónalo de nuevo para pausar: se conserva todo lo encontrado hasta ahora y al volver a ejecutarlo continúa donde lo dejó. Los sistemas de disco se omiten por ahora. No se mueve ni se elimina nada.',
   AppLocale.rematchAchievementsSignedOut:
       'La coincidencia funciona sin haber iniciado sesión, pero necesitas iniciar sesión en RetroAchievements para ver los resultados.',
   AppLocale.rematchAchievementsLookingUp:
@@ -265,8 +265,8 @@ const Map<String, dynamic> appLocaleEs = {
       'Listo: {matched} juego(s) emparejado(s), {hashed} identificado(s) por primera vez.',
   AppLocale.rematchAchievementsNothingToDo:
       'Todos los juegos compatibles ya se han comprobado.',
-  AppLocale.rematchAchievementsStopped:
-      'Detenido: {matched} juego(s) emparejado(s) hasta ahora.',
+  AppLocale.rematchAchievementsPaused:
+      'En pausa: {matched} juego(s) coincidentes hasta ahora. Ejecútalo de nuevo para continuar.',
   AppLocale.rematchAchievementsFailed:
       'No se pudieron emparejar los juegos de RetroAchievements: {error}',
   AppLocale.raFixMatch: 'Corregir emparejamiento',

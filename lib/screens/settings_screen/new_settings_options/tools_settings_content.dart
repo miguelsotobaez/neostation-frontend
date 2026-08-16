@@ -42,7 +42,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   bool _isOrganizingMultiDisc = false;
   bool _isCleaningMetadata = false;
   bool _isRematchingAchievements = false;
-  bool _rematchCancelled = false;
+  bool _rematchPaused = false;
   List<String> _currentRomFolders = [];
 
   @override
@@ -382,7 +382,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   /// runs stops it after the current ROM.
   Future<void> _rematchAchievements() async {
     if (_isRematchingAchievements) {
-      setState(() => _rematchCancelled = true);
+      setState(() => _rematchPaused = true);
       return;
     }
 
@@ -407,9 +407,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     final localeDone = AppLocale.rematchAchievementsDone.getString(context);
     final localeNothingToDo = AppLocale.rematchAchievementsNothingToDo
         .getString(context);
-    final localeStopped = AppLocale.rematchAchievementsStopped.getString(
-      context,
-    );
+    final localePaused = AppLocale.rematchAchievementsPaused.getString(context);
     final localeFailed = AppLocale.rematchAchievementsFailed.getString(context);
     final localeConfirm = AppLocale.confirm.getString(context);
 
@@ -430,7 +428,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     try {
       setState(() {
         _isRematchingAchievements = true;
-        _rematchCancelled = false;
+        _rematchPaused = false;
       });
 
       GlobalNotificationService().show(
@@ -440,7 +438,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         progress: 0,
       );
 
-      bool isCancelled() => _rematchCancelled;
+      bool isCancelled() => _rematchPaused;
 
       // The pass resumes: hashed ROMs are excluded from the candidate query, so
       // a stopped run picks up where it left off. Report progress against the
@@ -490,7 +488,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       final examined = lookup.total + (hashPass?.total ?? 0);
 
       if (cancelled) {
-        completionMessage = localeStopped.replaceFirst(
+        completionMessage = localePaused.replaceFirst(
           '{matched}',
           matched.toString(),
         );
@@ -517,7 +515,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       if (mounted) {
         setState(() {
           _isRematchingAchievements = false;
-          _rematchCancelled = false;
+          _rematchPaused = false;
         });
         if (completionMessage != null && completionType != null) {
           GlobalNotificationService().update(
@@ -622,7 +620,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     onTap: () => _rematchAchievements(),
                     trailing: SettingsActionButton(
                       icon: _isRematchingAchievements
-                          ? Symbols.stop_rounded
+                          ? Symbols.pause_rounded
                           : Symbols.emoji_events_rounded,
                       selected:
                           widget.isContentFocused &&

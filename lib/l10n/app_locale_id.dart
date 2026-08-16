@@ -243,7 +243,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rematchAchievementsSubtitle:
       'Memeriksa seluruh pustaka untuk set prestasi, bukan satu game per satu',
   AppLocale.rematchAchievementsWarning:
-      'Setiap ROM yang belum cocok akan dibaca untuk diidentifikasi, dan ini bisa memakan waktu pada pustaka besar. Pilih lagi untuk menghentikan. Sistem berbasis disc dilewati untuk sekarang. Tidak ada yang dipindahkan atau dihapus.',
+      'Ini membaca setiap ROM yang belum cocok untuk mengidentifikasinya, yang bisa memakan waktu pada pustaka besar. Pilih lagi untuk menjeda: semua yang sudah cocok tetap tersimpan, dan menjalankannya lagi akan melanjutkan dari tempat terakhir. Sistem berbasis disc dilewati untuk saat ini. Tidak ada yang dipindahkan atau dihapus.',
   AppLocale.rematchAchievementsSignedOut:
       'Pencocokan tetap berjalan saat Anda keluar, tetapi Anda perlu masuk ke RetroAchievements untuk melihat hasilnya.',
   AppLocale.rematchAchievementsLookingUp:
@@ -253,8 +253,8 @@ const Map<String, dynamic> appLocaleId = {
       'Selesai: {matched} game cocok, {hashed} baru diidentifikasi.',
   AppLocale.rematchAchievementsNothingToDo:
       'Semua game yang didukung sudah diperiksa.',
-  AppLocale.rematchAchievementsStopped:
-      'Dihentikan: {matched} game cocok sejauh ini.',
+  AppLocale.rematchAchievementsPaused:
+      'Dijeda: {matched} gim cocok sejauh ini. Jalankan lagi untuk melanjutkan.',
   AppLocale.rematchAchievementsFailed:
       'Gagal mencocokkan game RetroAchievements: {error}',
   AppLocale.raFixMatch: 'Perbaiki kecocokan',

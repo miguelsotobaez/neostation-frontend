@@ -259,7 +259,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rematchAchievementsSubtitle:
       'Analyse toute la bibliothèque à la recherche de sets de succès, au lieu d\'un jeu à la fois',
   AppLocale.rematchAchievementsWarning:
-      'Chaque ROM non associée est lue pour être identifiée, ce qui peut prendre du temps sur une grande bibliothèque. Sélectionnez à nouveau pour arrêter. Les systèmes à disque sont ignorés pour l\'instant. Rien n\'est déplacé ni supprimé.',
+      'Cela lit chaque ROM non associée pour l’identifier, ce qui peut prendre du temps sur une grande bibliothèque. Sélectionnez-le à nouveau pour mettre en pause : tout ce qui a été trouvé est conservé, et une nouvelle exécution reprend là où elle s’est arrêtée. Les systèmes à disque sont ignorés pour le moment. Rien n’est déplacé ni supprimé.',
   AppLocale.rematchAchievementsSignedOut:
       'La correspondance fonctionne même déconnecté, mais vous devez vous connecter à RetroAchievements pour voir les résultats.',
   AppLocale.rematchAchievementsLookingUp:
@@ -269,8 +269,8 @@ const Map<String, dynamic> appLocaleFr = {
       'Terminé : {matched} jeu(x) associé(s), {hashed} nouvellement identifié(s).',
   AppLocale.rematchAchievementsNothingToDo:
       'Tous les jeux pris en charge ont déjà été vérifiés.',
-  AppLocale.rematchAchievementsStopped:
-      'Arrêté : {matched} jeu(x) associé(s) jusqu\'ici.',
+  AppLocale.rematchAchievementsPaused:
+      'En pause : {matched} jeu(x) associé(s) jusqu’ici. Relancez-le pour continuer.',
   AppLocale.rematchAchievementsFailed:
       'Échec de l\'association des jeux RetroAchievements : {error}',
   AppLocale.raFixMatch: 'Corriger l’association',
