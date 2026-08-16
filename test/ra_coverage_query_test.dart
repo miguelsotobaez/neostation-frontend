@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/database_game_model.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/system_model.dart';
 import 'package:neostation/repositories/game_repository.dart';
+import 'package:neostation/services/game_service.dart';
 import 'package:neostation/utils/ra_coverage.dart';
 
 import 'database_test_helper.dart';
@@ -189,6 +191,40 @@ void main() {
         await onlyGameOf(() => GameRepository.getGamesBySystem('dos')),
       );
       expect(game.raCoverage, RaCoverage.unsupportedSystem);
+    });
+  });
+
+  group('GameService.loadGamesForSystem carries the match to the UI', () {
+    // GameListService builds GameModel by hand rather than through
+    // GameModel.fromDatabaseModel, so a field added to the query and to both
+    // models still arrives null at every tile. That is exactly how the badge
+    // came to render nowhere while the database held the right numbers.
+    setUp(() async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id) VALUES ('nes')",
+      );
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, id_ra) "
+        "VALUES ('mario.nes', '/roms/nes/mario.nes', 'nes', 'h-one', 500)",
+      );
+    });
+
+    test('the game the grid renders knows its match and its count', () async {
+      final games = await GameService.loadGamesForSystem(
+        const SystemModel(
+          id: 'nes',
+          folderName: 'nes',
+          realName: 'NES',
+          iconImage: '',
+          color: '#000000',
+        ),
+      );
+
+      final game = games.singleWhere((g) => g.romname == 'mario.nes');
+      expect(game.idRa, 500);
+      expect(game.raNumAchievements, 42);
+      expect(game.systemRaId, '7');
+      expect(game.raCoverage, RaCoverage.matched);
     });
   });
 }
