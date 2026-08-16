@@ -21,6 +21,27 @@ class RetroAchievementsHashService {
 
   static final _log = LoggerService.instance;
 
+  /// Whether a library-wide pass is in flight, and whether one has been asked
+  /// to pause.
+  ///
+  /// Deliberately owned by the service rather than by the Tools screen: the
+  /// pass outlives that widget. Navigating away disposes it while the run keeps
+  /// going, so widget state reports "idle" on the way back and a second
+  /// concurrent pass can be started over the same ROMs — and the first run's
+  /// pause flag, captured in a closure over the dead State, can never be read
+  /// again, leaving it unstoppable.
+  static bool _rematchRunning = false;
+  static bool _rematchPauseRequested = false;
+
+  /// Whether [rematchLibrary] is currently running.
+  static bool get isRematchRunning => _rematchRunning;
+
+  /// Asks an in-flight pass to stop after the ROM it is working on. No-op when
+  /// nothing is running.
+  static void requestRematchPause() {
+    if (_rematchRunning) _rematchPauseRequested = true;
+  }
+
   /// Generates the appropriate RA hash for a specific game if not already present.
   ///
   /// Checks local cache (SQLite) before attempting generation. Handles temporary
@@ -132,6 +153,43 @@ class RetroAchievementsHashService {
     void Function(int processed, int total, String label)? onProgress,
     bool Function()? isCancelled,
   }) async {
+    // A second pass over the same candidates would duplicate every hash and
+    // race the first on the same rows; refuse rather than interleave.
+    if (_rematchRunning) {
+      _log.w('RA re-match already running; ignoring duplicate start');
+      return const RaRematchResult(
+        total: 0,
+        processed: 0,
+        hashed: 0,
+        matched: 0,
+        skipped: 0,
+        cancelled: true,
+      );
+    }
+    _rematchRunning = true;
+    _rematchPauseRequested = false;
+    try {
+      return await _runRematch(
+        mode: mode,
+        includeDiscSystems: includeDiscSystems,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+      );
+    } finally {
+      _rematchRunning = false;
+      _rematchPauseRequested = false;
+    }
+  }
+
+  static Future<RaRematchResult> _runRematch({
+    required RaRematchMode mode,
+    required bool includeDiscSystems,
+    void Function(int processed, int total, String label)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    // Either the caller's own flag or a pause requested through the service.
+    bool cancelled() =>
+        _rematchPauseRequested || (isCancelled?.call() ?? false);
     var candidates = mode == RaRematchMode.lookupOnly
         ? await RetroAchievementsRepository.getRomsNeedingRaGameId()
         : await RetroAchievementsRepository.getRomsNeedingRaHash(
@@ -161,7 +219,7 @@ class RetroAchievementsHashService {
     _log.i('RA re-match (${mode.name}): $total candidate ROMs');
 
     for (final candidate in candidates) {
-      if (isCancelled?.call() ?? false) {
+      if (cancelled()) {
         _log.i('RA re-match cancelled after $processed of $total');
         return RaRematchResult(
           total: total,

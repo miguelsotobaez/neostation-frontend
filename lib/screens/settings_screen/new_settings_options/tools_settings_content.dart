@@ -41,8 +41,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   static final _log = LoggerService.instance;
   bool _isOrganizingMultiDisc = false;
   bool _isCleaningMetadata = false;
-  bool _isRematchingAchievements = false;
-  bool _rematchPaused = false;
   List<String> _currentRomFolders = [];
 
   @override
@@ -381,8 +379,12 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   /// ROMs that have never been hashed at all. Selecting the row again while it
   /// runs stops it after the current ROM.
   Future<void> _rematchAchievements() async {
-    if (_isRematchingAchievements) {
-      setState(() => _rematchPaused = true);
+    // The service owns "is it running", not this widget: leaving Tools disposes
+    // the screen while the pass carries on, so a local flag reads idle on the
+    // way back and would start a second run over the same ROMs.
+    if (RetroAchievementsHashService.isRematchRunning) {
+      RetroAchievementsHashService.requestRematchPause();
+      setState(() {});
       return;
     }
 
@@ -426,10 +428,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     const notificationId = 'rematch_achievements';
 
     try {
-      setState(() {
-        _isRematchingAchievements = true;
-        _rematchPaused = false;
-      });
+      setState(() {});
 
       GlobalNotificationService().show(
         id: notificationId,
@@ -437,8 +436,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         type: GlobalNotificationType.info,
         progress: 0,
       );
-
-      bool isCancelled() => _rematchPaused;
 
       // The pass resumes: hashed ROMs are excluded from the candidate query, so
       // a stopped run picks up where it left off. Report progress against the
@@ -452,7 +449,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       // already carry a hash.
       final lookup = await RetroAchievementsHashService.rematchLibrary(
         mode: RaRematchMode.lookupOnly,
-        isCancelled: isCancelled,
+
         onProgress: (processed, total, _) {
           if (total == 0) return;
           GlobalNotificationService().update(
@@ -468,7 +465,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       final hashPass = lookup.cancelled
           ? null
           : await RetroAchievementsHashService.rematchLibrary(
-              isCancelled: isCancelled,
               onProgress: (processed, total, label) {
                 if (total == 0) return;
                 GlobalNotificationService().update(
@@ -513,10 +509,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       completionType = NotificationType.error;
     } finally {
       if (mounted) {
-        setState(() {
-          _isRematchingAchievements = false;
-          _rematchPaused = false;
-        });
+        setState(() {});
         if (completionMessage != null && completionType != null) {
           GlobalNotificationService().update(
             id: notificationId,
@@ -578,7 +571,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     selected: isSelected,
                     onTap: () => _rematchAchievements(),
                     trailing: SettingsActionButton(
-                      icon: _isRematchingAchievements
+                      icon: RetroAchievementsHashService.isRematchRunning
                           ? Symbols.pause_rounded
                           : Symbols.emoji_events_rounded,
                       selected: isSelected,
