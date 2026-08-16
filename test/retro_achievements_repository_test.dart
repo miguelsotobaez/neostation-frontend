@@ -95,6 +95,58 @@ void main() {
       expect(result.first['id_ra'], 1234);
     });
 
+    group('getGameIdByHash', () {
+      test('resolves a hash registered under the ROM\'s own console', () async {
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title) "
+          "VALUES ('abc123', 500, 7, 'NES/Famicom', 'Mario')",
+        );
+
+        expect(
+          await RetroAchievementsRepository.getGameIdByHash('abc123', '7'),
+          500,
+        );
+      });
+
+      test('resolves a hash registered under a different console', () async {
+        // A 32X title kept in the Mega Drive folder: the set is registered
+        // under console 10, the system's ra_id is 1. The dump is still that
+        // game, so the scoped miss must fall through rather than give up.
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title) "
+          "VALUES ('32xhash', 600, 10, '32X', 'Knuckles'' Chaotix')",
+        );
+
+        expect(
+          await RetroAchievementsRepository.getGameIdByHash('32xhash', '1'),
+          600,
+        );
+      });
+
+      test('prefers the ROM\'s own console when both are registered', () async {
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title) "
+          "VALUES ('shared', 700, 10, '32X', 'Other')",
+        );
+        await db.execute(
+          "INSERT INTO app_ra_game_list (hash, game_id, console_id, console_name, title) "
+          "VALUES ('shared', 701, 1, 'Genesis/Mega Drive', 'Own console')",
+        );
+
+        expect(
+          await RetroAchievementsRepository.getGameIdByHash('shared', '1'),
+          701,
+        );
+      });
+
+      test('returns null when the hash is not registered at all', () async {
+        expect(
+          await RetroAchievementsRepository.getGameIdByHash('missing', '7'),
+          isNull,
+        );
+      });
+    });
+
     test('findRAHashByConsoleName returns hash and gameId', () async {
       await db.execute(
         "INSERT INTO app_ra_game_list (hash, game_id, console_name, title) VALUES ('deadbeef', 99, 'Nintendo Entertainment System', 'Mario')",

@@ -221,11 +221,13 @@ class OptimizedMd5Utils {
     }
   }
 
-  /// Calculates the MD5 hash for NES/Famicom ROMs.
+  /// Calculates the MD5 hash for NES/Famicom and Famicom Disk System ROMs.
   ///
-  /// If the ROM includes an iNES header ("NES\x1a"), the first 16 bytes are
-  /// skipped before hashing to match RetroAchievements requirements.
-  /// Handles compressed (.zip, .7z) files by extracting them first.
+  /// If the ROM includes an iNES header ("NES\x1a") or an FDS header
+  /// ("FDS\x1a"), the first 16 bytes are skipped before hashing, which is what
+  /// rcheevos does and therefore what RetroAchievements' registered hashes are
+  /// computed over. Handles compressed (.zip, .7z) files by extracting them
+  /// first.
   static Future<String> calculateNesMd5(String filePath) async {
     try {
       if (!await fileExists(filePath)) {
@@ -266,12 +268,10 @@ class OptimizedMd5Utils {
         }
       }
 
-      // Check for iNES header ("NES\x1a").
-      if (romBytes.length >= 4 &&
-          romBytes[0] == 0x4E &&
-          romBytes[1] == 0x45 &&
-          romBytes[2] == 0x53 &&
-          romBytes[3] == 0x1A) {
+      // Check for an iNES ("NES\x1a") or FDS ("FDS\x1a") header. Both are
+      // 16 bytes and both are excluded from the hash RetroAchievements
+      // registers; a headered .fds hashed whole matches nothing.
+      if (_hasNesOrFdsHeader(romBytes)) {
         // Strip 16-byte header.
         return crypto.md5
             .convert(romBytes.length > 16 ? romBytes.sublist(16) : romBytes)
@@ -283,6 +283,18 @@ class OptimizedMd5Utils {
       _log.e('Error calculating NES MD5 for $filePath: $e');
       rethrow;
     }
+  }
+
+  /// Whether [bytes] starts with a 16-byte iNES or FDS header.
+  ///
+  /// Both magics share a layout — three ASCII letters then 0x1A — and both
+  /// precede 16 bytes that RetroAchievements excludes from the hash.
+  static bool _hasNesOrFdsHeader(List<int> bytes) {
+    if (bytes.length < 4 || bytes[3] != 0x1A) return false;
+    // "NES" or "FDS".
+    final isNes = bytes[0] == 0x4E && bytes[1] == 0x45 && bytes[2] == 0x53;
+    final isFds = bytes[0] == 0x46 && bytes[1] == 0x44 && bytes[2] == 0x53;
+    return isNes || isFds;
   }
 
   /// Calculates the MD5 hash for SNES/Super Famicom ROMs.

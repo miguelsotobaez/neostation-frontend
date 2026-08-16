@@ -93,9 +93,27 @@ class RetroAchievementsRepository {
 
   // ── Game ID lookups (for RA game matching) ────────────────────────────────
 
-  /// Resolves RA game_id by MD5 hash and console ID string.
-  static Future<int?> getGameIdByHash(String raHash, String raConsoleId) =>
-      SqliteService.getRetroAchievementsGameIdByHash(raHash, raConsoleId);
+  /// Resolves RA game_id by MD5 hash, preferring the ROM's own console.
+  ///
+  /// Falls back to a console-agnostic lookup when the scoped one finds
+  /// nothing. An MD5 is unique in practice, so restricting it to one console
+  /// buys no safety — it only loses matches whenever a ROM sits in a folder
+  /// whose RA console differs from the one its set is registered under: 32X
+  /// titles kept in a Mega Drive folder, a Game Boy set for a ROM filed under
+  /// Game Boy Color, an SG-1000 title in a Master System folder. Those are
+  /// correct matches for the exact dump, and the lazy per-game path already
+  /// accepted them, so the scoped-only lookup just made the two paths
+  /// disagree.
+  static Future<int?> getGameIdByHash(String raHash, String raConsoleId) async {
+    final scoped = await SqliteService.getRetroAchievementsGameIdByHash(
+      raHash,
+      raConsoleId,
+    );
+    if (scoped != null && scoped != 0) return scoped;
+
+    final anyConsole = await findGameIdByHash(raHash);
+    return (anyConsole == null || anyConsole == 0) ? null : anyConsole;
+  }
 
   // ── ROM RA-data update ─────────────────────────────────────────────────────
 
