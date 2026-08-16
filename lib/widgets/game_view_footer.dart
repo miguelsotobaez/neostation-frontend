@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
@@ -123,7 +124,14 @@ class GameViewFooter extends StatelessWidget {
                   _SteamStyleRating(game: game),
                   SizedBox(width: 6.r),
                 ],
-                if (hasRetroAchievements) ...[
+                // Signed out, no achievement data is ever loaded, so the pill
+                // would render its "none" state for every game in the library
+                // and read as "this game has no achievements" rather than
+                // "nobody asked RetroAchievements". Say nothing instead.
+                if (hasRetroAchievements &&
+                    context.select<RetroAchievementsProvider, bool>(
+                      (ra) => ra.isConnected,
+                    )) ...[
                   _CompactAchievementsIndicator(
                     isLoading: isLoadingAchievements,
                     gameInfo: currentGameInfo,

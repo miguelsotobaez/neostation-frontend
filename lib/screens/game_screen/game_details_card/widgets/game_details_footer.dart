@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -302,6 +304,15 @@ class GameDetailsFooter extends StatelessWidget {
     required bool hasPlayTime,
   }) {
     if (!hasRetroAchievements) return const SizedBox.shrink();
+
+    // Signed out, nothing ever loads achievement data, so the badge below
+    // would settle on its "none" state for every game and claim the game has
+    // no achievements when the truth is that nobody asked.
+    if (!context.select<RetroAchievementsProvider, bool>(
+      (ra) => ra.isConnected,
+    )) {
+      return const SizedBox.shrink();
+    }
 
     // The badge fills its (Expanded) slot when the legend is hidden, or when
     // there is no play-time pill claiming the space to its right (otherwise it
