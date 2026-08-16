@@ -260,6 +260,8 @@ const Map<String, dynamic> appLocaleFr = {
       'Analyse toute la bibliothèque à la recherche de sets de succès, au lieu d\'un jeu à la fois',
   AppLocale.rematchAchievementsWarning:
       'Chaque ROM non associée est lue pour être identifiée, ce qui peut prendre du temps sur une grande bibliothèque. Sélectionnez à nouveau pour arrêter. Les systèmes à disque sont ignorés pour l\'instant. Rien n\'est déplacé ni supprimé.',
+  AppLocale.rematchAchievementsSignedOut:
+      'La correspondance fonctionne même déconnecté, mais vous devez vous connecter à RetroAchievements pour voir les résultats.',
   AppLocale.rematchAchievementsLookingUp:
       'Vérification des jeux déjà hachés...',
   AppLocale.rematchAchievementsHashing: 'Identification de {filename}',

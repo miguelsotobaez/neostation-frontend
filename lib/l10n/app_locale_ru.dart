@@ -250,6 +250,8 @@ const Map<String, dynamic> appLocaleRu = {
       'Проверяет всю библиотеку на наличие наборов достижений, а не по одной игре',
   AppLocale.rematchAchievementsWarning:
       'Каждый несопоставленный ROM будет прочитан для опознания — на большой библиотеке это займёт время. Выберите ещё раз, чтобы остановить. Дисковые системы пока пропускаются. Ничего не перемещается и не удаляется.',
+  AppLocale.rematchAchievementsSignedOut:
+      'Сопоставление работает и без входа в аккаунт, но чтобы увидеть результаты, нужно войти в RetroAchievements.',
   AppLocale.rematchAchievementsLookingUp:
       'Проверка игр, для которых уже есть хеш...',
   AppLocale.rematchAchievementsHashing: 'Опознаётся {filename}',

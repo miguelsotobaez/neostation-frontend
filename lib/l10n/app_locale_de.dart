@@ -255,6 +255,8 @@ const Map<String, dynamic> appLocaleDe = {
       'Durchsucht die gesamte Bibliothek nach Achievement-Sets, statt Spiel für Spiel',
   AppLocale.rematchAchievementsWarning:
       'Dabei wird jede noch nicht zugeordnete ROM eingelesen, um sie zu identifizieren. Bei großen Bibliotheken kann das dauern. Erneut auswählen, um abzubrechen. CD-basierte Systeme werden vorerst übersprungen. Es wird nichts verschoben oder gelöscht.',
+  AppLocale.rematchAchievementsSignedOut:
+      'Der Abgleich läuft auch im abgemeldeten Zustand, aber du musst dich bei RetroAchievements anmelden, um die Ergebnisse zu sehen.',
   AppLocale.rematchAchievementsLookingUp:
       'Bereits gehashte Spiele werden geprüft ...',
   AppLocale.rematchAchievementsHashing: '{filename} wird identifiziert',

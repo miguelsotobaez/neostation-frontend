@@ -205,6 +205,8 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rematchAchievementsSubtitle: '扫描整个库来查找成就集，而不是逐个打开游戏',
   AppLocale.rematchAchievementsWarning:
       '将读取每个尚未匹配的 ROM 以识别它，库较大时可能需要一些时间。再次选择即可停止。光盘类系统暂不处理。不会移动或删除任何文件。',
+  AppLocale.rematchAchievementsSignedOut:
+      '未登录时也会进行匹配，但需要登录 RetroAchievements 才能查看结果。',
   AppLocale.rematchAchievementsLookingUp: '正在检查已有哈希的游戏…',
   AppLocale.rematchAchievementsHashing: '正在识别 {filename}',
   AppLocale.rematchAchievementsDone: '完成：匹配 {matched} 个游戏，新识别 {hashed} 个。',

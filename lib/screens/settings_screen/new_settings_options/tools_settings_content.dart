@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/repositories/retro_achievements_repository.dart';
@@ -386,9 +387,17 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     }
 
     final localeTitle = AppLocale.rematchAchievements.getString(context);
-    final localeWarning = AppLocale.rematchAchievementsWarning.getString(
-      context,
-    );
+    var localeWarning = AppLocale.rematchAchievementsWarning.getString(context);
+
+    // The pass itself needs no account — it hashes locally and looks the hash
+    // up in the bundled RA database. Every screen that *shows* a match does
+    // need one, though, so without this a signed-out user would watch a long
+    // run finish and see nothing change anywhere.
+    if (!context.read<RetroAchievementsProvider>().isConnected) {
+      localeWarning =
+          '$localeWarning\n\n'
+          '${AppLocale.rematchAchievementsSignedOut.getString(context)}';
+    }
     final localeLookingUp = AppLocale.rematchAchievementsLookingUp.getString(
       context,
     );

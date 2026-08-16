@@ -209,6 +209,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rematchAchievementsSubtitle: 'ゲームを1本ずつ開かずに、ライブラリ全体から実績セットを探します',
   AppLocale.rematchAchievementsWarning:
       '未照合の ROM をすべて読み込んで識別します。ライブラリが大きい場合は時間がかかります。もう一度選択すると停止します。ディスク系のシステムは現時点では対象外です。ファイルの移動や削除は行いません。',
+  AppLocale.rematchAchievementsSignedOut:
+      'ログアウトしていても照合は実行されますが、結果を見るには RetroAchievements にログインする必要があります。',
   AppLocale.rematchAchievementsLookingUp: 'ハッシュ済みのゲームを確認中...',
   AppLocale.rematchAchievementsHashing: '{filename} を識別中',
   AppLocale.rematchAchievementsDone:

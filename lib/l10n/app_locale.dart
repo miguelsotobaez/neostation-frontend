@@ -251,6 +251,8 @@ mixin AppLocale {
       'rematch_achievements_subtitle';
   static const String rematchAchievementsWarning =
       'rematch_achievements_warning';
+  static const String rematchAchievementsSignedOut =
+      'rematch_achievements_signed_out';
   static const String rematchAchievementsLookingUp =
       'rematch_achievements_looking_up';
   static const String rematchAchievementsHashing =

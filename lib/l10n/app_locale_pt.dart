@@ -252,6 +252,8 @@ const Map<String, dynamic> appLocalePt = {
       'Verifica toda a biblioteca à procura de conjuntos de conquistas, em vez de um jogo de cada vez',
   AppLocale.rematchAchievementsWarning:
       'Cada ROM ainda não associada será lida para ser identificada, o que pode demorar numa biblioteca grande. Seleciona novamente para parar. Os sistemas em disco são ignorados por agora. Nada é movido ou eliminado.',
+  AppLocale.rematchAchievementsSignedOut:
+      'A correspondência funciona sem sessão iniciada, mas é preciso iniciar sessão no RetroAchievements para ver os resultados.',
   AppLocale.rematchAchievementsLookingUp:
       'A verificar jogos que já têm hash...',
   AppLocale.rematchAchievementsHashing: 'A identificar {filename}',

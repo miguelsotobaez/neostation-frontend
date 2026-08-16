@@ -244,6 +244,8 @@ const Map<String, dynamic> appLocaleId = {
       'Memeriksa seluruh pustaka untuk set prestasi, bukan satu game per satu',
   AppLocale.rematchAchievementsWarning:
       'Setiap ROM yang belum cocok akan dibaca untuk diidentifikasi, dan ini bisa memakan waktu pada pustaka besar. Pilih lagi untuk menghentikan. Sistem berbasis disc dilewati untuk sekarang. Tidak ada yang dipindahkan atau dihapus.',
+  AppLocale.rematchAchievementsSignedOut:
+      'Pencocokan tetap berjalan saat Anda keluar, tetapi Anda perlu masuk ke RetroAchievements untuk melihat hasilnya.',
   AppLocale.rematchAchievementsLookingUp:
       'Memeriksa game yang sudah memiliki hash...',
   AppLocale.rematchAchievementsHashing: 'Mengidentifikasi {filename}',

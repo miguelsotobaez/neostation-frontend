@@ -208,6 +208,8 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rematchAchievementsSubtitle: '게임을 하나씩 열지 않고 라이브러리 전체에서 업적 세트를 찾습니다',
   AppLocale.rematchAchievementsWarning:
       '아직 매칭되지 않은 모든 ROM을 읽어 식별합니다. 라이브러리가 크면 시간이 걸릴 수 있습니다. 다시 선택하면 중지됩니다. 디스크 기반 시스템은 현재 제외됩니다. 파일을 옮기거나 삭제하지 않습니다.',
+  AppLocale.rematchAchievementsSignedOut:
+      '로그아웃 상태에서도 매칭은 실행되지만, 결과를 보려면 RetroAchievements에 로그인해야 합니다.',
   AppLocale.rematchAchievementsLookingUp: '이미 해시된 게임을 확인하는 중...',
   AppLocale.rematchAchievementsHashing: '{filename} 식별 중',
   AppLocale.rematchAchievementsDone: '완료: {matched}개 매칭, {hashed}개 새로 식별했습니다.',
