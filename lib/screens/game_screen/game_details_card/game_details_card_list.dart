@@ -11,6 +11,9 @@ import '../../../providers/retro_achievements_provider.dart';
 import '../../../sync/i_sync_provider.dart';
 import '../../../models/retro_achievements_game_info.dart';
 import '../../../repositories/game_repository.dart';
+import '../../../repositories/retro_achievements_repository.dart';
+import 'package:neostation/services/sfx_service.dart';
+import 'dialogs/ra_match_picker_dialog.dart';
 import '../../../services/retro_achievements_helper.dart';
 import '../../../utils/artwork_cache.dart';
 import '../../../utils/gamepad_nav.dart';
@@ -179,6 +182,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   GameInfoAndUserProgress? _currentGameInfo;
   bool _isLoadingAchievements = false;
 
+  /// Whether the shown match was chosen by hand, which decides whether the
+  /// picker offers a way back to automatic matching.
+  bool _isManualMatch = false;
+
   // Media playback configuration state.
   bool _isLoadingVideoConfig = true;
 
@@ -304,6 +311,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     if (!widget.isNavigatingFast) {
       _loadAchievementsForGame();
     }
+    _loadMatchSource();
 
     widget.retroAchievementsProvider.addListener(_onRAProviderChanged);
 
@@ -429,6 +437,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       if (!widget.isNavigatingFast) {
         _loadAchievementsForGame(forceRefresh: false);
       }
+      _loadMatchSource();
       _verifyCloudSyncStatus();
 
       if (widget.showVideo) {
@@ -524,6 +533,44 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   }
 
   /// Loads RetroAchievements data for the current game, including MD5 hash generation.
+  /// Reads whether this ROM's match was set by hand, so the picker knows to
+  /// offer the "use automatic matching" way back.
+  Future<void> _loadMatchSource() async {
+    final romPath = widget.game.romPath;
+    if (romPath == null || romPath.isEmpty) return;
+    final source = await RetroAchievementsRepository.getRomRaMatchSource(
+      romPath,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isManualMatch = source == RetroAchievementsRepository.raMatchManual;
+    });
+  }
+
+  /// Opens the manual match picker and reloads the tab when the user picked a
+  /// different game, so the achievement list reflects the new set immediately.
+  ///
+  /// The list view reaches achievements through this tab rather than through
+  /// GameAchievementsDialog, so without this the picker is unreachable in one
+  /// of the three view modes.
+  Future<void> _openMatchPicker() async {
+    SfxService().playNavSound();
+    final changed = await RaMatchPickerDialog.show(
+      context,
+      game: widget.game,
+      system: _effectiveSystem,
+      currentGameId: _currentGameInfo?.id,
+      isManualMatch: _isManualMatch,
+    );
+    if (!changed || !mounted) return;
+
+    // The match moved, so anything cached against the old game id is wrong.
+    RetroAchievementsHelper.evictBadgeCache(_currentGameInfo);
+    widget.retroAchievementsProvider.gameInfoCache.clear();
+    await _loadMatchSource();
+    if (mounted) refreshAchievements();
+  }
+
   Future<void> _loadAchievementsForGame({bool forceRefresh = false}) async {
     final gameTarget = widget.game;
 
@@ -710,6 +757,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               gameInfo: _currentGameInfo,
               isLoading: _isLoadingAchievements,
               onRefresh: refreshAchievements,
+              onFixMatch: _openMatchPicker,
             ),
 
           // Scrape feedback for every tab. A scrape can start from any of them
