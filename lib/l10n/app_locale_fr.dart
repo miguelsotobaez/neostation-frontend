@@ -994,7 +994,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommInfoSaveSync:
       'Synchronisez vos sauvegardes entre vos appareils',
   AppLocale.rommInfoSelfHosted:
-      'Auto-hébergé — votre collection, votre serveur',
+      'Auto-hébergé : votre collection, votre serveur',
   AppLocale.rommLearnMoreAt: 'En savoir plus sur ',
   AppLocale.rommServerUrl: 'URL du serveur',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
@@ -1015,6 +1015,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommConnectedAs: 'Connecté en tant que {user}',
   AppLocale.rommCredentialsRequired:
       'Saisissez l’URL du serveur, l’utilisateur et le mot de passe',
+  AppLocale.rommAuthPassword: 'Mot de passe',
+  AppLocale.rommAuthApiKey: 'Clé d’API',
+  AppLocale.rommApiKey: 'Clé d’API',
+  AppLocale.rommApiKeyHint: 'rmm_...',
+  AppLocale.rommApiKeyRequired: 'Saisissez l’URL du serveur et la clé d’API',
   AppLocale.rommPlatforms: 'Plateformes',
   AppLocale.rommNoPlatforms: 'Aucune plateforme trouvée',
   AppLocale.rommCollections: 'Collections',
@@ -1039,7 +1044,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommSyncCancel: 'Annuler la synchronisation',
   AppLocale.rommSyncConfirmTitle: 'Synchroniser {name} ?',
   AppLocale.rommSyncConfirmPlan:
-      'Télécharge {count} jeux — {size}. Cela peut être long.',
+      'Télécharge {count} jeux ({size}). Cela peut être long.',
   AppLocale.rommSyncConfirmSkipped: '{count} déjà sur cet appareil.',
   AppLocale.rommSyncConfirmFree: '{free} disponibles.',
   AppLocale.rommSyncConfirmNoSpace:

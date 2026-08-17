@@ -19,6 +19,7 @@ void main() {
         server_url TEXT,
         username TEXT,
         password TEXT,
+        api_key TEXT,
         access_token TEXT,
         refresh_token TEXT,
         token_expires INTEGER,
@@ -95,6 +96,68 @@ void main() {
         expect((await RommRepository.getConfig())!['server_url'], 'https://b');
       },
     );
+
+    test('saveConfig round-trips an API key instead of a password', () async {
+      await RommRepository.saveConfig(
+        serverUrl: 'https://romm.local',
+        apiKey: 'rmm_deadbeef',
+      );
+
+      final config = await RommRepository.getConfig();
+      expect(config!['api_key'], 'rmm_deadbeef');
+      expect(config['username'], '');
+      expect(config['password'], '');
+    });
+
+    test('the API key is stored base64-encoded, not in plaintext', () async {
+      await RommRepository.saveConfig(
+        serverUrl: 'https://romm.local',
+        apiKey: 'rmm_deadbeef',
+      );
+      final row = (await db.query('user_romm_config')).first;
+      expect(row['api_key'], base64Encode(utf8.encode('rmm_deadbeef')));
+      expect(row['api_key'], isNot('rmm_deadbeef'));
+    });
+
+    test('switching to a password clears the stored API key', () async {
+      await RommRepository.saveConfig(
+        serverUrl: 'https://romm.local',
+        apiKey: 'rmm_deadbeef',
+      );
+      await RommRepository.saveConfig(
+        serverUrl: 'https://romm.local',
+        username: 'testuser',
+        password: 's3cret',
+      );
+
+      final config = await RommRepository.getConfig();
+      expect(config!['api_key'], '');
+      expect(config['password'], 's3cret');
+    });
+
+    test('switching to an API key clears the stored password', () async {
+      await RommRepository.saveConfig(
+        serverUrl: 'https://romm.local',
+        username: 'testuser',
+        password: 's3cret',
+      );
+      await RommRepository.saveConfig(
+        serverUrl: 'https://romm.local',
+        apiKey: 'rmm_deadbeef',
+      );
+
+      final config = await RommRepository.getConfig();
+      expect(config!['password'], '');
+      expect(config['api_key'], 'rmm_deadbeef');
+    });
+
+    test('getConfig reads an absent api_key as unset', () async {
+      await db.execute(
+        "INSERT INTO user_romm_config (id, server_url, username) "
+        "VALUES (1, 'https://x', 'testuser')",
+      );
+      expect((await RommRepository.getConfig())!['api_key'], '');
+    });
 
     test('getConfig returns null when server_url is empty', () async {
       await db.execute(

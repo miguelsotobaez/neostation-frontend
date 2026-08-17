@@ -22,11 +22,14 @@ import '../app_screen.dart';
 
 /// Self-contained RomM connect / account panel for the top-level RomM tab.
 ///
-/// When disconnected it shows the server credential form (URL / user / password
-/// + connect). When connected it shows the server status plus the save-sync
-/// toggle, a disconnect action, and — when [onBrowse] is provided — a shortcut
-/// back to the library browser. Unlike the old settings panel this widget owns
-/// its own gamepad navigation layer so it works as a standalone tab.
+/// When disconnected it shows the server credential form: the server URL, an
+/// authentication mode switch (username + password, or a RomM Client API
+/// Token), the fields that mode needs, and connect. The URL leads because both
+/// modes need it — the switch only changes how you prove who you are, not which
+/// server you are proving it to. When connected it shows the server status plus
+/// the save-sync toggle, a disconnect action, and — when [onBrowse] is provided
+/// — a shortcut back to the library browser. Unlike the old settings panel this
+/// widget owns its own gamepad navigation layer so it works as a standalone tab.
 class RommConnectContent extends StatefulWidget {
   /// Invoked by the "back to library" action while connected. Null when the
   /// panel is shown as the disconnected landing view (nothing to go back to).
@@ -41,37 +44,55 @@ class RommConnectContent extends StatefulWidget {
 class _RommConnectContentState extends State<RommConnectContent>
     with LoginFormSelection<RommConnectContent> {
   final ScrollController _scrollController = ScrollController();
-  final List<GlobalKey> _itemKeys = List.generate(4, (_) => GlobalKey());
+  final List<GlobalKey> _itemKeys = List.generate(5, (_) => GlobalKey());
 
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _apiKeyController = TextEditingController();
   final FocusNode _urlFocus = FocusNode();
   final FocusNode _userFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _apiKeyFocus = FocusNode();
 
   late final GamepadNavigation _gamepadNav;
   bool _busy = false;
 
-  /// The slots the D-pad walks, which change with the connection state:
-  /// disconnected the panel is three credential fields plus connect, connected
-  /// it is three action rows and no field at all. Read live, so the cursor is
-  /// clamped into range the moment a connection is made or dropped — including
-  /// by something other than this panel's own buttons.
+  /// Whether the form is collecting a Client API Token instead of a username
+  /// and password. Purely a property of the login form — a connection remembers
+  /// its own mode in the database.
+  bool _useApiKey = false;
+
+  /// The slots the D-pad walks, which change with both the connection state and
+  /// the authentication mode: connected it is three action rows and no field at
+  /// all, disconnected it is the server URL, the mode switch, that mode's
+  /// secret(s), and connect. Read live, so the cursor is clamped into range the
+  /// moment any of that changes — including by something other than this
+  /// panel's own buttons.
   @override
-  List<FocusNode?> get selectionSlots =>
-      context.read<RommProvider>().isConnected
-      ? const [null, null, null]
-      : [_urlFocus, _userFocus, _passwordFocus, null];
+  List<FocusNode?> get selectionSlots {
+    if (context.read<RommProvider>().isConnected) {
+      return const [null, null, null];
+    }
+    return _useApiKey
+        ? [_urlFocus, null, _apiKeyFocus, null]
+        : [_urlFocus, null, _userFocus, _passwordFocus, null];
+  }
 
   /// Every node the panel owns, not just the ones the current state shows, so
-  /// focus tracking survives the switch to the connected view.
+  /// focus tracking survives the switch to the connected view or between the
+  /// two authentication modes.
   @override
   List<FocusNode> get ownedFocusNodes => [
     _urlFocus,
     _userFocus,
     _passwordFocus,
+    _apiKeyFocus,
   ];
+
+  /// Slot the mode switch sits on: under the server URL, which both modes need,
+  /// and above the fields it actually decides.
+  static const int _authModeSlot = 1;
 
   @override
   void initState() {
@@ -112,9 +133,11 @@ class _RommConnectContentState extends State<RommConnectContent>
     _urlController.dispose();
     _userController.dispose();
     _passwordController.dispose();
+    _apiKeyController.dispose();
     _urlFocus.dispose();
     _userFocus.dispose();
     _passwordFocus.dispose();
+    _apiKeyFocus.dispose();
     super.dispose();
   }
 
@@ -143,8 +166,19 @@ class _RommConnectContentState extends State<RommConnectContent>
       }
       return;
     }
+    if (isSelected(_authModeSlot)) {
+      _toggleAuthMode();
+      return;
+    }
     if (focusSelectedField()) return;
     _connect();
+  }
+
+  /// Flips between the two login modes. Nothing at or above the switch moves,
+  /// so the cursor is left where it is; only the rows below are replaced, and
+  /// the mixin clamps a cursor that was parked on one of them.
+  void _toggleAuthMode() {
+    setState(() => _useApiKey = !_useApiKey);
   }
 
   /// B leaves a focused field first — that is what it does everywhere else in
@@ -172,12 +206,18 @@ class _RommConnectContentState extends State<RommConnectContent>
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   bool _validateInputs() {
-    if (_urlController.text.trim().isEmpty ||
-        _userController.text.trim().isEmpty ||
-        _passwordController.text.isEmpty) {
+    final urlMissing = _urlController.text.trim().isEmpty;
+    final secretMissing = _useApiKey
+        ? _apiKeyController.text.trim().isEmpty
+        : _userController.text.trim().isEmpty ||
+              _passwordController.text.isEmpty;
+    if (urlMissing || secretMissing) {
       AppNotification.showNotification(
         context,
-        AppLocale.rommCredentialsRequired.getString(context),
+        (_useApiKey
+                ? AppLocale.rommApiKeyRequired
+                : AppLocale.rommCredentialsRequired)
+            .getString(context),
         type: NotificationType.error,
       );
       return false;
@@ -196,8 +236,9 @@ class _RommConnectContentState extends State<RommConnectContent>
         .updateActiveSyncProvider;
     final error = await provider.connect(
       serverUrl: _urlController.text.trim(),
-      username: _userController.text.trim(),
-      password: _passwordController.text,
+      username: _useApiKey ? '' : _userController.text.trim(),
+      password: _useApiKey ? '' : _passwordController.text,
+      apiKey: _useApiKey ? _apiKeyController.text.trim() : '',
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -221,7 +262,7 @@ class _RommConnectContentState extends State<RommConnectContent>
         );
       }
       if (!mounted) return;
-      _passwordController.clear();
+      _clearSecretFields();
       // Reset selection so the connected view starts on the first row.
       resetSelection();
       AppNotification.showNotification(
@@ -250,8 +291,16 @@ class _RommConnectContentState extends State<RommConnectContent>
       );
     }
     if (!mounted) return;
-    _passwordController.clear();
+    _clearSecretFields();
     resetSelection();
+  }
+
+  /// Wipes both modes' secrets out of the form once they have been handed to
+  /// the provider (or thrown away by a disconnect), so neither lingers on
+  /// screen — nor in memory — while the panel stays mounted.
+  void _clearSecretFields() {
+    _passwordController.clear();
+    _apiKeyController.clear();
   }
 
   bool get _isSaveSyncActive =>
@@ -534,27 +583,123 @@ class _RommConnectContentState extends State<RommConnectContent>
         focusNode: _urlFocus,
       ),
       SizedBox(height: 10.r),
-      _buildFieldRow(
-        theme,
-        index: 1,
-        label: AppLocale.username.getString(context),
-        hint: AppLocale.enterUsername.getString(context),
-        controller: _userController,
-        focusNode: _userFocus,
-      ),
-      SizedBox(height: 8.r),
-      _buildFieldRow(
-        theme,
-        index: 2,
-        label: AppLocale.password.getString(context),
-        hint: AppLocale.enterPassword.getString(context),
-        controller: _passwordController,
-        focusNode: _passwordFocus,
-        obscure: true,
-      ),
+      _buildAuthModeRow(theme),
+      SizedBox(height: 10.r),
+      if (_useApiKey) ...[
+        _buildFieldRow(
+          theme,
+          index: 2,
+          label: AppLocale.rommApiKey.getString(context),
+          hint: AppLocale.rommApiKeyHint.getString(context),
+          controller: _apiKeyController,
+          focusNode: _apiKeyFocus,
+          obscure: true,
+        ),
+      ] else ...[
+        _buildFieldRow(
+          theme,
+          index: 2,
+          label: AppLocale.username.getString(context),
+          hint: AppLocale.enterUsername.getString(context),
+          controller: _userController,
+          focusNode: _userFocus,
+        ),
+        SizedBox(height: 8.r),
+        _buildFieldRow(
+          theme,
+          index: 3,
+          label: AppLocale.password.getString(context),
+          hint: AppLocale.enterPassword.getString(context),
+          controller: _passwordController,
+          focusNode: _passwordFocus,
+          obscure: true,
+        ),
+      ],
       SizedBox(height: 12.r),
       _buildConnectButton(theme),
     ];
+  }
+
+  /// Two-option switch choosing how to authenticate. A (or a tap on either
+  /// half) flips it, so the gamepad needs one slot rather than two.
+  Widget _buildAuthModeRow(ThemeData theme) {
+    final selected = isSelected(_authModeSlot);
+    final scheme = theme.colorScheme;
+    return Container(
+      key: _itemKeys[_authModeSlot],
+      constraints: BoxConstraints(maxWidth: 220.r),
+      padding: EdgeInsets.all(3.r),
+      decoration: BoxDecoration(
+        color: scheme.onSurface.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(
+          color: selected
+              ? scheme.primary
+              : scheme.primary.withValues(alpha: 0.1),
+          width: selected ? 2.r : 1.r,
+        ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: scheme.primary.withValues(alpha: 0.35),
+                  blurRadius: 6.r,
+                  spreadRadius: 1.r,
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          _buildAuthModeOption(
+            theme,
+            label: AppLocale.rommAuthPassword.getString(context),
+            active: !_useApiKey,
+          ),
+          _buildAuthModeOption(
+            theme,
+            label: AppLocale.rommAuthApiKey.getString(context),
+            active: _useApiKey,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAuthModeOption(
+    ThemeData theme, {
+    required String label,
+    required bool active,
+  }) {
+    final scheme = theme.colorScheme;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          // Either half flips the switch: tapping the half already active is a
+          // no-op the user never notices, and this keeps the hit targets even.
+          onTap: _busy ? null : _toggleAuthMode,
+          borderRadius: BorderRadius.circular(6.r),
+          child: Container(
+            padding: EdgeInsets.symmetric(vertical: 6.r),
+            decoration: BoxDecoration(
+              color: active ? scheme.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(6.r),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9.r,
+                fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                color: active
+                    ? scheme.onPrimary
+                    : scheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   List<Widget> _buildConnectedRows(ThemeData theme) {
@@ -671,7 +816,8 @@ class _RommConnectContentState extends State<RommConnectContent>
   /// Primary "Save & Connect" button, matching the RetroAchievements connect
   /// button (full-width elevated button with a gamepad-selection glow).
   Widget _buildConnectButton(ThemeData theme) {
-    const index = 3;
+    // Last slot either way, and which number that is depends on the mode.
+    final index = submitSlot;
     final selected = isSelected(index);
     return Container(
       key: _itemKeys[index],

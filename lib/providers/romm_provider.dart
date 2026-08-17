@@ -315,16 +315,19 @@ class RommProvider extends ChangeNotifier {
       }
       _serverUrl = config['server_url'] as String;
       _username = config['username'] as String? ?? '';
+      final apiKey = config['api_key'] as String? ?? '';
       _service.configure(
         serverUrl: _serverUrl,
         username: _username,
         password: config['password'] as String? ?? '',
+        apiKey: apiKey,
         accessToken: config['access_token'] as String?,
         refreshToken: config['refresh_token'] as String?,
         tokenExpiresMs: config['token_expires'] as int?,
       );
       // These tokens came straight from the DB; mark them as persisted so the
-      // first browse call doesn't re-write an identical row.
+      // first browse call doesn't re-write an identical row. An API-key
+      // connection has no tokens at all, so there is never anything to persist.
       _lastPersistedAccessToken = config['access_token'] as String?;
       _status = RommConnectionStatus.connected;
       notifyListeners();
@@ -338,13 +341,21 @@ class RommProvider extends ChangeNotifier {
 
   /// Validates credentials against the server without persisting them.
   /// Returns null on success, or a user-facing error message.
+  ///
+  /// Pass either [username]/[password] or an [apiKey], matching [connect].
   Future<String?> testConnection({
     required String serverUrl,
-    required String username,
-    required String password,
+    String username = '',
+    String password = '',
+    String apiKey = '',
   }) async {
     final probe = RommService()
-      ..configure(serverUrl: serverUrl, username: username, password: password);
+      ..configure(
+        serverUrl: serverUrl,
+        username: username,
+        password: password,
+        apiKey: apiKey,
+      );
     try {
       await probe.verifyConnection();
       return null;
@@ -357,10 +368,15 @@ class RommProvider extends ChangeNotifier {
 
   /// Authenticates, persists credentials + tokens, and marks the provider
   /// connected. Returns null on success or a user-facing error message.
+  ///
+  /// Pass either [username]/[password] for the OAuth2 password grant or an
+  /// [apiKey] for a RomM Client API Token; the mode that isn't used is stored
+  /// empty, so reconnecting one way clears the other way's secret.
   Future<String?> connect({
     required String serverUrl,
-    required String username,
-    required String password,
+    String username = '',
+    String password = '',
+    String apiKey = '',
   }) async {
     _status = RommConnectionStatus.connecting;
     _lastError = null;
@@ -370,6 +386,7 @@ class RommProvider extends ChangeNotifier {
       serverUrl: serverUrl,
       username: username,
       password: password,
+      apiKey: apiKey,
     );
     try {
       await _service.authenticate();
@@ -387,18 +404,25 @@ class RommProvider extends ChangeNotifier {
 
     await RommRepository.saveConfig(
       serverUrl: _service.baseUrl,
-      username: username,
+      // The service resolves the API key's owner during authentication, so an
+      // API-key connection still gets a username to show in the UI.
+      username: _service.username,
       password: password,
+      apiKey: apiKey,
     );
-    await RommRepository.saveTokens(
-      accessToken: _service.accessToken!,
-      refreshToken: _service.refreshToken,
-      tokenExpires: _service.tokenExpiresMs,
-    );
-    _lastPersistedAccessToken = _service.accessToken;
+    // Only the password grant produces tokens worth caching; an API key is
+    // itself the credential and is already in the config row.
+    if (!_service.usesApiKey) {
+      await RommRepository.saveTokens(
+        accessToken: _service.accessToken!,
+        refreshToken: _service.refreshToken,
+        tokenExpires: _service.tokenExpiresMs,
+      );
+      _lastPersistedAccessToken = _service.accessToken;
+    }
 
     _serverUrl = _service.baseUrl;
-    _username = username;
+    _username = _service.username;
     _status = RommConnectionStatus.connected;
     notifyListeners();
     _flushQueuedPlaytime();

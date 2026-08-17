@@ -19,12 +19,17 @@ class SqliteMigrations {
   // future column change is made in exactly one place.
 
   /// CREATE for the singleton RomM credentials/token table (v111).
+  ///
+  /// `api_key` (v131) holds a RomM Client API Token and is the alternative to
+  /// `username`/`password`: exactly one of the two is populated, and a non-empty
+  /// `api_key` is what marks the row as API-key authentication.
   static const String createUserRommConfigTableSql = '''
     CREATE TABLE IF NOT EXISTS user_romm_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       server_url TEXT,
       username TEXT,
       password TEXT,
+      api_key TEXT,
       access_token TEXT,
       refresh_token TEXT,
       token_expires INTEGER,
@@ -489,6 +494,9 @@ class SqliteMigrations {
         break;
       case 130:
         await _migrateToVersion130(db);
+        break;
+      case 131:
+        await _migrateToVersion131(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -6074,6 +6082,44 @@ class SqliteMigrations {
       _log.i('Migration v130 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v130: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v131: Adds `user_romm_config.api_key`, so a RomM server can be
+  /// connected with a Client API Token instead of a username and password.
+  ///
+  /// Numbered 131 rather than the next free 129 deliberately: main already
+  /// ships a v130, so a device that migrated on that branch would be past 129
+  /// when it first saw this build and would silently skip this step, leaving
+  /// `saveConfig` to fail with "no such column: api_key". 131 is above every
+  /// number in use, so it runs wherever that device has got to.
+  ///
+  /// Existing rows keep their credentials and read back with an empty key,
+  /// which is exactly what keeps them on the password grant.
+  ///
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion131(Database db) async {
+    _log.i('Migration v131: Adding api_key to user_romm_config');
+    try {
+      // The table only exists from v111; a database that somehow never got it
+      // has nothing to alter and gets the column from the CREATE instead.
+      final tableInfo = db.select('PRAGMA table_info(user_romm_config)');
+      if (tableInfo.isEmpty) {
+        _log.i('Table user_romm_config absent — nothing to migrate');
+        return;
+      }
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('api_key')) {
+        db.execute('ALTER TABLE user_romm_config ADD COLUMN api_key TEXT');
+        _log.i('Column api_key added via v131');
+      } else {
+        _log.i('Column api_key already exists');
+      }
+      _log.i('Migration v131 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v131: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

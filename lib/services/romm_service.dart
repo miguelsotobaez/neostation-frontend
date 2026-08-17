@@ -35,10 +35,17 @@ class RommCancelledException extends RommException {
 
 /// HTTP client for a remote RomM server (library browse + ROM download).
 ///
-/// Holds the server base URL and JWT tokens for one connection and transparently
-/// refreshes the access token on expiry / 401. Auth is OAuth2 password grant
-/// (`POST /api/token`). Modeled on the IOClient + bad-certificate setup used by
-/// [ScreenScraperService] so self-signed homelab certificates work.
+/// Holds the server base URL and credentials for one connection. Two
+/// authentication modes are supported, chosen by what [configure] is given:
+///
+/// * **OAuth2 password grant** (`POST /api/token`) — username + password. JWTs
+///   are cached and transparently refreshed on expiry / 401.
+/// * **Client API Token** — a `rmm_…` key the user creates in RomM. It is sent
+///   as the bearer token directly, never expires, and has no refresh flow, so
+///   the whole token lifecycle collapses to "use the key".
+///
+/// Modeled on the IOClient + bad-certificate setup used by [ScreenScraperService]
+/// so self-signed homelab certificates work.
 class RommService {
   static final _log = LoggerService.instance;
 
@@ -75,6 +82,7 @@ class RommService {
   bool _schemeExplicit = false;
   String _username = '';
   String _password = '';
+  String _apiKey = '';
   String? _accessToken;
   String? _refreshToken;
   int? _tokenExpiresMs;
@@ -94,18 +102,39 @@ class RommService {
       _playtimeScopeGranted && _playSessionsSupported;
 
   String get baseUrl => _baseUrl;
+
+  /// The account this connection belongs to. With the password grant it is
+  /// whatever the user typed; with an API key it is filled in from
+  /// `/api/users/me` at [authenticate] time, since the key alone doesn't name
+  /// its owner.
+  String get username => _username;
+
+  /// Whether this connection authenticates with a Client API Token. Callers
+  /// that persist the connection use it to decide which secret to store.
+  bool get usesApiKey => _apiKey.isNotEmpty;
+
+  /// The API key in use, or an empty string on a password-grant connection.
+  String get apiKey => _apiKey;
+
+  /// The cached OAuth2 access token — always null in API-key mode, where there
+  /// is nothing to cache and the key itself is the bearer credential.
   String? get accessToken => _accessToken;
   String? get refreshToken => _refreshToken;
   int? get tokenExpiresMs => _tokenExpiresMs;
 
   /// Configures the connection. [serverUrl] may include or omit a scheme and
   /// trailing slash; it is normalized to `scheme://host[:port]` with no
-  /// trailing slash. Existing tokens (if any) can be restored via
-  /// [accessToken]/[refreshToken]/[tokenExpiresMs].
+  /// trailing slash.
+  ///
+  /// Pass either [username]/[password] or a non-empty [apiKey]; a key wins if
+  /// both are somehow given, and puts the service in API-key mode where the
+  /// [accessToken]/[refreshToken]/[tokenExpiresMs] restore arguments are
+  /// meaningless and ignored.
   void configure({
     required String serverUrl,
-    required String username,
-    required String password,
+    String username = '',
+    String password = '',
+    String apiKey = '',
     String? accessToken,
     String? refreshToken,
     int? tokenExpiresMs,
@@ -113,11 +142,12 @@ class RommService {
     final raw = serverUrl.trim();
     _schemeExplicit = raw.startsWith('http://') || raw.startsWith('https://');
     _baseUrl = _normalizeBaseUrl(raw);
+    _apiKey = apiKey.trim();
     _username = username;
-    _password = password;
-    _accessToken = accessToken;
-    _refreshToken = refreshToken;
-    _tokenExpiresMs = tokenExpiresMs;
+    _password = _apiKey.isEmpty ? password : '';
+    _accessToken = _apiKey.isEmpty ? accessToken : null;
+    _refreshToken = _apiKey.isEmpty ? refreshToken : null;
+    _tokenExpiresMs = _apiKey.isEmpty ? tokenExpiresMs : null;
     // Playtime support is a property of the server we're pointed at, so a
     // reconfigure (different server, or the same one after an edit) re-probes
     // instead of inheriting the previous server's verdict.
@@ -140,6 +170,9 @@ class RommService {
   Uri _uri(String pathAndQuery) => Uri.parse('$_baseUrl$pathAndQuery');
 
   bool get _tokenLikelyValid {
+    // An API key never expires and has no refresh flow, so it is always the
+    // credential to send: there is nothing for _ensureToken to do.
+    if (usesApiKey) return true;
     if (_accessToken == null || _accessToken!.isEmpty) return false;
     final exp = _tokenExpiresMs;
     if (exp == null) return true; // assume valid until a 401 proves otherwise
@@ -149,33 +182,94 @@ class RommService {
 
   // ── Authentication ─────────────────────────────────────────────────────────
 
-  /// POSTs to `/api/token`. If an HTTPS TLS handshake fails and the user did
-  /// not pin the scheme, downgrades the base URL to HTTP and retries once
-  /// (plain-HTTP homelab servers are common).
-  Future<http.Response> _postTokenRequest(Map<String, String> body) async {
-    const headers = {'Content-Type': 'application/x-www-form-urlencoded'};
+  /// Runs [send] and, if an HTTPS TLS handshake fails while the user did not
+  /// pin the scheme, downgrades the base URL to HTTP and retries once
+  /// (plain-HTTP homelab servers are common). [send] must build its request
+  /// fresh so the retry picks up the rewritten [_baseUrl].
+  Future<http.Response> _withSchemeFallback(
+    Future<http.Response> Function() send,
+  ) async {
     try {
-      return await _httpClient
-          .post(_uri('/api/token'), headers: headers, body: body)
-          .timeout(const Duration(seconds: 30));
+      return await send();
     } on HandshakeException {
       if (!_schemeExplicit && _baseUrl.startsWith('https://')) {
         _baseUrl = _baseUrl.replaceFirst('https://', 'http://');
         _log.w('RomM HTTPS handshake failed; retrying over HTTP at $_baseUrl');
-        return await _httpClient
-            .post(_uri('/api/token'), headers: headers, body: body)
-            .timeout(const Duration(seconds: 30));
+        return await send();
       }
       rethrow;
     }
   }
 
-  /// Performs the OAuth2 password grant and stores the resulting tokens.
-  /// Throws [RommException] with a user-facing message on failure.
+  /// POSTs to `/api/token`, with the [_withSchemeFallback] HTTPS→HTTP retry.
+  Future<http.Response> _postTokenRequest(Map<String, String> body) {
+    const headers = {'Content-Type': 'application/x-www-form-urlencoded'};
+    return _withSchemeFallback(
+      () => _httpClient
+          .post(_uri('/api/token'), headers: headers, body: body)
+          .timeout(const Duration(seconds: 30)),
+    );
+  }
+
+  /// Establishes (or confirms) a usable credential, dispatching on the mode the
+  /// service was configured in. Throws [RommException] with a user-facing
+  /// message on failure.
   Future<void> authenticate() async {
     if (_baseUrl.isEmpty) {
       throw RommException('Server URL is empty');
     }
+    if (usesApiKey) return _verifyApiKey();
+    return _authenticateWithPassword();
+  }
+
+  /// Confirms an API key by fetching its owner, which doubles as the source of
+  /// the username shown in the UI (the key itself doesn't name its account).
+  ///
+  /// Nothing is cached: the key *is* the credential, so this is a validity
+  /// check rather than a token exchange, and only ever runs on connect.
+  Future<void> _verifyApiKey() async {
+    http.Response resp;
+    try {
+      resp = await _withSchemeFallback(
+        () => _httpClient
+            .get(_uri('/api/users/me'), headers: _authHeaders)
+            .timeout(const Duration(seconds: 30)),
+      );
+    } on TimeoutException {
+      throw RommException('Connection timed out');
+    } on HandshakeException {
+      throw RommException(
+        'TLS handshake failed — try an http:// URL if the server is not HTTPS',
+      );
+    } on SocketException catch (e) {
+      throw RommException('Cannot reach server: ${e.message}');
+    } catch (e) {
+      throw RommException('Connection failed: $e');
+    }
+
+    if (resp.statusCode == 401 || resp.statusCode == 403) {
+      throw RommException('Invalid API key', statusCode: resp.statusCode);
+    }
+    if (resp.statusCode != 200) {
+      throw RommException(
+        'Authentication failed (${resp.statusCode})',
+        statusCode: resp.statusCode,
+      );
+    }
+
+    try {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map<String, dynamic>) {
+        final name = decoded['username']?.toString();
+        if (name != null && name.isNotEmpty) _username = name;
+      }
+    } catch (_) {
+      // The key works; a surprising body shape only costs us the display name.
+    }
+  }
+
+  /// Performs the OAuth2 password grant and stores the resulting tokens.
+  Future<void> _authenticateWithPassword() async {
     Map<String, String> bodyFor(String scope) => {
       'grant_type': 'password',
       'username': _username,
@@ -231,6 +325,9 @@ class RommService {
   }
 
   Future<void> _refreshAccessToken() async {
+    // An API key can't be refreshed or re-minted; if the server rejected it,
+    // asking again with the same key would only repeat the rejection.
+    if (usesApiKey) return;
     final refresh = _refreshToken;
     if (refresh == null || refresh.isEmpty) {
       // No refresh token: fall back to a full re-authentication.
@@ -281,14 +378,25 @@ class RommService {
     }
   }
 
+  /// The credential to send. RomM accepts a Client API Token in exactly the
+  /// same `Bearer` header as an OAuth2 access token, so every call site below
+  /// is mode-agnostic.
   Map<String, String> get _authHeaders => {
-    'Authorization': 'Bearer $_accessToken',
+    'Authorization': 'Bearer ${usesApiKey ? _apiKey : _accessToken}',
   };
+
+  /// Whether a credential exists at all (used to decide if a request is worth
+  /// attaching auth to).
+  bool get _hasCredential =>
+      usesApiKey || (_accessToken != null && _accessToken!.isNotEmpty);
 
   /// Authenticates and performs a lightweight call to confirm the connection
   /// and credentials are valid (used by the settings "Test" button).
   Future<void> verifyConnection() async {
     await authenticate();
+    // In API-key mode authenticate() *is* the authorized `/api/users/me` call,
+    // so repeating it here would only double the round trips.
+    if (usesApiKey) return;
     // A successful, authorized call confirms the token works end-to-end. Hit
     // the lightweight `/api/users/me` rather than downloading the full platform
     // list — same auth guarantee, a fraction of the payload. Error mapping is
@@ -303,6 +411,10 @@ class RommService {
   /// failure: `401` → refresh the access token, `403` → full re-authenticate
   /// (covers a cached token minted before the current scope set). [send] must
   /// build a *fresh* request each call so the retry picks up the new token.
+  ///
+  /// In API-key mode there is no retry: the key is fixed, its scopes were set
+  /// when the user created it, and nothing about a second identical request
+  /// would come out differently — so a 401/403 is passed straight to the caller.
   ///
   /// Works for both [http.Response] and [http.StreamedResponse] via [statusOf];
   /// this is the single retry policy shared by every authenticated call site
@@ -320,6 +432,7 @@ class RommService {
     } on SocketException catch (e) {
       throw RommException('Cannot reach server: ${e.message}');
     }
+    if (usesApiKey) return resp;
     if (statusOf(resp) == 401) {
       await _refreshAccessToken();
       resp = await send();
@@ -754,9 +867,7 @@ class RommService {
   /// server itself — never leak the bearer token to third-party CDNs (IGDB,
   /// RetroAchievements, etc. host many covers/logos).
   Map<String, String> imageHeadersFor(String url) =>
-      (_accessToken != null && url.startsWith(_baseUrl))
-      ? _authHeaders
-      : const {};
+      (_hasCredential && url.startsWith(_baseUrl)) ? _authHeaders : const {};
 
   /// URL of RomM's bundled SVG icon for [platform]. RomM only ships icons for
   /// some slugs, so this may 404.
@@ -1257,7 +1368,11 @@ class RommService {
 
   /// Marks the play-session API unusable when the server's answer says it will
   /// never work on this connection: `404` (endpoint absent) or a `403` that has
-  /// already survived one re-authentication, i.e. a genuine scope denial.
+  /// already survived one re-authentication, i.e. a genuine scope denial. In
+  /// API-key mode a 403 is conclusive on the first try — the key's scopes were
+  /// fixed when the user created it, so there is no re-auth that could widen
+  /// them, and this is how a key issued without `roms.user.*` quietly settles
+  /// into "everything but playtime sync" instead of erroring on every game exit.
   void _notePlaySessionFailure(int statusCode) {
     if (statusCode == 404 || statusCode == 403) {
       if (_playSessionsSupported) {

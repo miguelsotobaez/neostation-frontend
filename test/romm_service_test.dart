@@ -22,6 +22,16 @@ RommService _service({
   return s;
 }
 
+/// Builds a service configured with a Client API Token rather than a password.
+RommService _apiKeyService({
+  String serverUrl = 'https://romm.local',
+  String apiKey = 'rmm_deadbeef',
+}) {
+  final s = RommService();
+  s.configure(serverUrl: serverUrl, apiKey: apiKey);
+  return s;
+}
+
 RommRom _rom({
   String? urlCover,
   String? pathCoverLarge,
@@ -186,6 +196,87 @@ void main() {
     test('sends no auth header when there is no access token', () {
       final s = _service(accessToken: null);
       expect(s.imageHeadersFor('https://romm.local/assets/x.png'), isEmpty);
+    });
+
+    test('sends the API key as the bearer token for same-server URLs', () {
+      final s = _apiKeyService();
+      expect(
+        s.imageHeadersFor('https://romm.local/assets/x.png')['Authorization'],
+        'Bearer rmm_deadbeef',
+      );
+    });
+
+    test('never leaks the API key to third-party CDN URLs', () {
+      expect(
+        _apiKeyService().imageHeadersFor('https://images.igdb.com/x.png'),
+        isEmpty,
+      );
+    });
+  });
+
+  group('API-key mode', () {
+    test('a configured key puts the service in API-key mode', () {
+      final s = _apiKeyService();
+      expect(s.usesApiKey, isTrue);
+      expect(s.apiKey, 'rmm_deadbeef');
+    });
+
+    test('an empty key leaves the service on the password grant', () {
+      expect(_service().usesApiKey, isFalse);
+      expect(_service().apiKey, isEmpty);
+    });
+
+    test('surrounding whitespace is trimmed off a pasted key', () {
+      expect(_apiKeyService(apiKey: '  rmm_deadbeef\n').apiKey, 'rmm_deadbeef');
+    });
+
+    test('a key discards any restored OAuth2 token state', () {
+      final s = RommService()
+        ..configure(
+          serverUrl: 'https://romm.local',
+          apiKey: 'rmm_deadbeef',
+          accessToken: 'tok-123',
+          refreshToken: 'refresh-456',
+          tokenExpiresMs: 1700000000000,
+        );
+
+      expect(s.accessToken, isNull);
+      expect(s.refreshToken, isNull);
+      expect(s.tokenExpiresMs, isNull);
+    });
+
+    test('reconfiguring without a key returns to the password grant', () {
+      final s = _apiKeyService();
+      s.configure(
+        serverUrl: 'https://romm.local',
+        username: 'testuser',
+        password: 's3cret',
+      );
+
+      expect(s.usesApiKey, isFalse);
+      expect(s.apiKey, isEmpty);
+    });
+
+    test('a key discards a leftover password from the previous mode', () {
+      final s = RommService()
+        ..configure(
+          serverUrl: 'https://romm.local',
+          username: 'testuser',
+          password: 's3cret',
+          apiKey: 'rmm_deadbeef',
+        );
+
+      // Nothing exposes the password directly; the API key winning is what the
+      // auth-header contract asserts.
+      expect(s.usesApiKey, isTrue);
+      expect(
+        s.imageHeadersFor('https://romm.local/x.png')['Authorization'],
+        'Bearer rmm_deadbeef',
+      );
+    });
+
+    test('the username is empty until the server names the key owner', () {
+      expect(_apiKeyService().username, isEmpty);
     });
   });
 

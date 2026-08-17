@@ -970,7 +970,7 @@ const Map<String, dynamic> appLocalePt = {
       'O RomM é um gerenciador de ROMs auto-hospedado. Conecte-se ao seu servidor para navegar pela sua biblioteca, baixar jogos direto para este dispositivo e sincronizar seus saves.',
   AppLocale.rommInfoBrowse: 'Navegue e baixe toda a sua biblioteca de jogos',
   AppLocale.rommInfoSaveSync: 'Sincronize os saves entre seus dispositivos',
-  AppLocale.rommInfoSelfHosted: 'Auto-hospedado — sua coleção, seu servidor',
+  AppLocale.rommInfoSelfHosted: 'Auto-hospedado: sua coleção, seu servidor',
   AppLocale.rommLearnMoreAt: 'Saiba mais em ',
   AppLocale.rommServerUrl: 'URL do servidor',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
@@ -991,6 +991,11 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommConnectedAs: 'Conectado como {user}',
   AppLocale.rommCredentialsRequired:
       'Informe a URL do servidor, o usuário e a senha',
+  AppLocale.rommAuthPassword: 'Senha',
+  AppLocale.rommAuthApiKey: 'Chave de API',
+  AppLocale.rommApiKey: 'Chave de API',
+  AppLocale.rommApiKeyHint: 'rmm_...',
+  AppLocale.rommApiKeyRequired: 'Informe a URL do servidor e a chave de API',
   AppLocale.rommPlatforms: 'Plataformas',
   AppLocale.rommNoPlatforms: 'Nenhuma plataforma encontrada',
   AppLocale.rommCollections: 'Coleções',
@@ -1015,7 +1020,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommSyncCancel: 'Cancelar sincronização',
   AppLocale.rommSyncConfirmTitle: 'Sincronizar {name}?',
   AppLocale.rommSyncConfirmPlan:
-      'Baixa {count} jogos — {size}. Pode demorar bastante.',
+      'Baixa {count} jogos ({size}). Pode demorar bastante.',
   AppLocale.rommSyncConfirmSkipped: '{count} já estão neste dispositivo.',
   AppLocale.rommSyncConfirmFree: '{free} livres.',
   AppLocale.rommSyncConfirmNoSpace:

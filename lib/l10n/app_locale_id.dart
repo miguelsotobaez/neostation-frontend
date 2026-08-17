@@ -961,8 +961,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommInfoBrowse: 'Jelajahi dan unduh seluruh pustaka game Anda',
   AppLocale.rommInfoSaveSync:
       'Sinkronkan file simpanan di seluruh perangkat Anda',
-  AppLocale.rommInfoSelfHosted:
-      'Di-hosting sendiri — koleksi Anda, server Anda',
+  AppLocale.rommInfoSelfHosted: 'Di-hosting sendiri: koleksi Anda, server Anda',
   AppLocale.rommLearnMoreAt: 'Pelajari lebih lanjut di ',
   AppLocale.rommServerUrl: 'URL Server',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
@@ -983,6 +982,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommConnectedAs: 'Terhubung sebagai {user}',
   AppLocale.rommCredentialsRequired:
       'Masukkan URL server, nama pengguna, dan kata sandi',
+  AppLocale.rommAuthPassword: 'Kata sandi',
+  AppLocale.rommAuthApiKey: 'Kunci API',
+  AppLocale.rommApiKey: 'Kunci API',
+  AppLocale.rommApiKeyHint: 'rmm_...',
+  AppLocale.rommApiKeyRequired: 'Masukkan URL server dan kunci API',
   AppLocale.rommPlatforms: 'Platform',
   AppLocale.rommNoPlatforms: 'Tidak ada platform ditemukan',
   AppLocale.rommCollections: 'Koleksi',
@@ -1007,7 +1011,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSyncCancel: 'Batalkan sinkronisasi',
   AppLocale.rommSyncConfirmTitle: 'Sinkronkan {name}?',
   AppLocale.rommSyncConfirmPlan:
-      'Mengunduh {count} gim — {size}. Ini bisa memakan waktu lama.',
+      'Mengunduh {count} gim ({size}). Ini bisa memakan waktu lama.',
   AppLocale.rommSyncConfirmSkipped: '{count} sudah ada di perangkat ini.',
   AppLocale.rommSyncConfirmFree: '{free} tersedia.',
   AppLocale.rommSyncConfirmNoSpace:

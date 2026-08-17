@@ -958,7 +958,7 @@ const Map<String, dynamic> appLocaleEn = {
       'library, download games straight to this device, and sync your saves.',
   AppLocale.rommInfoBrowse: 'Browse and download your full game library',
   AppLocale.rommInfoSaveSync: 'Sync save files across your devices',
-  AppLocale.rommInfoSelfHosted: 'Self-hosted — your collection, your server',
+  AppLocale.rommInfoSelfHosted: 'Self-hosted: your collection, your server',
   AppLocale.rommLearnMoreAt: 'Learn more at ',
   AppLocale.rommServerUrl: 'Server URL',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
@@ -978,6 +978,11 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommConnectedAs: 'Connected as {user}',
   AppLocale.rommCredentialsRequired:
       'Enter the server URL, username and password',
+  AppLocale.rommAuthPassword: 'Password',
+  AppLocale.rommAuthApiKey: 'API key',
+  AppLocale.rommApiKey: 'API key',
+  AppLocale.rommApiKeyHint: 'rmm_...',
+  AppLocale.rommApiKeyRequired: 'Enter the server URL and API key',
   AppLocale.rommPlatforms: 'Platforms',
   AppLocale.rommNoPlatforms: 'No platforms found',
   AppLocale.rommCollections: 'Collections',
@@ -1000,7 +1005,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommSyncCancel: 'Cancel sync',
   AppLocale.rommSyncConfirmTitle: 'Sync {name}?',
   AppLocale.rommSyncConfirmPlan:
-      'Downloads {count} games — {size}. This can take a long time.',
+      'Downloads {count} games ({size}). This can take a long time.',
   AppLocale.rommSyncConfirmSkipped: '{count} already on this device.',
   AppLocale.rommSyncConfirmFree: '{free} free.',
   AppLocale.rommSyncConfirmNoSpace:
