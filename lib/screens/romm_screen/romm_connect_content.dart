@@ -860,7 +860,9 @@ class _RommConnectContentState extends State<RommConnectContent>
                   ),
                 )
               : Text(
-                  AppLocale.rommSaveConnect.getString(context),
+                  // Same label the RetroAchievements and ScreenScraper login
+                  // buttons use, so the three forms read as one family.
+                  AppLocale.login.getString(context),
                   style: TextStyle(fontSize: 14.r, fontWeight: FontWeight.bold),
                 ),
         ),
