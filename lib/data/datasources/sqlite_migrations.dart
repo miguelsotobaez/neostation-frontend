@@ -487,8 +487,8 @@ class SqliteMigrations {
       case 128:
         await _migrateToVersion128(db);
         break;
-      case 129:
-        await _migrateToVersion129(db);
+      case 130:
+        await _migrateToVersion130(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -6033,7 +6033,7 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v129: Adds `app_systems.ra_hash_algo` and
+  /// Migration v130: Adds `app_systems.ra_hash_algo` and
   /// `app_systems.ra_hash_mode`, the per-system RetroAchievements hashing
   /// policy.
   ///
@@ -6048,26 +6048,26 @@ class SqliteMigrations {
   /// the filename fallback — which is what an undeclared system did before.
   ///
   /// Idempotent — each column is added only when absent.
-  static Future<void> _migrateToVersion129(Database db) async {
-    _log.i('Migration v129: Adding RA hash policy columns to app_systems');
+  static Future<void> _migrateToVersion130(Database db) async {
+    _log.i('Migration v130: Adding RA hash policy columns to app_systems');
     try {
       final tableInfo = db.select('PRAGMA table_info(app_systems)');
       final columns = tableInfo.map((c) => c['name'].toString()).toList();
       if (!columns.contains('ra_hash_algo')) {
         db.execute('ALTER TABLE app_systems ADD COLUMN ra_hash_algo TEXT');
-        _log.i('Column ra_hash_algo added via v129');
+        _log.i('Column ra_hash_algo added via v130');
       } else {
         _log.i('Column ra_hash_algo already exists');
       }
       if (!columns.contains('ra_hash_mode')) {
         db.execute('ALTER TABLE app_systems ADD COLUMN ra_hash_mode TEXT');
-        _log.i('Column ra_hash_mode added via v129');
+        _log.i('Column ra_hash_mode added via v130');
       } else {
         _log.i('Column ra_hash_mode already exists');
       }
-      _log.i('Migration v129 completed');
+      _log.i('Migration v130 completed');
     } catch (e, stackTrace) {
-      _log.e('Error in migration v129: $e');
+      _log.e('Error in migration v130: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
