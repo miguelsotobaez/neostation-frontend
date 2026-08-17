@@ -91,7 +91,8 @@ class _RommConnectContentState extends State<RommConnectContent>
   ];
 
   /// Slot the mode switch sits on: under the server URL, which both modes need,
-  /// and above the fields it actually decides.
+  /// and above the fields it actually decides. Left/Right pick a half directly
+  /// (see [_setAuthMode]); A flips it, for anyone who reaches it that way.
   static const int _authModeSlot = 1;
 
   @override
@@ -101,6 +102,8 @@ class _RommConnectContentState extends State<RommConnectContent>
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
+      onNavigateLeft: () => _setAuthMode(useApiKey: false),
+      onNavigateRight: () => _setAuthMode(useApiKey: true),
       onSelectItem: _selectCurrent,
       onBack: _handleBack,
       onPreviousTab: AppNavigation.previousTab,
@@ -177,8 +180,27 @@ class _RommConnectContentState extends State<RommConnectContent>
   /// Flips between the two login modes. Nothing at or above the switch moves,
   /// so the cursor is left where it is; only the rows below are replaced, and
   /// the mixin clamps a cursor that was parked on one of them.
-  void _toggleAuthMode() {
-    setState(() => _useApiKey = !_useApiKey);
+  void _toggleAuthMode() => _applyAuthMode(!_useApiKey);
+
+  /// Picks a mode outright rather than cycling, which is what Left and Right
+  /// do while the cursor is on the switch: Left is the left half (password),
+  /// Right is the right half (API key). A two-option control reads as a pair of
+  /// positions, not a list to step through, so pointing at one should choose it.
+  ///
+  /// Returns whether anything changed, so the gamepad handler stays silent when
+  /// the mode asked for is already the current one — the same "refused moves
+  /// make no sound" contract [moveSelection] follows.
+  bool _setAuthMode({required bool useApiKey}) {
+    if (context.read<RommProvider>().isConnected) return false;
+    if (!isSelected(_authModeSlot)) return false;
+    if (isAnyFieldFocused()) return false;
+    if (_useApiKey == useApiKey) return false;
+    _applyAuthMode(useApiKey);
+    return true;
+  }
+
+  void _applyAuthMode(bool useApiKey) {
+    setState(() => _useApiKey = useApiKey);
   }
 
   /// B leaves a focused field first — that is what it does everywhere else in
@@ -625,10 +647,17 @@ class _RommConnectContentState extends State<RommConnectContent>
   Widget _buildAuthModeRow(ThemeData theme) {
     final selected = isSelected(_authModeSlot);
     final scheme = theme.colorScheme;
+    // A border participates in layout, so thickening it on selection would grow
+    // this row and shove every field below it down — 6px on an AYN Thor, which
+    // reads as the form twitching as the cursor passes through. The fields
+    // opposite don't do that because their border sits inside a fixed-height
+    // box; here the padding gives back exactly what the border takes, so the
+    // row occupies the same space selected or not.
+    final borderWidth = selected ? 2.r : 1.r;
     return Container(
       key: _itemKeys[_authModeSlot],
       constraints: BoxConstraints(maxWidth: 220.r),
-      padding: EdgeInsets.all(3.r),
+      padding: EdgeInsets.all(4.r - borderWidth),
       decoration: BoxDecoration(
         color: scheme.onSurface.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8.r),
@@ -636,7 +665,7 @@ class _RommConnectContentState extends State<RommConnectContent>
           color: selected
               ? scheme.primary
               : scheme.primary.withValues(alpha: 0.1),
-          width: selected ? 2.r : 1.r,
+          width: borderWidth,
         ),
         boxShadow: selected
             ? [
