@@ -862,7 +862,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommServerUrl: '服务器 URL',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
   AppLocale.rommTestConnection: '测试连接',
-  AppLocale.rommSaveConnect: '保存并连接',
   AppLocale.rommDisconnect: '断开连接',
   AppLocale.rommUseForSaveSync: '使用 RomM 同步存档',
   AppLocale.rommSaveSyncLabel: 'RomM 同步',

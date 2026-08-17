@@ -1049,7 +1049,6 @@ mixin AppLocale {
   static const String rommServerUrl = 'romm_server_url';
   static const String rommServerUrlHint = 'romm_server_url_hint';
   static const String rommTestConnection = 'romm_test_connection';
-  static const String rommSaveConnect = 'romm_save_connect';
   static const String rommDisconnect = 'romm_disconnect';
   static const String rommUseForSaveSync = 'romm_use_for_save_sync';
   static const String rommSaveSyncLabel = 'romm_save_sync_label';

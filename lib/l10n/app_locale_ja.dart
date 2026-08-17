@@ -877,7 +877,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommServerUrl: 'サーバー URL',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
   AppLocale.rommTestConnection: '接続をテスト',
-  AppLocale.rommSaveConnect: '保存して接続',
   AppLocale.rommDisconnect: '接続を解除',
   AppLocale.rommUseForSaveSync: 'セーブデータの同期に RomM を使用',
   AppLocale.rommSaveSyncLabel: 'RomM 同期',

@@ -993,7 +993,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommServerUrl: 'URL del servidor',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
   AppLocale.rommTestConnection: 'Probar conexión',
-  AppLocale.rommSaveConnect: 'Guardar y conectar',
   AppLocale.rommDisconnect: 'Desconectar',
   AppLocale.rommUseForSaveSync: 'Usar RomM para sincronizar partidas',
   AppLocale.rommSaveSyncLabel: 'Sinc. RomM',

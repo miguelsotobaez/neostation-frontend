@@ -966,7 +966,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommServerUrl: 'URL Server',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
   AppLocale.rommTestConnection: 'Uji Koneksi',
-  AppLocale.rommSaveConnect: 'Simpan & Hubungkan',
   AppLocale.rommDisconnect: 'Putuskan',
   AppLocale.rommUseForSaveSync: 'Gunakan RomM untuk sinkronisasi simpanan',
   AppLocale.rommSaveSyncLabel: 'Sinkron RomM',

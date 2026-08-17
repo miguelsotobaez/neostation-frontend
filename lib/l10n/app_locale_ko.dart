@@ -887,7 +887,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommServerUrl: '서버 URL',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
   AppLocale.rommTestConnection: '연결 테스트',
-  AppLocale.rommSaveConnect: '저장 후 연결',
   AppLocale.rommDisconnect: '연결 해제',
   AppLocale.rommUseForSaveSync: '저장 동기화에 RomM 사용',
   AppLocale.rommSaveSyncLabel: 'RomM 동기화',

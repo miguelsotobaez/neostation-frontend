@@ -996,7 +996,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommServerUrl: 'Server-URL',
   AppLocale.rommServerUrlHint: 'https://romm.example.com',
   AppLocale.rommTestConnection: 'Verbindung testen',
-  AppLocale.rommSaveConnect: 'Speichern & verbinden',
   AppLocale.rommDisconnect: 'Trennen',
   AppLocale.rommUseForSaveSync: 'RomM für Spielstand-Sync verwenden',
   AppLocale.rommSaveSyncLabel: 'RomM-Sync',
