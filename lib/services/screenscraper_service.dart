@@ -383,6 +383,13 @@ class ScreenScraperService {
           _log.e('Error getting game information: ${data['header']['error']}');
           return null;
         }
+      } else if (response.statusCode == 404) {
+        // ScreenScraper answers an unmatched ROM with 404 ("Rom/Iso/Dossier
+        // non trouvee"), which is an ordinary outcome of a scrape sweep rather
+        // than a fault. Logged at error it buried everything else: 478 of the
+        // 575 error lines in one user's log were this one line repeating.
+        _log.d('ScreenScraper has no entry for "$romName"');
+        return null;
       } else {
         _log.e('HTTP Error ${response.statusCode}: ${response.body}');
         return null;
