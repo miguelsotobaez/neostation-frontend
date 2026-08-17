@@ -4,9 +4,12 @@ import '../models/database_game_model.dart';
 import '../models/ra_game_list_entry.dart';
 import '../models/ra_match_candidate.dart';
 import '../models/retro_achievements_dashboard_models.dart';
+import '../services/logger_service.dart';
 
 /// Repository for RetroAchievements data access.
 class RetroAchievementsRepository {
+  static final _log = LoggerService.instance;
+
   static const String _raApiKeyStorageKey = 'ra_api_key';
   // Do not let a transient Android Keystore error erase credentials. This can
   // happen during cold boot on some launchers, and the default resetOnError
@@ -465,6 +468,15 @@ class RetroAchievementsRepository {
   /// Finds RA game_id by filename for a system, using exact then LIKE matching.
   /// [filenameWithoutExt] should already be sanitized (no brackets/parens).
   /// Returns the game_id, or null if not found.
+  ///
+  /// Subsets are never returned. A `[Subset - ...]` entry is an extra
+  /// achievement set bolted onto a game, so it is never the right answer for a
+  /// plain ROM — but the deprioritising it used to get only applied among rows
+  /// the LIKE pattern had already reached, and when the main set's title
+  /// differs from the filename by punctuation the subset is the only candidate
+  /// left and wins outright. That is issue #8's partial-set report. A user who
+  /// genuinely wants the subset picks it in the manual match dialog, which
+  /// lists them.
   static Future<int?> findGameIdByFilename(
     String systemFolderName,
     String filenameWithoutExt,
@@ -499,12 +511,17 @@ class RetroAchievementsRepository {
         '%${filenameWithoutExt.replaceAll(' - ', ' ').replaceAll(':', '').replaceAll(' ', '%').trim()}%';
     final preferHackMatches = filenameWithoutExt.toLowerCase().contains('hack');
 
+    // Several candidates are read rather than one so the runners-up can be
+    // logged: a wrong filename match is otherwise invisible, and this path only
+    // runs for systems with no usable hash algorithm, where it is the only
+    // thing standing between a ROM and no match at all.
     final likeResults = await db.rawQuery(
       '''
-      SELECT g.game_id
+      SELECT g.game_id, g.title
       FROM app_ra_game_list g
       WHERE g.console_id = ($consoleSubquery)
-        AND g.title LIKE ? 
+        AND g.title LIKE ?
+        AND g.title NOT LIKE '%[Subset%'
       ORDER BY
         CASE
           WHEN ? = 1 AND g.title LIKE '~Hack~%' THEN 0
@@ -512,10 +529,9 @@ class RetroAchievementsRepository {
           WHEN ? = 0 AND g.title LIKE '~Hack~%' THEN 1
           ELSE 0
         END,
-        CASE WHEN g.title LIKE '%[Subset%' THEN 1 ELSE 0 END,
         LENGTH(g.title) ASC,
         g.title ASC
-      LIMIT 1
+      LIMIT 5
       ''',
       [
         systemFolderName,
@@ -525,11 +541,20 @@ class RetroAchievementsRepository {
         preferHackMatches ? 1 : 0,
       ],
     );
-    if (likeResults.isNotEmpty) {
-      return int.tryParse(likeResults.first['game_id']?.toString() ?? '0') ?? 0;
+    if (likeResults.isEmpty) return null;
+
+    if (likeResults.length > 1) {
+      final runnersUp = likeResults
+          .skip(1)
+          .map((r) => r['title']?.toString() ?? '')
+          .join(', ');
+      _log.d(
+        'RA filename match: "$filenameWithoutExt" -> '
+        '"${likeResults.first['title']}" (also matched: $runnersUp)',
+      );
     }
 
-    return null;
+    return int.tryParse(likeResults.first['game_id']?.toString() ?? '0') ?? 0;
   }
 
   static Future<OwnedWeekGameResolution?> findBestLocalGameByRaGameId(

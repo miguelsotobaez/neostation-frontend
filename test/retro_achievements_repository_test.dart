@@ -676,6 +676,40 @@ void main() {
       expect(gameId, 4003);
     });
 
+    test('findGameIdByFilename never returns a subset, even when it is the '
+        'only candidate', () async {
+      // The main set exists but its punctuation keeps the LIKE pattern from
+      // reaching it, which is how a subset used to win outright — issue #8's
+      // partial-set report. No match is the right answer; the manual picker
+      // is where a subset gets chosen deliberately.
+      await db.execute(
+        "INSERT INTO app_ra_game_list (hash, game_id, console_id, title) VALUES ('sub', 5001, '7', 'Castlevania: Symphony of the Night [Subset - Bonus]')",
+      );
+
+      final gameId = await RetroAchievementsRepository.findGameIdByFilename(
+        'nes',
+        'Symphony of the Night',
+      );
+
+      expect(gameId, isNull);
+    });
+
+    test('findGameIdByFilename still finds the main set beside a subset', () async {
+      await db.execute(
+        "INSERT INTO app_ra_game_list (hash, game_id, console_id, title) VALUES ('sub2', 5101, '7', 'Metroid [Subset - Bonus]')",
+      );
+      await db.execute(
+        "INSERT INTO app_ra_game_list (hash, game_id, console_id, title) VALUES ('main2', 5102, '7', 'Metroid')",
+      );
+
+      final gameId = await RetroAchievementsRepository.findGameIdByFilename(
+        'nes',
+        'Metroid',
+      );
+
+      expect(gameId, 5102);
+    });
+
     test('findGameIdByFilename returns null when no match', () async {
       final gameId = await RetroAchievementsRepository.findGameIdByFilename(
         'nes',
