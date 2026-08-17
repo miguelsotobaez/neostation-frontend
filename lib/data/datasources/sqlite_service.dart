@@ -14,6 +14,7 @@ import '../../models/core_emulator_model.dart';
 // import '../models/neo_sync_models.dart'; // Removido si no se usa directamente aquí
 import '../../models/database_game_model.dart';
 import '../../utils/cloud_path_builder.dart';
+import '../../utils/semaphore.dart';
 import 'sqlite_migrations.dart';
 import '../../services/config_service.dart'; // Required for ConfigService usage
 import '../../services/json_config_service.dart';
@@ -248,25 +249,60 @@ class DatabaseAdapter implements DatabaseExecutorAdapter {
   @override
   BatchAdapter batch() => BatchAdapter(_db);
 
+  /// Serializes transactions opened against this connection.
+  ///
+  /// Every caller shares one [sqlite.Database], and `package:sqlite3` is
+  /// synchronous, so a statement executed while someone else holds `BEGIN`
+  /// joins *their* transaction whether it meant to or not.
+  static final Semaphore _transactionLock = Semaphore(1);
+
+  /// Marks the async task that currently owns the open transaction.
+  ///
+  /// Zone values propagate into the continuations of the guarded action, so a
+  /// nested [transaction] call from inside the body sees its own connection
+  /// here while an unrelated task does not.
+  static const Object _transactionOwnerKey = #sqliteTransactionOwner;
+
   /// Executes a series of database operations within an atomic transaction.
+  ///
+  /// Concurrent callers are serialized: a second task waits for the first to
+  /// commit rather than writing into its transaction. Genuine nesting still
+  /// runs inline on the outermost transaction — first-run setup does this three
+  /// levels deep (`_onCreate` → `_insertInitialData` →
+  /// `_executeSqlFileOptimized`) — which is why ownership is tracked per task
+  /// instead of read back off the connection.
+  ///
+  /// Previously this branched on `_db.autocommit`, which answers "is a
+  /// transaction open" rather than "is it mine". Two overlapping writers
+  /// therefore shared one transaction: the second returned success to its
+  /// caller with nothing committed, and the first's rollback discarded its work
+  /// as well. Where both wrote the same UNIQUE column the collision surfaced as
+  /// a constraint violation; everywhere else it was silent.
   Future<T> transaction<T>(
     Future<T> Function(TransactionAdapter) action,
   ) async {
-    final bool inTransaction = !_db.autocommit;
-    if (inTransaction) {
+    if (identical(Zone.current[_transactionOwnerKey], _db)) {
       return await action(TransactionAdapter(_db));
     }
 
-    _db.execute('BEGIN');
+    await _transactionLock.acquire();
     try {
-      final result = await action(TransactionAdapter(_db));
-      _db.execute('COMMIT');
-      return result;
-    } catch (e) {
-      if (!_db.autocommit) {
-        _db.execute('ROLLBACK');
+      _db.execute('BEGIN');
+      try {
+        final result = await runZoned(
+          () => action(TransactionAdapter(_db)),
+          zoneValues: {_transactionOwnerKey: _db},
+        );
+        _db.execute('COMMIT');
+        return result;
+      } catch (e) {
+        if (!_db.autocommit) {
+          _db.execute('ROLLBACK');
+        }
+        rethrow;
       }
-      rethrow;
+    } finally {
+      _transactionLock.release();
     }
   }
 }
@@ -2532,7 +2568,12 @@ class SqliteService {
   /// [recoverRomFoldersFromStoredRoms] nothing to derive a root from.
   static Future<void> saveUserRomFolders(List<String> folders) async {
     final db = await instance.database;
-    final paths = folders.where((folder) => folder.isNotEmpty).toList();
+    // Deduplicated because `path` is UNIQUE: a caller that appended a folder it
+    // already held would otherwise collide with itself mid-transaction.
+    final paths = folders
+        .where((folder) => folder.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
 
     if (paths.isEmpty) {
       final rows = await db.rawQuery(
@@ -2552,7 +2593,9 @@ class SqliteService {
     await db.transaction((txn) async {
       await txn.delete('user_rom_folders');
       for (final folder in paths) {
-        await txn.insert('user_rom_folders', {'path': folder});
+        await txn.insert('user_rom_folders', {
+          'path': folder,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     });
   }
