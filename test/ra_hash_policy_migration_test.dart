@@ -20,6 +20,21 @@ void main() {
         multidisc INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    db.execute('''
+      CREATE TABLE user_roms (
+        filename TEXT,
+        rom_path TEXT PRIMARY KEY,
+        app_system_id TEXT,
+        ra_hash TEXT,
+        id_ra INTEGER,
+        ra_match_source TEXT,
+        ra_hash_skipped TEXT
+      )
+    ''');
+    db.execute(
+      "INSERT INTO app_systems (id, folder_name, real_name, ra_id) "
+      "VALUES ('nes', 'nes', 'NES', 7)",
+    );
   });
 
   tearDown(() {
@@ -63,15 +78,73 @@ void main() {
       expect(columns, contains('ra_hash_mode'));
     });
 
-    test('leaves existing rows alone — syncSystems refills them', () async {
+    test('clears the stale hash on a corrected hack folder', () async {
       db.execute(
         "INSERT INTO app_systems (id, folder_name, real_name, ra_id) "
-        "VALUES ('nes', 'nes', 'NES', 7)",
+        "VALUES ('nes-hacks', 'nes-hacks', 'NES Hacks', 7)",
+      );
+      db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, "
+        "id_ra) VALUES ('h.nes', '/roms/nes-hacks/h.nes', 'nes-hacks', "
+        "'wrongalgo', 999)",
       );
 
       await runV130();
 
-      final row = db.select('SELECT * FROM app_systems').single;
+      final row = db
+          .select(
+            "SELECT ra_hash, id_ra FROM user_roms WHERE filename = 'h.nes'",
+          )
+          .single;
+      expect(row['ra_hash'], isNull);
+      expect(row['id_ra'], isNull);
+    });
+
+    test('leaves a hand-picked match on a hack folder alone', () async {
+      db.execute(
+        "INSERT INTO app_systems (id, folder_name, real_name, ra_id) "
+        "VALUES ('nes-hacks', 'nes-hacks', 'NES Hacks', 7)",
+      );
+      db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, "
+        "id_ra, ra_match_source) VALUES ('m.nes', '/roms/nes-hacks/m.nes', "
+        "'nes-hacks', 'picked', 555, 'manual')",
+      );
+
+      await runV130();
+
+      final row = db
+          .select(
+            "SELECT ra_hash, id_ra FROM user_roms WHERE filename = 'm.nes'",
+          )
+          .single;
+      expect(row['ra_hash'], 'picked');
+      expect(row['id_ra'], 555);
+    });
+
+    test('leaves ROMs on other systems untouched', () async {
+      db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash, "
+        "id_ra) VALUES ('a.nes', '/roms/nes/a.nes', 'nes', 'goodhash', 42)",
+      );
+
+      await runV130();
+
+      final row = db
+          .select(
+            "SELECT ra_hash, id_ra FROM user_roms WHERE filename = 'a.nes'",
+          )
+          .single;
+      expect(row['ra_hash'], 'goodhash');
+      expect(row['id_ra'], 42);
+    });
+
+    test('leaves existing rows alone — syncSystems refills them', () async {
+      await runV130();
+
+      final row = db
+          .select("SELECT * FROM app_systems WHERE folder_name = 'nes'")
+          .single;
       expect(row['ra_id'], 7);
       // Null reads as the permissive default, which is what an undeclared
       // system did before the policy became data.

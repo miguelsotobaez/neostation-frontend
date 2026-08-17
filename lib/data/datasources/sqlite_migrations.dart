@@ -6047,7 +6047,12 @@ class SqliteMigrations {
   /// and a NULL reads as the permissive default — hash the whole file, allow
   /// the filename fallback — which is what an undeclared system did before.
   ///
-  /// Idempotent — each column is added only when absent.
+  /// It also drops the stored hash for the three hack folders whose algorithm
+  /// the policy corrects, so the match pass recomputes them. See
+  /// [_clearStaleHackHashes].
+  ///
+  /// Idempotent — each column is added only when absent, and the hash clear is
+  /// scoped to rows that still carry a hash.
   static Future<void> _migrateToVersion130(Database db) async {
     _log.i('Migration v130: Adding RA hash policy columns to app_systems');
     try {
@@ -6065,11 +6070,62 @@ class SqliteMigrations {
       } else {
         _log.i('Column ra_hash_mode already exists');
       }
+      _clearStaleHackHashes(db);
       _log.i('Migration v130 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v130: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
+    }
+  }
+
+  /// Drops the RetroAchievements hash for ROMs in the hack folders whose
+  /// algorithm v130 corrects, so the match pass hashes them again.
+  ///
+  /// `nes-hacks`, `snes-hacks` and `sfc-hacks` were in none of the three
+  /// hardcoded lists the policy replaces, so their ROMs were hashed as whole
+  /// files — headers included — and could never match. The bulk pass only walks
+  /// ROMs with no hash, so without this the correction would reach only ROMs
+  /// added after the update, which is the refresh gap that makes a bad cached
+  /// match permanent.
+  ///
+  /// The folder list is a statement about history, not a policy: these are the
+  /// folders whose stored hashes are known wrong. The live policy lives in
+  /// `assets/systems/<sys>.json`, and this migration runs before `syncSystems`
+  /// has written it, so it could not read it even if it wanted to.
+  ///
+  /// A hand-picked match is left alone — the user's choice outranks any
+  /// automatic answer.
+  static void _clearStaleHackHashes(Database db) {
+    const folders = ['nes-hacks', 'snes-hacks', 'sfc-hacks'];
+
+    final romColumns = db
+        .select('PRAGMA table_info(user_roms)')
+        .map((c) => c['name'].toString())
+        .toSet();
+    if (!romColumns.contains('ra_hash')) return;
+
+    final placeholders = List.filled(folders.length, '?').join(', ');
+    final manualGuard = romColumns.contains('ra_match_source')
+        ? "AND (ra_match_source IS NULL OR ra_match_source != 'manual')"
+        : '';
+    final skipClear = romColumns.contains('ra_hash_skipped')
+        ? ', ra_hash_skipped = NULL'
+        : '';
+
+    db.execute('''
+      UPDATE user_roms
+      SET ra_hash = NULL, id_ra = NULL$skipClear
+      WHERE ra_hash IS NOT NULL AND ra_hash != ''
+        $manualGuard
+        AND app_system_id IN (
+          SELECT id FROM app_systems WHERE folder_name IN ($placeholders)
+        )
+    ''', folders);
+
+    final cleared = db.select('SELECT changes() AS n').first['n'];
+    if ((cleared as int) > 0) {
+      _log.i('v130: cleared $cleared stale hack-folder hashes for re-matching');
     }
   }
 }
