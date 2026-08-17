@@ -48,10 +48,24 @@ class RommRomCard extends StatefulWidget {
 class RommRomCardState extends State<RommRomCard> {
   bool _alreadyDownloaded = false;
 
+  /// Index into `RommService.coverUrlCandidates` of the cover being drawn.
+  /// A failed load advances it rather than settling for the placeholder: which
+  /// of RomM's cover sources a given library populated is not knowable up
+  /// front, and only the load can tell us the first one was a dead end.
+  int _coverAttempt = 0;
+
   @override
   void initState() {
     super.initState();
     _checkDownloaded();
+  }
+
+  @override
+  void didUpdateWidget(RommRomCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Grid tiles recycle across ROMs; the previous ROM's dead sources say
+    // nothing about this one's.
+    if (oldWidget.rom.id != widget.rom.id) _coverAttempt = 0;
   }
 
   Future<void> _checkDownloaded() async {
@@ -67,7 +81,10 @@ class RommRomCardState extends State<RommRomCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final coverUrl = widget.provider.service.coverUrl(widget.rom);
+    final covers = widget.provider.service.coverUrlCandidates(widget.rom);
+    final coverUrl = _coverAttempt < covers.length
+        ? covers[_coverAttempt]
+        : null;
     final download = widget.provider.downloadFor(widget.rom.id);
     final scheme = theme.colorScheme;
 
@@ -381,6 +398,18 @@ class RommRomCardState extends State<RommRomCard> {
     );
   }
 
+  /// Advances to the next cover source after a failed load, on the next frame
+  /// — `errorBuilder` runs *during* build, where `setState` is illegal. Guarded
+  /// on the attempt that failed so repeated error frames for the same source
+  /// only skip it once.
+  void _tryNextCover() {
+    final failed = _coverAttempt;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _coverAttempt != failed) return;
+      setState(() => _coverAttempt = failed + 1);
+    });
+  }
+
   Widget _buildCover(ThemeData theme, String? coverUrl) {
     if (coverUrl == null) {
       return _coverPlaceholder(theme);
@@ -389,7 +418,10 @@ class RommRomCardState extends State<RommRomCard> {
       coverUrl,
       fit: BoxFit.cover,
       headers: widget.provider.service.imageHeadersFor(coverUrl),
-      errorBuilder: (_, _, _) => _coverPlaceholder(theme),
+      errorBuilder: (_, _, _) {
+        _tryNextCover();
+        return _coverPlaceholder(theme);
+      },
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
         return _coverPlaceholder(theme);

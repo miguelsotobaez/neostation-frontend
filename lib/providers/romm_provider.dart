@@ -1528,13 +1528,20 @@ class RommProvider extends ChangeNotifier {
       final ss =
           (detail['ss_metadata'] as Map?)?.cast<String, dynamic>() ?? const {};
 
-      // Cover -> box2d (the box art proper).
-      final coverPath =
-          (detail['path_cover_large']?.toString().isNotEmpty ?? false)
-          ? detail['path_cover_large'].toString()
-          : detail['path_cover_small']?.toString();
+      // Cover -> box2d (the box art proper), taken from the first source that
+      // actually yields an image. `path_cover_*` is RomM's own cached copy;
+      // `url_cover` is the metadata provider's original, and is exactly what
+      // the RomM browse grid draws. A library RomM holds no cached cover file
+      // for therefore showed box art in the browser while the download saved
+      // none — reading the same sources here keeps the two in step, so whatever
+      // the browser can draw, a download keeps.
+      final coverSources = <String?>[
+        detail['path_cover_large']?.toString(),
+        detail['path_cover_small']?.toString(),
+        _service.coverUrl(rom),
+      ];
       await _saveRommMedia(
-        coverPath,
+        coverSources,
         'box2d',
         system,
         indexedName,
@@ -1545,7 +1552,7 @@ class RommProvider extends ChangeNotifier {
       // fanart, the cover doubles as the background so the card is never blank.
       final fanartPath = _rommResourcePath(ss['fanart_path']);
       await _saveRommMedia(
-        fanartPath ?? coverPath,
+        [fanartPath, ...coverSources],
         'fanarts',
         system,
         indexedName,
@@ -1562,7 +1569,7 @@ class RommProvider extends ChangeNotifier {
           _rommResourcePath(ss['logo_path']) ??
           _rommResourcePath(ss['marquee_path']);
       await _saveRommMedia(
-        wheelPath,
+        [wheelPath],
         'wheels',
         system,
         indexedName,
@@ -1575,11 +1582,11 @@ class RommProvider extends ChangeNotifier {
               ?.whereType<String>()
               .toList() ??
           const <String>[];
-      final shotPath = screenshots.isNotEmpty
-          ? screenshots.first
-          : _rommResourcePath(ss['title_screen_path']);
       await _saveRommMedia(
-        shotPath,
+        [
+          if (screenshots.isNotEmpty) screenshots.first,
+          _rommResourcePath(ss['title_screen_path']),
+        ],
         'screenshots',
         system,
         indexedName,
@@ -1595,7 +1602,7 @@ class RommProvider extends ChangeNotifier {
       if (videoPath != null) {
         final vext = videoPath.toLowerCase().contains('.webm') ? 'webm' : 'mp4';
         await _saveRommMedia(
-          videoPath,
+          [videoPath],
           'videos',
           system,
           indexedName,
@@ -1621,14 +1628,23 @@ class RommProvider extends ChangeNotifier {
     return '/assets/romm/resources/$s';
   }
 
-  /// Fetches [pathOrUrl] from RomM and writes it into the [folder] media folder
-  /// keyed by [indexedName], picking the on-disk extension from the actual bytes
-  /// (RomM serves JPEG even from `*.png` paths and the library's lookup is
-  /// extension-sensitive) unless [forcedExt] is given. Removes stale variants in
-  /// [siblingExts] so `getImagePath`/`getVideoPath` resolve this one. No-op when
-  /// the path is empty or the fetch yields nothing.
+  /// Fetches the first of [sources] that yields usable bytes and writes it into
+  /// the [folder] media folder keyed by [indexedName], picking the on-disk
+  /// extension from the actual bytes (RomM serves JPEG even from `*.png` paths
+  /// and the library's lookup is extension-sensitive) unless [forcedExt] is
+  /// given. Removes stale variants in [siblingExts] so
+  /// `getImagePath`/`getVideoPath` resolve this one. No-op when every source is
+  /// empty or fetches nothing.
+  ///
+  /// Sources are tried in order because RomM's cached copy and the metadata
+  /// provider's original are the same artwork from two places, and a given
+  /// library may only have one of them.
+  ///
+  /// Failures are contained here rather than at the call site: the media types
+  /// are independent, and a single unwritable folder or dead URL must not cost
+  /// the caller every type queued behind it.
   Future<void> _saveRommMedia(
-    String? pathOrUrl,
+    List<String?> sources,
     String folder,
     SystemModel system,
     String indexedName,
@@ -1636,31 +1652,62 @@ class RommProvider extends ChangeNotifier {
     String? forcedExt,
     List<String> siblingExts = const ['png', 'jpg', 'webp'],
   }) async {
-    if (pathOrUrl == null || pathOrUrl.isEmpty) return;
-    final bytes = await _service.fetchImageBytes(pathOrUrl);
-    if (bytes == null || bytes.isEmpty) return;
-    final ext = forcedExt ?? RommService.imageExtensionFor(bytes);
-    final dest = fileProvider.getMediaPath(
-      system.folderName,
-      folder,
-      indexedName,
-      ext,
-    );
-    final destFile = File(dest);
-    await destFile.parent.create(recursive: true);
-    await destFile.writeAsBytes(bytes);
-    for (final other in siblingExts) {
-      if (other == ext) continue;
-      final stale = File(
-        fileProvider.getMediaPath(
-          system.folderName,
-          folder,
-          indexedName,
-          other,
-        ),
+    try {
+      Uint8List? bytes;
+      for (final source in sources) {
+        if (source == null || source.isEmpty) continue;
+        // A video's bytes are not an image, so only art is content-checked.
+        bytes = await _service.fetchImageBytes(
+          source,
+          requireImage: forcedExt == null,
+        );
+        if (bytes != null && bytes.isNotEmpty) break;
+        bytes = null;
+      }
+      if (bytes == null) return;
+
+      final ext = forcedExt ?? _mediaExtensionFor(bytes);
+      final dest = fileProvider.getMediaPath(
+        system.folderName,
+        folder,
+        indexedName,
+        ext,
       );
-      if (await stale.exists()) await stale.delete();
+      final destFile = File(dest);
+      await destFile.parent.create(recursive: true);
+      await destFile.writeAsBytes(bytes);
+      for (final other in siblingExts) {
+        if (other == ext) continue;
+        final stale = File(
+          fileProvider.getMediaPath(
+            system.folderName,
+            folder,
+            indexedName,
+            other,
+          ),
+        );
+        if (await stale.exists()) await stale.delete();
+      }
+    } catch (e) {
+      _log.e('RomM media import failed for $folder/$indexedName: $e');
     }
+  }
+
+  /// The extension art must be *saved* under, which is not always the one the
+  /// bytes imply.
+  ///
+  /// RomM stores every cover as `big.png` whatever the source served, so an
+  /// import can come back holding WebP (SteamGridDB and LaunchBox both serve
+  /// it). Saved under its true `.webp` name that art was invisible to the
+  /// library — and `siblingExts` had already deleted the `.png` a previous
+  /// scrape left behind, so a RomM download could *remove* working box art.
+  /// `GameModel` now reads `.webp` too, but art still lands under the
+  /// extensions every scrape writes: it keeps one shape of file on disk, and
+  /// the library's lookup answers on its first probe rather than its third.
+  /// Flutter decodes by content, not by name, so WebP under `.png` renders.
+  static String _mediaExtensionFor(Uint8List bytes) {
+    final ext = RommService.imageExtensionFor(bytes);
+    return ext == 'jpg' ? ext : 'png';
   }
 
   /// Requests cancellation of an in-flight download.

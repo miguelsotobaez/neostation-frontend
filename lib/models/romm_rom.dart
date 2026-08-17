@@ -60,7 +60,20 @@ class RommRom {
   final bool hasMultipleFiles;
 
   /// Relative or absolute cover URL (may need the server base URL + auth).
+  ///
+  /// This is the metadata provider's own copy (IGDB, SteamGridDB,
+  /// ScreenScraper…), which RomM leaves empty for some matches — see
+  /// [pathCoverLarge] for the server-cached copy that stands in for it.
   final String? urlCover;
+
+  /// RomM's *locally cached* cover files, as server-relative paths under
+  /// `/assets/romm/resources/`, or null when RomM stored no file.
+  ///
+  /// Same artwork as [urlCover] from a different place: a library can hold
+  /// either one, both, or neither, so the cover a ROM actually has is whichever
+  /// of the three answers first.
+  final String? pathCoverLarge;
+  final String? pathCoverSmall;
 
   /// RetroAchievements game id RomM matched this ROM to, or null if none.
   /// A non-null id means the game has a RetroAchievements set.
@@ -100,6 +113,8 @@ class RommRom {
     this.files = const [],
     this.hasMultipleFiles = false,
     this.urlCover,
+    this.pathCoverLarge,
+    this.pathCoverSmall,
     this.raId,
     this.raTotalAchievements = 0,
     this.genres = const [],
@@ -143,6 +158,8 @@ class RommRom {
       files: files,
       hasMultipleFiles: json['has_multiple_files'] == true,
       urlCover: json['url_cover']?.toString(),
+      pathCoverLarge: json['path_cover_large']?.toString(),
+      pathCoverSmall: json['path_cover_small']?.toString(),
       raId: (json['ra_id'] as num?)?.toInt(),
       raTotalAchievements: _parseRaTotal(json),
       genres: _parseStringList(json, 'genres'),

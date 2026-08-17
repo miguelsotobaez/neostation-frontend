@@ -22,7 +22,11 @@ RommService _service({
   return s;
 }
 
-RommRom _rom({String? urlCover}) => RommRom(
+RommRom _rom({
+  String? urlCover,
+  String? pathCoverLarge,
+  String? pathCoverSmall,
+}) => RommRom(
   id: 1,
   name: 'Game',
   platformId: 1,
@@ -31,6 +35,8 @@ RommRom _rom({String? urlCover}) => RommRom(
   fsNameNoExt: 'game',
   fsExtension: 'sfc',
   urlCover: urlCover,
+  pathCoverLarge: pathCoverLarge,
+  pathCoverSmall: pathCoverSmall,
 );
 
 RommPlatform _platform({String? urlLogo, String slug = 'snes'}) =>
@@ -91,6 +97,50 @@ void main() {
         _service().coverUrl(_rom(urlCover: 'assets/cover.png')),
         'https://romm.local/assets/cover.png',
       );
+    });
+
+    test(
+      'falls back to RomM\'s cached cover when there is no provider URL',
+      () {
+        // The case behind the "no art in the browser, but the download has it"
+        // report: RomM cached a cover file but recorded no url_cover.
+        expect(
+          _service().coverUrl(
+            _rom(
+              pathCoverLarge: '/assets/romm/resources/roms/1/2/cover/big.png',
+            ),
+          ),
+          'https://romm.local/assets/romm/resources/roms/1/2/cover/big.png',
+        );
+      },
+    );
+  });
+
+  group('coverUrlCandidates', () {
+    test('orders provider URL, then cached large, then cached small', () {
+      final urls = _service().coverUrlCandidates(
+        _rom(
+          urlCover: 'https://cdn.igdb/cover.png',
+          pathCoverLarge: '/assets/big.png',
+          pathCoverSmall: '/assets/small.png',
+        ),
+      );
+      expect(urls, [
+        'https://cdn.igdb/cover.png',
+        'https://romm.local/assets/big.png',
+        'https://romm.local/assets/small.png',
+      ]);
+    });
+
+    test('skips sources the server left empty', () {
+      final urls = _service().coverUrlCandidates(
+        _rom(urlCover: '', pathCoverLarge: '', pathCoverSmall: '/assets/s.png'),
+      );
+      expect(urls, ['https://romm.local/assets/s.png']);
+    });
+
+    test('is empty when the ROM has no cover at all', () {
+      expect(_service().coverUrlCandidates(_rom()), isEmpty);
     });
   });
 

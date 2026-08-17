@@ -605,7 +605,17 @@ class RommService {
   /// The caller picks the on-disk extension from the actual content — RomM
   /// serves JPEG even from `*.png` cover paths, and the app's image lookup is
   /// extension-sensitive.
-  Future<Uint8List?> fetchImageBytes(String pathOrUrl) async {
+  ///
+  /// With [requireImage] (the default) a body that isn't a recognisable image
+  /// counts as a miss: a resource path RomM no longer has a file for falls
+  /// through to its SPA shell, which answers **200 with HTML**. Writing that
+  /// out would leave an undecodable `.png` behind — art that looks downloaded
+  /// but renders as nothing — and would hide the miss from any caller trying a
+  /// second source. Video fetches pass `requireImage: false`.
+  Future<Uint8List?> fetchImageBytes(
+    String pathOrUrl, {
+    bool requireImage = true,
+  }) async {
     try {
       final url = pathOrUrl.startsWith('http')
           ? pathOrUrl
@@ -613,12 +623,61 @@ class RommService {
       final resp = await _httpClient
           .get(Uri.parse(url), headers: imageHeadersFor(url))
           .timeout(const Duration(seconds: 30));
-      if (resp.statusCode != 200) return null;
-      return resp.bodyBytes;
+      if (resp.statusCode != 200) {
+        _log.w('RomM image fetch: HTTP ${resp.statusCode} for $url');
+        return null;
+      }
+      final bytes = resp.bodyBytes;
+      if (requireImage && !looksLikeImage(bytes)) {
+        _log.w('RomM image fetch: non-image body for $url');
+        return null;
+      }
+      return bytes;
     } catch (e) {
       _log.e('RomM image fetch failed: $e');
       return null;
     }
+  }
+
+  /// Whether [bytes] start with the magic numbers of an image format the app
+  /// can decode. Deliberately content-based: RomM names every stored cover
+  /// `big.png` whatever the source served, so the extension proves nothing.
+  static bool looksLikeImage(Uint8List bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return true; // JPEG
+    }
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return true; // PNG
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return true; // WEBP
+    }
+    if (bytes.length >= 6 &&
+        bytes[0] == 0x47 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x38) {
+      return true; // GIF
+    }
+    if (bytes.length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4D) {
+      return true; // BMP
+    }
+    return false;
   }
 
   /// Returns the image file extension ('jpg'/'png'/'webp') implied by [bytes]'
@@ -641,13 +700,31 @@ class RommService {
   }
 
   /// Builds an absolute, authenticated-fetchable cover URL for [rom], or null.
-  String? coverUrl(RommRom rom) {
-    final cover = rom.urlCover;
-    if (cover == null || cover.isEmpty) return null;
-    if (cover.startsWith('http://') || cover.startsWith('https://')) {
-      return cover;
+  String? coverUrl(RommRom rom) => coverUrlCandidates(rom).firstOrNull;
+
+  /// Every cover URL [rom] could be drawn from, best first: the metadata
+  /// provider's own copy, then RomM's cached large and small files.
+  ///
+  /// RomM populates these independently — a ROM matched without a provider
+  /// cover still has the cached file, and a library RomM never cached covers
+  /// for only has the provider URL. Anything that draws a cover should walk the
+  /// list rather than give up on the first entry, or a ROM whose art the server
+  /// plainly has renders as a blank card.
+  List<String> coverUrlCandidates(RommRom rom) {
+    final urls = <String>[];
+    for (final cover in [
+      rom.urlCover,
+      rom.pathCoverLarge,
+      rom.pathCoverSmall,
+    ]) {
+      if (cover == null || cover.isEmpty) continue;
+      urls.add(
+        (cover.startsWith('http://') || cover.startsWith('https://'))
+            ? cover
+            : '$_baseUrl${cover.startsWith('/') ? '' : '/'}$cover',
+      );
     }
-    return '$_baseUrl${cover.startsWith('/') ? '' : '/'}$cover';
+    return urls;
   }
 
   /// Absolute, authenticated-fetchable cover URLs making up [collection]'s

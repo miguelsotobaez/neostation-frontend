@@ -385,6 +385,15 @@ class GameModel {
     return _manualImagePath(systemFolderName, imageType);
   }
 
+  /// Extensions a NeoStation-owned media file may carry, in probe order.
+  ///
+  /// `webp` is last and costs a stat only for a ROM that has no art at all:
+  /// scrapes write `png`/`jpg`, so any game with artwork answers on the first
+  /// or second entry. It is probed because RomM imports before 0.10.1 saved
+  /// covers under the source's own extension, leaving `.webp` box art on disk
+  /// that nothing could resolve.
+  static const List<String> _mediaExtensions = ['png', 'jpg', 'webp'];
+
   /// The existing NeoStation-owned media file for [imageType], or null when
   /// NeoStation has no art of its own for this ROM.
   String? _existingNeoStationImagePath(
@@ -392,7 +401,7 @@ class GameModel {
     String systemFolderName,
     String imageType,
   ) {
-    for (final extension in const ['png', 'jpg']) {
+    for (final extension in _mediaExtensions) {
       final candidate = fileProvider.getMediaPath(
         systemFolderName,
         imageType,
@@ -403,7 +412,7 @@ class GameModel {
     }
 
     // Fallback for files with complex extensions (e.g., 'v1.11.zip').
-    for (final extension in const ['png', 'jpg']) {
+    for (final extension in _mediaExtensions) {
       final candidate = path.join(
         fileProvider.getMediaDirectoryPath(),
         systemFolderName,
