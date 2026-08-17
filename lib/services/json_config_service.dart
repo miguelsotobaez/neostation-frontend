@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/systems_update_service.dart';
@@ -71,6 +72,19 @@ class JsonConfigService {
           if (jsonMap.containsKey('system')) {
             final systemData = jsonMap['system'];
 
+            // A definition downloaded before the RetroAchievements hashing
+            // policy existed declares none, and a missing policy reads as the
+            // permissive default — which would quietly cost NES, SNES and
+            // arcade their algorithms for anyone who had ever taken a systems
+            // update. The bundled copy of the same system still knows how it
+            // must be hashed, so read that one field from it rather than
+            // publishing a manifest bump to invalidate every user's cache.
+            final raHash =
+                systemData['ra_hash'] ??
+                (cachedPath != null && bundledFileNames.contains(fileName)
+                    ? await bundledRaHash(fileName)
+                    : null);
+
             final flatMap = <String, dynamic>{
               'id': _generateId(systemData['id']),
               'folderName': systemData['id'],
@@ -82,8 +96,8 @@ class JsonConfigService {
               'type': systemData['details']?['type'],
               'screenscraperId': systemData['ids']?['screenscraper'],
               'raId': systemData['ids']?['retroachievements'],
-              'raHashAlgo': systemData['ra_hash']?['algo'],
-              'raHashMode': systemData['ra_hash']?['mode'],
+              'raHashAlgo': raHash?['algo'],
+              'raHashMode': raHash?['mode'],
               'iconImage': 'assets/images/systems/${systemData['id']}-icon.png',
               'backgroundImage':
                   'assets/images/systems/${systemData['id']}-bg.jpg',
@@ -130,6 +144,24 @@ class JsonConfigService {
     } catch (e) {
       _log.e('Error loading system configurations: $e');
       return [];
+    }
+  }
+
+  /// Reads just the `ra_hash` block from the *bundled* copy of [fileName].
+  ///
+  /// Used when a cached definition predates the hashing policy. Returns null if
+  /// the bundled copy has none either, in which case the system genuinely
+  /// declares no policy and gets the permissive default.
+  @visibleForTesting
+  Future<Map<String, dynamic>?> bundledRaHash(String fileName) async {
+    try {
+      final content = await rootBundle.loadString('assets/systems/$fileName');
+      final jsonMap = json.decode(content) as Map<String, dynamic>;
+      final raHash = (jsonMap['system'] as Map?)?['ra_hash'];
+      return raHash is Map<String, dynamic> ? raHash : null;
+    } catch (e) {
+      _log.w('Could not read bundled ra_hash for $fileName: $e');
+      return null;
     }
   }
 
