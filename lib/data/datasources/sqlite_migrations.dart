@@ -487,6 +487,9 @@ class SqliteMigrations {
       case 128:
         await _migrateToVersion128(db);
         break;
+      case 129:
+        await _migrateToVersion129(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6025,6 +6028,46 @@ class SqliteMigrations {
       _log.i('Migration v128 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v128: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v129: Adds `app_systems.ra_hash_algo` and
+  /// `app_systems.ra_hash_mode`, the per-system RetroAchievements hashing
+  /// policy.
+  ///
+  /// The policy used to be three hardcoded lists in the hash service that could
+  /// disagree with one another; it now lives in `assets/systems/<sys>.json` and
+  /// is synced into these columns, so it reaches existing installs through the
+  /// systems OTA update rather than an app release.
+  ///
+  /// Both columns are left NULL here rather than backfilled. `syncSystems`
+  /// rewrites every row from the JSON definitions on the launch that follows,
+  /// and a NULL reads as the permissive default — hash the whole file, allow
+  /// the filename fallback — which is what an undeclared system did before.
+  ///
+  /// Idempotent — each column is added only when absent.
+  static Future<void> _migrateToVersion129(Database db) async {
+    _log.i('Migration v129: Adding RA hash policy columns to app_systems');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_systems)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_hash_algo')) {
+        db.execute('ALTER TABLE app_systems ADD COLUMN ra_hash_algo TEXT');
+        _log.i('Column ra_hash_algo added via v129');
+      } else {
+        _log.i('Column ra_hash_algo already exists');
+      }
+      if (!columns.contains('ra_hash_mode')) {
+        db.execute('ALTER TABLE app_systems ADD COLUMN ra_hash_mode TEXT');
+        _log.i('Column ra_hash_mode added via v129');
+      } else {
+        _log.i('Column ra_hash_mode already exists');
+      }
+      _log.i('Migration v129 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v129: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

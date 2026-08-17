@@ -14,6 +14,10 @@
       "screenscraper": 9,
       "retroachievements": 4
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "hash_only"
+    },
     "folders": [
       "gb",
       "Game Boy",

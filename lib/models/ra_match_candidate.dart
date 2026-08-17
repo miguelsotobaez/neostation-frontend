@@ -1,3 +1,5 @@
+import 'ra_hash_policy.dart';
+
 /// A ROM row selected for RetroAchievements hashing or re-matching.
 ///
 /// Deliberately narrower than [GameModel]: the bulk passes only need enough to
@@ -10,7 +12,7 @@ class RaMatchCandidate {
   /// File name as stored in `user_roms`, used for progress messages.
   final String filename;
 
-  /// Folder name of the owning system, which selects the hash algorithm.
+  /// Folder name of the owning system, used for archive extraction paths.
   final String systemFolderName;
 
   /// The system's RetroAchievements console id, used for the hash lookup.
@@ -19,11 +21,16 @@ class RaMatchCandidate {
   /// Hash already stored for this ROM, if any.
   final String? raHash;
 
+  /// The owning system's hashing policy, carried on the row so the bulk pass
+  /// does not have to look a system up per ROM.
+  final RaHashPolicy policy;
+
   const RaMatchCandidate({
     required this.romPath,
     required this.filename,
     required this.systemFolderName,
     required this.systemRaId,
+    required this.policy,
     this.raHash,
   });
 
@@ -35,6 +42,10 @@ class RaMatchCandidate {
       systemFolderName: row['system_folder_name']?.toString() ?? '',
       systemRaId: row['system_ra_id']?.toString() ?? '',
       raHash: (hash != null && hash.isNotEmpty) ? hash : null,
+      policy: RaHashPolicy.fromNames(
+        row['ra_hash_algo']?.toString(),
+        row['ra_hash_mode']?.toString(),
+      ),
     );
   }
 

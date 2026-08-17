@@ -82,6 +82,8 @@ class JsonConfigService {
               'type': systemData['details']?['type'],
               'screenscraperId': systemData['ids']?['screenscraper'],
               'raId': systemData['ids']?['retroachievements'],
+              'raHashAlgo': systemData['ra_hash']?['algo'],
+              'raHashMode': systemData['ra_hash']?['mode'],
               'iconImage': 'assets/images/systems/${systemData['id']}-icon.png',
               'backgroundImage':
                   'assets/images/systems/${systemData['id']}-bg.jpg',

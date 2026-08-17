@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'neo_sync_models.dart';
+import 'ra_hash_policy.dart';
 
 /// Represents a physical or virtual emulation system (e.g., 'NES', 'Recently Played').
 ///
@@ -14,6 +15,19 @@ class SystemModel {
 
   /// External ID for the RetroAchievements.org API.
   final String? raId;
+
+  /// Name of the hashing algorithm RetroAchievements expects for this system,
+  /// declared in `assets/systems/<sys>.json`. Null means the default.
+  final String? raHashAlgo;
+
+  /// Whether this system matches by hash only or may guess by filename,
+  /// declared in `assets/systems/<sys>.json`. Null means the default.
+  final String? raHashMode;
+
+  /// The system's RetroAchievements hashing policy, or
+  /// [RaHashPolicy.fallback] when it declares none.
+  RaHashPolicy get raHashPolicy =>
+      RaHashPolicy.fromNames(raHashAlgo, raHashMode);
 
   /// Primary folder name on the filesystem used as the unique key.
   final String folderName;
@@ -110,6 +124,8 @@ class SystemModel {
     this.id,
     this.screenscraperId,
     this.raId,
+    this.raHashAlgo,
+    this.raHashMode,
     required this.folderName,
     required this.realName,
     this.shortName,
@@ -228,6 +244,10 @@ class SystemModel {
         (json['screenscraper_id'] ?? json['screenscraperId'] ?? '').toString(),
       ),
       raId: json['ra_id']?.toString() ?? json['raId']?.toString(),
+      raHashAlgo:
+          json['ra_hash_algo']?.toString() ?? json['raHashAlgo']?.toString(),
+      raHashMode:
+          json['ra_hash_mode']?.toString() ?? json['raHashMode']?.toString(),
       folderName: primaryFolder,
       realName: (json['real_name'] ?? json['realName'] ?? '').toString(),
       shortName:
@@ -335,6 +355,8 @@ class SystemModel {
       'id': id,
       'screenscraperId': screenscraperId,
       'raId': raId,
+      'raHashAlgo': raHashAlgo,
+      'raHashMode': raHashMode,
       'folderName': folderName,
       'realName': realName,
       'shortName': shortName,
@@ -372,6 +394,8 @@ class SystemModel {
     String? id,
     int? screenscraperId,
     String? raId,
+    String? raHashAlgo,
+    String? raHashMode,
     String? folderName,
     String? realName,
     String? shortName,
@@ -407,6 +431,8 @@ class SystemModel {
       id: id ?? this.id,
       screenscraperId: screenscraperId ?? this.screenscraperId,
       raId: raId ?? this.raId,
+      raHashAlgo: raHashAlgo ?? this.raHashAlgo,
+      raHashMode: raHashMode ?? this.raHashMode,
       folderName: folderName ?? this.folderName,
       realName: realName ?? this.realName,
       shortName: shortName ?? this.shortName,

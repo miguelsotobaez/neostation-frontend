@@ -14,6 +14,10 @@
       "screenscraper": 263,
       "retroachievements": 71
     },
+    "ra_hash": {
+      "algo": "arduboy",
+      "mode": "hash_only"
+    },
     "folders": [
       "ard",
       "arduboy"

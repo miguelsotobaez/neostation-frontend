@@ -14,6 +14,10 @@
       "screenscraper": 31,
       "retroachievements": 8
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
+    },
     "folders": [
       "tg16",
       "TurboGrafx-16",

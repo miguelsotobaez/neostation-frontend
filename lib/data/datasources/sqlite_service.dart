@@ -422,7 +422,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 128;
+  static const int _databaseVersion = 129;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -526,6 +526,8 @@ class SqliteService {
               'short_name': jsonSystem.shortName,
               'screenscraper_id': jsonSystem.screenscraperId,
               'ra_id': jsonSystem.raId,
+              'ra_hash_algo': jsonSystem.raHashAlgo,
+              'ra_hash_mode': jsonSystem.raHashMode,
               'description': jsonSystem.description,
               'launch_date': jsonSystem.launchDate,
               'manufacturer': jsonSystem.manufacturer,
@@ -546,6 +548,8 @@ class SqliteService {
             'folder_name': jsonSystem.folderName,
             'screenscraper_id': jsonSystem.screenscraperId,
             'ra_id': jsonSystem.raId,
+            'ra_hash_algo': jsonSystem.raHashAlgo,
+            'ra_hash_mode': jsonSystem.raHashMode,
             'description': jsonSystem.description,
             'launch_date': jsonSystem.launchDate,
             'manufacturer': jsonSystem.manufacturer,
@@ -1732,6 +1736,8 @@ class SqliteService {
           id TEXT PRIMARY KEY,
           screenscraper_id INTEGER,
           ra_id INTEGER,
+          ra_hash_algo TEXT,
+          ra_hash_mode TEXT,
           real_name TEXT NOT NULL,
           short_name TEXT,
           folder_name TEXT NOT NULL UNIQUE,

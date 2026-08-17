@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../models/game_model.dart';
+import '../models/ra_hash_policy.dart';
 import '../models/retro_achievements_summary.dart';
 import '../repositories/retro_achievements_repository.dart';
 import 'logger_service.dart';
@@ -41,14 +42,14 @@ class RetroAchievementsMatcher {
   /// Returns null when the ROM has no hash and none can be produced cheaply.
   static Future<String?> resolveMd5Hash(
     GameModel game, {
-    required bool hasSpecificGenerator,
+    required RaHashPolicy policy,
   }) async {
     final existing = game.raHash;
     if (existing != null && existing.isNotEmpty) return existing;
 
-    if (hasSpecificGenerator) {
-      // Systems with a real RA algorithm: always generate, so the precise match
-      // is available.
+    if (policy.isHashOnly) {
+      // Hash-only systems have nothing else to fall back on, so the hash is
+      // always worth generating.
       return RetroAchievementsHashService.generateHashForGame(game);
     }
 
@@ -70,7 +71,7 @@ class RetroAchievementsMatcher {
     required GameModel game,
     required String systemFolderName,
     required RetroAchievementsUserSummary? summary,
-    required bool hasSpecificGenerator,
+    required RaHashPolicy policy,
     String? md5Hash,
   }) async {
     // Strategy 0: a match the user chose by hand wins over every automatic
@@ -100,8 +101,9 @@ class RetroAchievementsMatcher {
       }
     }
 
-    // Hash-specific systems must match by hash only to avoid false positives.
-    if (hasSpecificGenerator) return null;
+    // Hash-only systems stop here: a filename guess where RA registers real
+    // hashes is a false positive waiting to happen.
+    if (policy.isHashOnly) return null;
 
     // Strategy 2: sanitized filename match.
     try {

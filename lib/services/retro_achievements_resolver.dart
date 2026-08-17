@@ -70,19 +70,18 @@ class RetroAchievementsResolver {
     if (!provider.isConnected) return null;
 
     try {
-      final hasSpecificGenerator =
-          RetroAchievementsHashService.hasSpecificHashGenerator(
-            game.systemFolderName,
-          );
+      final policy = await RetroAchievementsHashService.policyForSystem(
+        game.systemFolderName,
+      );
       final md5Hash = await RetroAchievementsMatcher.resolveMd5Hash(
         game,
-        hasSpecificGenerator: hasSpecificGenerator,
+        policy: policy,
       );
       final gameId = await RetroAchievementsMatcher.resolveGameId(
         game: game,
         systemFolderName: systemFolderName,
         summary: provider.userSummary,
-        hasSpecificGenerator: hasSpecificGenerator,
+        policy: policy,
         md5Hash: md5Hash,
       );
       if (gameId == null) return null;

@@ -14,6 +14,10 @@
       "screenscraper": 113,
       "retroachievements": 29
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
+    },
     "folders": [
       "msx",
       "msx1",

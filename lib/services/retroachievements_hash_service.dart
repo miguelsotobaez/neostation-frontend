@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../models/game_model.dart';
+import '../models/ra_hash_policy.dart';
 import '../models/ra_match_candidate.dart';
 import '../repositories/retro_achievements_repository.dart';
 import '../repositories/system_repository.dart';
@@ -71,11 +72,13 @@ class RetroAchievementsHashService {
         return null;
       }
 
+      final policy = await policyForSystem(game.systemFolderName);
+
       String romPathToProcess = game.romPath!;
       final bool isArchive =
           (romPathToProcess.toLowerCase().endsWith('.zip') ||
               romPathToProcess.toLowerCase().endsWith('.7z')) &&
-          !isArcadeSystem(game.systemFolderName);
+          !policy.keepsArchivesPacked;
 
       if (isArchive) {
         final extractedPath = await ArchiveService.extractRom(
@@ -97,8 +100,7 @@ class RetroAchievementsHashService {
       final isolateToken = RootIsolateToken.instance!;
       final hash = await compute(_generateHashForSystemIsolate, {
         'romPath': romPathToProcess,
-        'systemFolderName': game.systemFolderName,
-        'gameName': game.name,
+        'algo': policy.algo.jsonName,
         'token': isolateToken,
       });
 
@@ -332,7 +334,7 @@ class RetroAchievementsHashService {
     final lowerPath = romPathToProcess.toLowerCase();
     final bool isArchive =
         (lowerPath.endsWith('.zip') || lowerPath.endsWith('.7z')) &&
-        !isArcadeSystem(candidate.systemFolderName);
+        !candidate.policy.keepsArchivesPacked;
 
     if (isArchive) {
       final extractedPath = await ArchiveService.extractRom(
@@ -352,8 +354,7 @@ class RetroAchievementsHashService {
     try {
       final hash = await compute(_generateHashForSystemIsolate, {
         'romPath': romPathToProcess,
-        'systemFolderName': candidate.systemFolderName,
-        'gameName': candidate.label,
+        'algo': candidate.policy.algo.jsonName,
         'token': RootIsolateToken.instance!,
       });
       if (hash == null || hash.isEmpty) {
@@ -404,80 +405,42 @@ class RetroAchievementsHashService {
     return false;
   }
 
-  /// Determines if a specific system requires a non-standard hashing algorithm
-  /// recognized by RetroAchievements.
-  static bool hasSpecificHashGenerator(String? systemFolderName) {
-    if (systemFolderName == null) return false;
-    final system = systemFolderName.toLowerCase();
+  /// The RetroAchievements hashing policy for [systemFolderName].
+  ///
+  /// Reads it off the system record, which `syncSystems` fills from
+  /// `assets/systems/<sys>.json`. A system that declares none — or a folder no
+  /// system claims — gets [RaHashPolicy.fallback].
+  static Future<RaHashPolicy> policyForSystem(String? systemFolderName) async {
+    if (systemFolderName == null || systemFolderName.isEmpty) {
+      return RaHashPolicy.fallback;
+    }
+    final cached = _policyCache[systemFolderName.toLowerCase()];
+    if (cached != null) return cached;
 
-    return system == 'nes' ||
-        system == 'fc' ||
-        system == 'ds' ||
-        system == 'snes' ||
-        system == 'sfc' ||
-        system == 'satellaview' ||
-        system == 'arc' ||
-        system == 'fbneo' ||
-        system == 'neogeo' ||
-        system == 'naomi' ||
-        system == 'naomi2' ||
-        system == 'naomigd' ||
-        system == 'aw' ||
-        system == 'cps1' ||
-        system == 'cps2' ||
-        system == 'cps3' ||
-        system == 'mame' ||
-        system == 'gb' ||
-        system == 'gbc' ||
-        system == 'gba' ||
-        system == 'vb' ||
-        system == 'ngp' ||
-        system == 'ngpc' ||
-        system == '32x' ||
-        system == 'sms' ||
-        system == 'mark3' ||
-        system == 'wasm4' ||
-        system == 'md' ||
-        system == 'genesis' ||
-        system == 'jag' ||
-        system == 'ws' ||
-        system == 'wsc' ||
-        system == 'chf' ||
-        system == 'vect' ||
-        system == 'mo2' ||
-        system == 'intv' ||
-        system == 'cv' ||
-        system == '2600' ||
-        system == '7800' ||
-        system == 'lynx' ||
-        system == 'ard' ||
-        system == 'n64' ||
-        system == 'sg1k' ||
-        system == 'duck' ||
-        system == 'wsv' ||
-        system == 'gg' ||
-        system == 'mini';
+    final system = await SystemRepository.getSystemByFolderName(
+      systemFolderName,
+    );
+    final policy = system?.raHashPolicy ?? RaHashPolicy.fallback;
+    _policyCache[systemFolderName.toLowerCase()] = policy;
+    return policy;
   }
 
-  /// Identifies if a system belongs to the Arcade category, where ROM archives
-  /// (ZIPs) should not be extracted for hashing.
-  static bool isArcadeSystem(String? systemFolderName) {
-    if (systemFolderName == null) return false;
-    final system = systemFolderName.toLowerCase();
-    return system == 'arc' ||
-        system == 'fbneo' ||
-        system == 'neogeo' ||
-        system == 'naomi' ||
-        system == 'naomi2' ||
-        system == 'naomigd' ||
-        system == 'aw' ||
-        system == 'cps1' ||
-        system == 'cps2' ||
-        system == 'cps3' ||
-        system == 'mame';
-  }
+  /// Resolved policies, keyed by the folder name asked for.
+  ///
+  /// Looking a system up costs a ROM count and a settings query, and the
+  /// achievements pill asks once per selected game while the library is
+  /// scrolled. The systems table only changes on an OTA update, which
+  /// [clearPolicyCache] follows.
+  static final Map<String, RaHashPolicy> _policyCache = {};
 
-  /// Top-level function executed in a background isolate to compute system-specific hashes.
+  /// Drops the cached policies. Call after the systems definitions change.
+  static void clearPolicyCache() => _policyCache.clear();
+
+  /// Top-level function executed in a background isolate to compute the hash.
+  ///
+  /// Takes the algorithm by name rather than the system folder: the policy is
+  /// resolved on the main isolate, so this side has no database to consult and
+  /// there is only one place that decides which algorithm a system gets.
   static Future<String?> _generateHashForSystemIsolate(
     Map<String, dynamic> params,
   ) async {
@@ -487,50 +450,26 @@ class RetroAchievementsHashService {
     }
 
     final romPath = params['romPath'].toString();
-    final systemFolderName = params['systemFolderName']?.toString();
-    final systemFolder = systemFolderName?.toLowerCase() ?? '';
+    final algo = RaHashAlgo.fromJson(params['algo']?.toString());
 
     try {
-      String? hash;
-
-      if (systemFolder == 'nes' ||
-          systemFolder == 'fc' ||
-          systemFolder == 'famicom' ||
-          systemFolder == 'fds') {
-        hash = await OptimizedMd5Utils.calculateNesMd5(romPath);
-      } else if (systemFolder == 'ds') {
-        hash = await OptimizedMd5Utils.calculateDsMd5(romPath);
-      } else if (systemFolder == 'arc' ||
-          systemFolder == 'fbneo' ||
-          systemFolder == 'neogeo' ||
-          systemFolder == 'naomi' ||
-          systemFolder == 'naomi2' ||
-          systemFolder == 'naomigd' ||
-          systemFolder == 'aw' ||
-          systemFolder == 'cps1' ||
-          systemFolder == 'cps2' ||
-          systemFolder == 'cps3' ||
-          systemFolder == 'mame') {
-        hash = OptimizedMd5Utils.calculateArcadeMd5(romPath);
-      } else if (systemFolder == 'snes' ||
-          systemFolder == 'sfc' ||
-          systemFolder == 'satellaview') {
-        hash = await OptimizedMd5Utils.calculateSnesMd5(romPath);
-      } else if (systemFolder == '7800') {
-        hash = await OptimizedMd5Utils.calculateAtari7800Md5(romPath);
-      } else if (systemFolder == 'lynx') {
-        hash = await OptimizedMd5Utils.calculateLynxMd5(romPath);
-      } else if (systemFolder == 'ard') {
-        hash = await OptimizedMd5Utils.calculateArduboyMd5(romPath);
-      } else if (systemFolder == 'n64') {
-        hash = await OptimizedMd5Utils.calculateN64Md5(romPath);
-      } else {
-        hash = await OptimizedMd5Utils.calculateFileMd5(romPath);
-      }
-
-      return hash;
+      return switch (algo) {
+        RaHashAlgo.nes => await OptimizedMd5Utils.calculateNesMd5(romPath),
+        RaHashAlgo.snes => await OptimizedMd5Utils.calculateSnesMd5(romPath),
+        RaHashAlgo.ds => await OptimizedMd5Utils.calculateDsMd5(romPath),
+        RaHashAlgo.n64 => await OptimizedMd5Utils.calculateN64Md5(romPath),
+        RaHashAlgo.lynx => await OptimizedMd5Utils.calculateLynxMd5(romPath),
+        RaHashAlgo.atari7800 => await OptimizedMd5Utils.calculateAtari7800Md5(
+          romPath,
+        ),
+        RaHashAlgo.arduboy => await OptimizedMd5Utils.calculateArduboyMd5(
+          romPath,
+        ),
+        RaHashAlgo.arcade => OptimizedMd5Utils.calculateArcadeMd5(romPath),
+        RaHashAlgo.file => await OptimizedMd5Utils.calculateFileMd5(romPath),
+      };
     } catch (e) {
-      _log.e('Error generating hash for system $systemFolder: $e');
+      _log.e('Error generating ${algo.jsonName} hash for $romPath: $e');
       return null;
     }
   }

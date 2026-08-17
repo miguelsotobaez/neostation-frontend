@@ -14,6 +14,10 @@
       "screenscraper": 106,
       "retroachievements": 81
     },
+    "ra_hash": {
+      "algo": "nes",
+      "mode": "filename_fallback"
+    },
     "folders": [
       "fds",
       "Famicom Disk System",

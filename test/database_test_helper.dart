@@ -36,6 +36,8 @@ class DatabaseTestHelper {
         folder_name TEXT,
         screenscraper_id INTEGER,
         ra_id TEXT,
+        ra_hash_algo TEXT,
+        ra_hash_mode TEXT,
         short_name TEXT,
         description TEXT,
         launch_date TEXT,

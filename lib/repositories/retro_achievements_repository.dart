@@ -188,7 +188,8 @@ class RetroAchievementsRepository {
     final rows = await db.rawQuery('''
       SELECT ur.rom_path, ur.filename, ur.ra_hash,
              s.folder_name AS system_folder_name,
-             s.ra_id AS system_ra_id
+             s.ra_id AS system_ra_id,
+             s.ra_hash_algo, s.ra_hash_mode
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
       WHERE (ur.ra_hash IS NULL OR ur.ra_hash = '')
@@ -281,7 +282,8 @@ class RetroAchievementsRepository {
     final rows = await db.rawQuery('''
       SELECT ur.rom_path, ur.filename, ur.ra_hash,
              s.folder_name AS system_folder_name,
-             s.ra_id AS system_ra_id
+             s.ra_id AS system_ra_id,
+             s.ra_hash_algo, s.ra_hash_mode
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
       WHERE ur.ra_hash IS NOT NULL AND ur.ra_hash != ''

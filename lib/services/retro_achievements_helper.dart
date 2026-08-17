@@ -28,14 +28,13 @@ class RetroAchievementsHelper {
   }) async {
     if (!provider.isConnected) return null;
 
-    final hasSpecificGenerator =
-        RetroAchievementsHashService.hasSpecificHashGenerator(
-          game.systemFolderName,
-        );
+    final policy = await RetroAchievementsHashService.policyForSystem(
+      game.systemFolderName,
+    );
 
     final md5Hash = await RetroAchievementsMatcher.resolveMd5Hash(
       game,
-      hasSpecificGenerator: hasSpecificGenerator,
+      policy: policy,
     );
 
     // In "All" mode the game carries its own system; a system view searches the
@@ -48,7 +47,7 @@ class RetroAchievementsHelper {
       game: game,
       systemFolderName: systemFolderName,
       summary: provider.userSummary,
-      hasSpecificGenerator: hasSpecificGenerator,
+      policy: policy,
       md5Hash: md5Hash,
     );
 

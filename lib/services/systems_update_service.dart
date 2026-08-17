@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path;
 import 'config_service.dart';
 import 'logger_service.dart';
+import 'retroachievements_hash_service.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../utils/bounded_concurrency.dart';
 
@@ -89,6 +90,7 @@ class SystemsUpdateService {
           await entity.delete();
         }
       }
+      RetroAchievementsHashService.clearPolicyCache();
       _log.i('SystemsUpdateService: cleared systems cache');
     } catch (e) {
       _log.w('SystemsUpdateService: failed to clear systems cache: $e');
@@ -327,6 +329,8 @@ class SystemsUpdateService {
         );
       } else {
         await SqliteService.updateSystemsVersion(remoteVersion);
+        // The downloaded definitions may reassign a system's RA hashing policy.
+        RetroAchievementsHashService.clearPolicyCache();
         _log.i(
           'SystemsUpdateService: updated $downloaded files to v$remoteVersion',
         );

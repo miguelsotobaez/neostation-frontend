@@ -14,6 +14,10 @@
       "screenscraper": 72,
       "retroachievements": 49
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
+    },
     "folders": [
       "pcfx",
       "NEC PC-FX",
