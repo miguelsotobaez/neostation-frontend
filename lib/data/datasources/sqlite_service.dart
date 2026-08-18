@@ -458,7 +458,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 134;
+  static const int _databaseVersion = 135;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1931,7 +1931,13 @@ class SqliteService {
         filename TEXT NOT NULL,
         rom_path TEXT NOT NULL COLLATE NOCASE,
         ra_hash TEXT,
+        -- ScreenScraper dump identity: md5 (ss_hash), crc32 and size of the ROM
+        -- image itself. Distinct from ra_hash, which is RetroAchievements' own
+        -- per-console transform and matches nothing else. See migration v135.
         ss_hash TEXT,
+        rom_crc32 TEXT,
+        rom_size INTEGER,
+        rom_fingerprint_skipped TEXT,
         id_ra INTEGER,
         ra_match_source TEXT,
         ra_hash_skipped TEXT,
@@ -2097,6 +2103,7 @@ class SqliteService {
       'CREATE INDEX IF NOT EXISTS idx_user_roms_app_system_id ON user_roms(app_system_id);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_ra_hash ON user_roms(ra_hash);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_ss_hash ON user_roms(ss_hash);',
+      'CREATE INDEX IF NOT EXISTS idx_user_roms_rom_crc32 ON user_roms(rom_crc32);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_filename ON user_roms(filename);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_is_favorite ON user_roms(is_favorite);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_id_ra ON user_roms(id_ra);',

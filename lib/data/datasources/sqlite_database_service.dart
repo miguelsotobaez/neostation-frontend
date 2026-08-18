@@ -888,6 +888,7 @@ class SqliteDatabaseService {
 
     const columns =
         'is_favorite, play_time, last_played, id_ra, ra_hash, ss_hash, '
+        'rom_crc32, rom_size, rom_fingerprint_skipped, '
         'app_emulator_unique_id, app_emulator_os_id, '
         'app_alternative_emulators_id';
 
@@ -927,6 +928,9 @@ class SqliteDatabaseService {
             id_ra = ?,
             ra_hash = ?,
             ss_hash = ?,
+            rom_crc32 = ?,
+            rom_size = ?,
+            rom_fingerprint_skipped = ?,
             app_emulator_unique_id = ?,
             app_emulator_os_id = ?,
             app_alternative_emulators_id = ?,
@@ -942,6 +946,12 @@ class SqliteDatabaseService {
             s['id_ra'] ?? d['id_ra'],
             s['ra_hash'] ?? d['ra_hash'],
             s['ss_hash'] ?? d['ss_hash'],
+            // Both paths are the same file (a symlinked duplicate), so the
+            // dump identity transfers verbatim; a computed fingerprint on
+            // either row beats losing it and re-reading the ROM.
+            s['rom_crc32'] ?? d['rom_crc32'],
+            s['rom_size'] ?? d['rom_size'],
+            s['rom_fingerprint_skipped'] ?? d['rom_fingerprint_skipped'],
             s['app_emulator_unique_id'] ?? d['app_emulator_unique_id'],
             s['app_emulator_os_id'] ?? d['app_emulator_os_id'],
             s['app_alternative_emulators_id'] ??

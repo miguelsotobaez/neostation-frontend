@@ -501,6 +501,9 @@ class SqliteMigrations {
       case 134:
         await _migrateToVersion134(db);
         break;
+      case 135:
+        await _migrateToVersion135(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6123,6 +6126,76 @@ class SqliteMigrations {
       _log.i('Migration v131 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v131: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v135: caches a ROM's dump identity for ScreenScraper matching.
+  ///
+  /// ScreenScraper indexes ROMs by the crc32/md5/size of the image itself, and
+  /// each of those resolves a lookup on its own. Caching them per ROM turns a
+  /// re-scrape into a lookup instead of a re-read of every file.
+  ///
+  /// `rom_crc32` is the primary key for matching (widest coverage — their DB is
+  /// seeded from No-Intro/Redump DATs) and is often obtainable without reading
+  /// the ROM at all, straight from a zip's central directory. `rom_size` is
+  /// ScreenScraper's `romtaille`. `rom_fingerprint_skipped` parks ROMs that
+  /// cannot be fingerprinted so a bulk pass stops re-walking them, mirroring
+  /// `ra_hash_skipped`.
+  ///
+  /// The md5 reuses the existing `ss_hash` column rather than adding a fourth:
+  /// it is named for exactly this, indexed for exactly this lookup, and has
+  /// always been dead — no caller has ever passed a value for it, so there is
+  /// no older meaning to collide with.
+  ///
+  /// Numbered 135, having moved twice while this branch was open — the exact
+  /// churn the merge-order rule exists for. It started at the next free slot,
+  /// went to 133 when `feat/discovery-store` turned out to hold committed v132
+  /// and v133 migrations (`user_discovery_picks`, `hide_tab_discovery`), then
+  /// to 134, and finally to 135 when `feat/ra-disc-hashing` claimed 134 in the
+  /// open PR #380. A device that migrated on any of those branches would
+  /// already sit past a lower number and would skip this step silently,
+  /// leaving every fingerprint query failing with "no such column".
+  ///
+  /// The lesson for whoever renumbers next: scan on-disk working trees, not
+  /// just refs, and re-scan immediately before opening the PR rather than once
+  /// at the start. Both collisions here appeared *after* a clean scan.
+  ///
+  /// Idempotent per column — a device whose DB was already past 135 when it
+  /// first saw this binary skips the case entirely, so nothing may assume it
+  /// ran.
+  static Future<void> _migrateToVersion135(Database db) async {
+    _log.i('Migration v135: Adding ROM fingerprint cache to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toSet();
+
+      const additions = {
+        'rom_crc32': 'TEXT',
+        'rom_size': 'INTEGER',
+        'rom_fingerprint_skipped': 'TEXT',
+      };
+
+      for (final entry in additions.entries) {
+        if (!columns.contains(entry.key)) {
+          db.execute(
+            'ALTER TABLE user_roms ADD COLUMN ${entry.key} ${entry.value}',
+          );
+          _log.i('Column ${entry.key} added via v135');
+        } else {
+          _log.i('Column ${entry.key} already exists');
+        }
+      }
+
+      db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_user_roms_rom_crc32 '
+        'ON user_roms(rom_crc32)',
+      );
+
+      _log.i('Migration v135 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v135: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
