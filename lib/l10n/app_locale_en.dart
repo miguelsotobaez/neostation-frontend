@@ -967,6 +967,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommUseForSaveSync: 'Use RomM for save sync',
   AppLocale.rommSaveSyncLabel: 'RomM Sync',
   AppLocale.rommSaveSyncActive: 'RomM is your save-sync provider',
+  AppLocale.saveSyncHandledBy: 'Save sync is handled by {provider}',
+  AppLocale.saveSyncSingleProvider: 'Only one provider syncs saves at a time',
   AppLocale.rommBrowseLibrary: 'Browse Library',
   AppLocale.rommStatusConnected: 'Connected',
   AppLocale.rommStatusDisconnected: 'Not connected',

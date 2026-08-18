@@ -20,6 +20,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/themes/corner_radii.dart';
+import 'package:neostation/sync/sync_manager.dart';
+import 'package:neostation/sync/providers/neo_sync_adapter.dart';
 import '../../app_screen.dart';
 import 'save_list_view.dart';
 import 'neo_sync_shared.dart';
@@ -452,6 +454,10 @@ class NeoSyncContentState extends State<NeoSyncContent>
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Tells the user when their saves are going somewhere else:
+              // save sync has a single owner, so this dashboard otherwise
+              // looks fully live while another provider holds it.
+              _buildSaveSyncOwnerNotice(),
               // Main row: profile header (left) + menu options (right)
               Expanded(
                 child: Row(
@@ -473,6 +479,61 @@ class NeoSyncContentState extends State<NeoSyncContent>
           );
         },
       ),
+    );
+  }
+
+  /// Notice shown when another provider (e.g. RomM) owns save sync.
+  ///
+  /// Only one provider syncs saves at a time ([SyncManager] holds a single
+  /// active id), and nothing else on this screen reflects that — the account,
+  /// plan and save list all render normally while NeoSync sync is idle.
+  Widget _buildSaveSyncOwnerNotice() {
+    return Consumer<SyncManager>(
+      builder: (context, syncManager, _) {
+        if (syncManager.activeProviderId == NeoSyncAdapter.kProviderId) {
+          return const SizedBox.shrink();
+        }
+        final theme = Theme.of(context);
+        final radii = theme.extension<CornerRadii>() ?? CornerRadii.m();
+        final providerName =
+            syncManager.active?.meta.name ?? syncManager.activeProviderId;
+        return Padding(
+          padding: EdgeInsets.only(bottom: 8.r),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 8.r),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.tertiary.withValues(alpha: 0.12),
+              borderRadius: radii.radiusExternal,
+              border: Border.all(
+                color: theme.colorScheme.tertiary.withValues(alpha: 0.5),
+                width: 1.r,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Symbols.info_rounded,
+                  size: 16.r,
+                  color: theme.colorScheme.tertiary,
+                ),
+                SizedBox(width: 8.r),
+                Expanded(
+                  child: Text(
+                    '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', providerName)} · '
+                    '${AppLocale.saveSyncSingleProvider.getString(context)}',
+                    style: TextStyle(
+                      fontSize: 11.r,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

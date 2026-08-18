@@ -751,6 +751,7 @@ class _RommConnectContentState extends State<RommConnectContent>
         toggleValue: _isSaveSyncActive,
         onTap: _toggleSaveSync,
       ),
+      _buildSaveSyncCaption(theme),
       SizedBox(height: 10.r),
       _buildActionRow(
         theme,
@@ -760,6 +761,33 @@ class _RommConnectContentState extends State<RommConnectContent>
         onTap: _disconnect,
       ),
     ];
+  }
+
+  /// Caption under the save-sync toggle naming who currently owns save sync.
+  ///
+  /// Connecting a RomM server does not take save sync off a NeoSync account
+  /// that is still signed in (see [_connect]), so a connected server plus
+  /// downloads plus playtime can all look healthy while saves go elsewhere.
+  /// Not focusable — it is a label for the row above it.
+  Widget _buildSaveSyncCaption(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final active = SyncManager.instance.active;
+    final text = _isSaveSyncActive
+        ? AppLocale.rommSaveSyncActive.getString(context)
+        : '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', active?.meta.name ?? SyncManager.instance.activeProviderId)} · '
+              '${AppLocale.saveSyncSingleProvider.getString(context)}';
+    return Padding(
+      padding: EdgeInsets.only(top: 4.r, left: 12.r, right: 12.r),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9.r,
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
   }
 
   Widget _buildFieldRow(

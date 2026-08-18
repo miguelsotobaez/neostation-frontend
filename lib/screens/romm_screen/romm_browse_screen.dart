@@ -939,8 +939,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
                       ),
                       Text(
                         AppLocale.rommConnectedAs
-                            .getString(context)
-                            .replaceAll('{user}', provider.username),
+                                .getString(context)
+                                .replaceAll('{user}', provider.username) +
+                            _saveSyncOwnerSuffix(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1106,6 +1107,22 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   bool get _isSaveSyncActive =>
       SyncManager.instance.activeProviderId == RomMSyncProvider.kProviderId;
 
+  /// Names the provider that owns save sync, appended to the account line when
+  /// it is not RomM.
+  ///
+  /// A connected server, its downloads and its playtime all keep working while
+  /// another provider holds save sync — connecting to RomM deliberately does
+  /// not take it off a NeoSync account that is still signed in — so without
+  /// this the screen reads as "RomM is syncing everything". Empty when RomM
+  /// owns it: the toggle beside this line already says so.
+  String _saveSyncOwnerSuffix() {
+    if (_isSaveSyncActive) return '';
+    final active = SyncManager.instance.active;
+    final name = active?.meta.name ?? SyncManager.instance.activeProviderId;
+    return ' · '
+        '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', name)}';
+  }
+
   /// Toggles whether RomM is the active save-sync provider (vs NeoSync).
   Future<void> _toggleSaveSync() async {
     final persist = context
@@ -1116,9 +1133,15 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
         : RomMSyncProvider.kProviderId;
     await SyncManager.instance.setActive(target, persist: persist);
     if (!mounted) return;
+    // Name the provider that just took over rather than echoing the toggle's
+    // own label: only one provider syncs saves, and which one it now is the
+    // only thing the toast can usefully confirm.
+    final owner = SyncManager.instance.active?.meta.name ?? target;
     AppNotification.showNotification(
       context,
-      AppLocale.rommUseForSaveSync.getString(context),
+      AppLocale.saveSyncHandledBy
+          .getString(context)
+          .replaceFirst('{provider}', owner),
       type: NotificationType.info,
     );
     setState(() {});

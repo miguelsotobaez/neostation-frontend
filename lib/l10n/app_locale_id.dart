@@ -971,6 +971,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSaveSyncLabel: 'Sinkron RomM',
   AppLocale.rommSaveSyncActive:
       'RomM adalah penyedia sinkronisasi simpanan Anda',
+  AppLocale.saveSyncHandledBy:
+      'Sinkronisasi simpanan ditangani oleh {provider}',
+  AppLocale.saveSyncSingleProvider:
+      'Hanya satu penyedia yang menyinkronkan simpanan dalam satu waktu',
   AppLocale.rommBrowseLibrary: 'Jelajahi Pustaka',
   AppLocale.rommStatusConnected: 'Terhubung',
   AppLocale.rommStatusDisconnected: 'Tidak terhubung',
