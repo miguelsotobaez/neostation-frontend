@@ -216,7 +216,13 @@ class HeaderState extends State<Header> {
               final pillAllowance = statusPillMaxWidth(
                 totalWidth: constraints.maxWidth,
                 navStripWidth: navStripWidth(
-                  tabCount: visibleNavTabs(configProvider.config).length,
+                  // The strip never renders more than [maxVisibleNavTabSlots]
+                  // slots — past that it scrolls instead of growing — so the
+                  // collision bound must use the rendered width, not the tab
+                  // count, or the pill gives up room the strip never takes.
+                  tabCount: visibleNavTabs(
+                    configProvider.config,
+                  ).length.clamp(0, maxVisibleNavTabSlots),
                   slot: 32.r,
                   shoulder: 36.r,
                   pillPadding: 4.r,
@@ -382,6 +388,7 @@ class HeaderState extends State<Header> {
                                   );
                                 },
                               );
+
                               if (visibleTabs.length <= maxVisibleNavTabSlots) {
                                 _windowStart = 0;
                                 return strip;
