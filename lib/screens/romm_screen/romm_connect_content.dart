@@ -772,15 +772,20 @@ class _RommConnectContentState extends State<RommConnectContent>
   Widget _buildSaveSyncCaption(ThemeData theme) {
     final scheme = theme.colorScheme;
     final owner = SyncManager.instance.active;
-    // Same gate as the library header: a provider that owns save sync while
-    // signed out is not handling it, so say nothing rather than name it.
-    if (!_isSaveSyncActive && (owner == null || !owner.isAuthenticated)) {
-      return const SizedBox.shrink();
+    // Same rule as the library header: a provider that owns save sync while
+    // signed out is not handling it, so report that nothing is rather than
+    // name it.
+    final ownerSignedIn = owner != null && owner.isAuthenticated;
+    final String text;
+    if (_isSaveSyncActive) {
+      text = AppLocale.rommSaveSyncActive.getString(context);
+    } else if (!ownerSignedIn) {
+      text = AppLocale.saveSyncNoneActive.getString(context);
+    } else {
+      text =
+          '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner.meta.name)} · '
+          '${AppLocale.saveSyncSingleProvider.getString(context)}';
     }
-    final text = _isSaveSyncActive
-        ? AppLocale.rommSaveSyncActive.getString(context)
-        : '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner!.meta.name)} · '
-              '${AppLocale.saveSyncSingleProvider.getString(context)}';
     return Padding(
       padding: EdgeInsets.only(top: 4.r, left: 12.r, right: 12.r),
       child: Text(

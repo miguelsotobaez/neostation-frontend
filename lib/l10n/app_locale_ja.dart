@@ -883,6 +883,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSaveSyncActive: 'RomM がセーブデータ同期の提供元です',
   AppLocale.saveSyncHandledBy: 'セーブデータの同期は {provider} が担当しています',
   AppLocale.saveSyncSingleProvider: 'セーブデータを同期できる提供元は同時に 1 つだけです',
+  AppLocale.saveSyncNoneActive: 'セーブデータの同期は無効です',
   AppLocale.rommBrowseLibrary: 'ライブラリを閲覧',
   AppLocale.rommStatusConnected: '接続済み',
   AppLocale.rommStatusDisconnected: '未接続',

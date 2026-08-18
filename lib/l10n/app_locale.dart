@@ -1055,6 +1055,7 @@ mixin AppLocale {
   static const String rommSaveSyncActive = 'romm_save_sync_active';
   static const String saveSyncHandledBy = 'save_sync_handled_by';
   static const String saveSyncSingleProvider = 'save_sync_single_provider';
+  static const String saveSyncNoneActive = 'save_sync_none_active';
   static const String rommBrowseLibrary = 'romm_browse_library';
   static const String rommStatusConnected = 'romm_status_connected';
   static const String rommStatusDisconnected = 'romm_status_disconnected';

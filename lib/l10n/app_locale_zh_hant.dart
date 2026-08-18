@@ -868,6 +868,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommSaveSyncActive: 'RomM 是你的存檔同步服務',
   AppLocale.saveSyncHandledBy: '存檔同步由 {provider} 負責',
   AppLocale.saveSyncSingleProvider: '同一時間只有一個提供方同步存檔',
+  AppLocale.saveSyncNoneActive: '目前沒有啟用存檔同步',
   AppLocale.rommBrowseLibrary: '瀏覽庫',
   AppLocale.rommStatusConnected: '已連線',
   AppLocale.rommStatusDisconnected: '未連線',

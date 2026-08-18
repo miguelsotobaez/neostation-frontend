@@ -1118,9 +1118,13 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   String _saveSyncOwnerSuffix() {
     if (_isSaveSyncActive) return '';
     final owner = SyncManager.instance.active;
-    // Signed out, it is not handling save sync either: naming it would just
-    // point at a second thing that is not syncing.
-    if (owner == null || !owner.isAuthenticated) return '';
+    // Signed out, it is not handling save sync either — so say that nothing
+    // is, rather than naming a second provider that also isn't syncing. This
+    // is the state where a connected server, its downloads and its playtime
+    // all look healthy while no save leaves the device.
+    if (owner == null || !owner.isAuthenticated) {
+      return ' · ${AppLocale.saveSyncNoneActive.getString(context)}';
+    }
     return ' · '
         '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner.meta.name)}';
   }
@@ -1137,9 +1141,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     if (!mounted) return;
     // Name the provider that just took over rather than echoing the toggle's
     // own label: only one provider syncs saves, and which one it now is the
-    // only thing the toast can usefully confirm. Unless it is signed out, in
-    // which case it is not handling saves and the toggle's own label is the
-    // honest confirmation.
+    // only thing the toast can usefully confirm. When that provider is signed
+    // out it took over nothing, and the honest confirmation is that save sync
+    // is now off entirely.
     final owner = SyncManager.instance.active;
     final signedIn = owner != null && owner.isAuthenticated;
     AppNotification.showNotification(
@@ -1148,7 +1152,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
           ? AppLocale.saveSyncHandledBy
                 .getString(context)
                 .replaceFirst('{provider}', owner.meta.name)
-          : AppLocale.rommUseForSaveSync.getString(context),
+          : AppLocale.saveSyncNoneActive.getString(context),
       type: NotificationType.info,
     );
     setState(() {});

@@ -999,6 +999,8 @@ const Map<String, dynamic> appLocaleIt = {
       'La sincronizzazione dei salvataggi è gestita da {provider}',
   AppLocale.saveSyncSingleProvider:
       'Solo un provider sincronizza i salvataggi alla volta',
+  AppLocale.saveSyncNoneActive:
+      'Nessuna sincronizzazione dei salvataggi attiva',
   AppLocale.rommBrowseLibrary: 'Sfoglia libreria',
   AppLocale.rommStatusConnected: 'Connesso',
   AppLocale.rommStatusDisconnected: 'Non connesso',

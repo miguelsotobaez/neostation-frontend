@@ -498,12 +498,16 @@ class NeoSyncContentState extends State<NeoSyncContent>
           return const SizedBox.shrink();
         }
         final owner = syncManager.active;
-        if (owner == null || !owner.isAuthenticated) {
-          return const SizedBox.shrink();
-        }
+        final ownerSignedIn = owner != null && owner.isAuthenticated;
         final theme = Theme.of(context);
         final radii = theme.extension<CornerRadii>() ?? CornerRadii.m();
-        final providerName = owner.meta.name;
+        // Signed into NeoSync but another provider holds save sync while it is
+        // signed out: nothing is syncing, and being signed in here is exactly
+        // what makes that hard to guess.
+        final text = ownerSignedIn
+            ? '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner.meta.name)} · '
+                  '${AppLocale.saveSyncSingleProvider.getString(context)}'
+            : AppLocale.saveSyncNoneActive.getString(context);
         return Padding(
           padding: EdgeInsets.only(bottom: 8.r),
           child: Container(
@@ -526,8 +530,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
                 SizedBox(width: 8.r),
                 Expanded(
                   child: Text(
-                    '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', providerName)} · '
-                    '${AppLocale.saveSyncSingleProvider.getString(context)}',
+                    text,
                     style: TextStyle(
                       fontSize: 11.r,
                       color: theme.colorScheme.onSurface,

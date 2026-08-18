@@ -973,6 +973,7 @@ const Map<String, dynamic> appLocaleRu = {
       'Синхронизацией сохранений занимается {provider}',
   AppLocale.saveSyncSingleProvider:
       'Сохранения синхронизирует только один провайдер одновременно',
+  AppLocale.saveSyncNoneActive: 'Синхронизация сохранений не активна',
   AppLocale.rommBrowseLibrary: 'Просмотр библиотеки',
   AppLocale.rommStatusConnected: 'Подключено',
   AppLocale.rommStatusDisconnected: 'Не подключено',

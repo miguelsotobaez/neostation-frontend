@@ -1002,6 +1002,7 @@ const Map<String, dynamic> appLocaleEs = {
       'La sincronización de partidas la gestiona {provider}',
   AppLocale.saveSyncSingleProvider:
       'Solo un proveedor sincroniza las partidas a la vez',
+  AppLocale.saveSyncNoneActive: 'Sin sincronización de partidas activa',
   AppLocale.rommBrowseLibrary: 'Explorar biblioteca',
   AppLocale.rommStatusConnected: 'Conectado',
   AppLocale.rommStatusDisconnected: 'No conectado',

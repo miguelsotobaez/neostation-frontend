@@ -984,6 +984,7 @@ const Map<String, dynamic> appLocalePt = {
       'A sincronização de saves é feita pelo {provider}',
   AppLocale.saveSyncSingleProvider:
       'Apenas um provedor sincroniza os saves de cada vez',
+  AppLocale.saveSyncNoneActive: 'Nenhuma sincronização de saves ativa',
   AppLocale.rommBrowseLibrary: 'Navegar na biblioteca',
   AppLocale.rommStatusConnected: 'Conectado',
   AppLocale.rommStatusDisconnected: 'Não conectado',

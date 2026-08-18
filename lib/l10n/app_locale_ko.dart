@@ -893,6 +893,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSaveSyncActive: 'RomM이 저장 동기화 제공자입니다',
   AppLocale.saveSyncHandledBy: '세이브 동기화는 {provider}에서 처리합니다',
   AppLocale.saveSyncSingleProvider: '한 번에 하나의 제공자만 세이브를 동기화합니다',
+  AppLocale.saveSyncNoneActive: '활성화된 세이브 동기화가 없습니다',
   AppLocale.rommBrowseLibrary: '라이브러리 탐색',
   AppLocale.rommStatusConnected: '연결됨',
   AppLocale.rommStatusDisconnected: '연결되지 않음',
