@@ -487,16 +487,23 @@ class NeoSyncContentState extends State<NeoSyncContent>
   /// Only one provider syncs saves at a time ([SyncManager] holds a single
   /// active id), and nothing else on this screen reflects that — the account,
   /// plan and save list all render normally while NeoSync sync is idle.
+  ///
+  /// Gated on the owner actually being signed in. A provider that holds save
+  /// sync while logged out is not handling anything, so naming it would trade
+  /// one wrong impression for another.
   Widget _buildSaveSyncOwnerNotice() {
     return Consumer<SyncManager>(
       builder: (context, syncManager, _) {
         if (syncManager.activeProviderId == NeoSyncAdapter.kProviderId) {
           return const SizedBox.shrink();
         }
+        final owner = syncManager.active;
+        if (owner == null || !owner.isAuthenticated) {
+          return const SizedBox.shrink();
+        }
         final theme = Theme.of(context);
         final radii = theme.extension<CornerRadii>() ?? CornerRadii.m();
-        final providerName =
-            syncManager.active?.meta.name ?? syncManager.activeProviderId;
+        final providerName = owner.meta.name;
         return Padding(
           padding: EdgeInsets.only(bottom: 8.r),
           child: Container(

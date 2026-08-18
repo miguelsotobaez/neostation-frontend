@@ -1117,10 +1117,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// owns it: the toggle beside this line already says so.
   String _saveSyncOwnerSuffix() {
     if (_isSaveSyncActive) return '';
-    final active = SyncManager.instance.active;
-    final name = active?.meta.name ?? SyncManager.instance.activeProviderId;
+    final owner = SyncManager.instance.active;
+    // Signed out, it is not handling save sync either: naming it would just
+    // point at a second thing that is not syncing.
+    if (owner == null || !owner.isAuthenticated) return '';
     return ' · '
-        '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', name)}';
+        '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner.meta.name)}';
   }
 
   /// Toggles whether RomM is the active save-sync provider (vs NeoSync).
@@ -1135,13 +1137,18 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     if (!mounted) return;
     // Name the provider that just took over rather than echoing the toggle's
     // own label: only one provider syncs saves, and which one it now is the
-    // only thing the toast can usefully confirm.
-    final owner = SyncManager.instance.active?.meta.name ?? target;
+    // only thing the toast can usefully confirm. Unless it is signed out, in
+    // which case it is not handling saves and the toggle's own label is the
+    // honest confirmation.
+    final owner = SyncManager.instance.active;
+    final signedIn = owner != null && owner.isAuthenticated;
     AppNotification.showNotification(
       context,
-      AppLocale.saveSyncHandledBy
-          .getString(context)
-          .replaceFirst('{provider}', owner),
+      signedIn
+          ? AppLocale.saveSyncHandledBy
+                .getString(context)
+                .replaceFirst('{provider}', owner.meta.name)
+          : AppLocale.rommUseForSaveSync.getString(context),
       type: NotificationType.info,
     );
     setState(() {});

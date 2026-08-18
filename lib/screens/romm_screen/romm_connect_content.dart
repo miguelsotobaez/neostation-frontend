@@ -771,10 +771,15 @@ class _RommConnectContentState extends State<RommConnectContent>
   /// Not focusable — it is a label for the row above it.
   Widget _buildSaveSyncCaption(ThemeData theme) {
     final scheme = theme.colorScheme;
-    final active = SyncManager.instance.active;
+    final owner = SyncManager.instance.active;
+    // Same gate as the library header: a provider that owns save sync while
+    // signed out is not handling it, so say nothing rather than name it.
+    if (!_isSaveSyncActive && (owner == null || !owner.isAuthenticated)) {
+      return const SizedBox.shrink();
+    }
     final text = _isSaveSyncActive
         ? AppLocale.rommSaveSyncActive.getString(context)
-        : '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', active?.meta.name ?? SyncManager.instance.activeProviderId)} · '
+        : '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner!.meta.name)} · '
               '${AppLocale.saveSyncSingleProvider.getString(context)}';
     return Padding(
       padding: EdgeInsets.only(top: 4.r, left: 12.r, right: 12.r),
