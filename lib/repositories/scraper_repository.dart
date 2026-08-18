@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../data/datasources/sqlite_service.dart';
+import '../models/rom_fingerprint.dart';
 import 'package:neostation/services/logger_service.dart';
 
 class MetadataTransferResult {
@@ -981,6 +982,98 @@ class ScraperRepository {
     } catch (e) {
       _log.e('Error saving enabled media types: $e');
       return false;
+    }
+  }
+
+  /// Returns the cached dump identity for [romPath], or null if it has never
+  /// been fingerprinted.
+  ///
+  /// A row with only a crc32 is normal and complete: the zip fast path yields
+  /// crc and size without ever decompressing, and crc alone resolves a
+  /// ScreenScraper lookup.
+  static Future<RomFingerprint?> getRomFingerprint(String romPath) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final rows = await db.rawQuery(
+        'SELECT ss_hash, rom_crc32, rom_size FROM user_roms '
+        'WHERE rom_path = ? LIMIT 1',
+        [romPath],
+      );
+      if (rows.isEmpty) return null;
+
+      final row = rows.first;
+      final crc = row['rom_crc32']?.toString();
+      final md5 = row['ss_hash']?.toString();
+      if ((crc == null || crc.isEmpty) && (md5 == null || md5.isEmpty)) {
+        return null;
+      }
+
+      return RomFingerprint(
+        crc32: crc ?? '',
+        md5: (md5 != null && md5.isNotEmpty) ? md5 : null,
+        sizeBytes: (row['rom_size'] as int?) ?? 0,
+      );
+    } catch (e) {
+      _log.e('Error reading ROM fingerprint for $romPath: $e');
+      return null;
+    }
+  }
+
+  /// Returns why [romPath] was parked by an earlier fingerprint attempt, or
+  /// null if it is not parked. The read half of [markRomFingerprintSkipped]:
+  /// without it the marker is write-only and every scrape re-walks the ROM.
+  static Future<String?> getRomFingerprintSkipReason(String romPath) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final rows = await db.rawQuery(
+        'SELECT rom_fingerprint_skipped FROM user_roms '
+        'WHERE rom_path = ? LIMIT 1',
+        [romPath],
+      );
+      if (rows.isEmpty) return null;
+      final reason = rows.first['rom_fingerprint_skipped']?.toString();
+      return (reason == null || reason.isEmpty) ? null : reason;
+    } catch (e) {
+      _log.e('Error reading fingerprint skip reason for $romPath: $e');
+      return null;
+    }
+  }
+
+  /// Caches [fingerprint] against [romPath] and clears any skip marker, since
+  /// a value now exists.
+  static Future<void> updateRomFingerprint(
+    String romPath,
+    RomFingerprint fingerprint,
+  ) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      await db.rawUpdate(
+        'UPDATE user_roms SET rom_crc32 = ?, rom_size = ?, '
+        // Never blank an md5 the slow path already produced: the cheap zip
+        // path returns crc only, and re-running it must not lose the md5.
+        'ss_hash = COALESCE(?, ss_hash), rom_fingerprint_skipped = NULL '
+        'WHERE rom_path = ?',
+        [fingerprint.crc32, fingerprint.sizeBytes, fingerprint.md5, romPath],
+      );
+    } catch (e) {
+      _log.e('Error saving ROM fingerprint for $romPath: $e');
+    }
+  }
+
+  /// Records that [romPath] could not be fingerprinted and why, so a bulk pass
+  /// stops revisiting it. Mirrors `markRomRaHashSkipped`.
+  static Future<void> markRomFingerprintSkipped(
+    String romPath,
+    String reason,
+  ) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      await db.rawUpdate(
+        'UPDATE user_roms SET rom_fingerprint_skipped = ? WHERE rom_path = ?',
+        [reason, romPath],
+      );
+    } catch (e) {
+      _log.e('Error marking ROM fingerprint skipped for $romPath: $e');
     }
   }
 }
