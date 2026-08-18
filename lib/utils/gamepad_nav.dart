@@ -983,8 +983,7 @@ class GamepadNavigation {
 
       case GamepadInputType.buttonLB:
       case GamepadInputType.buttonRB:
-        _dispatchShoulder(event.inputType);
-        _startShoulderHold(event);
+        if (_dispatchShoulder(event.inputType)) _startShoulderHold(event);
         break;
 
       // L3 (left stick click) only — the UI hint shows the Left-Stick-Click
@@ -1124,16 +1123,13 @@ class GamepadNavigation {
       }
       handled = true;
     } else if (key == LogicalKeyboardKey.keyQ) {
-      if (isKeyDown) {
-        SfxService().playNavSound();
-        onPreviousTab?.call();
-      }
+      // Q/E are the keyboard's bumpers, so they go through the same dispatch:
+      // it honours a screen's bumper override and stays silent where the
+      // screen binds nothing.
+      if (isKeyDown) _dispatchShoulder(GamepadInputType.buttonLB);
       handled = true;
     } else if (key == LogicalKeyboardKey.keyE) {
-      if (isKeyDown) {
-        SfxService().playNavSound();
-        onNextTab?.call();
-      }
+      if (isKeyDown) _dispatchShoulder(GamepadInputType.buttonRB);
       handled = true;
     } else if (key == LogicalKeyboardKey.enter) {
       if (isKeyDown) {
@@ -1356,21 +1352,22 @@ class GamepadNavigation {
   }
 
   /// Walks one tab for [input], honouring the per-screen bumper overrides.
-  void _dispatchShoulder(GamepadInputType input) {
+  ///
+  /// Screens that bind neither the override nor the tab walk (the games grid
+  /// and carousel) stay silent rather than clicking: a nav sound with nothing
+  /// behind it is what made the carousel's dead bumpers read as a frozen
+  /// screen rather than an unbound button.
+  /// Returns whether anything was bound to walk, so an unbound bumper does not
+  /// start a hold-repeat that would fire into the void.
+  bool _dispatchShoulder(GamepadInputType input) {
+    final action = input == GamepadInputType.buttonLB
+        ? (onLeftBumper ?? onPreviousTab)
+        : (onRightBumper ?? onNextTab);
+    if (action == null) return false;
+
     SfxService().playNavSound();
-    if (input == GamepadInputType.buttonLB) {
-      if (onLeftBumper != null) {
-        onLeftBumper!.call();
-      } else {
-        onPreviousTab?.call();
-      }
-    } else {
-      if (onRightBumper != null) {
-        onRightBumper!.call();
-      } else {
-        onNextTab?.call();
-      }
-    }
+    action();
+    return true;
   }
 
   /// Starts the synthetic repeat for a bumper held on desktop.

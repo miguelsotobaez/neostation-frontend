@@ -564,6 +564,14 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   /// Steps [step] places through the visible tabs, wrapping at both ends, so a
   /// hidden tab is skipped rather than selected and immediately bounced.
   void _cycleTab(int step) {
+    // A pushed full-screen route (the system games list and its grid/carousel
+    // views, a game's details screen) covers AppScreen entirely. Switching the
+    // tab underneath one is invisible on the main display and leaves the user
+    // driving a screen they cannot see — see the bumper comment in
+    // my_games_carousel.dart. Screens on a route own their own bumpers; the
+    // app strip is only reachable from the tab that is actually on screen.
+    if (Navigator.maybeOf(context)?.canPop() ?? false) return;
+
     final visible = _visibleTabs;
     if (visible.isEmpty) return;
 

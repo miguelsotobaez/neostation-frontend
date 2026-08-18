@@ -15,7 +15,6 @@ import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/letter_jump.dart';
-import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
@@ -377,10 +376,17 @@ class _GamesCarouselState extends State<GamesCarousel> {
       onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-      onLeftBumper: AppNavigation.previousTab,
-      onRightBumper: AppNavigation.nextTab,
+      // The bumpers deliberately bind nothing here. This view lives on a route
+      // PUSHED OVER AppScreen, so cycling the app's top-level tabs from it
+      // switched the tab underneath a screen that stays on top: the main
+      // display never changed while the secondary display and the tab sounds
+      // said it had. Landing on a tab that hosts its own navigation layer
+      // (Search, NeoSync, RomM) then stacked that layer above this one, so
+      // every further press — B included — went to a screen the user could not
+      // see, and the device needed a restart. The list and grid views never
+      // reached the app tabs from here either (the list sends its bumpers to
+      // the details card's tabs, the grid binds none), which is why only
+      // carousel mode locked up.
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
