@@ -563,11 +563,19 @@ class HeaderState extends State<Header> {
           blendMode: BlendMode.dstIn,
           child: Stack(
             children: [
+              // `top`/`bottom` rather than an explicit `height`: the pill's
+              // 1.r border deflates the space its child gets, so the slots are
+              // 2.r shorter than 32.r. A positioned child with a stated height
+              // ignores that and renders the icons at full size (BoxFit sizes
+              // them off the shorter axis), which made every icon jump ~14%
+              // larger the moment a hidden tab pushed the strip into scrolling.
+              // Filling the box keeps the scrolled strip identical to the
+              // static one.
               AnimatedPositioned(
                 left: -_windowStart * 32.r,
                 top: 0,
+                bottom: 0,
                 width: tabCount * 32.r,
-                height: 32.r,
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeInOut,
                 child: strip,
