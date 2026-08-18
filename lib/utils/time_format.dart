@@ -14,3 +14,12 @@ String formatClockTime(DateTime time, {required bool use12Hour}) {
   if (hour12 == 0) hour12 = 12;
   return '$hour12:$minute $period';
 }
+
+/// The widest string [formatClockTime] can return for this setting.
+///
+/// Header geometry is sized off this rather than the current time, so the
+/// layout cannot shift as the clock ticks: 24-hour hours are not zero-padded,
+/// so a two-digit hour is the widest, and the 12-hour form adds the period
+/// suffix. 'AM' and 'PM' are treated as equally wide.
+String widestClockText({required bool use12Hour}) =>
+    use12Hour ? '12:59 PM' : '23:59';

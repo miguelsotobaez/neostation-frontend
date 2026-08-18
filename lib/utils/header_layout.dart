@@ -72,3 +72,33 @@ double statusPillMaxWidth({
   final free = ((totalWidth - navStripWidth) / 2) - margin - gutter;
   return free < 0 ? 0 : free;
 }
+
+/// How many tab slots the centred strip may show before it would meet the
+/// right-hand status pill.
+///
+/// The inverse of [statusPillMaxWidth]. The strip is centred, so the pill and
+/// its [margin] and [gutter] are mirrored on the left when working out what is
+/// left for the strip; the shoulder glyphs and the pill's own padding come off
+/// that, and the rest divides into slots.
+///
+/// Pass a *worst-case* [statusPillWidth] — the widest clock string the locale
+/// and 12/24-hour setting can produce, with the battery block reserved whenever
+/// the device has one. Sizing off the live pill would let the slot count flip
+/// as the clock ticked past a digit or the battery fell to one.
+///
+/// Never returns fewer than [minSlots]: a screen too narrow even for those is
+/// handled by the pill scaling itself down, not by shrinking the strip further.
+int navStripMaxSlots({
+  required double totalWidth,
+  required double statusPillWidth,
+  double slot = 32,
+  double shoulder = 36,
+  double pillPadding = 4,
+  double margin = 8,
+  double gutter = 4,
+  int minSlots = 5,
+}) {
+  final free = totalWidth - (2 * (statusPillWidth + margin + gutter));
+  final slots = (free - (shoulder * 2) - (pillPadding * 2)) ~/ slot;
+  return slots < minSlots ? minSlots : slots;
+}

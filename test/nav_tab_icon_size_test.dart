@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// box like the static one does: a positioned child with a stated height
 /// ignores the border and renders the icons off a taller axis, which showed up
 /// as every icon jumping ~14% larger the moment a hidden tab pushed the strip
-/// past [maxVisibleNavTabSlots].
+/// past [minNavTabSlots].
 ///
 /// Mirrors `_buildScrollingStrip` / the static branch in `lib/widgets/header.dart`.
 void main() {

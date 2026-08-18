@@ -148,10 +148,15 @@ List<NavTab> hidableNavTabs() => NavTab.values
     .where((tab) => navTabSpec(tab).isHidable)
     .toList(growable: false);
 
-/// Most tab slots the header strip shows at once. With more visible tabs than
-/// this, the strip scrolls; with this many or fewer it renders exactly as a
-/// static strip and never scrolls.
-const int maxVisibleNavTabSlots = 5;
+/// Fewest tab slots the header strip will show.
+///
+/// The strip normally shows as many slots as fit beside the status pill, which
+/// varies with the screen and with whether the device reports a battery — see
+/// `navStripMaxSlots` in `header_layout.dart`. This is the floor for screens
+/// too narrow even for that, where the pill scales itself down instead. With
+/// more visible tabs than the strip has slots it scrolls; with that many or
+/// fewer it renders as a static strip and never scrolls.
+const int minNavTabSlots = 5;
 
 /// First slot shown by the scrolling strip after selection moves to
 /// [selectedSlot].
@@ -168,7 +173,7 @@ int navTabWindowStart({
   required int windowStart,
   required int selectedSlot,
   required int tabCount,
-  int maxSlots = maxVisibleNavTabSlots,
+  int maxSlots = minNavTabSlots,
 }) {
   if (tabCount <= maxSlots) return 0;
   final start = selectedSlot >= 0
