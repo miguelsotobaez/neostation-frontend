@@ -306,12 +306,10 @@ class _RommConnectContentState extends State<RommConnectContent>
     // NeoSync. Leaving "romm" active against a server we just forgot would
     // silently stop ALL save sync — RomM errors out, NeoSync sits idle —
     // until the user thought to re-toggle it.
-    if (SyncManager.instance.activeProviderId == RomMSyncProvider.kProviderId) {
-      await SyncManager.instance.setActive(
-        NeoSyncAdapter.kProviderId,
-        persist: persist,
-      );
-    }
+    await SyncManager.instance.releaseIfActive(
+      RomMSyncProvider.kProviderId,
+      persist: persist,
+    );
     if (!mounted) return;
     _clearSecretFields();
     resetSelection();

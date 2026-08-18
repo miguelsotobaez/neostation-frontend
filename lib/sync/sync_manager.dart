@@ -81,6 +81,24 @@ class SyncManager extends ChangeNotifier {
     return true;
   }
 
+  /// Hands save sync back to NeoSync if [providerId] currently owns it.
+  ///
+  /// Called when a provider is deliberately signed out. Leaving a disconnected
+  /// provider active silently stops **all** save sync — it errors out on every
+  /// hook while NeoSync sits idle — and nothing in the UI would attribute that
+  /// to the disconnect that caused it.
+  ///
+  /// Returns true when ownership actually moved. A provider that did not own
+  /// save sync is a no-op, so signing out of RomM never disturbs a NeoSync
+  /// user's setting, and [persist] is not called.
+  Future<bool> releaseIfActive(
+    String providerId, {
+    required Future<void> Function(String) persist,
+  }) async {
+    if (_activeProviderId != providerId) return false;
+    return setActive(NeoSyncAdapter.kProviderId, persist: persist);
+  }
+
   /// Restore the user's previously chosen provider from config on startup.
   /// Falls back to NeoSync if [savedProviderId] is null or not registered.
   void restoreActive(String? savedProviderId) {
