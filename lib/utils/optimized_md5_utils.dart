@@ -204,6 +204,49 @@ class OptimizedMd5Utils {
         (bytes[offset + 3] << 24);
   }
 
+  /// Streams [filePath] in chunks, SAF-aware, without ever holding the whole
+  /// file in memory.
+  ///
+  /// [readAllBytes] is fine for the per-system generators, which need random
+  /// access into a header and run behind a size gate. Anything that only walks
+  /// the bytes in order should use this instead, so a large ROM costs one
+  /// buffer rather than its full size.
+  static Future<void> readChunked(
+    String filePath,
+    void Function(Uint8List chunk) onChunk, {
+    int chunkSize = 2 * 1024 * 1024,
+  }) async {
+    if (Platform.isAndroid && filePath.startsWith('content://')) {
+      int offset = 0;
+      while (true) {
+        final chunk = await SafDirectoryService.readRange(
+          filePath,
+          offset,
+          chunkSize,
+        );
+        // null is a read *error* (the platform side reports EOF as an empty
+        // array, and readRange maps PlatformException to null). Treating it as
+        // end-of-file would hand the caller a truncated stream — and a hash of
+        // truncated bytes is confidently wrong, so fail loudly instead.
+        if (chunk == null) {
+          throw FileSystemException(
+            'SAF read failed at offset $offset',
+            filePath,
+          );
+        }
+        if (chunk.isEmpty) break;
+        onChunk(chunk);
+        offset += chunk.length;
+        if (chunk.length < chunkSize) break;
+      }
+      return;
+    }
+
+    await for (final chunk in File(filePath).openRead()) {
+      onChunk(chunk is Uint8List ? chunk : Uint8List.fromList(chunk));
+    }
+  }
+
   /// Calculates a standard MD5 hash for the given file.
   static Future<String> calculateFileMd5(String filePath) async {
     try {
