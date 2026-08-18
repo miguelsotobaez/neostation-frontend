@@ -96,12 +96,11 @@ class DirectoriesSettingsContentState
     // Use the focused row's own key so scrolling tracks its real height —
     // section headers and path-chip cards aren't a uniform height, so a
     // fixed per-row estimate drifts and overshoots as the list scrolls.
-    if (index >= 0 && index < _itemKeys.length) {
-      final ctx = _itemKeys[index].currentContext;
-      if (ctx != null) {
-        _scroller.ensureVisible(ctx);
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   void _buildDirectoryItems() {

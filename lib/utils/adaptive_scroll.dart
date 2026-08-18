@@ -30,6 +30,34 @@ class AdaptiveScroller {
 
   DateTime? _lastScroll;
 
+  /// Ensures the item at [index] is visible, given the per-item [keys] and the
+  /// list's [controller].
+  ///
+  /// Prefer this over [ensureVisible] for list/grid panels: a lazy list
+  /// (`ListView.builder`) only mounts what is on screen, so an item scrolled
+  /// far out of view has no context and [ensureVisible] would silently do
+  /// nothing — which is what happens when focus re-enters a panel at index 0
+  /// from far down the list. The top of the list is unambiguous without a
+  /// context, so it falls back to [controller]; any other unmounted index is
+  /// left alone rather than guessed at from an estimated row height.
+  void ensureVisibleIndex(
+    int index, {
+    required List<GlobalKey> keys,
+    ScrollController? controller,
+  }) {
+    if (index < 0 || index >= keys.length) return;
+
+    final ctx = keys[index].currentContext;
+    if (ctx != null) {
+      ensureVisible(ctx);
+      return;
+    }
+
+    if (index == 0 && (controller?.hasClients ?? false)) {
+      controller!.jumpTo(0);
+    }
+  }
+
   /// Ensures [context]'s item is visible, snapping during rapid navigation.
   void ensureVisible(BuildContext context) {
     final now = DateTime.now();

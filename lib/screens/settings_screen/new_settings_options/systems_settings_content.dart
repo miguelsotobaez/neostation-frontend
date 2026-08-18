@@ -49,12 +49,11 @@ class SystemsSettingsContentState extends State<SystemsSettingsContent> {
 
   /// Synchronizes the viewport to ensure the currently focused setting is visible.
   void scrollToIndex(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final ctx = _itemKeys[index].currentContext;
-      if (ctx != null) {
-        _scroller.ensureVisible(ctx);
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   /// Calculates the total number of navigable settings (Global Card + Detected Systems).

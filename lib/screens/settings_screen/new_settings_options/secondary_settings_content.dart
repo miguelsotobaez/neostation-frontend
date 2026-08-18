@@ -153,12 +153,11 @@ class SecondarySettingsContentState extends State<SecondarySettingsContent>
 
   /// Scrolls the item at [index] into view for gamepad navigation.
   void scrollToIndex(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final ctx = _itemKeys[index].currentContext;
-      if (ctx != null) {
-        _scroller.ensureVisible(ctx);
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   /// Human label for a dim delay; 0 reads as "Never".

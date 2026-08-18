@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/services/permission_service.dart';
@@ -42,6 +43,9 @@ class ThemesSettingsContent extends StatefulWidget {
 class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   final _log = LoggerService.instance;
   final ScrollController _scrollController = ScrollController();
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
 
   /// Keys used for calculating viewport alignment during grid-based navigation.
   final List<GlobalKey> _itemKeys = [];
@@ -129,19 +133,16 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
     _ensureSelectedItemVisible(newIndex);
   }
 
+  /// Brings the focused grid cell into view (used when focus re-enters the panel).
+  void scrollToIndex(int index) => _ensureSelectedItemVisible(index);
+
   /// Orchestrates visual alignment to ensure the focused theme card is within the viewport.
   void _ensureSelectedItemVisible(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final context = _itemKeys[index].currentContext;
-      if (context != null) {
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   /// Persistence Protocol: Updates the active application theme.

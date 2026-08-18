@@ -401,12 +401,11 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
   /// Synchronizes the scroll viewport with the currently focused setting item.
   void scrollToIndex(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final context = _itemKeys[index].currentContext;
-      if (context != null) {
-        _scroller.ensureVisible(context);
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   @override
