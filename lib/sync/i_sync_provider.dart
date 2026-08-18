@@ -55,6 +55,17 @@ abstract class ISyncProvider {
   Future<SyncResult> login();
 
   /// Clear credentials and end the session.
+  ///
+  /// **Signing a provider out does not release save sync.** A provider cannot
+  /// do that itself: handing ownership back means `SyncManager.setActive`,
+  /// which needs a `persist` callback that lives at the config layer. The
+  /// caller must therefore pair a sign-out with
+  /// `SyncManager.instance.releaseIfActive(providerId, persist: …)`, or the
+  /// signed-out provider keeps owning save sync and every save hook fails
+  /// silently while the other providers sit idle.
+  ///
+  /// Both RomM disconnect paths do this today; this method has no callers at
+  /// all, so nothing currently depends on the pairing being remembered.
   Future<void> logout();
 
   // ── Core Sync Operations ───────────────────────────────────────────────────
