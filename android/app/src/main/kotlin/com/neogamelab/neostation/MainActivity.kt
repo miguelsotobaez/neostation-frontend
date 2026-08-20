@@ -589,6 +589,15 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     private fun setSecondaryDisplayVisible(visible: Boolean) {
         if (visible) {
+            // A presentation that was dismissed behind our back (its engine is
+            // already destroyed) still sits in subScreenPresentation, and a
+            // non-null reference would block the recreate below — leaving the
+            // bottom screen dead until the whole app is restarted. Anything
+            // that is no longer showing, and isn't merely hidden to reveal a
+            // dock-launched app, is dead: drop it so the branch below rebuilds.
+            if (subScreenPresentation?.isShowing == false && !presentationHiddenForApp) {
+                onCloseSubScreen()
+            }
             if (subScreenPresentation == null) {
                 val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
                 val displays = dm.displays
