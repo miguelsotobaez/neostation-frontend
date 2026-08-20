@@ -18,6 +18,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/models/game_model.dart';
@@ -354,6 +355,18 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         // pull belongs to the pre-launch hook, which knows a game is about to
         // start and has a deadline to answer to.
         if (uploadOnly) continue;
+        // "The server moved on" is a statement about timestamps, not content.
+        // A device that uploaded, then another that pulled and re-uploaded the
+        // identical file, both bump `updated_at` without a byte changing — and
+        // RomM's own `content_hash` says so for free. Hashing the local file
+        // costs a fraction of the transfer it replaces, and settling the pair
+        // here also stops the mtime path re-asking the same question forever.
+        final pullDigest = await _md5OfFile(local.filePath);
+        if (pullDigest != null &&
+            await _serverHoldsSameBytes(match, pullDigest, local)) {
+          await _recordSynced(local, match.updatedAtMs, pullDigest);
+          continue;
+        }
         final r = await _download(
           game,
           match,
@@ -374,7 +387,53 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         // older local one — so a sweep leaves ties to the hook that can settle
         // them.
         if (uploadOnly && remoteChanged) continue;
-        if (await _upload(romId, local, isState, existing: match)) uploaded++;
+        // `localChanged` is an mtime answer, and mtime lies in the direction
+        // that costs the most: RetroArch rewrites `<game>.state.auto` on every
+        // exit whether or not the bytes moved, so a device with auto-save-state
+        // on re-uploads the same file after every session. Two hashes settle
+        // it — the one recorded at the last sync (which covers states, where
+        // RomM has no `content_hash` of its own) and the server's, which
+        // catches a second device that already pushed these exact bytes.
+        final pushDigest = await _md5OfFile(local.filePath);
+        if (pushDigest != null) {
+          // Both hashes are asked, never short-circuited, because the answers
+          // are not interchangeable: only the server's says anything about the
+          // copy that is actually up there. The recorded hash says this device
+          // has not changed its file, which is reason enough to skip the
+          // upload but no reason at all to claim [match] has been seen — and
+          // recording its stamp would mark a remote copy consumed that nothing
+          // ever compared or fetched, leaving `remoteChanged` false from then
+          // on and stranding the other device's save for good. So the cloud
+          // stamp only moves when [_serverHoldsSameBytes] vouched for it;
+          // otherwise it stays put and the next pass, with the local mtime now
+          // settled, takes the pull branch and collects what is waiting.
+          //
+          // States live on this path exclusively — RomM gives them no
+          // `content_hash` to check — so it carries the ordinary two-device
+          // case, not an exotic one.
+          final serverMatches = await _serverHoldsSameBytes(
+            match,
+            pushDigest,
+            local,
+          );
+          if (serverMatches || pushDigest == recorded?['file_hash']) {
+            await _recordSynced(
+              local,
+              serverMatches ? match.updatedAtMs : recordedCloudMs,
+              pushDigest,
+            );
+            continue;
+          }
+        }
+        if (await _upload(
+          romId,
+          local,
+          isState,
+          existing: match,
+          digest: pushDigest,
+        )) {
+          uploaded++;
+        }
       }
     }
 
@@ -649,6 +708,114 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   static bool isPermissionDenied(Object e) =>
       e is RommException && e.statusCode == 403;
 
+  /// The local file's first four bytes, as a zip archive would start them.
+  static const List<int> _zipMagic = [0x50, 0x4B, 0x03, 0x04];
+
+  /// MD5 of the file at [filePath], or null when it cannot be read.
+  ///
+  /// MD5 because that is what RomM computes — `hashlib.md5` over the stored
+  /// file, streamed in 8 KiB chunks (`AssetsHandler._compute_file_hash`, RomM
+  /// 5.1.0) — so this value is directly comparable with `content_hash`. It is a
+  /// change detector, never a security check; the comparison it feeds only ever
+  /// decides whether a transfer can be skipped.
+  ///
+  /// Streamed rather than read whole: a PS2 shared memory card is 8 MB and this
+  /// runs on the launch path.
+  static Future<String?> _md5OfFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return null;
+      return (await md5.bind(file.openRead()).first).toString();
+    } catch (e) {
+      _log.w('RomM hash failed ($filePath): $e');
+      return null;
+    }
+  }
+
+  /// Whether RomM's own `content_hash` for [asset] provably describes the same
+  /// bytes as [digest], an [_md5OfFile] of [local].
+  ///
+  /// False whenever the comparison cannot be trusted, which keeps every
+  /// uncertain case on the existing transfer path — the worst outcome of a
+  /// "no" here is the redundant upload or download this gate set out to avoid,
+  /// while a wrong "yes" would silently skip a real one. Three cases:
+  ///
+  /// * **States.** RomM's `StateSchema` has no `content_hash` field at all
+  ///   (verified against 5.1.0), so `/api/states` can never answer this. States
+  ///   are covered instead by the hash recorded at the last sync.
+  /// * **No hash.** Older servers, and rows whose file went missing, leave it
+  ///   null; RomM backfills them with a maintenance task on its own schedule.
+  /// * **Zip archives.** RomM hashes a zip entry-wise — MD5 over
+  ///   `"<name>:<md5>"` lines for the sorted entries
+  ///   (`AssetsHandler._compute_zip_hash`) — so its value is not an MD5 of the
+  ///   file's bytes and must never be compared with one.
+  static Future<bool> _serverHoldsSameBytes(
+    RommAsset asset,
+    String digest,
+    LocalSaveFile local,
+  ) async {
+    final remote = asset.contentHash;
+    if (asset.isState || remote == null || remote.isEmpty) return false;
+    if (remote.toLowerCase() != digest) return false;
+    return !await _looksZipped(local.filePath);
+  }
+
+  /// Whether [filePath] opens with a zip archive's local-file-header magic.
+  ///
+  /// Deliberately a header sniff and not a real archive test: it exists only to
+  /// withhold the [_serverHoldsSameBytes] shortcut from files RomM may have
+  /// hashed entry-wise, and a false positive costs one ordinary transfer.
+  static Future<bool> _looksZipped(String filePath) async {
+    try {
+      final handle = await File(filePath).open();
+      try {
+        final head = await handle.read(_zipMagic.length);
+        if (head.length < _zipMagic.length) return false;
+        for (var i = 0; i < _zipMagic.length; i++) {
+          if (head[i] != _zipMagic[i]) return false;
+        }
+        return true;
+      } finally {
+        await handle.close();
+      }
+    } catch (e) {
+      _log.w('RomM zip probe failed ($filePath): $e');
+      return false;
+    }
+  }
+
+  /// Records [local] as settled at [cloudUpdatedAt], no transfer having been
+  /// needed.
+  ///
+  /// [cloudUpdatedAt] is the caller's claim about how much of the server it has
+  /// actually accounted for, which is not always the matched asset's stamp: a
+  /// skip decided from this device's own records leaves it where it was, so the
+  /// remote copy stays unseen and a later pass still pulls it.
+  ///
+  /// Writing this row is the point of the skip, not bookkeeping around it:
+  /// without it the mtime comparison asks the same question on every pass and
+  /// this file pays for a hash forever. The stat is re-read rather than reusing
+  /// the locator's, so the recorded mtime is the one a later pass will see.
+  Future<void> _recordSynced(
+    LocalSaveFile local,
+    int cloudUpdatedAt,
+    String digest,
+  ) async {
+    try {
+      final stat = await File(local.filePath).stat();
+      await SyncRepository.saveSyncState(
+        kProviderId,
+        local.filePath,
+        stat.modified.millisecondsSinceEpoch,
+        cloudUpdatedAt,
+        stat.size,
+        fileHash: digest,
+      );
+    } catch (e) {
+      _log.w('RomM sync-state record failed (${local.filePath}): $e');
+    }
+  }
+
   /// Sends [local] to RomM, updating [existing] in place when the asset is
   /// already there and creating it otherwise.
   ///
@@ -659,6 +826,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     LocalSaveFile local,
     bool isState, {
     RommAsset? existing,
+    String? digest,
   }) async {
     try {
       final file = File(local.filePath);
@@ -674,13 +842,20 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
             : await _svc.uploadSave(romId, file, emulator: _assetLabel);
       }
       final stat = await file.stat();
+      // Record *our* hash of the bytes just sent, not the server's echo of it.
+      // The two agree for an ordinary save, but RomM hashes a zip archive
+      // entry-wise rather than byte-wise, and states carry no `content_hash` at
+      // all — so storing the server's value would leave exactly the files this
+      // gate exists for without one. The reader ([_syncGame]) only ever
+      // compares it against another [_md5OfFile] result, so self-consistency is
+      // what matters.
       await SyncRepository.saveSyncState(
         kProviderId,
         local.filePath,
         stat.modified.millisecondsSinceEpoch,
         asset.updatedAtMs,
         local.fileSize,
-        fileHash: asset.contentHash,
+        fileHash: digest ?? await _md5OfFile(local.filePath),
       );
       return true;
     } catch (e) {
@@ -797,7 +972,9 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
           stat.modified.millisecondsSinceEpoch,
           asset.updatedAtMs,
           bytes.length,
-          fileHash: asset.contentHash,
+          // Ours, for the reason given in [_upload] — and free here, since the
+          // bytes are already in memory.
+          fileHash: md5.convert(bytes).toString(),
         );
         wroteAny = true;
       }
