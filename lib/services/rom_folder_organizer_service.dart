@@ -89,10 +89,14 @@ class RomFolderOrganizerService {
 
   static Future<RomFolderOrganizerResult> organizeRomFolders(
     List<String> romRoots, {
+    required Set<String> supportedRomExtensions,
     Set<String>? supportedSystemFolders,
     void Function(int completed, int total)? onProgress,
   }) async {
     final result = _MutableResult();
+    final allowedExtensions = supportedRomExtensions
+        .map((extension) => extension.toLowerCase().replaceFirst('.', ''))
+        .toSet();
     final allowedFolders = supportedSystemFolders
         ?.map((folder) => folder.toLowerCase())
         .toSet();
@@ -129,9 +133,9 @@ class RomFolderOrganizerService {
     for (var index = 0; index < scanRoots.length; index++) {
       final scanRoot = scanRoots[index];
       if (scanRoot.startsWith('content://')) {
-        await _organizeSafRoot(scanRoot, result);
+        await _organizeSafRoot(scanRoot, allowedExtensions, result);
       } else {
-        await _organizeRoot(Directory(scanRoot), result);
+        await _organizeRoot(Directory(scanRoot), allowedExtensions, result);
       }
       onProgress?.call(index + 1, scanRoots.length);
     }
@@ -177,6 +181,7 @@ class RomFolderOrganizerService {
 
   static Future<void> _organizeRoot(
     Directory rootDir,
+    Set<String> allowedExtensions,
     _MutableResult result,
   ) async {
     final filesByDir = <String, List<File>>{};
@@ -199,6 +204,7 @@ class RomFolderOrganizerService {
       await _organizeDirectory(
         directoryPath: entry.key,
         files: entry.value,
+        allowedExtensions: allowedExtensions,
         result: result,
       );
     }
@@ -207,6 +213,7 @@ class RomFolderOrganizerService {
   static Future<void> _organizeDirectory({
     required String directoryPath,
     required List<File> files,
+    required Set<String> allowedExtensions,
     required _MutableResult result,
   }) async {
     final groups = <String, _DiscGroup>{};
@@ -225,6 +232,7 @@ class RomFolderOrganizerService {
         }
         continue;
       }
+      if (!_isAllowedRomExtension(filename, allowedExtensions)) continue;
 
       final discInfo = _extractDiscInfo(filename);
       if (discInfo == null) continue;
@@ -343,6 +351,7 @@ class RomFolderOrganizerService {
 
   static Future<void> _organizeSafRoot(
     String rootUri,
+    Set<String> allowedExtensions,
     _MutableResult result,
   ) async {
     final directories = <String, _SafDirectory>{};
@@ -378,6 +387,7 @@ class RomFolderOrganizerService {
         entry.key,
         entry.value.name,
         entry.value.files,
+        allowedExtensions,
         result,
       );
     }
@@ -387,6 +397,7 @@ class RomFolderOrganizerService {
     String directoryUri,
     String directoryName,
     List<Map<String, dynamic>> entries,
+    Set<String> allowedExtensions,
     _MutableResult result,
   ) async {
     final groups = <String, _DiscGroup>{};
@@ -405,6 +416,7 @@ class RomFolderOrganizerService {
         if (key.isNotEmpty) playlistsByGroupKey[key] = entry;
         continue;
       }
+      if (!_isAllowedRomExtension(filename, allowedExtensions)) continue;
 
       final discInfo = _extractDiscInfo(filename);
       if (discInfo == null) continue;
@@ -546,6 +558,15 @@ class RomFolderOrganizerService {
       normalizedGroupKey: groupKey,
       discNumber: discNumber,
     );
+  }
+
+  static bool _isAllowedRomExtension(
+    String filename,
+    Set<String> allowedExtensions,
+  ) {
+    final extension = path.extension(filename).toLowerCase();
+    return extension.length > 1 &&
+        allowedExtensions.contains(extension.substring(1));
   }
 
   static String _normalizeForGrouping(String value) {

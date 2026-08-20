@@ -49,9 +49,10 @@ void main() {
         "INSERT INTO user_screenscraper_metadata (filename, app_system_id, real_name, is_fully_scraped) VALUES ('Final Fantasy VIII (Disc 1).chd', 'psx', 'Final Fantasy VIII', 1)",
       );
 
-      final result = await RomFolderOrganizerService.organizeRomFolders([
-        root.path,
-      ]);
+      final result = await RomFolderOrganizerService.organizeRomFolders(
+        [root.path],
+        supportedRomExtensions: {'chd', 'm3u'},
+      );
 
       expect(result.groupsOrganized, 1);
       expect(result.foldersCreated, 1);
@@ -105,9 +106,10 @@ void main() {
           '${saturnDir.path}/Panzer Dragoon Saga - CD 2.cue',
         ).writeAsStringSync('disk2');
 
-        final result = await RomFolderOrganizerService.organizeRomFolders([
-          root.path,
-        ]);
+        final result = await RomFolderOrganizerService.organizeRomFolders(
+          [root.path],
+          supportedRomExtensions: {'cue', 'm3u'},
+        );
 
         expect(result.groupsOrganized, 1);
         expect(result.playlistsCreated, 1);
@@ -126,6 +128,37 @@ void main() {
       },
     );
 
+    test(
+      'ignores Skraper media files with disc markers in their names',
+      () async {
+        final root = await Directory.systemTemp.createTemp(
+          'neostation_organize_',
+        );
+        addTearDown(() async {
+          if (await root.exists()) await root.delete(recursive: true);
+        });
+
+        final psxDir = Directory('${root.path}/psx')
+          ..createSync(recursive: true);
+        final mediaDir = Directory('${psxDir.path}/media')
+          ..createSync(recursive: true);
+        File('${psxDir.path}/Game Disc 1.chd').writeAsStringSync('1');
+        File('${psxDir.path}/Game Disc 2.chd').writeAsStringSync('2');
+        File('${mediaDir.path}/Game Disc 1.png').writeAsStringSync('image1');
+        File('${mediaDir.path}/Game Disc 2.png').writeAsStringSync('image2');
+
+        final result = await RomFolderOrganizerService.organizeRomFolders(
+          [root.path],
+          supportedRomExtensions: {'chd', 'm3u'},
+        );
+
+        expect(result.groupsOrganized, 1);
+        expect(await File('${mediaDir.path}/Game Disc 1.png').exists(), isTrue);
+        expect(await File('${mediaDir.path}/Game Disc 2.png').exists(), isTrue);
+        expect(await File('${mediaDir.path}/Game/Game.m3u').exists(), isFalse);
+      },
+    );
+
     test('organizes multi-disc files found in nested subfolders', () async {
       final root = await Directory.systemTemp.createTemp(
         'neostation_organize_',
@@ -139,9 +172,10 @@ void main() {
       File('${nestedDir.path}/Suikoden II Disc 1.chd').writeAsStringSync('1');
       File('${nestedDir.path}/Suikoden II Disc 2.chd').writeAsStringSync('2');
 
-      final result = await RomFolderOrganizerService.organizeRomFolders([
-        root.path,
-      ]);
+      final result = await RomFolderOrganizerService.organizeRomFolders(
+        [root.path],
+        supportedRomExtensions: {'chd', 'm3u'},
+      );
 
       expect(result.groupsOrganized, 1);
       expect(
@@ -170,6 +204,7 @@ void main() {
         final progress = <String>[];
         final result = await RomFolderOrganizerService.organizeRomFolders(
           [root.path],
+          supportedRomExtensions: {'chd', 'm3u'},
           supportedSystemFolders: {'psx'},
           onProgress: (completed, total) => progress.add('$completed/$total'),
         );
@@ -204,9 +239,10 @@ void main() {
       File('${playlistDir.path}/Game Disc 1.chd').writeAsStringSync('1');
       File('${playlistDir.path}/Game Disc 2.chd').writeAsStringSync('2');
 
-      final result = await RomFolderOrganizerService.organizeRomFolders([
-        root.path,
-      ]);
+      final result = await RomFolderOrganizerService.organizeRomFolders(
+        [root.path],
+        supportedRomExtensions: {'chd', 'm3u'},
+      );
 
       expect(result.groupsOrganized, 0);
       expect(result.foldersCreated, 0);

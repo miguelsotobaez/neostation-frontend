@@ -120,6 +120,10 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         .expand((system) => [system.folderName, ...system.folders])
         .where((folder) => folder.isNotEmpty)
         .toSet();
+    final supportedRomExtensions = multiDiscSystems
+        .expand((system) => system.extensions)
+        .where((extension) => extension.isNotEmpty)
+        .toSet();
 
     String? completionMessage;
     NotificationType? completionType;
@@ -137,6 +141,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
 
       final result = await RomFolderOrganizerService.organizeRomFolders(
         _currentRomFolders,
+        supportedRomExtensions: supportedRomExtensions,
         supportedSystemFolders: supportedFolders,
         onProgress: (completed, total) {
           if (total == 0) return;
