@@ -5,6 +5,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'settings_title.dart';
@@ -25,6 +26,14 @@ class AboutSettingsContent extends StatefulWidget {
 
 class AboutSettingsContentState extends State<AboutSettingsContent> {
   final ScrollController _scrollController = ScrollController();
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
+
+  /// Keys used for calculating viewport alignment during navigation, one per
+  /// link card.
+  final List<GlobalKey> _itemKeys = List.generate(5, (_) => GlobalKey());
+
   String _appVersion = '';
   String _systemsVersion = '';
 
@@ -41,12 +50,12 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
     super.dispose();
   }
 
+  /// Synchronizes the scroll viewport with the currently focused link card.
   void scrollToIndex(int index) {
-    if (!_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      (index * 110.h).clamp(0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
     );
   }
 
@@ -177,6 +186,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildInfoCard(
+                        cardKey: _itemKeys[0],
                         icon: Symbols.code_rounded,
                         title: AppLocale.openSourceLicense.getString(context),
                         value: AppLocale.openSourceLicenseDesc.getString(
@@ -190,6 +200,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
+                        cardKey: _itemKeys[1],
                         icon: Symbols.coffee_rounded,
                         title: AppLocale.supportOnKofi.getString(context),
                         value: 'ko-fi.com/neostation',
@@ -201,6 +212,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
+                        cardKey: _itemKeys[2],
                         icon: Symbols.favorite_rounded,
                         title: AppLocale.supportOnPatreon.getString(context),
                         value: 'patreon.com/NeoStation',
@@ -212,6 +224,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
+                        cardKey: _itemKeys[3],
                         icon: Symbols.chat_bubble_outline_rounded,
                         title: AppLocale.joinCommunity.getString(context),
                         value: 'discord.gg/xE2kgKsRVq',
@@ -223,6 +236,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
+                        cardKey: _itemKeys[4],
                         icon: Symbols.language_rounded,
                         title: AppLocale.visitWebsite.getString(context),
                         value: 'neostation.dev',
@@ -244,6 +258,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
   }
 
   Widget _buildInfoCard({
+    required GlobalKey cardKey,
     required IconData icon,
     required String title,
     required String value,
@@ -252,6 +267,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
     bool isFocused = false,
   }) {
     return InkWell(
+      key: cardKey,
       onTap: () {
         SfxService().playNavSound();
         _launchUrl(url);

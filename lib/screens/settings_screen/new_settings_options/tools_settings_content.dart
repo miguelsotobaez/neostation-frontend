@@ -16,6 +16,7 @@ import 'package:neostation/services/global_notification_service.dart';
 import 'package:neostation/services/metadata_cleanup_service.dart';
 import 'package:neostation/services/retroachievements_hash_service.dart';
 import 'package:neostation/services/rom_folder_organizer_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/info_dialog.dart';
@@ -39,6 +40,16 @@ class ToolsSettingsContent extends StatefulWidget {
 
 class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   static final _log = LoggerService.instance;
+
+  final ScrollController _scrollController = ScrollController();
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
+
+  /// Keys used for calculating viewport alignment during navigation, one per
+  /// tool row.
+  final List<GlobalKey> _itemKeys = List.generate(3, (_) => GlobalKey());
+
   bool _isOrganizingMultiDisc = false;
   bool _isCleaningMetadata = false;
   List<String> _currentRomFolders = [];
@@ -47,6 +58,12 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   void initState() {
     super.initState();
     _loadRomFolders();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRomFolders() async {
@@ -60,7 +77,14 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
 
   int getItemCount() => 3;
 
-  void scrollToIndex(int index) {}
+  /// Synchronizes the scroll viewport with the currently focused tool row.
+  void scrollToIndex(int index) {
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
+  }
 
   void selectItem(int index) {
     switch (index) {
@@ -564,9 +588,11 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
               );
 
               return ListView(
+                controller: _scrollController,
                 physics: const ClampingScrollPhysics(),
                 children: [
                   SettingsCardRow(
+                    key: _itemKeys[0],
                     icon: Symbols.emoji_events_rounded,
                     title: AppLocale.rematchAchievements.getString(context),
                     subtitle: AppLocale.rematchAchievementsSubtitle.getString(
@@ -587,6 +613,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     ),
                   ),
                   SettingsCardRow(
+                    key: _itemKeys[1],
                     icon: Symbols.cleaning_services_rounded,
                     title: AppLocale.cleanOrphanedMetadata.getString(context),
                     subtitle: AppLocale.cleanOrphanedMetadataSubtitle.getString(
@@ -609,6 +636,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     ),
                   ),
                   SettingsCardRow(
+                    key: _itemKeys[2],
                     icon: Symbols.folder_managed_rounded,
                     title: AppLocale.organizeMultiDiscGames.getString(context),
                     subtitle: AppLocale.organizeMultiDiscGamesSubtitle
