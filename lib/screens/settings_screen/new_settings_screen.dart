@@ -312,6 +312,19 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     return _selectedContentIndex != previousIndex;
   }
 
+  /// Hands focus back to the category menu and resets the content cursor.
+  ///
+  /// The panel is scrolled back to its first item as well: the cursor moves to
+  /// index 0, so leaving the viewport parked wherever the user had scrolled to
+  /// would show a selection that is off-screen until focus re-enters.
+  void _returnFocusToMenu() {
+    setState(() {
+      _focusOnMenu = true;
+      _selectedContentIndex = 0;
+    });
+    _triggerContentScroll();
+  }
+
   /// Leftward Navigation Protocol: Returns focus to the master menu from the detail panel.
   void _navigateLeft() {
     if (_focusOnMenu) return;
@@ -320,26 +333,13 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     if (selectedKey == AppLocale.themes) {
       final returnToMenu =
           _themesSettingsKey.currentState?.navigateLeft() ?? true;
-      if (returnToMenu) {
-        setState(() {
-          _focusOnMenu = true;
-          _selectedContentIndex = 0;
-        });
-      }
+      if (returnToMenu) _returnFocusToMenu();
     } else if (selectedKey == AppLocale.systemArt) {
       final returnToMenu =
           _systemArtSettingsKey.currentState?.navigateLeft() ?? true;
-      if (returnToMenu) {
-        setState(() {
-          _focusOnMenu = true;
-          _selectedContentIndex = 0;
-        });
-      }
+      if (returnToMenu) _returnFocusToMenu();
     } else {
-      setState(() {
-        _focusOnMenu = true;
-        _selectedContentIndex = 0;
-      });
+      _returnFocusToMenu();
     }
   }
 
@@ -386,10 +386,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   /// a no-op, as elsewhere at the root of a tab.
   void _navigateBack() {
     if (_focusOnMenu) return;
-    setState(() {
-      _focusOnMenu = true;
-      _selectedContentIndex = 0;
-    });
+    _returnFocusToMenu();
   }
 
   /// Delete Protocol: routes the X button to a delete action on the focused
@@ -682,12 +679,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
         onExitPressed: _executeExit,
-        onCancel: () {
-          setState(() {
-            _focusOnMenu = true;
-            _selectedContentIndex = 0;
-          });
-        },
+        onCancel: _returnFocusToMenu,
       );
     } else {
       return Center(
