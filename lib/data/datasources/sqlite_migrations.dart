@@ -504,6 +504,9 @@ class SqliteMigrations {
       case 135:
         await _migrateToVersion135(db);
         break;
+      case 138:
+        await _migrateToVersion138(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6196,6 +6199,46 @@ class SqliteMigrations {
       _log.i('Migration v135 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v135: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Adds `user_config.ra_seed_stamp`, which records the generation stamp of
+  /// the bundled RA seed asset currently loaded into `app_ra_game_list`.
+  ///
+  /// Before this, `refreshRetroAchievementsData()` deleted and re-inserted all
+  /// 18,079 rows on every single launch, re-parsing a 6 MB asset one character
+  /// at a time to do it. The stamp is what lets that be skipped when the asset
+  /// has not changed since the last launch.
+  ///
+  /// Defaults to `''`, which matches no real stamp, so the first launch after
+  /// upgrading re-seeds once and records the stamp — the existing rows stay
+  /// valid either way, so there is nothing to backfill.
+  ///
+  /// Slot 138, not 136 or 137: `feat/collections-feature` holds BOTH of those,
+  /// committed. The worktree scan in RA_IMPROVEMENT_PLAN.md missed its 137
+  /// because it fed `sort -n` output to `comm`, which needs lexicographic
+  /// order — the snippet has been corrected. Gaps are normal here: main already
+  /// skips 129/132/133.
+  static Future<void> _migrateToVersion138(Database db) async {
+    _log.i('Migration v138: Add ra_seed_stamp to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toSet();
+
+      if (!columns.contains('ra_seed_stamp')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN ra_seed_stamp TEXT DEFAULT ''",
+        );
+        _log.i('Column ra_seed_stamp added to user_config');
+      } else {
+        _log.i('Column ra_seed_stamp already exists');
+      }
+
+      _log.i('Migration v138 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v138: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
