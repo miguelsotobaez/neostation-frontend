@@ -88,6 +88,24 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// from this device's own RetroArch configuration — see [_localSubfolder].
   static const String _assetLabel = 'neostation';
 
+  /// RomM `slot` sent with every save we create.
+  ///
+  /// A slot opts the save into RomM's `(rom_id, slot)` pairing, which is how
+  /// slot-aware clients find it: `lodordev/lodor` uploads and negotiates under
+  /// `const syncSlot = "autosave"` and treats a NULL slot as archival, so a
+  /// save we create without one is permanently invisible to it. The name is
+  /// therefore not ours to choose — it has to be the one such clients pair on.
+  ///
+  /// The cost is cosmetic and bounded: RomM datetime-tags a slotted upload
+  /// (`<name> [YYYY-MM-DD_HH-MM-SS].<ext>`), so the save reads as tagged in
+  /// RomM's own UI. It is tagged *once*, at creation — every later sync is a
+  /// `PUT` to that row, which carries no slot and leaves the name alone
+  /// (verified against RomM 5.2.0). [localNameForAsset] strips the tag on the
+  /// way back down, so nothing local ever sees it.
+  ///
+  /// Saves only. `/api/states` has no slot parameter and ignores one.
+  static const String _saveSlot = 'autosave';
+
   static final _log = LoggerService.instance;
 
   /// Authenticated RomM connection, shared with the library browser.
@@ -989,6 +1007,10 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   ///
   /// The update path matters: see [RommService.updateSave] for why a repeat
   /// `POST` corrupts the row/file relationship instead of overwriting.
+  ///
+  /// Only the create path carries [_saveSlot]. `PUT` has no slot parameter, so
+  /// an asset created before this device started slotting keeps its NULL slot
+  /// for life: slotting reaches new saves, never the existing library.
   Future<bool> _upload(
     int romId,
     LocalSaveFile local,
@@ -1007,7 +1029,12 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       } else {
         asset = isState
             ? await _svc.uploadState(romId, file, emulator: _assetLabel)
-            : await _svc.uploadSave(romId, file, emulator: _assetLabel);
+            : await _svc.uploadSave(
+                romId,
+                file,
+                emulator: _assetLabel,
+                slot: _saveSlot,
+              );
       }
       final stat = await file.stat();
       // Record *our* hash of the bytes just sent, not the server's echo of it.
@@ -1265,7 +1292,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       );
     }
     try {
-      await _svc.uploadSave(romId, file);
+      await _svc.uploadSave(romId, file, slot: _saveSlot);
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.networkError, message: e.toString());
