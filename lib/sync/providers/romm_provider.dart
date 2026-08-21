@@ -52,6 +52,22 @@ typedef ResolveSaveTargets =
 /// Enumerates the local library, for the pending-upload sweep.
 typedef ListLocalGames = Future<List<GameModel>> Function();
 
+/// Outcome of the pre-upload check that protects a remote copy the local one is
+/// about to replace.
+enum _RemoteGuard {
+  /// The server holds nothing this device has not already accounted for, so the
+  /// upload is an ordinary one-sided change.
+  clear,
+
+  /// Both sides genuinely changed and the remote bytes were saved beside the
+  /// local file before the upload overwrote them.
+  preserved,
+
+  /// The remote copy could not be read, so it could not be protected. The
+  /// upload is abandoned for this pass rather than performed blind.
+  unreadable,
+}
+
 class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   static const String kProviderId = 'romm';
 
@@ -292,6 +308,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     final matchedRemote = <String>{};
     String remoteKey(RommAsset a) => '${a.isState ? 's' : 'f'}:${a.id}';
     int uploaded = 0, downloaded = 0, coreMismatched = 0;
+    int conflictsPreserved = 0;
     bool anyLocal = localFiles.isNotEmpty;
     bool anyRemote = remote.isNotEmpty;
 
@@ -425,6 +442,30 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
             continue;
           }
         }
+        // Both sides moved since this device last agreed with the server, and
+        // the gate above has ruled out the false alarms (identical bytes, an
+        // untouched local file). What is left is a real conflict, and pushing
+        // over it is what destroyed another device's state on `main`. The
+        // outcome still prefers local — the session that just ended wins — but
+        // the copy it replaces is kept first.
+        if (remoteChanged) {
+          final guard = await _guardDivergedRemote(
+            match,
+            local,
+            recordedHash: recorded?['file_hash'] as String?,
+            pushDigest: pushDigest,
+          );
+          if (guard == _RemoteGuard.unreadable) {
+            // Nothing recorded: the file stays pending and the next pass asks
+            // again, which is the non-destructive way to fail.
+            _log.w(
+              'RomM: leaving ${path.basename(local.filePath)} pending — the '
+              'remote copy it would replace could not be read',
+            );
+            continue;
+          }
+          if (guard == _RemoteGuard.preserved) conflictsPreserved++;
+        }
         if (await _upload(
           romId,
           local,
@@ -454,7 +495,8 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     _log.i(
       'RomM sync ${game.romname}: $uploaded up, $downloaded down '
       '(${localFiles.length} local, ${remote.length} remote)'
-      '${coreMismatched > 0 ? ', $coreMismatched kept (different core)' : ''}',
+      '${coreMismatched > 0 ? ', $coreMismatched kept (different core)' : ''}'
+      '${conflictsPreserved > 0 ? ', $conflictsPreserved conflict backup(s)' : ''}',
     );
 
     // Playtime rides along with the upload-capable passes only. The pre-launch
@@ -515,7 +557,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// saves matched by title id, neither of which carries the game's name in the
   /// filename — so it is left alone and tightened here, at RomM's door.
   ///
-  /// Two things get dropped:
+  /// Three things get dropped:
   ///
   /// * **Thumbnails.** A `.state.png` was being uploaded to RomM as a save
   ///   state. Confirmed on device: one play session produced four "states",
@@ -538,6 +580,15 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     return found.where((f) {
       final name = path.basename(f.filePath);
       final lower = name.toLowerCase();
+
+      // Our own conflict backups. They begin with the game's name and continue
+      // with a dot, so every other rule here reads them as ordinary save data —
+      // and uploading a copy kept precisely because it was *not* this device's
+      // truth would undo the point of keeping it.
+      if (lower.contains(conflictBackupMarker)) {
+        _log.i('RomM: skipping conflict backup $name');
+        return false;
+      }
 
       if (_thumbnailExtensions.contains(path.extension(lower))) {
         _log.i('RomM: skipping thumbnail $name');
@@ -711,6 +762,14 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// The local file's first four bytes, as a zip archive would start them.
   static const List<int> _zipMagic = [0x50, 0x4B, 0x03, 0x04];
 
+  /// Infix marking a conflict backup written by [_guardDivergedRemote].
+  ///
+  /// Deliberately not a plain extension swap: the file sits next to the save it
+  /// came from so the user can find it, and the full original name stays
+  /// visible in front of the marker (`Game.srm.romm-conflict-<stamp>`).
+  @visibleForTesting
+  static const String conflictBackupMarker = '.romm-conflict-';
+
   /// MD5 of the file at [filePath], or null when it cannot be read.
   ///
   /// MD5 because that is what RomM computes — `hashlib.md5` over the stored
@@ -782,6 +841,115 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       _log.w('RomM zip probe failed ($filePath): $e');
       return false;
     }
+  }
+
+  /// Protects the server's copy of [match] from an upload of [local] that would
+  /// replace bytes this device has never seen.
+  ///
+  /// This is the narrowing of the "prefer local" tie-break. The branch that
+  /// calls it has always resolved a both-sides-changed pair by pushing the
+  /// local file over the remote one, on the reasoning that a session just
+  /// ended here. That reasoning is sound and is kept — what was wrong was the
+  /// *evidence*: "both changed" was an mtime answer, and the loser was
+  /// destroyed with no copy left anywhere. A hardware A/B confirmed it, a
+  /// second device's save state ceasing to exist on the server and on both
+  /// devices while the pass reported `1 up, 0 down`.
+  ///
+  /// So the question asked here is byte-level, and the answer only ever costs
+  /// the remote copy a read:
+  ///
+  /// * **[_RemoteGuard.clear]** — the server holds the very bytes this device
+  ///   recorded at its last sync, so nothing has diverged and the upload is an
+  ///   ordinary one-sided change. Also the answer when the server turns out to
+  ///   hold *our* new bytes already, which the upload would only rewrite.
+  /// * **[_RemoteGuard.preserved]** — the two really do differ. The remote
+  ///   bytes are written beside [local] under [conflictBackupMarker] and the
+  ///   upload then proceeds, so the outcome the user sees is unchanged and the
+  ///   copy that used to be destroyed is recoverable by hand.
+  /// * **[_RemoteGuard.unreadable]** — the remote copy could not be fetched.
+  ///   The caller abandons the upload for this pass; nothing is recorded, so
+  ///   the file stays pending and the next pass asks again. Non-destructive,
+  ///   which a blind overwrite would not be.
+  ///
+  /// [recordedHash] is the digest banked at the last sync and is the whole
+  /// basis for "has the *remote* moved": since #403 that column holds a hash
+  /// this provider computed, so it is comparable both with RomM's `content_hash`
+  /// for an ordinary save and with an MD5 of freshly fetched bytes. Without one
+  /// (a pair this device has never synced) nothing can be ruled out, and the
+  /// remote copy is preserved rather than assumed stale.
+  ///
+  /// The fetch is what makes this cover **states**, where RomM exposes no
+  /// `content_hash` at all and a zipped save's is entry-wise. Only the
+  /// post-close pass reaches here — the sweep bails on `uploadOnly &&
+  /// remoteChanged` before this point and the pre-launch pass never takes the
+  /// upload branch — so there is no launch deadline to spend it against.
+  Future<_RemoteGuard> _guardDivergedRemote(
+    RommAsset match,
+    LocalSaveFile local, {
+    required String? recordedHash,
+    required String? pushDigest,
+  }) async {
+    // Cheap path: RomM's own hash can rule divergence out without a transfer,
+    // but only where it is an MD5 of the stored bytes. States have none and a
+    // zip's is computed entry-wise, so both fall through to the fetch. Only
+    // equality is trusted here; "different" still needs the bytes, to keep.
+    final serverHash = match.contentHash;
+    if (recordedHash != null &&
+        recordedHash.isNotEmpty &&
+        !match.isState &&
+        serverHash != null &&
+        serverHash.isNotEmpty &&
+        serverHash.toLowerCase() == recordedHash &&
+        !await _looksZipped(local.filePath)) {
+      return _RemoteGuard.clear;
+    }
+
+    final Uint8List? bytes;
+    try {
+      bytes = await _fetchAssetBytes(match);
+    } catch (e) {
+      if (isPermissionDenied(e)) rethrow;
+      _log.e('RomM conflict guard: cannot read ${match.fileName}: $e');
+      return _RemoteGuard.unreadable;
+    }
+    if (bytes == null) return _RemoteGuard.unreadable;
+
+    final remoteDigest = md5.convert(bytes).toString();
+    // Unchanged since this device last agreed with the server, or already the
+    // bytes about to be pushed. Neither is a conflict.
+    if (remoteDigest == recordedHash || remoteDigest == pushDigest) {
+      return _RemoteGuard.clear;
+    }
+
+    try {
+      final backup = File(
+        '${local.filePath}$conflictBackupMarker${_backupStamp()}',
+      );
+      await backup.parent.create(recursive: true);
+      await backup.writeAsBytes(bytes, flush: true);
+      _log.w(
+        'RomM conflict: ${path.basename(local.filePath)} and the server both '
+        'changed since the last sync — kept the remote copy as '
+        '${path.basename(backup.path)} before uploading the local one',
+      );
+      return _RemoteGuard.preserved;
+    } catch (e) {
+      _log.e(
+        'RomM conflict guard: cannot write backup for ${local.filePath}: $e',
+      );
+      return _RemoteGuard.unreadable;
+    }
+  }
+
+  /// `2026-08-21_19-30-00`, for a conflict backup's filename.
+  ///
+  /// Local time, colon-free and sortable: it is read by a person looking in
+  /// their saves folder, not parsed by anything.
+  static String _backupStamp() {
+    final n = DateTime.now();
+    String p2(int v) => v.toString().padLeft(2, '0');
+    return '${n.year}-${p2(n.month)}-${p2(n.day)}_'
+        '${p2(n.hour)}-${p2(n.minute)}-${p2(n.second)}';
   }
 
   /// Records [local] as settled at [cloudUpdatedAt], no transfer having been
@@ -872,6 +1040,20 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// written by a different core (see the guard below). Everything else — no
   /// target, an expired deadline, a newer local copy — is a routine `wrote:
   /// false`.
+  /// The bytes RomM holds for [asset], or null when they cannot be fetched.
+  ///
+  /// Both saves and states download via the asset's `download_path`; only saves
+  /// have the `/content` convenience route, used as a fallback. A state with no
+  /// `download_path` is unreadable, which is a server-side data problem rather
+  /// than something a caller can retry differently.
+  Future<Uint8List?> _fetchAssetBytes(RommAsset asset) async {
+    final dp = asset.downloadPath;
+    if (dp != null && dp.isNotEmpty) return _svc.downloadAssetByPath(dp);
+    if (!asset.isState) return _svc.downloadSaveContent(asset.id);
+    _log.w('RomM download: state ${asset.fileName} has no download_path');
+    return null;
+  }
+
   Future<({bool wrote, bool coreMismatch})> _download(
     GameModel game,
     RommAsset asset, {
@@ -898,18 +1080,8 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         _log.w('RomM download: no local target for ${asset.fileName}');
         return (wrote: false, coreMismatch: false);
       }
-      // Both saves and states download via the asset's download_path; only
-      // saves have the /content convenience route (used as a fallback).
-      final Uint8List bytes;
-      final dp = asset.downloadPath;
-      if (dp != null && dp.isNotEmpty) {
-        bytes = await _svc.downloadAssetByPath(dp);
-      } else if (!asset.isState) {
-        bytes = await _svc.downloadSaveContent(asset.id);
-      } else {
-        _log.w('RomM download: state ${asset.fileName} has no download_path');
-        return (wrote: false, coreMismatch: false);
-      }
+      final bytes = await _fetchAssetBytes(asset);
+      if (bytes == null) return (wrote: false, coreMismatch: false);
 
       // Pre-launch deadline guard: the network fetch is done, but if the
       // launch-blocking wait has already elapsed the game is running on the
