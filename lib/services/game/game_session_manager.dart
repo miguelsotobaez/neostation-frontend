@@ -90,6 +90,40 @@ class GameSessionManager {
     _onProcessExitCallback = null;
   }
 
+  /// Listeners notified once a session has been finalized.
+  ///
+  /// Separate from [_onProcessExitCallback] and [_onGameReturnedCallback],
+  /// which are single-slot and owned by whichever screen launched the game.
+  /// This is a broadcast for state that is not tied to a launch site — anything
+  /// cached about the player's progress is stale the moment they stop playing,
+  /// whichever screen started the game and whichever platform ended it. Every
+  /// launcher funnels its exit through [endGameSession], so registering here
+  /// covers them all.
+  static final List<VoidCallback> _sessionEndListeners = <VoidCallback>[];
+
+  static void addSessionEndListener(VoidCallback listener) {
+    if (!_sessionEndListeners.contains(listener)) {
+      _sessionEndListeners.add(listener);
+    }
+  }
+
+  static void removeSessionEndListener(VoidCallback listener) {
+    _sessionEndListeners.remove(listener);
+  }
+
+  /// Fires every session-end listener, isolating them from each other: this
+  /// runs on the game-exit path, which already has UI waiting on it, so one
+  /// listener throwing must not skip the rest or fail the teardown.
+  static void _notifySessionEnded() {
+    for (final listener in List<VoidCallback>.from(_sessionEndListeners)) {
+      try {
+        listener();
+      } catch (e) {
+        _log.e('Session-end listener failed: $e');
+      }
+    }
+  }
+
   /// Recovers playtime from a previously interrupted game session.
   ///
   /// Handles cases where the application was terminated by the OS (Android)
@@ -246,6 +280,8 @@ class GameSessionManager {
     _launchedEmulatorExe = null;
     _currentGameSystem = null;
     _currentGame = null;
+
+    _notifySessionEnded();
   }
 
   static Future<void> _savePlayTime(

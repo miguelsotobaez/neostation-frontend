@@ -39,7 +39,19 @@ class _RADashboardHubState extends State<RADashboardHub> {
   /// is just quickly passing through this tab.
   Timer? _dashboardLoadTimer;
 
+  /// The provider this hub is subscribed to, and the invalidation generation
+  /// it has already acted on. Watching the generation is what makes a refresh
+  /// work while the hub is mounted: [didChangeDependencies] runs once, so a
+  /// finished game session (or the refresh button) would otherwise drop the
+  /// loaded flags with nothing left to notice.
+  RetroAchievementsProvider? _provider;
+  int _seenCacheGeneration = 0;
+
   Future<void> _loadDashboard(RetroAchievementsProvider provider) async {
+    // Stamped up front, not on completion: the five fetches below take a while
+    // and the stamp is what stops a second entry starting a duplicate run
+    // while this one is still going.
+    provider.markDashboardAttempted();
     // Load sequentially rather than with Future.wait: firing all five RA
     // endpoints at once trips the RetroAchievements API rate limiter (HTTP 429),
     // which left sections such as "Recent Masteries" stuck loading. Each section
@@ -55,13 +67,21 @@ class _RADashboardHubState extends State<RADashboardHub> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final provider = context.read<RetroAchievementsProvider>();
+    if (!identical(provider, _provider)) {
+      _provider?.removeListener(_onProviderChanged);
+      _provider = provider;
+      _seenCacheGeneration = provider.cacheGeneration;
+      provider.addListener(_onProviderChanged);
+    }
+    // Entering the tab re-reads anything past its staleness window, which is
+    // what stands in for a refresh control: leaving and coming back is the
+    // gesture. Without it the dashboard was a once-per-app-session snapshot —
+    // a section that failed, an unlock earned on another device, or the
+    // offline banner from a launch with no network, all stuck until restart.
     if (!_requestedInitialLoad &&
         provider.isConnected &&
-        !provider.dashboardLoaded &&
-        !provider.recentUnlocksLoading &&
-        !provider.recentlyPlayedLoading &&
-        !provider.completionProgressLoading &&
-        !provider.gotwLoading) {
+        (!provider.dashboardLoaded || provider.dashboardIsStale) &&
+        !provider.isDashboardLoading) {
       _requestedInitialLoad = true;
       _dashboardLoadTimer?.cancel();
       _dashboardLoadTimer = Timer(const Duration(milliseconds: 300), () {
@@ -70,9 +90,26 @@ class _RADashboardHubState extends State<RADashboardHub> {
     }
   }
 
+  /// Reloads when the cached reads have been invalidated under us — after a
+  /// game session, or when the user pressed refresh. Deliberately keyed to the
+  /// generation counter and not to `dashboardLoaded`: a section that failed
+  /// leaves that flag false too, and retrying on it would loop.
+  void _onProviderChanged() {
+    final provider = _provider;
+    if (provider == null || !mounted) return;
+    if (provider.cacheGeneration == _seenCacheGeneration) return;
+    _seenCacheGeneration = provider.cacheGeneration;
+    if (!provider.isConnected) return;
+    _dashboardLoadTimer?.cancel();
+    _requestedInitialLoad = true;
+    // ignore: unawaited_futures
+    _loadDashboard(provider);
+  }
+
   @override
   void dispose() {
     _dashboardLoadTimer?.cancel();
+    _provider?.removeListener(_onProviderChanged);
     super.dispose();
   }
 
