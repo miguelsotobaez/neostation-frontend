@@ -354,6 +354,76 @@ void main() {
     await tempDir.delete(recursive: true);
   });
 
+  group('a conflict backup on the server is never pulled down', () {
+    test('syncableRemote drops it and keeps everything else', () {
+      final backup = svc.seedState(
+        1,
+        'Game.state.auto${RomMSyncProvider.conflictBackupMarker}'
+        '2026-08-21_20-00-21',
+        'OTHER DEVICE'.codeUnits,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      );
+      final ordinary = svc.seedState(
+        1,
+        'Game.state.auto',
+        'REAL'.codeUnits,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      );
+
+      final kept = RomMSyncProvider.syncableRemote([backup, ordinary]);
+
+      expect(kept, [ordinary]);
+    });
+
+    test('the pre-launch pass downloads the real state but not the backup '
+        'sitting beside it', () async {
+      svc.seedState(
+        1,
+        'Game.state.auto${RomMSyncProvider.conflictBackupMarker}'
+        '2026-08-21_20-00-21',
+        'OTHER DEVICE'.codeUnits,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      );
+      svc.seedState(
+        1,
+        'Game.state.auto',
+        'REAL'.codeUnits,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      );
+
+      await provider.syncGameSavesBeforeLaunch(game);
+
+      expect(
+        await localState().readAsString(),
+        'REAL',
+        reason: 'the ordinary state still syncs',
+      );
+      expect(
+        backupsIn('states'),
+        isEmpty,
+        reason: 'the marker must not survive a round trip through the server',
+      );
+    });
+
+    test(
+      'a backup is not resurrected after the local copy is deleted',
+      () async {
+        svc.seedState(
+          1,
+          'Game.state.auto${RomMSyncProvider.conflictBackupMarker}'
+          '2026-08-21_20-00-21',
+          'OTHER DEVICE'.codeUnits,
+          updatedAt: DateTime.utc(2026, 1, 2),
+        );
+
+        await provider.syncGameSavesBeforeLaunch(game);
+        await provider.syncGameSavesBeforeLaunch(game);
+
+        expect(backupsIn('states'), isEmpty);
+      },
+    );
+  });
+
   group('a genuine both-sides change keeps the copy it replaces', () {
     test('a save the other device advanced is preserved before the local '
         'one overwrites it', () async {

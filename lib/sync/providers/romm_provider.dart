@@ -313,8 +313,12 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       ]);
       // Collapse a slot's version history before anything looks at the listing,
       // so the pairing loop and the remote-only pass below agree on which asset
-      // represents each local file.
-      remote = latestPerLocalName([...results[0], ...results[1]]);
+      // represents each local file. Conflict backups are dropped first: they
+      // must never reach the pairing loop, and filtering them here is cheaper
+      // than deduping them and discarding the survivor.
+      remote = latestPerLocalName(
+        syncableRemote([...results[0], ...results[1]]),
+      );
     } catch (e) {
       _log.e('RomM listSaves/listStates failed for ${game.romname}: $e');
       return GameSyncStatus.error;
@@ -670,6 +674,31 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   static String localNameForAsset(RommAsset asset) => asset.isState
       ? asset.fileName
       : asset.fileName.replaceAll(_datetimeTag, '');
+
+  /// Drops remote assets that are conflict backups.
+  ///
+  /// [syncableSaves] refuses to *upload* a local file carrying
+  /// [conflictBackupMarker]. Without the same rule on the way down the guard is
+  /// one-directional: an asset named `<game>.state.romm-conflict-<stamp>` has no
+  /// local counterpart to pair with, so the remote-only pass downloads it, and
+  /// every device that syncs the game acquires a permanent copy the upload side
+  /// then refuses to touch — unreconcilable and unremovable from the app.
+  ///
+  /// A backup is by definition a copy this system kept for a person to inspect
+  /// *locally*, never something to distribute, so its own marker is the whole
+  /// test. Deliberately checked against the raw `file_name` rather than
+  /// [localNameForAsset]: the marker survives tag-stripping, but the point is to
+  /// reject the asset before anything derives a local name from it.
+  @visibleForTesting
+  static List<RommAsset> syncableRemote(List<RommAsset> remote) {
+    return remote.where((a) {
+      if (a.fileName.toLowerCase().contains(conflictBackupMarker)) {
+        _log.i('RomM: skipping remote conflict backup ${a.fileName}');
+        return false;
+      }
+      return true;
+    }).toList();
+  }
 
   /// Collapses a remote listing to one asset per local filename, newest first.
   ///
