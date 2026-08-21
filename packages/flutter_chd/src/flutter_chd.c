@@ -34,6 +34,7 @@ typedef struct {
   uint32_t pregap;    /* leading frames that are gap rather than track data */
   uint32_t start;     /* first physical frame of the track within the CHD */
   uint32_t start_lba; /* first sector of the track as the disc addresses it */
+  int32_t flat;       /* frames are bare user data, with no sector header */
 } nchd_track;
 
 struct nchd_disc {
@@ -129,6 +130,42 @@ static uint32_t nchd_read_track_metadata(chd_file *chd, uint32_t index,
   return track->frames + nchd_padding_frames(track->frames);
 }
 
+/* Describes a DVD image as the single flat track it is, returning 1 when the
+ * CHD is one.
+ *
+ * A DVD carries none of the metadata above. `chdman createdvd` writes no track
+ * entry at all — only a `DVD ` tag with an empty payload — and stores the image
+ * as an unbroken run of 2048-byte sectors with no sync pattern, no header and
+ * no subheader. There is nothing to enumerate, so the layout comes from the
+ * header instead: one data track covering every sector in the file.
+ *
+ * The unit size is what decides it rather than the tag. A unit of exactly one
+ * sector's worth of user data can hold nothing but user data, the tag says no
+ * more than that, and not every writer leaves one behind. A container that
+ * turns out to carry no filesystem then fails where it already did, in the
+ * ISO9660 probe above this. */
+static int32_t nchd_add_dvd_track(const chd_header *header, nchd_disc *disc) {
+  uint64_t frames;
+  nchd_track *track;
+
+  if (header->unitbytes != NCHD_SECTOR_SIZE) return 0;
+
+  frames = header->logicalbytes / header->unitbytes;
+  if (frames == 0) return 0;
+  /* Sector numbers cross the FFI boundary as int32; a dual-layer DVD is about
+   * four million sectors, so this only ever bites a malformed header. */
+  if (frames > (uint64_t)0x7FFFFFFF) frames = (uint64_t)0x7FFFFFFF;
+
+  track = &disc->tracks[0];
+  memset(track, 0, sizeof(*track));
+  track->number = 1;
+  track->mode = NCHD_MODE_MODE1;
+  track->frames = (uint32_t)frames;
+  track->flat = 1;
+  disc->track_count = 1;
+  return 1;
+}
+
 static nchd_disc *nchd_create(chd_file *chd, FILE *fp, int32_t *out_error) {
   const chd_header *header = chd_get_header(chd);
   nchd_disc *disc;
@@ -173,7 +210,7 @@ static nchd_disc *nchd_create(chd_file *chd, FILE *fp, int32_t *out_error) {
     start_lba = track.start_lba + (track.frames - track.pregap);
   }
 
-  if (disc->track_count == 0) {
+  if (disc->track_count == 0 && !nchd_add_dvd_track(header, disc)) {
     free(disc->hunk);
     free(disc);
     if (out_error != NULL) *out_error = NCHD_ERR_NO_TRACKS;
@@ -359,7 +396,10 @@ FFI_PLUGIN_EXPORT int32_t nchd_read_sector(nchd_disc *disc, int32_t track_index,
   if (!nchd_load_hunk(disc, hunk_number)) return -2;
 
   sector = disc->hunk + frame_offset;
-  data_offset = nchd_sector_data_offset(sector, track->mode);
+  /* A flat track's frame *is* the user data: there is no header to step over,
+   * and looking for one would both drop the first 16 bytes of the sector and
+   * run past the end of the frame. */
+  data_offset = track->flat ? 0 : nchd_sector_data_offset(sector, track->mode);
   if ((uint32_t)data_offset + NCHD_SECTOR_SIZE > disc->unit_bytes) return -3;
 
   memcpy(out, sector + data_offset, NCHD_SECTOR_SIZE);

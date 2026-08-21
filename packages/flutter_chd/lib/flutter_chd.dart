@@ -1,4 +1,4 @@
-/// Reads CD tracks and sectors out of a CHD disc image.
+/// Reads tracks and sectors out of a CHD disc image.
 ///
 /// CHD is how essentially every disc-based ROM in a real library is stored, and
 /// RetroAchievements identifies a disc game by hashing the executable inside its
@@ -77,7 +77,8 @@ enum ChdOpenError {
   /// The file is missing, unreadable, or not a CHD at all.
   open,
 
-  /// A CHD, but one with no CD track metadata — a hard-disk or DVD image.
+  /// A CHD, but one describing no readable track — a hard-disk image, or a
+  /// disc whose sectors are neither CD frames nor plain 2048-byte ones.
   noTracks,
 
   /// Compressed with a codec this build cannot decode.

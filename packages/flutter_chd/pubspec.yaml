@@ -1,6 +1,6 @@
 name: flutter_chd
 resolution: workspace
-description: "Reads CD tracks and sectors out of CHD disc images, over a vendored libchdr."
+description: "Reads tracks and sectors out of CD and DVD CHD disc images, over a vendored libchdr."
 version: 0.0.1
 homepage:
 

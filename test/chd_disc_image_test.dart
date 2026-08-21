@@ -190,6 +190,67 @@ void main() {
     }, skip: skip);
   });
 
+  group('reading a DVD CHD', () {
+    test('reads a DVD image as the one flat track it is', () {
+      // `chdman createdvd` writes no track metadata at all and no sector
+      // headers either: frame N of the file is sector N of the disc, and its
+      // 2048 bytes are the user data. Reading one as a CD frame would drop the
+      // first 16 bytes of every sector and then run off the end of the frame —
+      // which is why every DVD-format PS2 CHD came back unhashed.
+      final payload = Uint8List.fromList(
+        List.generate(2048, (index) => index & 0xFF),
+      );
+      final disc = ChdDisc.open(
+        write(buildDvdChd(sectors: 40, data: {0: payload, 39: payload})),
+      );
+
+      expect(disc.tracks, hasLength(1));
+      expect(disc.tracks.single.number, 1);
+      expect(disc.tracks.single.isData, isTrue);
+      expect(disc.tracks.single.isMode2, isFalse);
+      expect(disc.tracks.single.sectors, 40);
+      expect(disc.tracks.single.startLba, 0);
+      // Byte for byte, including the 16 a CD sector would spend on a header.
+      expect(disc.readSector(0, 0), payload);
+      expect(disc.readSector(0, 39), payload);
+      expect(disc.readSector(0, 40), isNull, reason: 'past the disc');
+
+      disc.close();
+    }, skip: skip);
+
+    test('takes a 2048-byte unit as a DVD even with no tag', () {
+      // The tag says DVD, but a unit that is exactly one sector of user data
+      // already means the frames hold user data and nothing else. Requiring
+      // the tag would leave any image written without one unreadable.
+      final payload = Uint8List.fromList(List.filled(2048, 0x6D));
+      final disc = ChdDisc.open(
+        write(buildDvdChd(sectors: 8, data: {3: payload}, tagged: false)),
+      );
+
+      expect(disc.tracks, hasLength(1));
+      expect(disc.readSector(0, 3), payload);
+
+      disc.close();
+    }, skip: skip);
+
+    test('still reports a CHD that describes no track at all', () {
+      // A hard-disk image, or anything else with neither CD frames nor plain
+      // sectors, has to stay an open failure rather than be read as a disc.
+      expect(
+        () => ChdDisc.open(
+          write(buildDvdChd(sectors: 8, tagged: false, unitBytes: 2448)),
+        ),
+        throwsA(
+          isA<ChdException>().having(
+            (e) => e.error,
+            'error',
+            ChdOpenError.noTracks,
+          ),
+        ),
+      );
+    }, skip: skip);
+  });
+
   group('hashing a CHD end to end', () {
     test('produces the PlayStation hash from inside the image', () async {
       // The whole chain over a real container: hunk decompression, track
@@ -225,6 +286,40 @@ void main() {
           ...exeHeader,
           ...payload,
         ]).toString(),
+      );
+    }, skip: skip);
+
+    test('produces the PlayStation 2 hash from a DVD image', () async {
+      // The format most of a PS2 library is actually stored in. Everything
+      // above the reader is unchanged — the ISO9660 probe already expects flat
+      // 2048-byte sectors — so this is the container path end to end.
+      final executable = sector([0x7F, 0x45, 0x4C, 0x46]);
+      final path = write(
+        buildDvdChd(
+          sectors: 32,
+          data: {
+            16: volumeDescriptor(rootSector: 20, rootSize: 2048),
+            20: directory({
+              'SYSTEM.CNF;1': [22, 100],
+              'SLUS_202.02;1': [24, 2048],
+            }).first,
+            22: sector(
+              'BOOT2 = cdrom0:\\SLUS_202.02;1\r\nVER=1.00\r\n'.codeUnits,
+            ),
+            24: executable,
+          },
+        ),
+      );
+
+      final hash = await RaDiscHash.compute(RaHashAlgo.ps2, path);
+
+      expect(
+        hash,
+        crypto.md5
+            .convert(
+              ['SLUS_202.02'.codeUnits, executable].expand((e) => e).toList(),
+            )
+            .toString(),
       );
     }, skip: skip);
 
@@ -407,6 +502,69 @@ Uint8List buildChd({
   sectors.forEach((frame, data) {
     final start = dataStart + frame * _frameSize;
     bytes.setRange(start, start + data.length, data);
+  });
+
+  return bytes;
+}
+
+// --- Building a DVD CHD -----------------------------------------------------
+//
+// The other layout a CHD can hold, and the one `chdman createdvd` writes: no
+// track metadata, a `DVD ` tag with an empty payload, and the image stored as
+// an unbroken run of 2048-byte sectors.
+
+/// Builds an uncompressed DVD-format CHD of [sectors] sectors, with [data]
+/// placed by sector number.
+///
+/// [tagged] and [unitBytes] exist to cover what the reader has to decide from
+/// the header alone: an image written without the tag is still a DVD, and one
+/// whose unit is not a sector of user data is not.
+Uint8List buildDvdChd({
+  required int sectors,
+  Map<int, Uint8List> data = const {},
+  bool tagged = true,
+  int unitBytes = 2048,
+}) {
+  // Two sectors to a hunk, as `chdman createdvd` writes them: a 4096-byte
+  // hunk over a 2048-byte unit.
+  const framesPerHunk = 2;
+  final hunkBytes = unitBytes * framesPerHunk;
+  final logicalBytes = sectors * unitBytes;
+  final hunkCount = (logicalBytes + hunkBytes - 1) ~/ hunkBytes;
+
+  final dataStart = hunkBytes;
+  final bytes = Uint8List(dataStart + hunkCount * hunkBytes);
+  final view = ByteData.sublistView(bytes);
+
+  var offset = 124;
+  final metaOffset = offset;
+  if (tagged) {
+    // chdman writes the tag with an empty string, so the payload is that
+    // string's terminator and nothing else.
+    view.setUint32(offset, 0x44564420); // 'DVD '
+    view.setUint32(offset + 4, 1); // flags 0, length 1
+    view.setUint64(offset + 8, 0); // no entry after this one
+    bytes[offset + 16] = 0;
+    offset += 17;
+  }
+
+  final mapOffset = offset;
+  for (var hunk = 0; hunk < hunkCount; hunk++) {
+    view.setUint32(mapOffset + hunk * 4, hunk + 1);
+  }
+
+  bytes.setRange(0, 8, 'MComprHD'.codeUnits);
+  view.setUint32(8, 124); // header length
+  view.setUint32(12, 5); // version
+  view.setUint64(32, logicalBytes);
+  view.setUint64(40, mapOffset);
+  view.setUint64(48, tagged ? metaOffset : 0);
+  view.setUint32(56, hunkBytes);
+  view.setUint32(60, unitBytes);
+
+  data.forEach((sector, content) {
+    final start = dataStart + sector * unitBytes;
+    bytes.setRange(start, start + content.length, content);
   });
 
   return bytes;

@@ -1,4 +1,4 @@
-/* A minimal CD-image reader over libchdr.
+/* A minimal disc-image reader over libchdr.
  *
  * The Dart side needs one primitive to hash a disc the way RetroAchievements
  * does: "give me the 2048 user-data bytes of logical sector N of track T".
@@ -43,7 +43,9 @@ extern "C" {
  * that is not the first one has to subtract this. */
 #define NCHD_FIELD_START_LBA 3
 
-/* Track modes. Anything that is not audio carries a filesystem. */
+/* Track modes. Anything that is not audio carries a filesystem. A DVD image
+ * has no track metadata to take a mode from and no sector headers either, so
+ * it is reported as the plain data track it reads as. */
 #define NCHD_MODE_AUDIO 0
 #define NCHD_MODE_MODE1 1
 #define NCHD_MODE_MODE2 2
@@ -52,7 +54,7 @@ extern "C" {
  * codec is a build problem to fix, a bad file is a ROM problem to report. */
 #define NCHD_OK 0
 #define NCHD_ERR_OPEN 1        /* the file could not be opened or is not a CHD */
-#define NCHD_ERR_NO_TRACKS 2   /* opened, but carries no CD track metadata */
+#define NCHD_ERR_NO_TRACKS 2   /* opened, but describes no readable track */
 #define NCHD_ERR_UNSUPPORTED 3 /* a codec this build cannot decompress */
 #define NCHD_ERR_MEMORY 4
 

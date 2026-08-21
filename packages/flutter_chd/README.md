@@ -1,7 +1,11 @@
 # flutter_chd
 
-Reads CD tracks and sectors out of CHD disc images, so RetroAchievements hashing
+Reads tracks and sectors out of CHD disc images, so RetroAchievements hashing
 can reach the executable inside a disc's filesystem.
+
+Both CHD layouts a game library holds are read: a CD image, whose tracks are
+listed in metadata and whose frames wrap their user data in sector headers, and
+a DVD image, which has neither and is one flat run of 2048-byte sectors.
 
 RetroAchievements identifies a disc game by hashing its primary executable, not
 the container, so a plain MD5 of a `.chd` matches nothing in RA's database. This
