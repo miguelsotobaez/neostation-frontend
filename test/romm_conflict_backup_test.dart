@@ -405,6 +405,28 @@ void main() {
       );
     });
 
+    test('the provider listing does not offer it either', () async {
+      svc.seedState(
+        1,
+        'Game.state.auto${RomMSyncProvider.conflictBackupMarker}'
+        '2026-08-21_20-00-21',
+        'OTHER DEVICE'.codeUnits,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      );
+      svc.seedState(
+        1,
+        'Game.state.auto',
+        'REAL'.codeUnits,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      );
+
+      final listed = await provider.listSaves(gameId: '1');
+
+      expect(listed.map((f) => f.fileName), [
+        'Game.state.auto',
+      ], reason: 'the listing reports what may sync, not a server inventory');
+    });
+
     test(
       'a backup is not resurrected after the local copy is deleted',
       () async {

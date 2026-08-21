@@ -1352,7 +1352,11 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         _svc.listSaves(romId: romId),
         _svc.listStates(romId: romId),
       ]);
-      final assets = [...results[0], ...results[1]];
+      // Conflict backups are filtered here too, not just in [_syncGame]. This
+      // reports what a caller may sync, not an inventory of the server, and a
+      // backup is never syncable in either direction — leaving it in would put
+      // the download gap back the moment anything transfers from this listing.
+      final assets = syncableRemote([...results[0], ...results[1]]);
       return assets
           .map(
             (a) => SyncFile(
