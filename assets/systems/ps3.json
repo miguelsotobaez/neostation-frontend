@@ -83,9 +83,6 @@
         "macos": {
           "executable": "rpcs3",
           "args": "--no-gui \"{file.path}\""
-     
-        
-        
         }
       }
     }
