@@ -49,7 +49,19 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.armsx3/com.armsx2.Main -a android.intent.action.VIEW -e path \"{file.path}\""
-        }
+         }
+      }
+    },
+    {
+      "name": "Standalone EMUCOREC",
+      "default_standalone": true,
+      "unique_id": "ps3.emucorec.",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.sbro.emucorec/.core.ps3.Emulator -e gamePath \"{file.path}\""
+         }
       }
     },
     {
@@ -71,7 +83,10 @@
         "macos": {
           "executable": "rpcs3",
           "args": "--no-gui \"{file.path}\""
-      }
+     
+        
+        
+        }
       }
     }
   ],
