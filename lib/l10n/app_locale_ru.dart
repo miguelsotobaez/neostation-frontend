@@ -102,6 +102,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.subfolderView: 'Показывать подпапки',
   AppLocale.subfolderViewSubtitle:
       'Группировать ROM в подпапках в виде просматриваемых папок, а не смешивать их с играми',
+  AppLocale.subfolderViewAll: 'Показывать подпапки во всех системах',
+  AppLocale.subfolderViewAllSubtitle:
+      'Применить настройку «Показывать подпапки» сразу ко всем системам',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} систем(ы) имели собственную настройку «Показывать подпапки». Теперь все системы следуют этому переключателю; каждую из них по-прежнему можно изменить в её настройках.',
   AppLocale.subfolderViewEnabled: 'Подпапки показаны как папки',
   AppLocale.subfolderViewDisabled: 'Подпапки смешаны с играми',
   AppLocale.errorScanningSystem: 'Ошибка при сканировании системы: {error}',

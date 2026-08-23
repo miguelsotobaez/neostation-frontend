@@ -100,6 +100,11 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.subfolderView: 'Show Subfolders',
   AppLocale.subfolderViewSubtitle:
       'Group ROMs in subfolders into browsable folders instead of mixing them with games',
+  AppLocale.subfolderViewAll: 'Show Subfolders in Every System',
+  AppLocale.subfolderViewAllSubtitle:
+      'Apply the per-system Show Subfolders setting to every system at once',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} system(s) had their own Show Subfolders setting. All systems now follow this switch; you can still change any of them individually in that system’s settings.',
   AppLocale.subfolderViewEnabled: 'Subfolders shown as folders',
   AppLocale.subfolderViewDisabled: 'Subfolders mixed with games',
   AppLocale.errorScanningSystem: 'Error scanning system: {error}',

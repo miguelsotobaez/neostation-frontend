@@ -101,6 +101,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.subfolderView: 'Tampilkan Subfolder',
   AppLocale.subfolderViewSubtitle:
       'Kelompokkan ROM dalam subfolder menjadi folder yang dapat dijelajahi alih-alih mencampurnya dengan game',
+  AppLocale.subfolderViewAll: 'Tampilkan Subfolder di Semua Sistem',
+  AppLocale.subfolderViewAllSubtitle:
+      'Terapkan pengaturan Tampilkan Subfolder ke semua sistem sekaligus',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} sistem memiliki pengaturan Tampilkan Subfolder sendiri. Kini semua sistem mengikuti sakelar ini; Anda masih dapat mengubahnya satu per satu di pengaturan sistem tersebut.',
   AppLocale.subfolderViewEnabled: 'Subfolder ditampilkan sebagai folder',
   AppLocale.subfolderViewDisabled: 'Subfolder dicampur dengan game',
   AppLocale.errorScanningSystem: 'Kesalahan saat memindai sistem: {error}',

@@ -15,6 +15,7 @@ import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/utils/nav_tabs.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../repositories/retro_achievements_repository.dart';
+import '../../../repositories/system_repository.dart';
 import '../../../widgets/info_dialog.dart';
 import '../../../widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
@@ -75,7 +76,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
     // Pre-allocate keys for maximum theoretical setting items (the fixed rows
     // plus one per navigation tab that can be toggled).
-    for (int i = 0; i < 15 + NavTab.values.length; i++) {
+    for (int i = 0; i < 16 + NavTab.values.length; i++) {
       _itemKeys.add(GlobalKey());
     }
   }
@@ -204,6 +205,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // SFX Sounds
     count++; // SFX volume (dimmed, but still navigable, while SFX are off)
     count++; // 12-Hour Clock
+    count++; // Show subfolders (every system)
     count++; // Achievement badges on game tiles
     count++; // Match RetroAchievements on startup
     count += hidableNavTabs().length; // Navigation tab visibility
@@ -261,6 +263,32 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
           .replaceFirst('{count}', backlog.toString()),
       okLabel: AppLocale.ok.getString(context),
       icon: Symbols.trophy_rounded,
+    );
+  }
+
+  /// Flips the global "Show Subfolders" switch and applies it to every system.
+  ///
+  /// Systems that carried a setting of their own are overwritten by the stamp,
+  /// so they are counted first — after the write every system reads the same
+  /// and the information is gone. Like the RetroAchievements toggle above this
+  /// is advice, not a gate: the setting is written either way.
+  Future<void> _setSubfolderViewAll(bool value) async {
+    final configProvider = context.read<SqliteConfigProvider>();
+    final overridden = await SystemRepository.countSubfolderViewOverrides(
+      configProvider.config.subfolderViewAll,
+    );
+    if (!mounted) return;
+    await configProvider.updateSubfolderViewAll(value);
+    if (!mounted || overridden == 0) return;
+
+    await InfoDialog.show(
+      context,
+      title: AppLocale.subfolderViewAll.getString(context),
+      body: AppLocale.subfolderViewAllOverridesNotice
+          .getString(context)
+          .replaceFirst('{count}', overridden.toString()),
+      okLabel: AppLocale.ok.getString(context),
+      icon: Symbols.folder_rounded,
     );
   }
 
@@ -334,6 +362,13 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
       configProvider.updateUse12HourClock(
         !configProvider.config.use12HourClock,
       );
+      return;
+    }
+    currentItemIndex++;
+
+    // Protocol: Show subfolders, applied to every system.
+    if (index == currentItemIndex) {
+      _setSubfolderViewAll(!configProvider.config.subfolderViewAll);
       return;
     }
     currentItemIndex++;
@@ -675,6 +710,30 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                             .read<SqliteConfigProvider>()
                             .updateUse12HourClock(value);
                       },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Show subfolders, applied to every system. The
+                // per-system toggle in a system's settings dialog stays
+                // available; this stamps them all at once.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    onTap: () => selectItem(index),
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.subfolderViewAll.getString(context),
+                    subtitle: AppLocale.subfolderViewAllSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.subfolderViewAll,
+                      onChanged: _setSubfolderViewAll,
                       activeColor: theme.colorScheme.primary,
                     ),
                   );

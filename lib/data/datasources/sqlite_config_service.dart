@@ -268,6 +268,12 @@ class SqliteConfigService {
                 ) ??
                 0) ==
             1,
+        subfolderViewAll:
+            (int.tryParse(
+                  userConfig?['subfolder_view_all']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -331,6 +337,7 @@ class SqliteConfigService {
         esdeFolderPath: config.esdeFolderPath,
         showAchievementsBadge: config.showAchievementsBadge ? 1 : 0,
         raMatchOnStartup: config.raMatchOnStartup ? 1 : 0,
+        subfolderViewAll: config.subfolderViewAll ? 1 : 0,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

@@ -90,6 +90,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.recursiveScanDisabled: '再帰スキャン無効。{name}をスキャン中...',
   AppLocale.subfolderView: 'サブフォルダを表示',
   AppLocale.subfolderViewSubtitle: 'サブフォルダ内のROMをゲームと混在させず、閲覧可能なフォルダにまとめます',
+  AppLocale.subfolderViewAll: 'すべてのシステムでサブフォルダを表示',
+  AppLocale.subfolderViewAllSubtitle: '「サブフォルダを表示」の設定をすべてのシステムに一括で適用します',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} 個のシステムに個別の「サブフォルダを表示」設定がありました。現在はすべてのシステムがこのスイッチに従います。各システムの設定で個別に変更することもできます。',
   AppLocale.subfolderViewEnabled: 'サブフォルダをフォルダとして表示',
   AppLocale.subfolderViewDisabled: 'サブフォルダをゲームと混在',
   AppLocale.errorScanningSystem: 'システムのスキャン中にエラーが発生しました: {error}',

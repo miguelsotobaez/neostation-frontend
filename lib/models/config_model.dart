@@ -200,6 +200,14 @@ class ConfigModel {
   /// for it.
   final bool raMatchOnStartup;
 
+  /// The remembered Settings > General "Show Subfolders" master choice.
+  ///
+  /// Not what the game list reads — flipping the switch stamps every system's
+  /// own subfolder setting, and the per-system toggle stays free to differ
+  /// afterwards. This is the value the switch shows, and the one a system added
+  /// by a later systems update inherits.
+  final bool subfolderViewAll;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -245,6 +253,7 @@ class ConfigModel {
     this.esdeFolderPath = '',
     this.showAchievementsBadge = false,
     this.raMatchOnStartup = false,
+    this.subfolderViewAll = false,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -451,6 +460,13 @@ class ConfigModel {
               '1' ||
           (json['raMatchOnStartup'] ?? false).toString().toLowerCase() ==
               'true',
+      // Same reasoning: absent => 0 => off, matching the column default.
+      subfolderViewAll:
+          (json['subfolderViewAll'] ?? json['subfolder_view_all'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
+              'true',
     );
   }
 
@@ -506,6 +522,7 @@ class ConfigModel {
       'esdeFolderPath': esdeFolderPath,
       'showAchievementsBadge': showAchievementsBadge,
       'raMatchOnStartup': raMatchOnStartup,
+      'subfolderViewAll': subfolderViewAll,
     };
   }
 
@@ -555,6 +572,7 @@ class ConfigModel {
     String? esdeFolderPath,
     bool? showAchievementsBadge,
     bool? raMatchOnStartup,
+    bool? subfolderViewAll,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -603,6 +621,7 @@ class ConfigModel {
       showAchievementsBadge:
           showAchievementsBadge ?? this.showAchievementsBadge,
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
+      subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
     );
   }
 

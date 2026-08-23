@@ -164,6 +164,22 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists the global "Show Subfolders" choice and applies it to every
+  /// system.
+  ///
+  /// The game list reads the per-system flag, so the stored config value alone
+  /// would change nothing: the stamp is what makes the toggle global. Systems
+  /// keep their own toggle afterwards, and a later flip of this one overwrites
+  /// them again.
+  Future<void> updateSubfolderViewAll(bool value) async {
+    _config = _config.copyWith(subfolderViewAll: value);
+    await SqliteConfigService.saveConfig(_config);
+    await SystemRepository.setSubfolderViewForAll(value);
+    // The in-memory system models still carry the old per-system flag.
+    await refreshDetectedSystems();
+    _notify();
+  }
+
   /// Updates whether hidden files/folders are ignored during ROM scans.
   Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
     _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);

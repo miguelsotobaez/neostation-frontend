@@ -106,6 +106,12 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.subfolderView: 'Afficher les sous-dossiers',
   AppLocale.subfolderViewSubtitle:
       'Regrouper les ROMs des sous-dossiers dans des dossiers navigables au lieu de les mélanger avec les jeux',
+  AppLocale.subfolderViewAll:
+      'Afficher les sous-dossiers dans tous les systèmes',
+  AppLocale.subfolderViewAllSubtitle:
+      'Appliquer d’un coup l’option Afficher les sous-dossiers à tous les systèmes',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} système(s) avaient leur propre réglage Afficher les sous-dossiers. Tous les systèmes suivent désormais cet interrupteur ; vous pouvez toujours modifier chacun d’eux dans ses propres réglages.',
   AppLocale.subfolderViewEnabled: 'Sous-dossiers affichés comme dossiers',
   AppLocale.subfolderViewDisabled: 'Sous-dossiers mélangés aux jeux',
   AppLocale.errorScanningSystem:

@@ -89,6 +89,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.recursiveScanDisabled: '递归扫描已禁用。正在扫描 {name}...',
   AppLocale.subfolderView: '显示子文件夹',
   AppLocale.subfolderViewSubtitle: '将子文件夹中的 ROM 归入可浏览的文件夹，而不是与游戏混在一起',
+  AppLocale.subfolderViewAll: '在所有系统中显示子文件夹',
+  AppLocale.subfolderViewAllSubtitle: '将“显示子文件夹”设置一次性应用到所有系统',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '有 {count} 个系统使用了各自的“显示子文件夹”设置。现在所有系统都跟随此开关；你仍可在各系统的设置中单独更改。',
   AppLocale.subfolderViewEnabled: '子文件夹显示为文件夹',
   AppLocale.subfolderViewDisabled: '子文件夹与游戏混合',
   AppLocale.errorScanningSystem: '扫描系统时出错: {error}',

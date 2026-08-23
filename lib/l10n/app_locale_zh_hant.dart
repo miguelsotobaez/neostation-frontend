@@ -89,6 +89,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.recursiveScanDisabled: '遞迴掃描已停用。正在掃描 {name}...',
   AppLocale.subfolderView: '顯示子資料夾',
   AppLocale.subfolderViewSubtitle: '將子資料夾中的 ROM 歸入可瀏覽的資料夾，而非與遊戲混在一起',
+  AppLocale.subfolderViewAll: '在所有系統中顯示子資料夾',
+  AppLocale.subfolderViewAllSubtitle: '將「顯示子資料夾」設定一次套用到所有系統',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '有 {count} 個系統使用了各自的「顯示子資料夾」設定。現在所有系統都跟隨此開關；你仍可在各系統的設定中單獨變更。',
   AppLocale.subfolderViewEnabled: '子資料夾顯示為資料夾',
   AppLocale.subfolderViewDisabled: '子資料夾與遊戲混合',
   AppLocale.errorScanningSystem: '掃描系統時發生錯誤: {error}',
