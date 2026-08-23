@@ -104,11 +104,13 @@ class RetroAchievementsHashService {
       await Future.delayed(const Duration(milliseconds: 500));
 
       final isolateToken = RootIsolateToken.instance!;
-      final hash = await compute(_generateHashForSystemIsolate, {
-        'romPath': romPathToProcess,
-        'algo': policy.algo.jsonName,
-        'token': isolateToken,
-      });
+      final hash = _replayIsolateLog(
+        await compute(_generateHashForSystemIsolate, {
+          'romPath': romPathToProcess,
+          'algo': policy.algo.jsonName,
+          'token': isolateToken,
+        }),
+      );
 
       if (isArchive) {
         await ArchiveService.cleanupTempFolder(
@@ -231,6 +233,10 @@ class RetroAchievementsHashService {
     int hashed = 0;
     int matched = 0;
     int skipped = 0;
+    // Why each parked ROM was parked. The count alone reads as a stall; the
+    // reasons say whether the gap is the user's library (a missing file, a
+    // container nothing can read) or ours.
+    final skipReasons = <String, int>{};
 
     _log.i('RA re-match (${mode.name}): $total candidate ROMs');
 
@@ -281,10 +287,13 @@ class RetroAchievementsHashService {
           if (hash == null) {
             // Park it with the reason, so the next run does not walk it again
             // and the gap stays visible instead of looking like a stall.
+            final reason =
+                attempt.skipReason ?? RetroAchievementsRepository.raSkipError;
             await RetroAchievementsRepository.markRomRaHashSkipped(
               candidate.romPath,
-              attempt.skipReason ?? RetroAchievementsRepository.raSkipError,
+              reason,
             );
+            skipReasons[reason] = (skipReasons[reason] ?? 0) + 1;
             skipped++;
           } else {
             hashed++;
@@ -309,6 +318,8 @@ class RetroAchievementsHashService {
             candidate.romPath,
             RetroAchievementsRepository.raSkipError,
           );
+          final reason = RetroAchievementsRepository.raSkipError;
+          skipReasons[reason] = (skipReasons[reason] ?? 0) + 1;
         }
         skipped++;
       }
@@ -319,8 +330,9 @@ class RetroAchievementsHashService {
     onProgress?.call(processed, total, '');
     _log.i(
       'RA re-match finished: $processed processed, $hashed hashed, '
-      '$matched matched, $skipped skipped',
+      '$matched matched, $skipped skipped${_reasonSummary(skipReasons)}',
     );
+    await _logLibrarySkips();
 
     return RaRematchResult(
       total: total,
@@ -330,6 +342,31 @@ class RetroAchievementsHashService {
       skipped: skipped,
       cancelled: false,
     );
+  }
+
+  /// Renders skip reasons as ` (disc 12, missing 1)`, or nothing at all when
+  /// none were parked.
+  static String _reasonSummary(Map<String, int> reasons) {
+    if (reasons.isEmpty) return '';
+    final parts = reasons.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return ' (${parts.map((e) => '${e.key} ${e.value}').join(', ')})';
+  }
+
+  /// Logs how much of the library sits parked, across every run so far.
+  ///
+  /// The per-run summary only covers the ROMs this pass walked, and a pass on
+  /// a settled library walks none of the parked ones at all — so on the run
+  /// where a user notices the gap, the per-run line reads as a clean sweep.
+  static Future<void> _logLibrarySkips() async {
+    try {
+      final counts = await RetroAchievementsRepository.getRaHashSkipCounts();
+      if (counts.isEmpty) return;
+      final total = counts.values.fold(0, (sum, count) => sum + count);
+      _log.i('RA re-match: $total ROM(s) parked${_reasonSummary(counts)}');
+    } catch (e) {
+      _log.w('RA re-match: could not read skip counts: $e');
+    }
   }
 
   /// Hashes a single bulk-pass candidate.
@@ -393,11 +430,13 @@ class RetroAchievementsHashService {
     }
 
     try {
-      final hash = await compute(_generateHashForSystemIsolate, {
-        'romPath': romPathToProcess,
-        'algo': candidate.policy.algo.jsonName,
-        'token': RootIsolateToken.instance!,
-      });
+      final hash = _replayIsolateLog(
+        await compute(_generateHashForSystemIsolate, {
+          'romPath': romPathToProcess,
+          'algo': candidate.policy.algo.jsonName,
+          'token': RootIsolateToken.instance!,
+        }),
+      );
       if (hash == null || hash.isEmpty) {
         return (
           hash: null,
@@ -482,7 +521,15 @@ class RetroAchievementsHashService {
   /// Takes the algorithm by name rather than the system folder: the policy is
   /// resolved on the main isolate, so this side has no database to consult and
   /// there is only one place that decides which algorithm a system gets.
-  static Future<String?> _generateHashForSystemIsolate(
+  ///
+  /// Returns the hash under `hash` and everything this isolate logged under
+  /// `log`, for [_replayIsolateLog] to write out. The disc reader explains a
+  /// failure
+  /// entirely in warnings — an unreadable container, a track it cannot use, a
+  /// disc with no executable on it — and this isolate's logger has no file
+  /// output, so without handing them back the only trace a user's `app.log`
+  /// keeps of a failed hash is the skip count at the end of the pass.
+  static Future<Map<String, Object?>> _generateHashForSystemIsolate(
     Map<String, dynamic> params,
   ) async {
     final token = params['token'] as RootIsolateToken?;
@@ -493,6 +540,22 @@ class RetroAchievementsHashService {
     final romPath = params['romPath'].toString();
     final algo = RaHashAlgo.fromJson(params['algo']?.toString());
 
+    _log.startCapture();
+    try {
+      return {
+        'hash': await _hashInIsolate(algo, romPath),
+        'log': _log.takeCapture(),
+      };
+    } finally {
+      // Belt and braces: a throw that escaped _hashInIsolate would otherwise
+      // leave this isolate collecting for good.
+      _log.takeCapture();
+    }
+  }
+
+  /// The hash itself, so [_generateHashForSystemIsolate] can keep to
+  /// collecting the log around it.
+  static Future<String?> _hashInIsolate(RaHashAlgo algo, String romPath) async {
     try {
       // A disc's hash covers the boot executable inside the image, so it needs
       // the disc reader rather than any transformation of the file's bytes.
@@ -517,6 +580,14 @@ class RetroAchievementsHashService {
       _log.e('Error generating ${algo.jsonName} hash for $romPath: $e');
       return null;
     }
+  }
+
+  /// Writes out what the hashing isolate logged and returns the hash it
+  /// produced.
+  static String? _replayIsolateLog(Map<String, Object?> result) {
+    final lines = result['log'];
+    if (lines is List) _log.replayCaptured(lines.cast<String>());
+    return result['hash'] as String?;
   }
 
   /// Searches for the RetroAchievements Game ID in the local database using the
