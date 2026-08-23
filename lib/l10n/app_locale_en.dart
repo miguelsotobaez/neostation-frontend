@@ -66,8 +66,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.recentCardSize: 'Recent Card Size',
   AppLocale.recentCardSizeSubtitle:
       'Size of the recently played card in the systems grid',
-  AppLocale.recentCardSizeDefault: 'Default (3x2)',
-  AppLocale.recentCardSize2x1: 'Compact (2x1)',
+  AppLocale.recentCardSizeDefault: 'Default',
+  AppLocale.recentCardSize2x1: 'Compact',
   AppLocale.themesSubtitle: 'Personalize the appearance of your NeoStation',
   AppLocale.systemTheme: 'System',
   AppLocale.importTheme: 'Import Theme',

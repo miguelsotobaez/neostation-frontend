@@ -67,8 +67,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.recentCardSize: 'Размер карточки',
   AppLocale.recentCardSizeSubtitle:
       'Размер карточки недавних игр в сетке систем',
-  AppLocale.recentCardSizeDefault: 'По умолчанию (3x2)',
-  AppLocale.recentCardSize2x1: 'Компактно (2x1)',
+  AppLocale.recentCardSizeDefault: 'По умолчанию',
+  AppLocale.recentCardSize2x1: 'Компактно',
   AppLocale.themesSubtitle: 'Персонализируйте внешний вид вашей NeoStation',
   AppLocale.systemTheme: 'Системная',
   AppLocale.importTheme: 'Импорт темы',
