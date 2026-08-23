@@ -129,6 +129,17 @@
       }
     },
     {
+      "name": "RetroArch32 Geolith",
+      "unique_id": "neogeo.ra32.geolith",
+      "description": "Supported extensions: neo.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"geolith\""
+         }
+      }
+    },
+    {
       "name": "RetroArch64 Geolith",
       "unique_id": "neogeo.ra64.geolith",
       "description": "Supported extensions: neo.",
