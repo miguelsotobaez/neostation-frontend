@@ -686,6 +686,11 @@ mixin AppLocale {
   static const String totalRA = 'total_ra';
   static const String awardedOn = 'awarded_on';
   static const String successConnectedRA = 'success_connected_ra';
+
+  /// Shown when a sign-in worked but the credential could not be stored,
+  /// which is what an unusable Linux keyring looks like to the user.
+  static const String credentialStorageUnavailable =
+      'credential_storage_unavailable';
   static const String connect = 'connect';
   static const String enterUsername = 'enter_username';
   static const String pleaseCompleteAllFields = 'please_complete_all_fields';

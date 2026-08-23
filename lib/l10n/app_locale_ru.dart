@@ -699,6 +699,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.totalRA: 'ВСЕГО',
   AppLocale.awardedOn: 'Награжден ',
   AppLocale.successConnectedRA: 'Успешное подключение к RetroAchievements!',
+  AppLocale.credentialStorageUnavailable:
+      'Вход выполнен, но это устройство не смогло сохранить данные для входа. В следующий раз потребуется войти снова.',
   AppLocale.connect: 'Подключить',
   AppLocale.enterUsername: 'Введите имя пользователя',
   AppLocale.pleaseCompleteAllFields: 'Пожалуйста, заполните все поля',

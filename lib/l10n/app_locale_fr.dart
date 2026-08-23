@@ -718,6 +718,8 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.totalRA: 'Total',
   AppLocale.awardedOn: 'Décerné le',
   AppLocale.successConnectedRA: 'Connecté à RetroAchievements avec succès !',
+  AppLocale.credentialStorageUnavailable:
+      'Connexion réussie, mais cet appareil n\'a pas pu enregistrer vos identifiants. Vous devrez vous reconnecter la prochaine fois.',
   AppLocale.connect: 'Connecter',
   AppLocale.enterUsername: 'Entrez votre utilisateur',
   AppLocale.pleaseCompleteAllFields: 'Veuillez remplir tous les champs',

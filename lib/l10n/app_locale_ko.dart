@@ -631,6 +631,8 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.totalRA: '합계',
   AppLocale.awardedOn: '획득일: ',
   AppLocale.successConnectedRA: 'RetroAchievements에 성공적으로 연결되었습니다!',
+  AppLocale.credentialStorageUnavailable:
+      '로그인했지만 이 기기에 로그인 정보를 저장하지 못했습니다. 다음에 다시 로그인해야 합니다.',
   AppLocale.connect: '연결',
   AppLocale.enterUsername: '사용자 이름을 입력하세요',
   AppLocale.pleaseCompleteAllFields: '모든 항목을 작성해 주세요',

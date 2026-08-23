@@ -708,6 +708,8 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.totalRA: 'Totale',
   AppLocale.awardedOn: 'Premiato il',
   AppLocale.successConnectedRA: 'Connesso a RetroAchievements con successo !',
+  AppLocale.credentialStorageUnavailable:
+      'Accesso eseguito, ma questo dispositivo non è riuscito a salvare le credenziali. Dovrai accedere di nuovo la prossima volta.',
   AppLocale.connect: 'Connetti',
   AppLocale.enterUsername: 'Inserisci il tuo utente',
   AppLocale.pleaseCompleteAllFields: 'Per favore, completa tutti i campi',

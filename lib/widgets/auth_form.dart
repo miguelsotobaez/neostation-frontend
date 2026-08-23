@@ -262,7 +262,12 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
       }
 
       setState(() {
-        _message = result['message'];
+        // A login the device could not store still works until the app closes.
+        // Say that instead of the backend's plain "Login successful", which the
+        // next launch would contradict.
+        _message = result['tokenPersisted'] == false
+            ? AppLocale.credentialStorageUnavailable.getString(context)
+            : result['message'];
       });
 
       // Handle email not verified case (can come as error from backend)

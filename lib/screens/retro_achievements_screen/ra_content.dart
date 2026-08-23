@@ -170,10 +170,16 @@ class _RAContentState extends State<RAContent>
     );
     if (!mounted) return;
     if (success) {
+      // A login that could not be stored still works for this session, so say
+      // so rather than reporting a plain success the next launch contradicts.
       AppNotification.showNotification(
         context,
-        AppLocale.successConnectedRA.getString(context),
-        type: NotificationType.success,
+        raProvider.credentialsPersisted
+            ? AppLocale.successConnectedRA.getString(context)
+            : AppLocale.credentialStorageUnavailable.getString(context),
+        type: raProvider.credentialsPersisted
+            ? NotificationType.success
+            : NotificationType.info,
       );
     } else if (raProvider.error != null) {
       AppNotification.showNotification(

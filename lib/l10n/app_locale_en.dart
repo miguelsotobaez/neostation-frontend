@@ -688,6 +688,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.totalRA: 'TOTAL',
   AppLocale.awardedOn: 'Awarded on ',
   AppLocale.successConnectedRA: 'Successfully connected to RetroAchievements!',
+  AppLocale.credentialStorageUnavailable:
+      'Signed in, but this device could not save your login. You will need to sign in again next time.',
   AppLocale.connect: 'Connect',
   AppLocale.enterUsername: 'Enter your username',
   AppLocale.pleaseCompleteAllFields: 'Please complete all fields',

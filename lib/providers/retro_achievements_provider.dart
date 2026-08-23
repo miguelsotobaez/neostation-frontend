@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../models/retro_achievements_user.dart';
 import '../models/retro_achievements_summary.dart';
@@ -52,6 +53,10 @@ class RetroAchievementsProvider extends ChangeNotifier {
 
   /// Current RetroAchievements API key used for requests.
   String _apiKey = '';
+
+  /// Whether the last successful [connect] managed to store the API key.
+  /// False means this session is signed in but the next launch will not be.
+  bool _credentialsPersisted = true;
 
   static final _log = LoggerService.instance;
 
@@ -208,6 +213,9 @@ class RetroAchievementsProvider extends ChangeNotifier {
   bool get hasResolvedApiKey =>
       RetroAchievementsService.resolveApiKey(_apiKey).trim().isNotEmpty;
 
+  /// False when the credentials for the current session could not be saved.
+  bool get credentialsPersisted => _credentialsPersisted;
+
   /// Whether any dashboard section is currently in flight.
   bool get isDashboardLoading =>
       _recentUnlocksLoading ||
@@ -258,7 +266,7 @@ class RetroAchievementsProvider extends ChangeNotifier {
         _isConnected = true;
 
         await _saveRAUserToConfig(_username);
-        await _saveRAApiKeyToConfig(_apiKey);
+        _credentialsPersisted = await _saveRAApiKeyToConfig(_apiKey);
         await loadLocalStats();
         unawaited(loadUserSummary());
 
@@ -714,11 +722,17 @@ class RetroAchievementsProvider extends ChangeNotifier {
   }
 
   /// Persists the RetroAchievements API key to secure storage.
-  Future<void> _saveRAApiKeyToConfig(String apiKey) async {
+  ///
+  /// Returns false when the key only lives in memory, which is what happens on
+  /// a Linux install with no working keyring: the session works, but the next
+  /// launch starts signed out unless the user is told.
+  Future<bool> _saveRAApiKeyToConfig(String apiKey) async {
     try {
-      await RetroAchievementsRepository.saveRAApiKey(apiKey);
+      final outcome = await RetroAchievementsRepository.saveRAApiKey(apiKey);
+      return outcome != CredentialWriteOutcome.sessionOnly;
     } catch (e) {
       _log.e('Error saving RA API key: $e');
+      return false;
     }
   }
 

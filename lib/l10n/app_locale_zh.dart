@@ -615,6 +615,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.totalRA: '总计',
   AppLocale.awardedOn: '授予日期 ',
   AppLocale.successConnectedRA: '成功连接到 RetroAchievements！',
+  AppLocale.credentialStorageUnavailable: '已登录，但此设备无法保存登录信息。下次启动时需要重新登录。',
   AppLocale.connect: '连接',
   AppLocale.enterUsername: '输入用户名',
   AppLocale.pleaseCompleteAllFields: '请填写所有字段',

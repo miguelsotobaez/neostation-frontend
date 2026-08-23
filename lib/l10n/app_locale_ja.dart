@@ -625,6 +625,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.totalRA: '合計',
   AppLocale.awardedOn: '受賞日',
   AppLocale.successConnectedRA: 'RetroAchievementsに正常に接続されました！',
+  AppLocale.credentialStorageUnavailable:
+      'ログインしましたが、このデバイスにログイン情報を保存できませんでした。次回は再度ログインが必要です。',
   AppLocale.connect: '接続',
   AppLocale.enterUsername: 'ユーザー名を入力',
   AppLocale.pleaseCompleteAllFields: 'すべての項目を入力してください',

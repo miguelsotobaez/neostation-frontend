@@ -691,6 +691,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.totalRA: 'Total',
   AppLocale.awardedOn: 'Diberikan pada',
   AppLocale.successConnectedRA: 'Berhasil terhubung ke RetroAchievements!',
+  AppLocale.credentialStorageUnavailable:
+      'Berhasil masuk, tetapi perangkat ini tidak dapat menyimpan info masuk Anda. Anda harus masuk lagi lain kali.',
   AppLocale.connect: 'Hubungkan',
   AppLocale.enterUsername: 'Masukkan nama pengguna Anda',
   AppLocale.pleaseCompleteAllFields: 'Harap lengkapi semua bidang',

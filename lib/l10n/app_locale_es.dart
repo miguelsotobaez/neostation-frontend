@@ -710,6 +710,8 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.totalRA: 'TOTAL',
   AppLocale.awardedOn: 'Premiado el ',
   AppLocale.successConnectedRA: '¡Conectado con éxito a RetroAchievements!',
+  AppLocale.credentialStorageUnavailable:
+      'Sesión iniciada, pero este dispositivo no pudo guardar tus credenciales. Tendrás que iniciar sesión de nuevo la próxima vez.',
   AppLocale.connect: 'Conectar',
   AppLocale.enterUsername: 'Introduce tu usuario',
   AppLocale.pleaseCompleteAllFields: 'Por favor, completa todos los campos',
