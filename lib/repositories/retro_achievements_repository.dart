@@ -1,10 +1,10 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../models/database_game_model.dart';
 import '../models/ra_game_list_entry.dart';
 import '../models/ra_hash_policy.dart';
 import '../models/ra_match_candidate.dart';
 import '../models/retro_achievements_dashboard_models.dart';
+import '../services/credential_store.dart';
 import '../services/logger_service.dart';
 
 /// Repository for RetroAchievements data access.
@@ -12,17 +12,6 @@ class RetroAchievementsRepository {
   static final _log = LoggerService.instance;
 
   static const String _raApiKeyStorageKey = 'ra_api_key';
-  // Do not let a transient Android Keystore error erase credentials. This can
-  // happen during cold boot on some launchers, and the default resetOnError
-  // behaviour turns a temporary read failure into a permanent logout.
-  static const FlutterSecureStorage _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(resetOnError: false, migrateWithBackup: true),
-    // NeoStation's macOS builds are also distributed outside the App Store.
-    // The classic Keychain remains encrypted by macOS without requiring the
-    // restricted Keychain Sharing entitlement used by the data-protection
-    // Keychain, so ad-hoc-signed builds can persist the API key securely.
-    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-  );
 
   /// Returns local ROM counts: total and RA-compatible (has ra_hash).
   static Future<({int totalRoms, int raCompatibleRoms})>
@@ -69,19 +58,20 @@ class RetroAchievementsRepository {
   static Future<void> saveRAUser(String username) =>
       SqliteService.updateRAUser(username);
 
-  /// Persists the RA API key securely.
-  static Future<void> saveRAApiKey(String apiKey) async {
-    await _storage.write(key: _raApiKeyStorageKey, value: apiKey);
+  /// Persists the RA API key securely, reporting where it ended up so the
+  /// caller can tell the user when it will not survive a restart.
+  static Future<CredentialWriteOutcome> saveRAApiKey(String apiKey) {
+    return CredentialStore.write(_raApiKeyStorageKey, apiKey);
   }
 
   /// Returns the persisted RA API key, or null if not set.
-  static Future<String?> getRAApiKey() async {
-    return _storage.read(key: _raApiKeyStorageKey);
+  static Future<String?> getRAApiKey() {
+    return CredentialStore.read(_raApiKeyStorageKey);
   }
 
   /// Clears the stored RA API key.
-  static Future<void> clearRAApiKey() async {
-    await _storage.delete(key: _raApiKeyStorageKey);
+  static Future<void> clearRAApiKey() {
+    return CredentialStore.delete(_raApiKeyStorageKey);
   }
 
   /// Clears the stored RA username.
