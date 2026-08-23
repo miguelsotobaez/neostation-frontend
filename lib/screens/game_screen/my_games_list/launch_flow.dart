@@ -128,17 +128,9 @@ extension _LaunchFlow on _SystemGamesListState {
       _refreshAchievementsCallback?.call();
     });
 
-    // Trigger sync after returning from game so local save gets uploaded.
-    if (_selectedGame != null && mounted) {
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-      try {
-        final syncProvider = context.read<SyncManager>().active!;
-        await syncProvider.detectGameSaveFiles(_selectedGame!);
-      } catch (e) {
-        _SystemGamesListState._log.e('Post-game save sync failed: $e');
-      }
-    }
+    // The post-game save upload used to live here, which meant it only ran for
+    // games launched from this list. GameSessionManager.endGameSession() now
+    // owns it, so every launcher gets it.
   }
 
   /// Orchestrates the complex sequence for launching a game through an external emulator.

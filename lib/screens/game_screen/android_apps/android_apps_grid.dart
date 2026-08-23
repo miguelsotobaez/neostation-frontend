@@ -31,6 +31,16 @@ class AndroidAppsGrid extends StatefulWidget {
 class _AndroidAppsGridState extends State<AndroidAppsGrid> {
   static final _log = LoggerService.instance;
 
+  /// Identifier this screen registers with [GamepadNavigationManager].
+  ///
+  /// Per-instance rather than a shared constant. [GamepadNavigationManager.popLayer]
+  /// resolves an id to the *first* matching entry, so if two copies of this
+  /// route ever coexisted the top one's dispose would unregister the bottom
+  /// one and strand its own entry in the stack — a dead layer that swallows
+  /// input. A unique id keeps pop matched to the instance that pushed it.
+  static int _navLayerSeq = 0;
+  late final String _navLayerId = 'android_apps_grid#${++_navLayerSeq}';
+
   List<GameModel> _apps = [];
   bool _isLoading = true;
   int _selectedIndex = 0;
@@ -44,6 +54,12 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
   bool _canPop = false;
   bool _isNavigatingBack = false;
 
+  /// Guards against a second launch being dispatched for the same press, or a
+  /// bounced press landing while the previous handoff is still in flight.
+  bool _isLaunching = false;
+  DateTime? _lastLaunchTime;
+  static const Duration _launchCooldown = Duration(milliseconds: 1500);
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +69,7 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
 
   @override
   void dispose() {
+    GamepadNavigationManager.popLayer(_navLayerId);
     _gamepadNav.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -71,7 +88,21 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gamepadNav.initialize();
-      _gamepadNav.activate();
+
+      // Registered, not just locally activated. Launching an app backgrounds
+      // NeoStation, and the resume path calls
+      // [GamepadNavigationManager.reactivate], which wakes the stack's top
+      // layer. While this screen owned no layer that was the systems
+      // grid/carousel still mounted underneath it: from the first return
+      // onwards two navigators handled the same A press — this grid launched
+      // the focused app while the carousel re-entered the Android system and
+      // stacked a second copy of this screen, so each further press launched
+      // one more app the user never selected.
+      GamepadNavigationManager.pushLayer(
+        _navLayerId,
+        onActivate: () => _gamepadNav.activate(),
+        onDeactivate: () => _gamepadNav.deactivate(),
+      );
     });
   }
 
@@ -185,15 +216,30 @@ class _AndroidAppsGridState extends State<AndroidAppsGrid> {
   }
 
   /// Delegates execution to the Android platform service for external app launching.
+  ///
+  /// A launch hands the foreground to another app, so a second dispatch that
+  /// arrives before (or shortly after) the handoff is always a duplicate, never
+  /// a deliberate second launch — hold it off rather than firing two intents.
   Future<void> _launchSelectedApp() async {
-    if (_apps.isEmpty) return;
+    if (_apps.isEmpty || _isLaunching) return;
+    if (_lastLaunchTime != null &&
+        DateTime.now().difference(_lastLaunchTime!) < _launchCooldown) {
+      return;
+    }
+
     final app = _apps[_selectedIndex];
     final packageName = app.romPath;
+    if (packageName == null) return;
 
-    if (packageName != null) {
+    _isLaunching = true;
+    _lastLaunchTime = DateTime.now();
+    try {
       SfxService().playEnterSound();
       _log.i('Launching Android app: $packageName');
       await AndroidService.launchPackage(packageName);
+    } finally {
+      _isLaunching = false;
+      _lastLaunchTime = DateTime.now();
     }
   }
 

@@ -6,12 +6,14 @@ import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:neostation/repositories/retro_achievements_repository.dart';
 import 'package:neostation/services/retro_achievements_helper.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/themes/corner_radii.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import '../tabs/game_details_achievements_tab.dart';
+import 'ra_match_picker_dialog.dart';
 
 /// A full-screen dialog that displays RetroAchievements progress for a single game.
 ///
@@ -37,12 +39,48 @@ class _GameAchievementsDialogState extends State<GameAchievementsDialog> {
   GameInfoAndUserProgress? _gameInfo;
   bool _isLoading = false;
   GamepadNavigation? _gamepadNav;
+  bool _isManualMatch = false;
 
   @override
   void initState() {
     super.initState();
     _initializeGamepad();
     _loadAchievements();
+    _loadMatchSource();
+  }
+
+  /// Whether the shown match was chosen by hand, which decides if the picker
+  /// offers a way back to automatic matching.
+  Future<void> _loadMatchSource() async {
+    final romPath = widget.game.romPath;
+    if (romPath == null || romPath.isEmpty) return;
+    final source = await RetroAchievementsRepository.getRomRaMatchSource(
+      romPath,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isManualMatch = source == RetroAchievementsRepository.raMatchManual;
+    });
+  }
+
+  /// Opens the manual match picker, and reloads the achievements when the user
+  /// picked a different game so the dialog reflects the new set immediately.
+  Future<void> _openMatchPicker() async {
+    SfxService().playNavSound();
+    final changed = await RaMatchPickerDialog.show(
+      context,
+      game: widget.game,
+      system: widget.system,
+      currentGameId: _gameInfo?.id,
+      isManualMatch: _isManualMatch,
+    );
+    if (!changed || !mounted) return;
+
+    // The match moved, so anything cached for the old game id is now wrong.
+    RetroAchievementsHelper.evictBadgeCache(_gameInfo);
+    widget.retroAchievementsProvider.gameInfoCache.clear();
+    await _loadMatchSource();
+    if (mounted) await _loadAchievements(forceRefresh: true);
   }
 
   @override
@@ -157,6 +195,7 @@ class _GameAchievementsDialogState extends State<GameAchievementsDialog> {
                   backgroundColor: theme.colorScheme.primary,
                   foregroundColor: theme.colorScheme.onPrimary,
                 ),
+                onFixMatch: _openMatchPicker,
                 onRefresh: () {
                   SfxService().playNavSound();
                   _loadAchievements(forceRefresh: true);

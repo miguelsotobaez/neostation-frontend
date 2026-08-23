@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path;
 import 'config_service.dart';
 import 'logger_service.dart';
+import 'retroachievements_hash_service.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../utils/bounded_concurrency.dart';
 
@@ -89,6 +90,7 @@ class SystemsUpdateService {
           await entity.delete();
         }
       }
+      RetroAchievementsHashService.clearPolicyCache();
       _log.i('SystemsUpdateService: cleared systems cache');
     } catch (e) {
       _log.w('SystemsUpdateService: failed to clear systems cache: $e');
@@ -163,6 +165,26 @@ class SystemsUpdateService {
       }
     } catch (e) {
       _log.w('SystemsUpdateService: _syncBundledVersion error: $e');
+    }
+  }
+
+  /// Whether the cached system definitions are from a *newer* generation than
+  /// the ones bundled with this build.
+  ///
+  /// False on a tie, which is the steady state: after any systems update the
+  /// cached version equals the version the next app release bundles, because
+  /// the remote manifest is the bundled one. Callers use it to decide which
+  /// copy of a field to believe when both exist.
+  static Future<bool> cacheIsNewerThanBundle() async {
+    try {
+      final bundledVersion = await _readBundledManifestVersion();
+      final cachedVersion = await SqliteService.getSystemsVersion();
+      if (bundledVersion.isEmpty || cachedVersion.isEmpty) return false;
+      if (cachedVersion == bundledVersion) return false;
+      return _meetsMinimumVersion(cachedVersion, bundledVersion);
+    } catch (e) {
+      _log.w('SystemsUpdateService: cacheIsNewerThanBundle error: $e');
+      return false;
     }
   }
 
@@ -327,6 +349,8 @@ class SystemsUpdateService {
         );
       } else {
         await SqliteService.updateSystemsVersion(remoteVersion);
+        // The downloaded definitions may reassign a system's RA hashing policy.
+        RetroAchievementsHashService.clearPolicyCache();
         _log.i(
           'SystemsUpdateService: updated $downloaded files to v$remoteVersion',
         );

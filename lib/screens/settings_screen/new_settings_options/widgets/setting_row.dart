@@ -32,6 +32,9 @@ class SettingRow extends StatelessWidget {
   /// `true`; a small number of legacy rows lay out without it.
   final bool expandTitle;
 
+  /// Touch handler for the entire row.
+  final VoidCallback? onTap;
+
   const SettingRow({
     super.key,
     required this.title,
@@ -40,6 +43,7 @@ class SettingRow extends StatelessWidget {
     required this.trailing,
     required this.focused,
     this.expandTitle = true,
+    this.onTap,
   });
 
   @override
@@ -74,7 +78,6 @@ class SettingRow extends StatelessWidget {
     );
 
     return Container(
-      padding: EdgeInsets.only(left: 12.r, right: 12.r, top: 6.r, bottom: 6.r),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8.r),
@@ -83,13 +86,33 @@ class SettingRow extends StatelessWidget {
           width: 2,
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          expandTitle ? Expanded(child: titleColumn) : titleColumn,
-          SizedBox(width: 12.r),
-          trailing,
-        ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8.r),
+          canRequestFocus: false,
+          focusColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 12.r,
+              right: 12.r,
+              top: 6.r,
+              bottom: 6.r,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                expandTitle ? Expanded(child: titleColumn) : titleColumn,
+                SizedBox(width: 12.r),
+                trailing,
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

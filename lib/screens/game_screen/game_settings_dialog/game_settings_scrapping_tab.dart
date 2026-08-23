@@ -325,12 +325,20 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       : widget.game.getImagePath(_folder, type, widget.fileProvider);
 
   Future<void> _replaceImage(String type) async {
-    final result = await FilePicker.pickFiles(type: FileType.image);
-    final srcPath = result?.files.single.path;
+    final result = await FilePicker.pickFile(type: FileType.image);
+    final srcPath = result?.path;
     if (srcPath == null || !mounted) return;
 
     try {
-      final targetPath = _pathForImageType(type);
+      // Write into NeoStation's own media folder, never over the path the
+      // thumbnail happens to be read from: for an ES-DE imported library that
+      // path is the user's `downloaded_media` file (e.g. a miximage), which is
+      // read-only to us. The new file shadows it everywhere from now on.
+      final targetPath = widget.game.getWritableImagePath(
+        _folder,
+        type,
+        widget.fileProvider,
+      );
       await File(targetPath).parent.create(recursive: true);
       await File(srcPath).copy(targetPath);
       await evictScrapedArtwork([targetPath]);

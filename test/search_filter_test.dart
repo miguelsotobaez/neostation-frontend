@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:neostation/models/database_game_model.dart';
 import 'package:neostation/screens/search_screen/search_filter.dart';
+import 'package:neostation/utils/ra_coverage.dart';
 
 /// Builds a minimal [DatabaseGameModel] for filter tests; only the fields the
 /// search logic reads need values.
@@ -13,6 +14,9 @@ DatabaseGameModel game({
   String? genre,
   String? year,
   double? rating,
+  String? systemRaId,
+  String? raHash,
+  int? idRa,
 }) {
   return DatabaseGameModel(
     filename: filename,
@@ -23,6 +27,9 @@ DatabaseGameModel game({
     genre: genre,
     year: year,
     rating: rating,
+    systemRaId: systemRaId,
+    raHash: raHash,
+    idRa: idRa,
   );
 }
 
@@ -302,6 +309,298 @@ void main() {
     test('treats an unknown current value as Any', () {
       // indexOf returns -1, so currentIdx is 0 (the Any slot).
       expect(cycleFilterValue(options, 'X', 1), 'A');
+    });
+  });
+
+  group('SearchCriteria source partitioning', () {
+    test('a null source includes both libraries', () {
+      const c = SearchCriteria();
+      expect(c.includesLocal, isTrue);
+      expect(c.includesRomm, isTrue);
+    });
+
+    test('local excludes RomM and vice versa', () {
+      expect(const SearchCriteria(source: kSourceLocal).includesRomm, isFalse);
+      expect(const SearchCriteria(source: kSourceLocal).includesLocal, isTrue);
+      expect(const SearchCriteria(source: kSourceRomm).includesLocal, isFalse);
+      expect(const SearchCriteria(source: kSourceRomm).includesRomm, isTrue);
+    });
+
+    test('without() clears the source like any other dimension', () {
+      const c = SearchCriteria(source: kSourceRomm, genre: 'RPG');
+      expect(c.without(kFilterSource).source, isNull);
+      expect(c.without(kFilterSource).genre, 'RPG');
+      expect(c.without(kFilterGenre).source, kSourceRomm);
+    });
+
+    test('a rating filter makes the selection unfilterable remotely', () {
+      expect(const SearchCriteria().rommFilterable, isTrue);
+      expect(const SearchCriteria(genre: 'RPG').rommFilterable, isTrue);
+      expect(const SearchCriteria(rating: 8).rommFilterable, isFalse);
+    });
+  });
+
+  group('matchesRemoteCriteria', () {
+    const rom = RemoteGameFields(
+      name: 'Chrono Trigger',
+      platform: 'Super Nintendo',
+      genres: ['Role-playing (RPG)', 'Adventure'],
+      companies: ['Square', 'Nintendo'],
+      year: '1995',
+    );
+
+    test('an empty selection matches everything', () {
+      expect(matchesRemoteCriteria(rom, const SearchCriteria()), isTrue);
+    });
+
+    test('the query matches the name case-insensitively as a substring', () {
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(query: 'CHRONO')),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(query: 'trigger')),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(query: 'zelda')),
+        isFalse,
+      );
+    });
+
+    test('genre matches any of the ROM\'s genres, not just the first', () {
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(genre: 'Adventure')),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(genre: 'Puzzle')),
+        isFalse,
+      );
+    });
+
+    test('developer matches any credited company', () {
+      // RomM keeps one flat company list rather than splitting dev/publisher.
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(developer: 'Nintendo')),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(developer: 'Konami')),
+        isFalse,
+      );
+    });
+
+    test('platform matches the resolved local system name, not a slug', () {
+      expect(
+        matchesRemoteCriteria(
+          rom,
+          const SearchCriteria(platform: 'Super Nintendo'),
+        ),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(platform: 'snes')),
+        isFalse,
+      );
+    });
+
+    test('an unresolved platform never matches a platform filter', () {
+      const unresolved = RemoteGameFields(name: 'Chrono Trigger');
+      expect(
+        matchesRemoteCriteria(
+          unresolved,
+          const SearchCriteria(platform: 'Super Nintendo'),
+        ),
+        isFalse,
+      );
+      expect(matchesRemoteCriteria(unresolved, const SearchCriteria()), isTrue);
+    });
+
+    test('year matches exactly', () {
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(year: '1995')),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(year: '1996')),
+        isFalse,
+      );
+    });
+
+    test('every active dimension must match', () {
+      expect(
+        matchesRemoteCriteria(
+          rom,
+          const SearchCriteria(genre: 'Adventure', year: '1995'),
+        ),
+        isTrue,
+      );
+      expect(
+        matchesRemoteCriteria(
+          rom,
+          const SearchCriteria(genre: 'Adventure', year: '1996'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('rating is not evaluated here — it is gated by rommFilterable', () {
+      // The screen hides the section instead; the matcher must not silently
+      // pass or fail rows on a dimension RomM has no equivalent for.
+      expect(
+        matchesRemoteCriteria(rom, const SearchCriteria(rating: 9)),
+        isTrue,
+      );
+    });
+  });
+
+  group('SearchCriteria.remoteClientSide', () {
+    test('keeps only year — the rest go to RomM as query parameters', () {
+      const c = SearchCriteria(
+        query: 'mario',
+        platform: 'Super Nintendo',
+        developer: 'Nintendo',
+        genre: 'Platform',
+        year: '1990',
+      );
+      final remainder = c.remoteClientSide;
+      expect(remainder.year, '1990');
+      expect(remainder.platform, isNull);
+      expect(remainder.developer, isNull);
+      expect(remainder.genre, isNull);
+      // The server already applied search_term; re-applying it locally would
+      // drop rows RomM matched more loosely than a substring test.
+      expect(remainder.query, isEmpty);
+    });
+
+    test('reports whether anything is left to filter client-side', () {
+      expect(const SearchCriteria().hasClientSideRemoteFilter, isFalse);
+      expect(
+        const SearchCriteria(genre: 'Platform').hasClientSideRemoteFilter,
+        isFalse,
+      );
+      expect(
+        const SearchCriteria(year: '1990').hasClientSideRemoteFilter,
+        isTrue,
+      );
+    });
+
+    test('the remainder matches remote rows on year alone', () {
+      const rom = RemoteGameFields(name: 'Super Mario World', year: '1990');
+      const c = SearchCriteria(genre: 'Anything At All', year: '1990');
+      expect(matchesRemoteCriteria(rom, c.remoteClientSide), isTrue);
+      expect(
+        matchesRemoteCriteria(
+          rom,
+          const SearchCriteria(year: '1991').remoteClientSide,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('achievements filter', () {
+    // One game per coverage bucket, plus a game on a system RetroAchievements
+    // does not cover at all.
+    final matched = game(
+      realName: 'Matched',
+      systemRaId: '7',
+      raHash: 'h1',
+      idRa: 42,
+    );
+    final noSet = game(realName: 'No set', systemRaId: '7', raHash: 'h2');
+    final notChecked = game(realName: 'Not checked', systemRaId: '7');
+    final disc = game(realName: 'Disc', filename: 'disc.chd', systemRaId: '12');
+    final unsupported = game(realName: 'Unsupported');
+    final all = [matched, noSet, notChecked, disc, unsupported];
+
+    test('buckets each game by what is actually known about it', () {
+      expect(searchAchievementsBucket(matched), RaCoverage.matched);
+      expect(searchAchievementsBucket(noSet), RaCoverage.noSet);
+      expect(searchAchievementsBucket(notChecked), RaCoverage.notChecked);
+      expect(searchAchievementsBucket(disc), RaCoverage.pendingDiscSupport);
+    });
+
+    test('a game on an uncovered system is outside the dimension', () {
+      expect(searchAchievementsBucket(unsupported), isNull);
+    });
+
+    test('filtering to matched returns only the matched game', () {
+      final results = filterAndSortGames(
+        all,
+        const SearchCriteria(achievements: 'matched'),
+      );
+      expect(results.map((g) => g.realName), ['Matched']);
+    });
+
+    test('"no set" does not sweep up unhashed or disc ROMs', () {
+      final results = filterAndSortGames(
+        all,
+        const SearchCriteria(achievements: 'noSet'),
+      );
+      expect(results.map((g) => g.realName), ['No set']);
+    });
+
+    test('games on uncovered systems match no bucket at all', () {
+      for (final bucket in kFilterableRaCoverage) {
+        final results = filterAndSortGames([
+          unsupported,
+        ], SearchCriteria(achievements: bucket.name));
+        expect(results, isEmpty, reason: bucket.name);
+      }
+    });
+
+    test('the facet offers the buckets present, matched first', () {
+      final facets = computeFacets(all, const SearchCriteria());
+      expect(facets.achievements, [
+        'matched',
+        'noSet',
+        'notChecked',
+        'pendingDiscSupport',
+      ]);
+      expect(facets.optionsFor(kFilterAchievements), facets.achievements);
+    });
+
+    test('a library with nothing to say offers no options', () {
+      expect(
+        computeFacets([unsupported], const SearchCriteria()).achievements,
+        isEmpty,
+      );
+    });
+
+    test('a fully hashed library stops offering "not checked"', () {
+      final facets = computeFacets([matched, noSet], const SearchCriteria());
+      expect(facets.achievements, ['matched', 'noSet']);
+    });
+
+    test('the active value survives a query that strands it', () {
+      // The chip has to stay consistent with its own selection so the user can
+      // cycle back off it; see _facet's equivalent for string dimensions.
+      final facets = computeFacets([
+        matched,
+      ], const SearchCriteria(achievements: 'pendingDiscSupport'));
+      expect(facets.achievements, contains('pendingDiscSupport'));
+    });
+
+    test('an active bucket does not narrow its own facet', () {
+      final facets = computeFacets(
+        all,
+        const SearchCriteria(achievements: 'matched'),
+      );
+      expect(facets.achievements, hasLength(4));
+    });
+
+    test('the dimension cannot be evaluated against RomM results', () {
+      expect(const SearchCriteria().rommFilterable, isTrue);
+      expect(
+        const SearchCriteria(achievements: 'matched').rommFilterable,
+        isFalse,
+      );
+    });
+
+    test('clearing the dimension restores every game', () {
+      expect(filterAndSortGames(all, const SearchCriteria()), hasLength(5));
     });
   });
 }

@@ -4,7 +4,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
+import '../models/rom_fingerprint.dart';
 import '../repositories/scraper_repository.dart';
+import 'retroachievements_hash_service.dart';
+import 'rom_fingerprint_service.dart';
 import 'screenscraper/region_config.dart';
 import 'screenscraper/rom_hasher.dart';
 import 'screenscraper/media_resolver.dart';
@@ -20,7 +23,7 @@ import '../widgets/scraping_summary_dialog.dart';
 ///
 /// Features:
 /// - Multi-threaded scraping with configurable concurrency.
-/// - Support for MD5-based identification.
+/// - Hash-first identification (crc32/md5/size), falling back to the filename.
 /// - Local caching of metadata and media (images, videos, wheels).
 /// - Automatic system mapping between NeoStation and ScreenScraper IDs.
 /// - Daily request quota management and credentials verification.
@@ -306,6 +309,84 @@ class ScreenScraperService {
     }
   }
 
+  /// Returns the cached dump identity for [romPath], computing and caching it
+  /// on first use.
+  ///
+  /// [effort] decides whether a ROM that is not already fingerprinted is worth
+  /// reading. Under [FingerprintEffort.cheapOnly] only a cached value or a
+  /// zip's stored crc32 comes back, and a null result means "not worth it yet",
+  /// not "cannot be done" — so nothing is parked.
+  ///
+  /// Never throws: a ROM that genuinely cannot be fingerprinted is parked with
+  /// its reason and the scrape carries on by name, which is what it did before
+  /// hashing existed.
+  static Future<RomFingerprint?> _resolveFingerprint(
+    String romPath,
+    String? systemFolder, {
+    required FingerprintEffort effort,
+  }) async {
+    try {
+      final cached = await ScraperRepository.getRomFingerprint(romPath);
+      if (cached != null) return cached;
+
+      // A ROM parked for a reason that cannot fix itself (disc, oversize, a
+      // corrupt archive) stays parked — re-attempting it every scrape is
+      // exactly what the marker exists to stop, and for extract_failed each
+      // retry is a full extraction. Transient reasons (missing, error) are
+      // allowed through: a re-scrape is the natural retry point, and a fresh
+      // fingerprint clears the marker.
+      final parked = await ScraperRepository.getRomFingerprintSkipReason(
+        romPath,
+      );
+      if (parked != null &&
+          RomFingerprintService.permanentSkipReasons.contains(parked)) {
+        return null;
+      }
+
+      // Arcade sets are identified by their archive, and which systems those
+      // are is declared per system in assets/systems/<sys>.json. Resolved here
+      // (cached per system) rather than inside the fingerprinter, which stays
+      // free of database reads.
+      final policy = await RetroAchievementsHashService.policyForSystem(
+        systemFolder,
+      );
+
+      // The cheap path reads a few hundred bytes, so an isolate hop would cost
+      // more than the work. Only the full read is worth handing off.
+      final attempt = effort == FingerprintEffort.cheapOnly
+          ? await RomFingerprintService.fingerprint(
+              romPath,
+              systemFolder,
+              keepsArchivesPacked: policy.keepsArchivesPacked,
+              effort: FingerprintEffort.cheapOnly,
+            )
+          : await RomFingerprintService.computeInBackground(
+              romPath,
+              systemFolder,
+              keepsArchivesPacked: policy.keepsArchivesPacked,
+            );
+
+      final fingerprint = attempt.fingerprint;
+      if (fingerprint == null) {
+        // Deferring is not a failure — parking the ROM here would hide it from
+        // the full pass that runs a moment later.
+        if (attempt.skipReason != RomFingerprintService.deferredCostly) {
+          await ScraperRepository.markRomFingerprintSkipped(
+            romPath,
+            attempt.skipReason ?? RomFingerprintService.skipError,
+          );
+        }
+        return null;
+      }
+
+      await ScraperRepository.updateRomFingerprint(romPath, fingerprint);
+      return fingerprint;
+    } catch (e) {
+      _log.w('Could not fingerprint $romPath, scraping by name: $e');
+      return null;
+    }
+  }
+
   /// Fetches game information from the API using name or hash.
   ///
   /// Returns a map containing both `gameInfo` and updated `userInfo` (quota).
@@ -314,6 +395,8 @@ class ScreenScraperService {
     String romName, {
     String? appSystemId,
     String? md5,
+    String? crc,
+    int? romSize,
     int? maxDailyRequests,
     String? gameName,
   }) async {
@@ -358,8 +441,18 @@ class ScreenScraperService {
         queryParameters['langue'] = preferredLanguage;
       }
 
+      // Any one of these resolves a lookup on its own and outranks romnom, so
+      // an exact dump match does not depend on the filename being tidy. crc has
+      // the widest coverage — ScreenScraper's DB is seeded from No-Intro and
+      // Redump DATs. Comparison is case-insensitive on their side.
+      if (crc != null && crc.isNotEmpty) {
+        queryParameters['crc'] = crc;
+      }
       if (md5 != null && md5.isNotEmpty) {
         queryParameters['md5'] = md5;
+      }
+      if (romSize != null && romSize > 0) {
+        queryParameters['romtaille'] = romSize.toString();
       }
 
       final url = Uri.parse(
@@ -383,6 +476,13 @@ class ScreenScraperService {
           _log.e('Error getting game information: ${data['header']['error']}');
           return null;
         }
+      } else if (response.statusCode == 404) {
+        // ScreenScraper answers an unmatched ROM with 404 ("Rom/Iso/Dossier
+        // non trouvee"), which is an ordinary outcome of a scrape sweep rather
+        // than a fault. Logged at error it buried everything else: 478 of the
+        // 575 error lines in one user's log were this one line repeating.
+        _log.d('ScreenScraper has no entry for "$romName"');
+        return null;
       } else {
         _log.e('HTTP Error ${response.statusCode}: ${response.body}');
         return null;
@@ -880,15 +980,68 @@ class ScreenScraperService {
         return {'success': false, 'cancelled': true, 'requests': 0};
       }
 
-      final gameResult = await fetchGameInfo(
+      // Use a hash when one is free — already cached, or a zipped ROM whose
+      // crc32 the archive already stores. An exact dump match beats the
+      // filename outright, surviving regional tags, revision markers and untidy
+      // naming, and on a zipped library it costs a few hundred bytes.
+      //
+      // What it deliberately does NOT do is read every ROM up front. An
+      // uncompressed 16 MB cartridge costs ~200ms to hash, and on a library
+      // whose filenames are tidy that buys nothing the name would not have
+      // found. Those are hashed further down, only once the name has missed.
+      //
+      // Android app entries have no ROM file to fingerprint.
+      var fingerprint = systemFolder == 'android'
+          ? null
+          : await _resolveFingerprint(
+              romPath,
+              systemFolder,
+              effort: FingerprintEffort.cheapOnly,
+            );
+
+      var gameResult = await fetchGameInfo(
         screenscraperSystemId.toString(),
         filename,
         appSystemId: appSystemId,
+        md5: fingerprint?.md5,
+        crc: fingerprint?.crc32,
+        romSize: fingerprint?.sizeBytes,
         maxDailyRequests: maxDailyRequests,
         gameName: (systemFolder == 'android') ? titleName : null,
       );
       var gameInfo = gameResult?['gameInfo'];
       int requestsMade = 1;
+
+      // A miss with a fingerprint on board is final: romnom rode along on that
+      // request, and ScreenScraper falls back to the name server-side when the
+      // hash is unknown to it (probed live: a junk crc next to a valid romnom
+      // still matches). A name-only retry could never succeed where that
+      // request failed, so none is sent.
+      if (gameInfo == null &&
+          systemFolder != 'android' &&
+          fingerprint == null) {
+        // The name missed and no cheap hash was available, so this is the ROM
+        // that earns a full read: hashing is the only thing left to try, and
+        // the result is cached so no later scrape repeats it.
+        fingerprint = await _resolveFingerprint(
+          romPath,
+          systemFolder,
+          effort: FingerprintEffort.full,
+        );
+        if (fingerprint != null) {
+          gameResult = await fetchGameInfo(
+            screenscraperSystemId.toString(),
+            filename,
+            appSystemId: appSystemId,
+            md5: fingerprint.md5,
+            crc: fingerprint.crc32,
+            romSize: fingerprint.sizeBytes,
+            maxDailyRequests: maxDailyRequests,
+          );
+          gameInfo = gameResult?['gameInfo'];
+          requestsMade++;
+        }
+      }
 
       if (gameResult?['userInfo'] != null) {
         final ui = gameResult!['userInfo'];
@@ -909,23 +1062,6 @@ class ScreenScraperService {
         currentStep: ThreadProcessingStep.scanningImages,
         progress: 0.33,
       );
-
-      if (gameInfo == null &&
-          systemFolder != 'android' &&
-          File(romPath).existsSync()) {
-        final hash = await ScreenscraperRomHasher.calculateMd5InIsolate(
-          romPath,
-        );
-        final resWithHash = await fetchGameInfo(
-          screenscraperSystemId.toString(),
-          filename,
-          appSystemId: appSystemId,
-          md5: hash,
-          maxDailyRequests: maxDailyRequests,
-        );
-        gameInfo = resWithHash?['gameInfo'];
-        requestsMade++;
-      }
 
       if (gameInfo != null) {
         if (scraperConfig['scrape_metadata'] as bool? ?? true) {

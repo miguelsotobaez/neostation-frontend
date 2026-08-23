@@ -102,7 +102,8 @@ class ConfigProvider extends ChangeNotifier {
     try {
       final result = await FilePicker.getDirectoryPath(
         dialogTitle: 'Select ROM Folder',
-        lockParentWindow: true,
+        windowsOptions: const WindowsOptions(lockParentWindow: true),
+        linuxOptions: const LinuxOptions(lockParentWindow: true),
       );
 
       if (result != null) {

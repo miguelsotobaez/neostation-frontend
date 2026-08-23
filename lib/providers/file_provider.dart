@@ -66,11 +66,18 @@ class FileProvider extends ChangeNotifier {
   /// preference order. ES-DE scrapes more categories than NeoStation renders
   /// and users routinely enable only some of them, so each type falls back to
   /// the next-best ES-DE category rather than showing nothing.
+  ///
+  /// ES-DE's `miximages` are deliberately absent: they are composites (a
+  /// screenshot with the box art and usually the marquee baked in, on a padded
+  /// canvas), so they are not what any NeoStation slot means. In the fanart
+  /// slot they read worst of all — NeoStation draws the wheel on top of the
+  /// full-bleed background, so the logo lands twice on a letterboxed collage.
+  /// A missing slot is preferred over art that misrepresents it.
   static const Map<String, List<String>> _esdeMediaCategories = {
     'box2d': ['covers', '3dboxes'],
     'wheels': ['marquees'],
-    'screenshots': ['screenshots', 'titlescreens', 'miximages'],
-    'fanarts': ['fanart', 'miximages'],
+    'screenshots': ['screenshots', 'titlescreens'],
+    'fanarts': ['fanart'],
     'videos': ['videos'],
   };
 
@@ -343,7 +350,7 @@ class FileProvider extends ChangeNotifier {
     try {
       final directory = Directory(directoryPath);
       if (await directory.exists()) {
-        return directory.list().toList();
+        return await directory.list().toList();
       }
       return [];
     } catch (e) {

@@ -23,7 +23,7 @@ import 'game_settings_scrapping_tab.dart';
 /// tab strip, a content area, and a gamepad-hint footer. Tabs:
 ///  * Emulator  — per-game emulator override.
 ///  * Scrapping — force rescrape plus manual metadata/artwork editing.
-///  * Manage    — view mode, play-time reset, and game deletion.
+///  * Manage    — view mode, play-time reset, hiding, and game deletion.
 class GameSettingsDialog extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
@@ -45,6 +45,11 @@ class GameSettingsDialog extends StatefulWidget {
   /// right after invoking this.
   final void Function(String romname)? onGameDeleted;
 
+  /// Called after the game is hidden from the game lists; the dialog closes
+  /// itself right after invoking this, exactly like [onGameDeleted]. The row
+  /// stays in the database — only the lists stop showing it.
+  final void Function(String romname)? onGameHidden;
+
   const GameSettingsDialog({
     super.key,
     required this.game,
@@ -54,6 +59,7 @@ class GameSettingsDialog extends StatefulWidget {
     this.isAllMode = false,
     this.onGameUpdated,
     this.onGameDeleted,
+    this.onGameHidden,
   });
 
   @override
@@ -177,6 +183,11 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  void _handleGameHidden(String romname) {
+    widget.onGameHidden?.call(romname);
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -236,6 +247,7 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
                     isAllMode: widget.isAllMode,
                     onGameUpdated: widget.onGameUpdated,
                     onGameDeleted: _handleGameDeleted,
+                    onGameHidden: _handleGameHidden,
                   ),
                 ],
               ),

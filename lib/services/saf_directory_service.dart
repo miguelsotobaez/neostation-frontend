@@ -289,6 +289,30 @@ class SafDirectoryService {
     }
   }
 
+  /// Opens a SAF file URI and hands back a raw file descriptor for it.
+  ///
+  /// For native code that has to do its own seeking and cannot go through a
+  /// method channel per read — the CHD reader decompresses hunks all over a
+  /// multi-gigabyte disc image, which would be thousands of round trips.
+  ///
+  /// The descriptor is detached, so the caller owns it and must close it, and a
+  /// leaked one stays open for the life of the process.
+  static Future<int?> openFileDescriptor(String uri) async {
+    if (!Platform.isAndroid) {
+      return null;
+    }
+
+    try {
+      final int? fd = await platform.invokeMethod('openSafFileDescriptor', {
+        'uri': uri,
+      });
+      return fd;
+    } on PlatformException catch (e) {
+      _log.e('Error opening SAF file descriptor: ${e.message}');
+      return null;
+    }
+  }
+
   /// Reads the entire contents of a SAF file URI.
   ///
   /// Uses file descriptor streaming for efficiency. Returns null on failure.

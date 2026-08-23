@@ -164,10 +164,12 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 when (intent?.action) {
                     android.content.Intent.ACTION_SCREEN_OFF -> {
                         pushDeviceScreenOn(false)
+                        notifySecondaryScreenState(false)
                         notifyFlutterScreenState(false)
                     }
                     android.content.Intent.ACTION_SCREEN_ON -> {
                         pushDeviceScreenOn(true)
+                        notifySecondaryScreenState(true)
                         notifyFlutterScreenState(true)
                     }
                 }
@@ -193,6 +195,23 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             SharedStateManager.updateState(type, current)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "pushDeviceScreenOn: ${e.message}")
+        }
+    }
+
+    /// Delivers the screen on/off edge straight to the secondary engine, on its
+    /// own channel. [pushDeviceScreenOn] mirrors the same fact into the shared
+    /// state, but that transport ships whole snapshots between two engines with
+    /// no ordering guarantee: a snapshot another producer built moments before
+    /// the screen went off can land after this write and resurrect
+    /// `deviceScreenOn: true`, leaving the bottom screen convinced the device is
+    /// awake — which is how a preview video's audio kept playing with the lid
+    /// shut. This edge cannot be clobbered, so the secondary engine treats it as
+    /// the authority and only ever plays when BOTH agree the screen is on.
+    private fun notifySecondaryScreenState(on: Boolean) {
+        try {
+            (subScreenPresentation as? SecondaryAppsPresentation)?.notifyScreenState(on)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "notifySecondaryScreenState: ${e.message}")
         }
     }
 
@@ -415,12 +434,28 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                         result.error("INVALID_ARGUMENTS", "URI is required", null)
                     }
                 }
+                "openSafFileDescriptor" -> {
+                    val uriString = call.argument<String>("uri")
+                    if (uriString != null) {
+                        openSafFileDescriptor(uriString, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "URI is required", null)
+                    }
+                }
                 "getSafFileSize" -> {
                     val uriString = call.argument<String>("uri")
                     if (uriString != null) {
                         getSafFileSize(uriString, result)
                     } else {
                         result.error("INVALID_ARGUMENTS", "URI is required", null)
+                    }
+                }
+                "getFreeSpace" -> {
+                    val path = call.argument<String>("path")
+                    if (path != null) {
+                        getFreeSpace(path, result)
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "Path is required", null)
                     }
                 }
                 "findEmulatorDocumentProvider" -> {
@@ -516,6 +551,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 "openLauncherSettings" -> {
                     openLauncherSettings(result)
                 }
+                "openSystemSettings" -> {
+                    openSystemSettings()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -550,6 +589,15 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     private fun setSecondaryDisplayVisible(visible: Boolean) {
         if (visible) {
+            // A presentation that was dismissed behind our back (its engine is
+            // already destroyed) still sits in subScreenPresentation, and a
+            // non-null reference would block the recreate below — leaving the
+            // bottom screen dead until the whole app is restarted. Anything
+            // that is no longer showing, and isn't merely hidden to reveal a
+            // dock-launched app, is dead: drop it so the branch below rebuilds.
+            if (subScreenPresentation?.isShowing == false && !presentationHiddenForApp) {
+                onCloseSubScreen()
+            }
             if (subScreenPresentation == null) {
                 val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
                 val displays = dm.displays
@@ -760,6 +808,16 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             } catch (fallbackException: Exception) {
                 result.error("OPEN_FAILED", fallbackException.message, null)
             }
+        }
+    }
+
+    private fun openSystemSettings() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+        } catch (e: Exception) {
+            println("Error opening system settings: ${e.message}")
         }
     }
 
@@ -1574,6 +1632,34 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         }.start()
     }
 
+    /**
+     * Bytes still writable by this app on the volume holding [path], or null
+     * when that can't be answered.
+     *
+     * Backs the RomM bulk sync's pre-flight check ("does this platform fit?").
+     * usableSpace — rather than freeSpace — is the honest number: it accounts
+     * for the reserve the OS keeps back, so it matches what a download can
+     * actually claim.
+     *
+     * Returns null rather than 0 for an unknown or missing volume: the Dart
+     * side treats null as "no opinion" and lets the sync proceed, and a 0
+     * would read as a full disk and warn about a problem that isn't there.
+     * The caller passes a path that exists (it walks up to the nearest
+     * existing ancestor first), so 0 here really does mean "not on a volume
+     * this app can see".
+     */
+    private fun getFreeSpace(path: String, result: MethodChannel.Result) {
+        Thread {
+            val bytes = try {
+                java.io.File(path).usableSpace.takeIf { it > 0L }
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Free space for $path unavailable: ${e.message}")
+                null
+            }
+            runOnUiThread { result.success(bytes) }
+        }.start()
+    }
+
     private fun getSafFileSize(uriString: String, result: MethodChannel.Result) {
         Thread {
             try {
@@ -1640,6 +1726,35 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             } catch (e: Exception) {
                 runOnUiThread {
                     result.error("READ_FAILED", e.message, null)
+                }
+            }
+        }.start()
+    }
+
+    /**
+     * Opens a SAF document and detaches its file descriptor for native code.
+     *
+     * The CHD reader seeks all over a multi-gigabyte disc image, so going back
+     * through this channel per read would cost thousands of round trips. The
+     * descriptor is detached rather than closed here: whoever asked for it owns
+     * it, and the native reader closes it when it closes the disc.
+     */
+    private fun openSafFileDescriptor(uriString: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val uri = Uri.parse(uriString)
+                val pfd = contentResolver.openFileDescriptor(uri, "r")
+
+                if (pfd == null) {
+                    runOnUiThread { result.error("OPEN_FAILED", "Could not open file descriptor", null) }
+                    return@Thread
+                }
+
+                val fd = pfd.detachFd()
+                runOnUiThread { result.success(fd) }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    result.error("OPEN_FAILED", e.message, null)
                 }
             }
         }.start()

@@ -708,12 +708,19 @@ extension NeoSyncCore on NeoSyncProvider {
         file,
         basePath,
         isState: isState,
+        explicitSystemFolder: game.systemFolderName,
       );
 
+      final parsed = CloudPathBuilder.parse(relativePath);
       final result = await _neoSyncService.syncFile(
         file,
         game.name,
         customFilename: relativePath,
+        systemId: parsed?.system ?? game.systemFolderName,
+        emulatorId: parsed?.emulatorSlug,
+        gameHash: await _resolveGameHashForUpload(game),
+        isState: isState,
+        scope: parsed?.scope,
       );
 
       if (result['success']) {
@@ -775,6 +782,26 @@ extension NeoSyncCore on NeoSyncProvider {
   }
 
   /// Busca TODOS los archivos de guardado locales para un juego específico (saves y states)
+  /// Whether [candidate] (a filename or full path, case-insensitive) refers to
+  /// a save/state of the game with [romName].
+  ///
+  /// The ROM name must end at a word boundary (`.`, `_`, space, `[`, `(`, `/`),
+  /// so a save like `mvsc2u.zip.eeprom` never matches the game `mvsc` the way a
+  /// plain substring check would. A plain substring check is what uploaded the
+  /// orphan Naomi EEPROM under the unrelated CPS2 "Clash of Super Heroes".
+  bool _saveBelongsToRom(String candidate, String romName) {
+    final g = romName.trim().toLowerCase();
+    if (g.isEmpty) return false;
+    final c = candidate.toLowerCase();
+    if (c == g) return true;
+    const boundaries = ['.', '_', ' ', '[', '(', '/'];
+    for (final b in boundaries) {
+      if (c.contains('$g$b')) return true;
+    }
+    // The ROM name as the final path segment (a game folder).
+    return c.endsWith('/$g');
+  }
+
   Future<List<LocalSaveFile>> _findGameSaveFiles(GameModel game) async {
     try {
       // 1. Obtener el sistema para resolver sus rutas JSON
@@ -845,34 +872,21 @@ extension NeoSyncCore on NeoSyncProvider {
               isMatch = true;
             }
           } else {
-            // Para sistemas estándar, filtrar por romname
-            // Extendemos la búsqueda a la ruta completa por si el nombre del juego
-            // está en la carpeta contenedora en vez del propio archivo (ej. Switch)
+            // Standard systems match by ROM name with a word boundary, so
+            // mvsc2u.zip.eeprom can never match the game "mvsc". The full path
+            // is also checked in case the game name lives in the containing
+            // folder instead of the file itself (e.g. Switch).
             final fullPathLower = file.path.toLowerCase();
 
-            if (fileName.contains(gameRomName) ||
-                fullPathLower.contains(gameRomName)) {
+            if (_saveBelongsToRom(fileName, gameRomName) ||
+                _saveBelongsToRom(fullPathLower, gameRomName)) {
               isMatch = true;
             } else if (system.folderName == 'switch' &&
                 game.titleId != null &&
-                game.titleId!.isNotEmpty) {
-              // Especial para Switch: matchear por Title ID en la ruta
-              if (fullPathLower.contains(game.titleId!.toLowerCase())) {
-                isMatch = true;
-              }
-            } else {
-              // Comparación flexible
-              final normalizedPath = fullPathLower.replaceAll(
-                RegExp(r'[^\w\s\/\\]'),
-                '',
-              );
-              final normalizedGameName = gameRomName.replaceAll(
-                RegExp(r'[^\w\s]'),
-                '',
-              );
-              if (normalizedPath.contains(normalizedGameName)) {
-                isMatch = true;
-              }
+                game.titleId!.isNotEmpty &&
+                fullPathLower.contains(game.titleId!.toLowerCase())) {
+              // Switch special case: match by Title ID in the path
+              isMatch = true;
             }
           }
 
@@ -934,6 +948,33 @@ extension NeoSyncCore on NeoSyncProvider {
     return allFiles.isNotEmpty ? allFiles.first : null;
   }
 
+  // ── Public reuse hooks for other sync providers (e.g. RomM) ───────────────
+
+  /// Locates local save/state files for [game], reusing NeoSync's path
+  /// resolution and filename matching. Each [LocalSaveFile.relativePath] is
+  /// prefixed with `saves/` or `states/` so callers can tell them apart.
+  Future<List<LocalSaveFile>> locateGameSaveFiles(GameModel game) =>
+      _findGameSaveFiles(game);
+
+  /// Resolves candidate local destination paths for a cloud file named
+  /// [relativeName] (e.g. `saves/Game.srm` or `states/Game.state`) belonging to
+  /// [game]. Returns an empty list if no destination can be resolved.
+  Future<List<String>> resolveLocalTargetPaths(
+    GameModel game,
+    String relativeName,
+  ) {
+    final synthetic = NeoSyncFile(
+      id: '',
+      fileName: relativeName,
+      filePath: relativeName,
+      fileSize: 0,
+      gameName: game.name,
+      uploadedAt: DateTime.now(),
+      userId: '',
+    );
+    return resolveCloudFileToLocalPath(game, synthetic);
+  }
+
   /// Obtiene TODOS los archivos de guardado de la nube para un juego específico
   Future<List<NeoSyncFile>> _getCloudSaveFilesForGame(GameModel game) async {
     try {
@@ -946,7 +987,7 @@ extension NeoSyncCore on NeoSyncProvider {
 
       // 2. Cargar archivos de la nube si no están cargados
       if (_files.isEmpty) {
-        final result = await _neoSyncService.getFiles();
+        final result = await _neoSyncService.getAllFiles();
         if (result['success']) {
           _files = result['files'];
         } else {
@@ -977,26 +1018,13 @@ extension NeoSyncCore on NeoSyncProvider {
             isMatch = true;
           }
         } else {
-          // Para sistemas estándar, filtrar por romname
-          // Usamos la ruta completa del cloudFile por si está en carpetas (ej. Switch)
+          // Standard systems match by ROM name with a word boundary. The full
+          // cloud path is checked too in case it lives in folders (e.g. Switch).
           final fullCloudPathLower = cloudFile.fileName.toLowerCase();
 
-          if (fileName.contains(gameRomName) ||
-              fullCloudPathLower.contains(gameRomName)) {
+          if (_saveBelongsToRom(fileName, gameRomName) ||
+              _saveBelongsToRom(fullCloudPathLower, gameRomName)) {
             isMatch = true;
-          } else {
-            // Comparación flexible en toda la ruta
-            final normalizedCloudPath = fullCloudPathLower.replaceAll(
-              RegExp(r'[^\w\s\/]'),
-              '',
-            );
-            final normalizedGameName = gameRomName.replaceAll(
-              RegExp(r'[^\w\s]'),
-              '',
-            );
-            if (normalizedCloudPath.contains(normalizedGameName)) {
-              isMatch = true;
-            }
           }
         }
 
@@ -1063,7 +1091,10 @@ extension NeoSyncCore on NeoSyncProvider {
       }
 
       // 2. Si los hashes NO coinciden (contenido diferente), evaluar el estado guardado.
-      final syncState = await SyncRepository.getSyncState(localSave.filePath);
+      final syncState = await SyncRepository.getSyncState(
+        NeoSyncProvider.kSyncProviderId,
+        localSave.filePath,
+      );
 
       final cloudTime = cloudSave.fileModifiedAtTimestamp ?? 0;
       final localTime = localSave.lastModified.millisecondsSinceEpoch;
@@ -1185,10 +1216,16 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Helper to calculate relative path for sync, with special handling for Dreamcast
   /// Sincroniza saves antes de iniciar un juego (al estilo Steam)
-  Future<void> syncGameSavesBeforeLaunch(GameModel game) async {
+  Future<void> syncGameSavesBeforeLaunch(
+    GameModel game, {
+    SyncDeadline? deadline,
+  }) async {
     if (!isNeoSyncAuthenticated) return;
     if (game.cloudSyncEnabled != true) return;
 
+    // Expose the deadline to the shared download path (_downloadCloudFile) so a
+    // late download abandons its write once the launch has proceeded.
+    _launchDeadline = deadline;
     try {
       // Detectar saves actuales
       await detectGameSaveFiles(game);
@@ -1211,12 +1248,19 @@ extension NeoSyncCore on NeoSyncProvider {
               game,
               file,
               savesPath,
+              explicitSystemFolder: game.systemFolderName,
             );
 
+            final parsed = CloudPathBuilder.parse(relativePath);
             final result = await _neoSyncService.syncFile(
               file,
               game.name,
               customFilename: relativePath,
+              systemId: parsed?.system ?? game.systemFolderName,
+              emulatorId: parsed?.emulatorSlug,
+              gameHash: await _resolveGameHashForUpload(game),
+              isState: false,
+              scope: parsed?.scope,
             );
 
             if (result['success']) {
@@ -1244,6 +1288,8 @@ extension NeoSyncCore on NeoSyncProvider {
       );
     } catch (e) {
       NeoSyncProvider._log.w('Error in pre-launch sync for ${game.name}: $e');
+    } finally {
+      _launchDeadline = null;
     }
   }
 
@@ -1272,12 +1318,19 @@ extension NeoSyncCore on NeoSyncProvider {
             game,
             file,
             savesPath,
+            explicitSystemFolder: game.systemFolderName,
           );
 
+          final parsed = CloudPathBuilder.parse(relativePath);
           final result = await _neoSyncService.syncFile(
             file,
             game.name,
             customFilename: relativePath,
+            systemId: parsed?.system ?? game.systemFolderName,
+            emulatorId: parsed?.emulatorSlug,
+            gameHash: await _resolveGameHashForUpload(game),
+            isState: false,
+            scope: parsed?.scope,
           );
 
           if (result['success']) {

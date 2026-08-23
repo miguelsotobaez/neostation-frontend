@@ -13,6 +13,8 @@ import '../../models/emulator_model.dart';
 import '../../models/core_emulator_model.dart';
 // import '../models/neo_sync_models.dart'; // Removido si no se usa directamente aquí
 import '../../models/database_game_model.dart';
+import '../../utils/cloud_path_builder.dart';
+import '../../utils/semaphore.dart';
 import 'sqlite_migrations.dart';
 import '../../services/config_service.dart'; // Required for ConfigService usage
 import '../../services/json_config_service.dart';
@@ -247,25 +249,60 @@ class DatabaseAdapter implements DatabaseExecutorAdapter {
   @override
   BatchAdapter batch() => BatchAdapter(_db);
 
+  /// Serializes transactions opened against this connection.
+  ///
+  /// Every caller shares one [sqlite.Database], and `package:sqlite3` is
+  /// synchronous, so a statement executed while someone else holds `BEGIN`
+  /// joins *their* transaction whether it meant to or not.
+  static final Semaphore _transactionLock = Semaphore(1);
+
+  /// Marks the async task that currently owns the open transaction.
+  ///
+  /// Zone values propagate into the continuations of the guarded action, so a
+  /// nested [transaction] call from inside the body sees its own connection
+  /// here while an unrelated task does not.
+  static const Object _transactionOwnerKey = #sqliteTransactionOwner;
+
   /// Executes a series of database operations within an atomic transaction.
+  ///
+  /// Concurrent callers are serialized: a second task waits for the first to
+  /// commit rather than writing into its transaction. Genuine nesting still
+  /// runs inline on the outermost transaction — first-run setup does this three
+  /// levels deep (`_onCreate` → `_insertInitialData` →
+  /// `_executeSqlFileOptimized`) — which is why ownership is tracked per task
+  /// instead of read back off the connection.
+  ///
+  /// Previously this branched on `_db.autocommit`, which answers "is a
+  /// transaction open" rather than "is it mine". Two overlapping writers
+  /// therefore shared one transaction: the second returned success to its
+  /// caller with nothing committed, and the first's rollback discarded its work
+  /// as well. Where both wrote the same UNIQUE column the collision surfaced as
+  /// a constraint violation; everywhere else it was silent.
   Future<T> transaction<T>(
     Future<T> Function(TransactionAdapter) action,
   ) async {
-    final bool inTransaction = !_db.autocommit;
-    if (inTransaction) {
+    if (identical(Zone.current[_transactionOwnerKey], _db)) {
       return await action(TransactionAdapter(_db));
     }
 
-    _db.execute('BEGIN');
+    await _transactionLock.acquire();
     try {
-      final result = await action(TransactionAdapter(_db));
-      _db.execute('COMMIT');
-      return result;
-    } catch (e) {
-      if (!_db.autocommit) {
-        _db.execute('ROLLBACK');
+      _db.execute('BEGIN');
+      try {
+        final result = await runZoned(
+          () => action(TransactionAdapter(_db)),
+          zoneValues: {_transactionOwnerKey: _db},
+        );
+        _db.execute('COMMIT');
+        return result;
+      } catch (e) {
+        if (!_db.autocommit) {
+          _db.execute('ROLLBACK');
+        }
+        rethrow;
       }
-      rethrow;
+    } finally {
+      _transactionLock.release();
     }
   }
 }
@@ -421,7 +458,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 114;
+  static const int _databaseVersion = 144;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -462,7 +499,7 @@ class SqliteService {
     // Retrieve base systems with user settings and calculated ROM counts
     final systemsResults = await db.rawQuery('''
       SELECT s.*,
-             (SELECT COUNT(*) FROM user_roms ur WHERE ur.app_system_id = s.id) as rom_count,
+             (SELECT COUNT(*) FROM user_roms ur WHERE ur.app_system_id = s.id AND ur.is_hidden = 0) as rom_count,
              ss.recursive_scan,
              ss.custom_background_path,
              ss.custom_logo_path,
@@ -525,6 +562,8 @@ class SqliteService {
               'short_name': jsonSystem.shortName,
               'screenscraper_id': jsonSystem.screenscraperId,
               'ra_id': jsonSystem.raId,
+              'ra_hash_algo': jsonSystem.raHashAlgo,
+              'ra_hash_mode': jsonSystem.raHashMode,
               'description': jsonSystem.description,
               'launch_date': jsonSystem.launchDate,
               'manufacturer': jsonSystem.manufacturer,
@@ -545,6 +584,8 @@ class SqliteService {
             'folder_name': jsonSystem.folderName,
             'screenscraper_id': jsonSystem.screenscraperId,
             'ra_id': jsonSystem.raId,
+            'ra_hash_algo': jsonSystem.raHashAlgo,
+            'ra_hash_mode': jsonSystem.raHashMode,
             'description': jsonSystem.description,
             'launch_date': jsonSystem.launchDate,
             'manufacturer': jsonSystem.manufacturer,
@@ -849,6 +890,19 @@ class SqliteService {
         final bool retroAchievementsCompatible =
             emuDef.isretroAchievementsCompatible ?? (!isStandalone);
 
+        // Determine the NeoSync v2 cloud slug. RetroArch cores collapse all
+        // variants (RA/RA64/RA32) into one `retroarch.<core>` slug so saves are
+        // portable between them; standalone emulators use the declared slug or
+        // a derivation from their unique id.
+        String? neosyncSlug;
+        if (!isStandalone) {
+          neosyncSlug = CloudPathBuilder.retroArchCoreSlug(
+            coreFilename ?? emuDef.uniqueId,
+          );
+        } else {
+          neosyncSlug = emuDef.effectiveNeoSyncSlug;
+        }
+
         // Insert/Update
         final existing = await txn.query(
           'app_emulators',
@@ -867,6 +921,7 @@ class SqliteService {
             'android_package_name': packageName,
             'android_activity_name': platformData['_resolved_activity_name'],
             'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
+            'neosync_slug': neosyncSlug,
           };
 
           if (isDefaultCore) {
@@ -902,6 +957,7 @@ class SqliteService {
               'android_package_name': packageName,
               'android_activity_name': platformData['_resolved_activity_name'],
               'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
+              'neosync_slug': neosyncSlug,
             };
             if (isDefaultCore) {
               updateData['is_default_core'] = 1;
@@ -931,6 +987,7 @@ class SqliteService {
               // only thing that can see the whole (system_id, os_id) group.
               'is_default': 0,
               'is_ra_compatible': retroAchievementsCompatible ? 1 : 0,
+              'neosync_slug': neosyncSlug,
             };
             if (isDefaultCore) {
               insertData['is_default_core'] = 1;
@@ -1313,6 +1370,38 @@ class SqliteService {
       tableNames.add('user_rom_folders');
     }
 
+    // FIX: Ensure user_custom_save_folders exists even if migrations were
+    // skipped. NeoSync stores user-selected save folders per system + emulator.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_custom_save_folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        system_folder_name TEXT NOT NULL COLLATE NOCASE,
+        emulator_slug TEXT NOT NULL,
+        folder_path TEXT NOT NULL,
+        UNIQUE(system_folder_name, emulator_slug)
+      );
+    ''');
+    // A table created by an earlier feature branch may lack emulator_slug;
+    // CREATE TABLE IF NOT EXISTS won't alter it, so add the column manually.
+    try {
+      final csfInfo = await db.rawQuery(
+        'PRAGMA table_info(user_custom_save_folders)',
+      );
+      final hasEmulatorSlug = csfInfo.any(
+        (c) => c['name'].toString() == 'emulator_slug',
+      );
+      if (!hasEmulatorSlug) {
+        await db.execute(
+          'ALTER TABLE user_custom_save_folders ADD COLUMN emulator_slug TEXT NOT NULL DEFAULT \'unknown\'',
+        );
+      }
+    } catch (e) {
+      _log.w('Could not ensure emulator_slug on user_custom_save_folders: $e');
+    }
+    if (!tableNames.contains('user_custom_save_folders')) {
+      tableNames.add('user_custom_save_folders');
+    }
+
     // FIX: Ensure user_screenscraper_config columns are up to date (v29).
     await _ensureScreenScraperConfigColumns(db);
 
@@ -1363,21 +1452,30 @@ class SqliteService {
       }
     }
 
-    // FIX: Ensure app_neo_sync_state exists (legacy support for v58).
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      );
-    ''');
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_neo_sync_state_file_path 
-      ON app_neo_sync_state(file_path);
-    ''');
+    // FIX: Ensure app_neo_sync_state exists (legacy support for v58). New
+    // installs get the provider-scoped schema (v111); pre-existing tables are
+    // upgraded by migration v111, so IF NOT EXISTS here never masks that.
+    await db.execute(SqliteMigrations.createAppNeoSyncStateTableSql);
+    // The index spans `provider`, which migration v111 adds — and this runs
+    // *before* migrations. On a database still at the pre-v111 schema the
+    // CREATE INDEX raises "no such column: provider" and aborts init before
+    // v111 can ever run, leaving every launch to fail the same way. Create it
+    // only once the column is there; v111 creates it as part of the upgrade.
+    final neoSyncColumns = await db.rawQuery(
+      'PRAGMA table_info(app_neo_sync_state);',
+    );
+    final hasProviderColumn = neoSyncColumns.any(
+      (c) => c['name']?.toString() == 'provider',
+    );
+    if (hasProviderColumn) {
+      await db.execute(SqliteMigrations.createAppNeoSyncStateIndexSql);
+    }
+
+    // The RomM tables are created by migration v111 and by the fresh-install
+    // table list — the only two sources, per the maintainer's
+    // versioned-migrations-only policy. No on-launch CREATE safety net here:
+    // it would only mask a failed migration as a later runtime "no such table"
+    // error instead of surfacing it.
   }
 
   /// Ensures the unique_identifier column exists in app_emulators.
@@ -1674,6 +1772,8 @@ class SqliteService {
           id TEXT PRIMARY KEY,
           screenscraper_id INTEGER,
           ra_id INTEGER,
+          ra_hash_algo TEXT,
+          ra_hash_mode TEXT,
           real_name TEXT NOT NULL,
           short_name TEXT,
           folder_name TEXT NOT NULL UNIQUE,
@@ -1719,9 +1819,19 @@ class SqliteService {
           is_ra_compatible INTEGER NOT NULL DEFAULT 0,
           android_package_name TEXT,
           android_activity_name TEXT,
+          neosync_slug TEXT,
           PRIMARY KEY (os_id, unique_identifier),
           FOREIGN KEY (os_id) REFERENCES app_os(id) ON DELETE CASCADE,
           FOREIGN KEY (system_id) REFERENCES app_systems(id) ON DELETE CASCADE
+      );
+      ''',
+      '''
+      CREATE TABLE IF NOT EXISTS user_custom_save_folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        system_folder_name TEXT NOT NULL COLLATE NOCASE,
+        emulator_slug TEXT NOT NULL,
+        folder_path TEXT NOT NULL,
+        UNIQUE(system_folder_name, emulator_slug)
       );
       ''',
     ];
@@ -1751,6 +1861,7 @@ class SqliteService {
         setup_completed INTEGER DEFAULT 0,
         hide_bottom_screen INTEGER DEFAULT 0,
         sfx_enabled INTEGER DEFAULT 1,
+        sfx_volume REAL DEFAULT 0.75,
         system_sort_by TEXT DEFAULT 'alphabetical',
         system_sort_order TEXT DEFAULT 'asc',
         app_language TEXT DEFAULT 'en',
@@ -1761,9 +1872,14 @@ class SqliteService {
         hide_tab_sync INTEGER DEFAULT 0,
         hide_tab_achievements INTEGER DEFAULT 0,
         hide_tab_scraper INTEGER DEFAULT 0,
+        hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
+        -- Generation stamp of the bundled RA seed asset that is currently
+        -- loaded into app_ra_game_list. Read from the file's own header, so it
+        -- moves whenever the asset is regenerated. See migration v138.
+        ra_seed_stamp TEXT DEFAULT '',
         neostation_app_version TEXT DEFAULT '',
         auto_update_app INTEGER DEFAULT 1,
         auto_update_systems INTEGER DEFAULT 1,
@@ -1777,7 +1893,9 @@ class SqliteService {
         now_playing_dim_delay INTEGER DEFAULT 3,
         now_playing_dim_level INTEGER DEFAULT 100,
         fanart_dim_level INTEGER DEFAULT 25,
-        esde_folder_path TEXT DEFAULT ''
+        esde_folder_path TEXT DEFAULT '',
+        show_achievements_badge INTEGER DEFAULT 0,
+        ra_match_on_startup INTEGER DEFAULT 0
       );
       ''',
       '''
@@ -1818,9 +1936,18 @@ class SqliteService {
         filename TEXT NOT NULL,
         rom_path TEXT NOT NULL COLLATE NOCASE,
         ra_hash TEXT,
+        -- ScreenScraper dump identity: md5 (ss_hash), crc32 and size of the ROM
+        -- image itself. Distinct from ra_hash, which is RetroAchievements' own
+        -- per-console transform and matches nothing else. See migration v135.
         ss_hash TEXT,
+        rom_crc32 TEXT,
+        rom_size INTEGER,
+        rom_fingerprint_skipped TEXT,
         id_ra INTEGER,
+        ra_match_source TEXT,
+        ra_hash_skipped TEXT,
         is_favorite INTEGER DEFAULT 0,
+        is_hidden INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,
         last_played TEXT,
         cloud_sync_enabled INTEGER DEFAULT 1,
@@ -1885,6 +2012,7 @@ class SqliteService {
         UNIQUE(app_system_id)
       );
       ''',
+      SqliteMigrations.createUserRommConfigTableSql,
       '''
       CREATE TABLE IF NOT EXISTS user_screenscraper_metadata (
         app_system_id TEXT NOT NULL,
@@ -1936,16 +2064,10 @@ class SqliteService {
         UNIQUE(app_system_id)
       );
       ''',
-      '''
-      CREATE TABLE IF NOT EXISTS app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      );
-      ''',
+      SqliteMigrations.createAppNeoSyncStateTableSql,
+      SqliteMigrations.createAppRommRomMapTableSql,
+      SqliteMigrations.createAppRommPlaySessionsTableSql,
+      SqliteMigrations.createAppRommPlaytimeStateTableSql,
     ];
 
     for (final sql in tables) {
@@ -1986,6 +2108,7 @@ class SqliteService {
       'CREATE INDEX IF NOT EXISTS idx_user_roms_app_system_id ON user_roms(app_system_id);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_ra_hash ON user_roms(ra_hash);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_ss_hash ON user_roms(ss_hash);',
+      'CREATE INDEX IF NOT EXISTS idx_user_roms_rom_crc32 ON user_roms(rom_crc32);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_filename ON user_roms(filename);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_is_favorite ON user_roms(is_favorite);',
       'CREATE INDEX IF NOT EXISTS idx_user_roms_id_ra ON user_roms(id_ra);',
@@ -2014,8 +2137,12 @@ class SqliteService {
       // 5. Index for user_emulator_config
       'CREATE INDEX IF NOT EXISTS idx_user_emulator_config_is_user_default ON user_emulator_config(is_user_default);',
 
-      // 6. Index for app_neo_sync_state
-      'CREATE INDEX IF NOT EXISTS idx_neo_sync_state_file_path ON app_neo_sync_state(file_path);',
+      // 6. Index for app_neo_sync_state (provider-scoped)
+      SqliteMigrations.createAppNeoSyncStateIndexSql,
+      // 7. Index for app_romm_rom_map (RomM save-sync mapping)
+      SqliteMigrations.createAppRommRomMapIndexSql,
+      // 8. Index for app_romm_play_sessions (RomM playtime outbox)
+      SqliteMigrations.createAppRommPlaySessionsIndexSql,
     ];
 
     for (final sql in indexes) {
@@ -2459,7 +2586,12 @@ class SqliteService {
   /// [recoverRomFoldersFromStoredRoms] nothing to derive a root from.
   static Future<void> saveUserRomFolders(List<String> folders) async {
     final db = await instance.database;
-    final paths = folders.where((folder) => folder.isNotEmpty).toList();
+    // Deduplicated because `path` is UNIQUE: a caller that appended a folder it
+    // already held would otherwise collide with itself mid-transaction.
+    final paths = folders
+        .where((folder) => folder.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
 
     if (paths.isEmpty) {
       final rows = await db.rawQuery(
@@ -2479,7 +2611,9 @@ class SqliteService {
     await db.transaction((txn) async {
       await txn.delete('user_rom_folders');
       for (final folder in paths) {
-        await txn.insert('user_rom_folders', {'path': folder});
+        await txn.insert('user_rom_folders', {
+          'path': folder,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     });
   }
@@ -2546,6 +2680,7 @@ class SqliteService {
     int? setupCompleted,
     int? hideBottomScreen,
     int? sfxEnabled,
+    double? sfxVolume,
     int? use12HourClock,
     String? systemSortBy,
     String? systemSortOrder,
@@ -2557,9 +2692,11 @@ class SqliteService {
     int? hideTabSync,
     int? hideTabAchievements,
     int? hideTabScraper,
+    int? hideTabRomm,
     int? hideTabSearch,
     String? activeSyncProvider,
     String? systemsVersion,
+    String? raSeedStamp,
     String? neostationAppVersion,
     int? autoUpdateApp,
     int? autoUpdateSystems,
@@ -2573,6 +2710,8 @@ class SqliteService {
     int? nowPlayingDimLevel,
     int? fanartDimLevel,
     String? esdeFolderPath,
+    int? showAchievementsBadge,
+    int? raMatchOnStartup,
   }) async {
     final db = await instance.database;
 
@@ -2614,6 +2753,9 @@ class SqliteService {
     if (sfxEnabled != null) {
       updates['sfx_enabled'] = sfxEnabled;
     }
+    if (sfxVolume != null) {
+      updates['sfx_volume'] = sfxVolume;
+    }
     if (use12HourClock != null) {
       updates['use_12_hour_clock'] = use12HourClock;
     }
@@ -2647,11 +2789,17 @@ class SqliteService {
     if (hideTabScraper != null) {
       updates['hide_tab_scraper'] = hideTabScraper;
     }
+    if (hideTabRomm != null) {
+      updates['hide_tab_romm'] = hideTabRomm;
+    }
     if (hideTabSearch != null) {
       updates['hide_tab_search'] = hideTabSearch;
     }
     if (activeSyncProvider != null) {
       updates['active_sync_provider'] = activeSyncProvider;
+    }
+    if (raSeedStamp != null) {
+      updates['ra_seed_stamp'] = raSeedStamp;
     }
     if (systemsVersion != null) {
       updates['systems_version'] = systemsVersion;
@@ -2694,6 +2842,13 @@ class SqliteService {
     }
     if (esdeFolderPath != null) {
       updates['esde_folder_path'] = esdeFolderPath;
+    }
+    if (raMatchOnStartup != null) {
+      updates['ra_match_on_startup'] = raMatchOnStartup;
+    }
+
+    if (showAchievementsBadge != null) {
+      updates['show_achievements_badge'] = showAchievementsBadge;
     }
 
     // Both statements run in one transaction. Apart alone they can straddle a
@@ -2934,6 +3089,18 @@ class SqliteService {
     await saveUserConfig(systemsVersion: version);
   }
 
+  /// Retrieves the RA seed generation stamp currently loaded into
+  /// `app_ra_game_list`, or `''` if the seed has never run.
+  static Future<String> getRaSeedStamp() async {
+    final config = await getUserConfig();
+    return config?['ra_seed_stamp']?.toString() ?? '';
+  }
+
+  /// Persists the RA seed generation stamp after a successful re-seed.
+  static Future<void> updateRaSeedStamp(String stamp) async {
+    await saveUserConfig(raSeedStamp: stamp);
+  }
+
   /// Retrieves the Neostation app version recorded at last startup.
   static Future<String> getNeostationAppVersion() async {
     final config = await getUserConfig();
@@ -2965,6 +3132,12 @@ class SqliteService {
     await saveUserConfig(scanOnStartup: value);
   }
 
+  /// Configures whether the startup scan is followed by a RetroAchievements
+  /// match pass over the ROMs it added.
+  static Future<void> updateRaMatchOnStartup(int value) async {
+    await saveUserConfig(raMatchOnStartup: value);
+  }
+
   // ==========================================
   // SYSTEM DETECTION METHODS
   // ==========================================
@@ -2975,7 +3148,7 @@ class SqliteService {
 
     final results = await db.rawQuery('''
       SELECT s.*, uds.actual_folder_name,
-             (SELECT COUNT(*) FROM user_roms ur WHERE ur.app_system_id = s.id) as rom_count,
+             (SELECT COUNT(*) FROM user_roms ur WHERE ur.app_system_id = s.id AND ur.is_hidden = 0) as rom_count,
              ss.recursive_scan,
              ss.hide_extension,
              ss.hide_parentheses,
@@ -3135,8 +3308,11 @@ class SqliteService {
         return false;
       });
 
-      // Synchronize exact ROM count from persistent storage.
-      final romCount = await getRomCountForSystem(system.id!);
+      // Synchronize exact ROM count from persistent storage. Hidden games are
+      // left out so the count always matches the list the user can see; the
+      // callers that decide whether a system still exists ask for the raw count
+      // instead ([getRomCountForSystem]).
+      final romCount = await getVisibleRomCountForSystem(system.id!);
       system = system.copyWith(romCount: romCount);
 
       // Enrich with user-specific system overrides.
@@ -3199,6 +3375,23 @@ class SqliteService {
     final db = await instance.database;
     final results = await db.rawQuery(
       'SELECT COUNT(*) as count FROM user_roms WHERE app_system_id = ?',
+      [systemId],
+    );
+    if (results.isEmpty) return 0;
+    return int.tryParse(results.first['count']?.toString() ?? '0') ?? 0;
+  }
+
+  /// Calculates the number of ROMs a system shows in its game list — the total
+  /// minus the ones the user hid.
+  ///
+  /// Never use this to decide whether a system still exists: a library whose
+  /// games are all hidden would prune the system and take the unhide UI with
+  /// it. Gate existence on [getRomCountForSystem].
+  static Future<int> getVisibleRomCountForSystem(String systemId) async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM user_roms '
+      'WHERE app_system_id = ? AND is_hidden = 0',
       [systemId],
     );
     if (results.isEmpty) return 0;
@@ -3457,7 +3650,7 @@ class SqliteService {
     // Fetch systems with comprehensive metadata and game statistics.
     final results = await db.rawQuery('''
       SELECT s.*,
-             (SELECT COUNT(*) FROM user_roms ur WHERE ur.app_system_id = s.id) as rom_count,
+             (SELECT COUNT(*) FROM user_roms ur WHERE ur.app_system_id = s.id AND ur.is_hidden = 0) as rom_count,
              ss.recursive_scan,
              ss.custom_background_path,
              ss.custom_logo_path,
@@ -4061,7 +4254,7 @@ class SqliteService {
     final results = await db.rawQuery(
       '''
       SELECT
-        ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
         ur.cloud_sync_enabled, ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
@@ -4077,6 +4270,11 @@ class SqliteService {
         COALESCE(usm.genre, CASE WHEN s.folder_name IN ('android') THEN ur.genre END) as genre,
         COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END) as players,
         ur.box2d_aspect_ratio,
+        ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        -- app_ra_game_list holds one row per registered hash, so a game id can
+        -- appear several times with the same counts; take the first.
+        (SELECT ral.num_achievements FROM app_ra_game_list ral
+          WHERE ral.game_id = ur.id_ra LIMIT 1) as ra_num_achievements,
         usm.is_fully_scraped
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
@@ -4104,7 +4302,7 @@ class SqliteService {
     final db = await instance.database;
     final results = await db.rawQuery('''
       SELECT
-        ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
         ur.cloud_sync_enabled, ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
@@ -4120,6 +4318,11 @@ class SqliteService {
         COALESCE(usm.genre, CASE WHEN s.folder_name IN ('android') THEN ur.genre END) as genre,
         COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END        ) as players,
         ur.box2d_aspect_ratio,
+        ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        -- app_ra_game_list holds one row per registered hash, so a game id can
+        -- appear several times with the same counts; take the first.
+        (SELECT ral.num_achievements FROM app_ra_game_list ral
+          WHERE ral.game_id = ur.id_ra LIMIT 1) as ra_num_achievements,
         usm.is_fully_scraped
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
@@ -4136,7 +4339,7 @@ class SqliteService {
     final db = await instance.database;
     final results = await db.rawQuery('''
       SELECT
-        ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
         ur.cloud_sync_enabled, ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
@@ -4152,6 +4355,11 @@ class SqliteService {
         COALESCE(usm.genre, CASE WHEN s.folder_name IN ('android') THEN ur.genre END) as genre,
         COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END        ) as players,
         ur.box2d_aspect_ratio,
+        ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        -- app_ra_game_list holds one row per registered hash, so a game id can
+        -- appear several times with the same counts; take the first.
+        (SELECT ral.num_achievements FROM app_ra_game_list ral
+          WHERE ral.game_id = ur.id_ra LIMIT 1) as ra_num_achievements,
         usm.is_fully_scraped
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
@@ -4172,7 +4380,7 @@ class SqliteService {
     final results = await db.rawQuery(
       '''
       SELECT
-        ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
         ur.cloud_sync_enabled, ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
@@ -4188,6 +4396,11 @@ class SqliteService {
         COALESCE(usm.genre, CASE WHEN s.folder_name IN ('android') THEN ur.genre END) as genre,
         COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END        ) as players,
         ur.box2d_aspect_ratio,
+        ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        -- app_ra_game_list holds one row per registered hash, so a game id can
+        -- appear several times with the same counts; take the first.
+        (SELECT ral.num_achievements FROM app_ra_game_list ral
+          WHERE ral.game_id = ur.id_ra LIMIT 1) as ra_num_achievements,
         usm.is_fully_scraped
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
@@ -4239,6 +4452,57 @@ class SqliteService {
         whereArgs: [romPath],
       );
     }
+  }
+
+  /// Adds playtime that was accumulated on *another* device (pulled from a
+  /// cloud provider) to a game's total.
+  ///
+  /// Differs from [updatePlayTime] in how `last_played` is treated: local play
+  /// stamps "now", whereas imported play must not — the game was last played
+  /// here whenever it was last played here. [remoteLastPlayed] only moves the
+  /// stamp forward when the remote session is genuinely newer, so a pull can
+  /// never rewrite a more recent local session as older.
+  static Future<void> applyRemotePlayTime(
+    String romPath,
+    int seconds, {
+    DateTime? remoteLastPlayed,
+  }) async {
+    final db = await instance.database;
+    final current = await db.query(
+      'user_roms',
+      columns: ['play_time', 'last_played'],
+      where: 'rom_path = ?',
+      whereArgs: [romPath],
+    );
+    if (current.isEmpty) return;
+
+    final row = current.first;
+    final values = <String, Object?>{};
+
+    if (seconds > 0) {
+      values['play_time'] =
+          (int.tryParse(row['play_time']?.toString() ?? '0') ?? 0) + seconds;
+    }
+
+    if (remoteLastPlayed != null) {
+      final localRaw = row['last_played']?.toString();
+      final local = (localRaw == null || localRaw.isEmpty)
+          ? null
+          : DateTime.tryParse(localRaw);
+      if (local == null || remoteLastPlayed.isAfter(local)) {
+        // Stored local-naive like every other writer of this column, so the
+        // UI's existing parse/format path keeps showing wall-clock time.
+        values['last_played'] = remoteLastPlayed.toLocal().toIso8601String();
+      }
+    }
+
+    if (values.isEmpty) return;
+    await db.update(
+      'user_roms',
+      values,
+      where: 'rom_path = ?',
+      whereArgs: [romPath],
+    );
   }
 
   /// Toggles the favorite status for a given game path.
@@ -4321,6 +4585,93 @@ class SqliteService {
       where: 'app_system_id = ? AND filename = ?',
       whereArgs: [system.id, filename],
     );
+  }
+
+  /// Hides or unhides a single game.
+  ///
+  /// Hidden ROMs stay in the database (favorites, play time, saves and cloud
+  /// sync are all preserved) — they are only filtered out of the game lists.
+  /// The user restores them from the system's settings dialog.
+  static Future<void> setRomHidden(
+    String systemFolderName,
+    String filename,
+    bool hidden,
+  ) async {
+    final db = await instance.database;
+    final system = await getSystemByFolderName(systemFolderName);
+    await db.update(
+      'user_roms',
+      {'is_hidden': hidden ? 1 : 0},
+      where: 'app_system_id = ? AND filename = ?',
+      whereArgs: [system.id, filename],
+    );
+  }
+
+  /// Restores every hidden game of [systemId] in one shot.
+  static Future<void> unhideAllRomsForSystem(String systemId) async {
+    final db = await instance.database;
+    await db.update(
+      'user_roms',
+      {'is_hidden': 0},
+      where: 'app_system_id = ? AND is_hidden = 1',
+      whereArgs: [systemId],
+    );
+  }
+
+  /// Restores every hidden game across all systems.
+  static Future<void> unhideAllRoms() async {
+    final db = await instance.database;
+    await db.update('user_roms', {'is_hidden': 0}, where: 'is_hidden = 1');
+  }
+
+  /// Retrieves the games hidden by the user.
+  ///
+  /// Pass [systemId] to scope the result to a single system; omit it (or pass
+  /// the virtual `all` system) to list the hidden games of the whole library.
+  static Future<List<DatabaseGameModel>> getHiddenGames({
+    String? systemId,
+  }) async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
+        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.app_emulator_unique_id as emulator_name,
+        s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
+        s.short_name as system_short_name,
+        COALESCE(usm.real_name, CASE WHEN s.folder_name IN ('android') THEN ur.title_name END, ur.filename) as game_display_name,
+        usm.real_name as ss_real_name,
+        usm.rating,
+        ur.box2d_aspect_ratio
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      LEFT JOIN user_screenscraper_metadata usm ON ur.app_system_id = usm.app_system_id AND ur.filename = usm.filename
+      WHERE ur.is_hidden = 1
+        ${systemId == null ? '' : 'AND ur.app_system_id = ?'}
+      ORDER BY LOWER(system_real_name) ASC, LOWER(game_display_name) ASC
+    ''',
+      [?systemId],
+    );
+
+    return results.map((row) => DatabaseGameModel.fromJson(row)).toList();
+  }
+
+  /// Returns how many games are hidden, keyed by system id.
+  ///
+  /// One query for the whole library: the scan loop subtracts these from the
+  /// raw ROM counts so a system card never advertises games the list won't show.
+  static Future<Map<String, int>> getHiddenRomCountsBySystem() async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      'SELECT app_system_id, COUNT(*) as count FROM user_roms '
+      'WHERE is_hidden = 1 GROUP BY app_system_id',
+    );
+    return {
+      for (final row in results)
+        row['app_system_id'].toString():
+            int.tryParse(row['count']?.toString() ?? '0') ?? 0,
+    };
   }
 
   /// Resets a game's play statistics (time and last played) to zero.
@@ -4542,6 +4893,7 @@ class SqliteService {
   /// This is used to track modifications and versioning for cloud sync, bypassing
   /// filesystem limitations on Android (e.g., restricted 'lastModified' modification).
   static Future<void> saveSyncState(
+    String provider,
     String filePath,
     int localModifiedAt,
     int cloudUpdatedAt,
@@ -4550,7 +4902,10 @@ class SqliteService {
   }) async {
     try {
       final db = await instance.database;
+      // Keyed on (provider, file_path): each sync provider owns its own row for
+      // a given file so RomM and NeoSync timestamps never overwrite each other.
       await db.insert('app_neo_sync_state', {
+        'provider': provider,
         'file_path': filePath,
         'local_modified_at': localModifiedAt,
         'cloud_updated_at': cloudUpdatedAt,
@@ -4563,13 +4918,16 @@ class SqliteService {
   }
 
   /// Retrieves the recorded synchronization state for a specific file path.
-  static Future<Map<String, dynamic>?> getSyncState(String filePath) async {
+  static Future<Map<String, dynamic>?> getSyncState(
+    String provider,
+    String filePath,
+  ) async {
     try {
       final db = await instance.database;
       final results = await db.query(
         'app_neo_sync_state',
-        where: 'file_path = ?',
-        whereArgs: [filePath],
+        where: 'provider = ? AND file_path = ?',
+        whereArgs: [provider, filePath],
         limit: 1,
       );
       if (results.isNotEmpty) {
@@ -4861,10 +5219,91 @@ class SqliteService {
     return cores.map((e) => e.toMap()).toList();
   }
 
+  /// Path of the bundled RetroAchievements seed asset.
+  static const String _raSeedAsset = 'assets/data/ra_insert.sql';
+
+  /// Reads the generation stamp from the head of the RA seed asset.
+  ///
+  /// The generator writes `-- Auto-generated on <timestamp>` into the first few
+  /// lines, so the stamp moves whenever the asset is regenerated and nobody has
+  /// to remember to bump a constant. Only the first bytes are decoded — the
+  /// whole file is 6 MB and decoding it is a third of what this check exists to
+  /// avoid.
+  ///
+  /// Returns `''` if the header is missing or unreadable, which compares equal
+  /// to no stored stamp and so falls back to re-seeding.
+  Future<String> _readRaSeedStamp() async {
+    try {
+      final data = await rootBundle.load(_raSeedAsset);
+      final headLength = data.lengthInBytes < 512 ? data.lengthInBytes : 512;
+      final head = String.fromCharCodes(
+        data.buffer.asUint8List(data.offsetInBytes, headLength),
+      );
+      for (final line in head.split('\n')) {
+        if (line.startsWith('-- Auto-generated on ')) {
+          return line.trim();
+        }
+      }
+    } catch (e) {
+      _log.w('Could not read RA seed stamp, will re-seed: $e');
+    }
+    return '';
+  }
+
   /// Refreshes the local RetroAchievements game database from bundled SQL assets.
+  ///
+  /// Skips the whole re-seed when the bundled asset has not changed since the
+  /// last successful one. That block deletes and re-inserts 18,079 rows and
+  /// character-parses a 6 MB asset to do it — measured at ~275 ms on a desktop
+  /// with the database on an NVMe, and it ran on every single launch. The stamp
+  /// is only written after the seed succeeds, so a failed seed retries next
+  /// launch rather than being cached as done.
+  /// Whether this launch actually rebuilt `app_ra_game_list`.
+  ///
+  /// The lookup-only match pass exists to recover matches after the bundled
+  /// RetroAchievements database changes. When it has not changed, walking every
+  /// hashed-but-unmatched ROM again cannot produce a different answer than it
+  /// did last launch — those ROMs are simply not in the list — so an unattended
+  /// pass has nothing to gain from it.
+  static bool raSeedChangedThisLaunch = false;
+
   Future<void> refreshRetroAchievementsData() async {
     try {
       final db = await database;
+      final assetStamp = await _readRaSeedStamp();
+
+      // Never let the skip-check itself cost us the seed. Anything that goes
+      // wrong reading the stored stamp (a database old enough to predate the
+      // column, a config row that is not there yet) must fall through to the
+      // re-seed that used to be unconditional, not abort it.
+      String storedStamp = '';
+      try {
+        storedStamp = await getRaSeedStamp();
+      } catch (e) {
+        _log.w('Could not read the stored RA seed stamp, will re-seed: $e');
+      }
+
+      // A matching stamp is only trustworthy if the rows are actually there.
+      // A migration that recreated the table, or a partially applied seed,
+      // would otherwise leave the app with an empty list it never rebuilds.
+      if (assetStamp.isNotEmpty && assetStamp == storedStamp) {
+        final rows = await db.rawQuery(
+          'SELECT COUNT(*) AS c FROM app_ra_game_list',
+        );
+        final count = rows.isEmpty ? 0 : (rows.first['c'] as int? ?? 0);
+        if (count > 0) {
+          _log.i(
+            'RetroAchievements seed unchanged ($assetStamp, $count rows) - '
+            'skipping re-seed.',
+          );
+          return; // raSeedChangedThisLaunch stays false: nothing to re-look-up.
+        }
+        _log.w(
+          'RetroAchievements seed stamp matched but table is empty - '
+          're-seeding.',
+        );
+      }
+
       await db.transaction((txn) async {
         _log.i('Refreshing local RetroAchievements game database...');
 
@@ -4872,12 +5311,20 @@ class SqliteService {
         await txn.execute('DELETE FROM app_ra_game_list');
 
         // Batch insert data from the SQL seed file.
-        await _executeSqlFileOptimized(
-          txn,
-          'assets/data/ra_insert.sql',
-          'ra_insert',
-        );
+        await _executeSqlFileOptimized(txn, _raSeedAsset, 'ra_insert');
       });
+
+      if (assetStamp.isNotEmpty) {
+        // Recording the stamp is an optimisation for next launch, not part of
+        // the seed: a failure here costs one redundant re-seed, and must not
+        // report the seed that just succeeded as failed.
+        try {
+          await updateRaSeedStamp(assetStamp);
+        } catch (e) {
+          _log.w('Could not record the RA seed stamp: $e');
+        }
+      }
+      raSeedChangedThisLaunch = true;
       _log.i('RetroAchievements database synchronized successfully.');
     } catch (e, stackTrace) {
       _log.e(
@@ -4886,6 +5333,79 @@ class SqliteService {
         stackTrace: stackTrace,
       );
       // Non-critical: allow initialization to proceed even if this sync fails.
+    }
+  }
+
+  /// Finds systems whose emulators reference a RetroArch core by display name
+  /// or core filename. Used by the NeoSync migration to resolve the system for
+  /// legacy `saves/<core>/<game>.ext` paths.
+  ///
+  /// Exact `core_filename` / `name` matches rank first so a specific core
+  /// folder maps to the intended system instead of an arbitrary `%...%` hit.
+  static Future<List<Map<String, dynamic>>?> findSystemByCoreName(
+    String coreName,
+  ) async {
+    try {
+      final db = await instance.database;
+      final results = await db.rawQuery(
+        '''
+        SELECT DISTINCT s.id, s.folder_name
+        FROM app_emulators e
+        JOIN app_systems s ON e.system_id = s.id
+        WHERE e.core_filename = ? OR e.name = ? OR e.core_filename LIKE ? OR e.name LIKE ?
+        ORDER BY
+          (CASE WHEN e.core_filename = ? THEN 0
+                WHEN e.name = ? THEN 1
+                WHEN e.core_filename LIKE ? THEN 2
+                ELSE 3 END),
+          s.folder_name
+        ''',
+        [
+          coreName,
+          coreName,
+          '%$coreName%',
+          '%$coreName%',
+          coreName,
+          coreName,
+          '$coreName%',
+        ],
+      );
+      return results;
+    } catch (e) {
+      _log.e('Error finding system by core name: $e');
+      return null;
+    }
+  }
+
+  /// Returns the folder names of every system an emulator is registered for,
+  /// keyed by its NeoSync slug (e.g. `retroarch.fceumm` -> `nes`).
+  ///
+  /// Used to reconcile the system of a save with the emulator that produced it:
+  /// a save must never be tagged with a system the emulator doesn't support.
+  /// Systems for which the emulator is the default rank first, since a core
+  /// like flycast can be registered for several arcade systems (dc, naomi, aw).
+  static Future<List<String>> findSystemsByEmulatorSlug(
+    String neosyncSlug,
+  ) async {
+    try {
+      final db = await instance.database;
+      final results = await db.rawQuery(
+        '''
+        SELECT DISTINCT s.folder_name
+        FROM app_emulators e
+        JOIN app_systems s ON e.system_id = s.id
+        WHERE e.neosync_slug = ?
+        ORDER BY (CASE WHEN e.is_default = 1 THEN 0 ELSE 1 END), s.folder_name
+        ''',
+        [neosyncSlug],
+      );
+      return results
+          .map((r) => r['folder_name']?.toString() ?? '')
+          .where((f) => f.isNotEmpty)
+          .toList();
+    } catch (e) {
+      _log.e('Error finding systems for emulator slug $neosyncSlug: $e');
+      return const [];
     }
   }
 }

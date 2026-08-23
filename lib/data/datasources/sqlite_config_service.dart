@@ -152,6 +152,11 @@ class SqliteConfigService {
             (int.tryParse(userConfig?['sfx_enabled']?.toString() ?? '1') ??
                 1) ==
             1,
+        sfxVolume:
+            (double.tryParse(userConfig?['sfx_volume']?.toString() ?? '0.75') ??
+                    0.75)
+                .clamp(0.0, 0.75)
+                .toDouble(),
         use12HourClock:
             (int.tryParse(
                   userConfig?['use_12_hour_clock']?.toString() ?? '0',
@@ -188,6 +193,10 @@ class SqliteConfigService {
             1,
         hideTabScraper:
             (int.tryParse(userConfig?['hide_tab_scraper']?.toString() ?? '0') ??
+                0) ==
+            1,
+        hideTabRomm:
+            (int.tryParse(userConfig?['hide_tab_romm']?.toString() ?? '0') ??
                 0) ==
             1,
         hideTabSearch:
@@ -241,6 +250,18 @@ class SqliteConfigService {
                     25)
                 .clamp(0, 100),
         esdeFolderPath: userConfig?['esde_folder_path']?.toString() ?? '',
+        showAchievementsBadge:
+            (int.tryParse(
+                  userConfig?['show_achievements_badge']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
+        raMatchOnStartup:
+            (int.tryParse(
+                  userConfig?['ra_match_on_startup']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -275,6 +296,7 @@ class SqliteConfigService {
         hideBottomScreen: config.hideBottomScreen ? 1 : 0,
         videoSound: config.videoSound ? 1 : 0,
         sfxEnabled: config.sfxEnabled ? 1 : 0,
+        sfxVolume: config.sfxVolume,
         use12HourClock: config.use12HourClock ? 1 : 0,
         systemSortBy: config.systemSortBy,
         systemSortOrder: config.systemSortOrder,
@@ -285,6 +307,7 @@ class SqliteConfigService {
         hideTabSync: config.hideTabSync ? 1 : 0,
         hideTabAchievements: config.hideTabAchievements ? 1 : 0,
         hideTabScraper: config.hideTabScraper ? 1 : 0,
+        hideTabRomm: config.hideTabRomm ? 1 : 0,
         hideTabSearch: config.hideTabSearch ? 1 : 0,
         activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
@@ -299,6 +322,8 @@ class SqliteConfigService {
         nowPlayingDimLevel: config.nowPlayingDimLevel,
         fanartDimLevel: config.fanartDimLevel,
         esdeFolderPath: config.esdeFolderPath,
+        showAchievementsBadge: config.showAchievementsBadge ? 1 : 0,
+        raMatchOnStartup: config.raMatchOnStartup ? 1 : 0,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

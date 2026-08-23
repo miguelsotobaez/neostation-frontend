@@ -24,7 +24,8 @@
         "style",
         "ci",
         "perf",
-        "test"
+        "test",
+        "revert"
       ]
     },
     {
@@ -36,6 +37,20 @@
     {
       "title": "## Other",
       "labels": []
+    }
+  ],
+  "label_extractor": [
+    {
+      "pattern": "^(feat|fix|docs|style|refactor|perf|test|chore|ci|revert)(\\([^)]*\\))?(!)?:[\\s\\S]*$",
+      "target": "$1",
+      "on_property": "title",
+      "flags": "gu"
+    },
+    {
+      "pattern": "^build\\(deps[^)]*\\)(!)?:[\\s\\S]*$",
+      "target": "dependencies",
+      "on_property": "title",
+      "flags": "gu"
     }
   ],
   "sort": "ASC",

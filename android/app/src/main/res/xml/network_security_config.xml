@@ -10,11 +10,11 @@
     
     <!-- Configuración para dominios de producción NeoGameLab (HTTPS) -->
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">neogamelab.com</domain>
-        <domain includeSubdomains="true">auth.neogamelab.com</domain>
-        <domain includeSubdomains="true">billing.neogamelab.com</domain>
-        <domain includeSubdomains="true">cloudsync.neogamelab.com</domain>
-        <domain includeSubdomains="true">notify.neogamelab.com</domain>
+        <domain includeSubdomains="true">neosync.cloud</domain>
+        <domain includeSubdomains="true">auth.neosync.cloud</domain>
+        <domain includeSubdomains="true">billing.neosync.cloud</domain>
+        <domain includeSubdomains="true">sync.neosync.cloud</domain>
+        <domain includeSubdomains="true">notify.neosync.cloud</domain>
         <trust-anchors>
             <certificates src="system"/>
         </trust-anchors>

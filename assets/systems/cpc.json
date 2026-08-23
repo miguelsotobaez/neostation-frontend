@@ -14,6 +14,10 @@
       "screenscraper": 65,
       "retroachievements": 37
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
+    },
     "folders": [
       "cpc",
       "amstradcpc",

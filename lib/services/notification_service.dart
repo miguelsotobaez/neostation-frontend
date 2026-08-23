@@ -233,7 +233,7 @@ class NotificationService extends ChangeNotifier {
     _shouldAutoReconnect = false;
 
     if (_channel != null) {
-      _channel!.sink.close(status.goingAway);
+      _channel!.sink.close(status.normalClosure);
       _channel = null;
     }
 
@@ -253,7 +253,7 @@ class NotificationService extends ChangeNotifier {
     _reconnectTimer = null;
     _reconnectAttempts = 0;
     _stopConnectionMonitoring();
-    _channel?.sink.close(status.goingAway);
+    _channel?.sink.close(status.normalClosure);
     _channel = null;
     _isConnected = false;
     _isConnecting = false;

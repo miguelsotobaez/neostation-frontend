@@ -3,6 +3,8 @@ package com.neogamelab.neostation
 import android.os.Bundle
 import android.util.Log
 import android.view.Display
+import android.view.KeyEvent
+import android.view.WindowManager
 import com.hcoderlee.subscreen.sub_screen.FlutterPresentation
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -34,7 +36,50 @@ class SecondaryAppsPresentation(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        hardenAgainstDismissal()
         registerAppsChannel()
+    }
+
+    /**
+     * Keeps the bottom screen alive when the user interacts with it.
+     *
+     * A [android.app.Presentation] is a [android.app.Dialog], so out of the box
+     * it is cancelable: tapping the bottom screen moves input focus to this
+     * window, and the next BACK press runs Dialog's default handling —
+     * cancel() then [dismiss] — which tears the secondary FlutterView off its
+     * engine and destroys it. The bottom half of the launcher then disappears
+     * for good (the system launcher shows through) while the top half keeps
+     * running, and nothing recreates it because the activity still holds the
+     * dismissed Presentation. MainActivity already swallows BACK, but that only
+     * covers its own window — this one is separate and never saw the key.
+     *
+     * Focus is the deeper problem: a focusable window here also makes the
+     * bottom display the top-focused display, which is why HOME could relaunch
+     * NeoStation onto the bottom screen (or re-prompt for the default launcher)
+     * and why gamepad keys stopped reaching MainActivity after a tap. The
+     * bottom screen is a touch-only status/dock surface with no text fields or
+     * key handling of its own, so it never needs key focus: FLAG_NOT_FOCUSABLE
+     * keeps touch working while leaving every key event, and the focused
+     * display, with the main activity on top.
+     */
+    private fun hardenAgainstDismissal() {
+        setCancelable(false)
+        setCanceledOnTouchOutside(false)
+        try {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not make secondary window non-focusable: ${e.message}")
+        }
+    }
+
+    /** Never let BACK reach Dialog's cancel path, focused or not. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onBackPressed() {
+        // Deliberately empty: BACK must never dismiss the bottom screen.
     }
 
     private fun registerAppsChannel() {
@@ -70,9 +115,47 @@ class SecondaryAppsPresentation(
                         activity.openScreenshotAccessSettings()
                         result.success(null)
                     }
+                    "isDisplayOn" -> result.success(isDisplayOn())
                     else -> result.notImplemented()
                 }
             }
+        }
+    }
+
+    /**
+     * Live power state of the display this presentation renders on — the ground
+     * truth for "is the bottom screen actually lit". The secondary engine gets
+     * no Android lifecycle callbacks and its shared-state mirror of the screen
+     * flag travels on a transport that ships full snapshots with no ordering
+     * guarantee, so a stale snapshot can resurrect a `true` after the device has
+     * gone to sleep. Asking the display itself can't go stale.
+     *
+     * Fails open (true): a display we cannot read must not silently disable the
+     * preview while the device is awake.
+     */
+    private fun isDisplayOn(): Boolean {
+        return try {
+            getDisplay().state == Display.STATE_ON
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read secondary display state: ${e.message}")
+            true
+        }
+    }
+
+    /**
+     * Pushes a device screen on/off edge straight to the secondary engine.
+     * Direct and ordered, unlike the shared-state snapshot mirror, so the engine
+     * can tear its preview video down on sleep and know the teardown sticks.
+     * Must be called on the main thread.
+     */
+    fun notifyScreenState(on: Boolean) {
+        try {
+            appsChannel?.invokeMethod(
+                if (on) "onDeviceScreenOn" else "onDeviceScreenOff",
+                null
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "notifyScreenState failed: ${e.message}")
         }
     }
 

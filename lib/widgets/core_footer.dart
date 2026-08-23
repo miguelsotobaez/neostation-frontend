@@ -7,6 +7,12 @@ import 'package:neostation/l10n/app_locale.dart';
 
 import '../themes/corner_radii.dart';
 
+/// Height of every [CoreFooter] strip, in logical (pre-`.r`) units.
+///
+/// Exposed so screens that float the footer over their content can pad the
+/// scrollable by exactly the strip it sits on.
+const double kCoreFooterHeight = 42;
+
 /// Base footer class that eliminates duplicated code between games_footer and systems_footer.
 abstract class CoreFooter extends StatefulWidget {
   const CoreFooter({super.key});
@@ -52,7 +58,7 @@ class _CoreFooterState extends State<CoreFooter> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 42.r,
+      height: kCoreFooterHeight.r,
       decoration: BoxDecoration(
         color: widget.centerControls
             ? Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.5)

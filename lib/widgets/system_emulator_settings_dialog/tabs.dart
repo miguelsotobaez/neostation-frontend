@@ -192,13 +192,14 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
           extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
         );
       } else {
-        final result = await FilePicker.pickFiles(
+        final result = await FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
           dialogTitle: 'Select Background Image',
-          lockParentWindow: true,
+          windowsOptions: const WindowsOptions(lockParentWindow: true),
+          linuxOptions: const LinuxOptions(lockParentWindow: true),
         );
-        pickedPath = result?.files.single.path;
+        pickedPath = result?.path;
       }
 
       if (pickedPath == null) return;
@@ -323,13 +324,14 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
           extensions: ['png', 'jpg', 'jpeg', 'webp'],
         );
       } else {
-        final result = await FilePicker.pickFiles(
+        final result = await FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
           dialogTitle: 'Select Logo Image',
-          lockParentWindow: true,
+          windowsOptions: const WindowsOptions(lockParentWindow: true),
+          linuxOptions: const LinuxOptions(lockParentWindow: true),
         );
-        pickedPath = result?.files.single.path;
+        pickedPath = result?.path;
       }
 
       if (pickedPath == null) return;
@@ -611,6 +613,228 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Hidden tab: the games the user took out of the game lists, each with the
+  /// action that puts it back. This is the only place a hidden game resurfaces,
+  /// so it stays reachable even when every game of the system is hidden.
+  Widget _buildHiddenGamesTab() {
+    final theme = Theme.of(context);
+
+    if (_isLoadingHiddenGames) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+        ),
+      );
+    }
+
+    if (_hiddenGames.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.r),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Symbols.visibility_off_rounded,
+                size: 28.r,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              SizedBox(height: 8.r),
+              Text(
+                AppLocale.noHiddenGames.getString(context),
+                style: TextStyle(
+                  fontSize: 12.r,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              SizedBox(height: 4.r),
+              Text(
+                AppLocale.noHiddenGamesSubtitle.getString(context),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10.r,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: _hiddenScrollController,
+      padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 6.r),
+      itemCount: _totalHiddenItems,
+      itemBuilder: (context, index) {
+        if (index >= _hiddenGames.length) return _buildUnhideAllItem(index);
+        return _buildHiddenGameItem(index, _hiddenGames[index]);
+      },
+    );
+  }
+
+  Widget _buildHiddenGameItem(int index, DatabaseGameModel game) {
+    final theme = Theme.of(context);
+    final isFocused = _hiddenIndex == index;
+    final key = _hiddenItemKeys.putIfAbsent(index, () => GlobalKey());
+    final displayName = game.realName ?? game.filename;
+    // In the aggregated libraries the same game name can come from several
+    // systems, so the row says which one it belongs to. Within one system the
+    // filename is the only extra detail worth showing, and only when the title
+    // above isn't already that same filename.
+    final subtitle = _isVirtualLibrarySystem
+        ? (game.systemRealName ?? game.systemFolderName ?? '')
+        : (displayName == game.filename ? '' : game.filename);
+
+    return Padding(
+      key: key,
+      padding: EdgeInsets.only(bottom: 4.r),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isFocused
+              ? theme.colorScheme.primary.withValues(alpha: 0.2)
+              : Colors.transparent,
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+              BorderRadius.circular(9.r),
+        ),
+        child: InkWell(
+          onTap: () {
+            SfxService().playNavSound();
+            rebuild(() => _hiddenIndex = index);
+            _unhideGame(game);
+          },
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+              BorderRadius.circular(9.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 6.r),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.r,
+                          fontWeight: FontWeight.w600,
+                          color: isFocused
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 9.r,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 8.r),
+                _buildUnhidePill(AppLocale.unhide.getString(context)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnhideAllItem(int index) {
+    final theme = Theme.of(context);
+    final isFocused = _hiddenIndex == index;
+    final key = _hiddenItemKeys.putIfAbsent(index, () => GlobalKey());
+
+    return Padding(
+      key: key,
+      padding: EdgeInsets.only(top: 4.r, bottom: 4.r),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isFocused
+              ? theme.colorScheme.primary.withValues(alpha: 0.2)
+              : Colors.transparent,
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+              BorderRadius.circular(9.r),
+        ),
+        child: InkWell(
+          onTap: () {
+            SfxService().playNavSound();
+            rebuild(() => _hiddenIndex = index);
+            _unhideAllGames();
+          },
+          borderRadius:
+              Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
+              BorderRadius.circular(9.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
+            child: Row(
+              children: [
+                Icon(
+                  Symbols.visibility_rounded,
+                  size: 14.r,
+                  color: isFocused
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
+                ),
+                SizedBox(width: 8.r),
+                Expanded(
+                  child: Text(
+                    AppLocale.unhideAll.getString(context),
+                    style: TextStyle(
+                      fontSize: 10.r,
+                      fontWeight: FontWeight.w600,
+                      color: isFocused
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnhidePill(String label) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4.r),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.4),
+          width: 1.r,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9.r,
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.primary,
         ),
       ),
     );

@@ -16,8 +16,22 @@ class DatabaseGameModel {
   /// Whether the user has marked this game as a favorite.
   final bool isFavorite;
 
+  /// Whether the user hid this game from the game lists. Hidden games stay in
+  /// the database and are restored from the system settings dialog.
+  final bool isHidden;
+
   /// Unique identifier on RetroAchievements.org.
   final int? idRa;
+
+  /// The system's RetroAchievements console id, or null when they do not cover
+  /// it. Carried on the game so a view can tell "no set for this game" from
+  /// "no sets for this whole system" without a systems lookup.
+  final String? systemRaId;
+
+  /// How many achievements the bundled RetroAchievements snapshot lists for
+  /// [idRa]. Null until the ROM is matched; read from the local snapshot, so it
+  /// costs no API call.
+  final int? raNumAchievements;
 
   /// Name of the standalone emulator or libretro core used to launch this game.
   final String? emulatorName;
@@ -36,6 +50,11 @@ class DatabaseGameModel {
 
   /// Computed RetroAchievements hash used for game identification.
   final String? raHash;
+
+  /// How the RetroAchievements match was established: 'hash', 'filename',
+  /// 'title' or 'manual'. NULL for matches made before this was recorded.
+  /// Only 'manual' is protected from automatic re-matching.
+  final String? raMatchSource;
 
   /// Computed ScreenScraper MD5/SHA1 hash used for metadata scraping.
   final String? ssHash;
@@ -96,13 +115,17 @@ class DatabaseGameModel {
     required this.filename,
     required this.romPath,
     this.isFavorite = false,
+    this.isHidden = false,
     this.idRa,
+    this.systemRaId,
+    this.raNumAchievements,
     this.emulatorName,
     this.emulatorPath,
     this.coreName,
     this.lastPlayed,
     this.playTime = 0,
     this.raHash,
+    this.raMatchSource,
     this.ssHash,
     this.systemFolderName,
     this.systemRealName,
@@ -165,7 +188,18 @@ class DatabaseGameModel {
                   .toLowerCase() ==
               'true' ||
           (json['is_favorite'] ?? json['isFavorite'] ?? 0).toString() == '1',
+      isHidden:
+          (json['is_hidden'] ?? json['isHidden'] ?? 0)
+                  .toString()
+                  .toLowerCase() ==
+              'true' ||
+          (json['is_hidden'] ?? json['isHidden'] ?? 0).toString() == '1',
       idRa: int.tryParse((json['id_ra'] ?? json['idRa'] ?? '').toString()),
+      systemRaId: (json['system_ra_id'] ?? json['systemRaId'])?.toString(),
+      raNumAchievements: int.tryParse(
+        (json['ra_num_achievements'] ?? json['raNumAchievements'] ?? '')
+            .toString(),
+      ),
       emulatorName: (json['emulator_name'] ?? json['emulatorName'])?.toString(),
       emulatorPath: (json['emulator_path'] ?? json['emulatorPath'])?.toString(),
       coreName: (json['core_name'] ?? json['coreName'])?.toString(),
@@ -180,6 +214,8 @@ class DatabaseGameModel {
           ) ??
           0,
       raHash: (json['ra_hash'] ?? json['raId'])?.toString(),
+      raMatchSource: (json['ra_match_source'] ?? json['raMatchSource'])
+          ?.toString(),
       ssHash: (json['ss_hash'] ?? json['ssId'])?.toString(),
       systemFolderName: (json['system_folder_name'] ?? json['systemFolderName'])
           ?.toString(),
@@ -229,13 +265,17 @@ class DatabaseGameModel {
       'filename': filename,
       'romPath': romPath,
       'isFavorite': isFavorite,
+      'isHidden': isHidden,
       'idRa': idRa,
+      'systemRaId': systemRaId,
+      'raNumAchievements': raNumAchievements,
       'emulatorName': emulatorName,
       'emulatorPath': emulatorPath,
       'coreName': coreName,
       'lastPlayed': lastPlayed?.toIso8601String(),
       'playTime': playTime,
       'raHash': raHash,
+      'raMatchSource': raMatchSource,
       'ssHash': ssHash,
       'systemFolderName': systemFolderName,
       'systemRealName': systemRealName,
@@ -264,13 +304,17 @@ class DatabaseGameModel {
     String? filename,
     String? romPath,
     bool? isFavorite,
+    bool? isHidden,
     int? idRa,
+    String? systemRaId,
+    int? raNumAchievements,
     String? emulatorName,
     String? emulatorPath,
     String? coreName,
     DateTime? lastPlayed,
     int? playTime,
     String? raHash,
+    String? raMatchSource,
     String? ssHash,
     String? systemFolderName,
     String? systemRealName,
@@ -295,13 +339,17 @@ class DatabaseGameModel {
       filename: filename ?? this.filename,
       romPath: romPath ?? this.romPath,
       isFavorite: isFavorite ?? this.isFavorite,
+      isHidden: isHidden ?? this.isHidden,
       idRa: idRa ?? this.idRa,
+      systemRaId: systemRaId ?? this.systemRaId,
+      raNumAchievements: raNumAchievements ?? this.raNumAchievements,
       emulatorName: emulatorName ?? this.emulatorName,
       emulatorPath: emulatorPath ?? this.emulatorPath,
       coreName: coreName ?? this.coreName,
       lastPlayed: lastPlayed ?? this.lastPlayed,
       playTime: playTime ?? this.playTime,
       raHash: raHash ?? this.raHash,
+      raMatchSource: raMatchSource ?? this.raMatchSource,
       ssHash: ssHash ?? this.ssHash,
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,

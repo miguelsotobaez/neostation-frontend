@@ -161,13 +161,16 @@ extension _Chrome on _SystemEmulatorSettingsDialogState {
             ),
           ),
           _buildTabItem(0, AppLocale.general.getString(context)),
-          if (widget.system.folderName != 'all' &&
-              widget.system.folderName != 'android') ...[
+          if (_availableTabs.contains(1)) ...[
             SizedBox(width: 16.r),
             _buildTabItem(1, AppLocale.emulators.getString(context)),
           ],
           SizedBox(width: 16.r),
           _buildTabItem(2, AppLocale.appearance.getString(context)),
+          if (_availableTabs.contains(3)) ...[
+            SizedBox(width: 16.r),
+            _buildTabItem(3, AppLocale.hiddenGames.getString(context)),
+          ],
           const Spacer(),
           // RB Icon
           Padding(

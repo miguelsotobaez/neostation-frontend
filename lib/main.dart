@@ -5,6 +5,7 @@ import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/screens/main_screen.dart';
 import 'package:neostation/services/neosync/auth_service.dart';
@@ -12,6 +13,7 @@ import 'package:neostation/services/neosync/neo_sync_service.dart';
 import 'package:neostation/services/neosync/billing_service.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/sync/providers/neo_sync_adapter.dart';
+import 'package:neostation/sync/providers/romm_provider.dart';
 import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
@@ -21,9 +23,10 @@ import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
 import 'package:neostation/services/startup_theme_cache.dart';
-import 'package:neostation/widgets/shimmering_logo.dart';
+import 'package:neostation/widgets/splash_status_layout.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
+import 'package:neostation/utils/display_metrics_log.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/config_service.dart';
@@ -369,6 +372,66 @@ void main() async {
 
   final neoSyncAdapter = NeoSyncAdapter(neoSyncProvider);
   SyncManager.instance.register(neoSyncAdapter);
+
+  // Build the RomM browse provider before runApp so the RomM save-sync provider
+  // can share its authenticated connection, and so SyncManager can register it.
+  final rommProvider = RommProvider()..initialize();
+  // After RomM downloads settle (debounced), index the new ROMs and refresh the
+  // affected systems' game lists so they appear progressively — even if the
+  // user backs out of the browse screen mid-batch.
+  //
+  // Scan only the affected systems (rescanSystemSilent), not the whole library,
+  // so downloading 100 ROMs doesn't trigger 100 full-library rescans. Fall back
+  // to a full scan only when a genuinely new (not-yet-detected) system appears,
+  // since detecting it needs the full re-detect pass.
+  rommProvider.onDownloadsSettled = (systems) async {
+    // Read the *scanned* system list, not `config.detectedSystems`. On Android
+    // scanSystems() deliberately leaves the config's copy alone while it scans
+    // in the background (see scanning.dart), so it is stale here — which made
+    // every downloaded system look new (forcing a full rescan each settle) and
+    // then look unregistered afterwards, skipping the refresh that puts the
+    // games on screen.
+    Set<String> detectedFolders() => {
+      for (final s in sqliteConfigProvider.detectedSystems) s.folderName,
+    };
+
+    final detected = detectedFolders();
+    final hasNewSystem = systems.any(
+      (s) =>
+          !detected.contains(s.folderName) && !s.folders.any(detected.contains),
+    );
+    if (hasNewSystem) {
+      await sqliteConfigProvider.scanSystems();
+    } else {
+      for (final system in systems) {
+        await sqliteConfigProvider.rescanSystemSilent(system);
+      }
+    }
+    // Re-read after the scan: a genuinely new system only becomes known here.
+    // A system still missing at this point really didn't register (scanSystems
+    // no-ops while another scan is in flight), and refreshing it would load an
+    // empty list and silently drop the freshly downloaded games — so skip it
+    // and log, leaving the gap diagnosable rather than silent.
+    final registered = detectedFolders();
+    for (final system in systems) {
+      final isKnown =
+          registered.contains(system.folderName) ||
+          system.folders.any(registered.contains);
+      if (isKnown) {
+        await sqliteDatabaseProvider.refreshSystem(system.folderName);
+      } else {
+        LoggerService.instance.w(
+          'RomM: downloaded ROMs for "${system.folderName}" but it is not '
+          'registered after scan; a manual rescan is needed for them to appear.',
+        );
+      }
+    }
+  };
+  SyncManager.instance.register(
+    RomMSyncProvider(rommProvider, neoSyncProvider),
+  );
+
+  // Restore the user's chosen provider only after both are registered.
   SyncManager.instance.restoreActive(
     sqliteConfigProvider.config.activeSyncProvider,
   );
@@ -381,6 +444,7 @@ void main() async {
       sqliteDatabaseProvider: sqliteDatabaseProvider,
       neoSyncService: neoSyncService,
       neoSyncProvider: neoSyncProvider,
+      rommProvider: rommProvider,
       themeProvider: themeProvider,
     ),
   );
@@ -389,7 +453,8 @@ void main() async {
 
   // Initialize SFX service for navigation sounds (fire-and-forget).
   SfxService().init().then((_) {
-    // Apply the persisted enabled/disabled preference immediately.
+    // Apply persisted SFX preferences immediately.
+    SfxService().setVolume(sqliteConfigProvider.config.sfxVolume);
     SfxService().setEnabled(sqliteConfigProvider.config.sfxEnabled);
   });
 }
@@ -492,27 +557,12 @@ class _StartupScaffoldState extends State<_StartupScaffold> {
               : (_, event) => widget.onKeyEvent!(event),
           // Animated mode pins the logo at the exact screen centre — the same
           // spot the Android 12+ splash icon occupies — with the status text
-          // hung below centre, so the native→Flutter handoff and the later
-          // screens never move the logo. The error screen keeps the simpler
-          // centred column with the wordmark.
+          // hung below it, so the native→Flutter handoff and the later screens
+          // never move the logo. Shared with the scan splash so the
+          // text/progress zone is one fixed place all intro. The error screen
+          // keeps the simpler centred column with the wordmark.
           child: widget.animatedLogo
-              ? Stack(
-                  children: [
-                    const Center(child: ShimmeringLogo()),
-                    Align(
-                      // Same offset as the scan splash's progress detail so
-                      // the text/progress zone is one fixed place all intro.
-                      alignment: const Alignment(0, 0.55),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: children,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
+              ? SplashStatusLayout(children: children)
               : Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),
@@ -799,6 +849,7 @@ class MyApp extends StatefulWidget {
   final SqliteDatabaseProvider sqliteDatabaseProvider;
   final NeoSyncService neoSyncService;
   final NeoSyncProvider neoSyncProvider;
+  final RommProvider rommProvider;
 
   /// Built in `main()` with the saved theme already resolved, so the first
   /// frame paints in the user's theme rather than the brightness fallback.
@@ -812,6 +863,7 @@ class MyApp extends StatefulWidget {
     required this.sqliteDatabaseProvider,
     required this.neoSyncService,
     required this.neoSyncProvider,
+    required this.rommProvider,
     required this.themeProvider,
   });
 
@@ -861,6 +913,7 @@ class _MyAppState extends State<MyApp> {
           lazy: false,
           create: (context) => RetroAchievementsProvider()..initialize(),
         ),
+        ChangeNotifierProvider.value(value: widget.rommProvider),
         ChangeNotifierProvider(create: (context) => SystemBackgroundProvider()),
         ChangeNotifierProvider(
           // Eager: the theme manifest is a network fetch, and during first-run
@@ -880,7 +933,8 @@ class _MyAppState extends State<MyApp> {
             designSize: const Size(640, 480),
             minTextAdapt: true,
             splitScreenMode: true,
-            builder: (_, child) {
+            builder: (screenUtilContext, child) {
+              logDisplayMetrics(screenUtilContext, 'main');
               return FocusTraversalGroup(
                 policy: NoFocusTraversalPolicy(),
                 child: Shortcuts(

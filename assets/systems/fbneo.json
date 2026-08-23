@@ -14,6 +14,10 @@
       "screenscraper": 75,
       "retroachievements": 27
     },
+    "ra_hash": {
+      "algo": "arcade",
+      "mode": "hash_only"
+    },
     "folders": [
       "fbneo",
       "fbn",

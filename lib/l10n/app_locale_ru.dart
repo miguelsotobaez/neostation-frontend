@@ -118,6 +118,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.retroArchPathConfigured: 'Путь для RetroArch успешно настроен',
   AppLocale.errorConfiguringRetroArchPath:
       'Ошибка при настройке пути для RetroArch: {error}',
+  AppLocale.androidSystemSettings: 'Настройки системы',
+  AppLocale.androidSystemSettingsSubtitle: 'Открыть настройки системы Android',
   AppLocale.scanOnStartup: 'Сканировать папки при запуске',
   AppLocale.nowPlayingDimAfter: 'Затемнять Now Playing через',
   AppLocale.nowPlayingDimAfterSubtitle:
@@ -155,9 +157,26 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.sfxSounds: 'Звуки навигации UI',
   AppLocale.sfxSoundsSubtitle:
       'Воспроизводить звуковые эффекты для геймпада, клавиатуры и сенсорной навигации',
+  AppLocale.sfxVolume: 'Громкость звуков интерфейса',
+  AppLocale.sfxVolumeSubtitle: 'Настройте громкость и прослушайте пример',
+  AppLocale.sfxVolumeLow: 'Низкая',
+  AppLocale.sfxVolumeMedium: 'Средняя',
+  AppLocale.sfxVolumeHigh: 'Высокая',
   AppLocale.use12HourClock: '12-часовой формат',
   AppLocale.use12HourClockSubtitle:
       'Показывать время в 12-часовом формате с AM/PM вместо 24-часового',
+  AppLocale.showAchievementsBadge: 'Значки достижений',
+  AppLocale.showAchievementsBadgeSubtitle:
+      'Показывать количество достижений на играх, сопоставленных с RetroAchievements',
+  AppLocale.raMatchOnStartup: 'Сопоставлять достижения при запуске',
+  AppLocale.raMatchOnStartupSubtitle:
+      'Сопоставляет новые ROM после стартового сканирования. Для всей библиотеки сначала запустите «Сопоставить игры RetroAchievements» в разделе «Инструменты».',
+  AppLocale.raMatchOnStartupBacklogWarning:
+      '{count} игр ещё ни разу не проверялись. Сопоставление их всех при следующем запуске может занять несколько минут. Вместо этого запустите «Сопоставить игры RetroAchievements» в разделе «Инструменты» — с видимым прогрессом.',
+  AppLocale.raMatchNotificationTitle: 'RetroAchievements',
+  AppLocale.raMatchProgressBusy: 'Сопоставление RetroAchievements...',
+  AppLocale.raMatchProgressCounted:
+      'Сопоставление RetroAchievements... {done}/{total}',
   AppLocale.fullscreenMode: 'Полноэкранный режим',
   AppLocale.fullscreenModeSubtitle:
       'Отображать приложение в полноэкранном режиме',
@@ -176,15 +195,17 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.bartopShutdownSubtitle:
       'Выключать компьютер при выходе из приложения',
 
-  AppLocale.showSyncTab: 'Показывать вкладку синхронизации',
+  AppLocale.showSyncTab: 'Показывать вкладку NeoSync',
   AppLocale.showSyncTabSubtitle:
-      'Отображает вкладку облачной синхронизации на панели навигации',
+      'Отображает вкладку NeoSync на панели навигации',
   AppLocale.showAchievementsTab: 'Показывать вкладку достижений',
   AppLocale.showAchievementsTabSubtitle:
       'Отображает вкладку RetroAchievements на панели навигации',
   AppLocale.showScraperTab: 'Показывать вкладку скрапера',
   AppLocale.showScraperTabSubtitle:
       'Отображает вкладку скрапинга на панели навигации',
+  AppLocale.showRommTab: 'Показывать вкладку RomM',
+  AppLocale.showRommTabSubtitle: 'Отображает вкладку RomM на панели навигации',
   AppLocale.showSearchTab: 'Показывать вкладку поиска',
   AppLocale.showSearchTabSubtitle:
       'Отображает вкладку поиска на панели навигации',
@@ -236,6 +257,31 @@ const Map<String, dynamic> appLocaleRu = {
       ' {count} запис(ь/ей), импортированных из ES-DE, оставлены нетронутыми.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Не удалось очистить потерянные метаданные: {error}',
+  AppLocale.rematchAchievements: 'Сопоставить игры RetroAchievements',
+  AppLocale.rematchAchievementsSubtitle:
+      'Проверяет всю библиотеку на наличие наборов достижений, а не по одной игре',
+  AppLocale.rematchAchievementsWarning:
+      'Читает каждый несопоставленный ROM, чтобы определить его; на большой библиотеке это может занять время. Выберите ещё раз, чтобы приостановить: всё найденное сохраняется, а повторный запуск продолжит с того же места. Образы дисков тоже читаются, но лишь несколько секторов каждого. Ничего не перемещается и не удаляется.',
+  AppLocale.rematchAchievementsSignedOut:
+      'Сопоставление работает и без входа в аккаунт, но чтобы увидеть результаты, нужно войти в RetroAchievements.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Проверка игр, для которых уже есть хеш...',
+  AppLocale.rematchAchievementsHashing: 'Сопоставление {done} из {total}',
+  AppLocale.rematchAchievementsDone:
+      'Готово: сопоставлено игр — {matched}, впервые опознано — {hashed}.',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Все поддерживаемые игры уже проверены.',
+  AppLocale.rematchAchievementsPaused:
+      'Приостановлено: сопоставлено игр — {matched}. Запустите ещё раз, чтобы продолжить.',
+  AppLocale.rematchAchievementsFailed:
+      'Не удалось сопоставить игры RetroAchievements: {error}',
+  AppLocale.raFixMatch: 'Исправить сопоставление',
+  AppLocale.raFixMatchTitle: 'Выберите нужную игру',
+  AppLocale.raFixMatchSearchHint: 'Поиск по названиям RetroAchievements',
+  AppLocale.raFixMatchNoResults: 'Подходящих игр не найдено.',
+  AppLocale.raFixMatchUseAutomatic: 'Использовать автоматическое сопоставление',
+  AppLocale.raFixMatchUpdated: 'Сопоставление обновлено.',
+  AppLocale.raFixMatchAchievements: 'достижений: {count}',
   AppLocale.notifications: 'Уведомления',
   AppLocale.clearAll: 'Очистить все',
   AppLocale.noActiveNotifications: 'Нет активных уведомлений',
@@ -278,6 +324,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.loadingAchievements: 'Загрузка достижений...',
 
   AppLocale.neoSync: 'NeoSync',
+  AppLocale.neoSyncLogin: 'Вход в NeoSync',
   AppLocale.neoSyncSynchronizing: 'NeoSync: Синхронизация...',
   AppLocale.neoSyncNotConnected: 'NeoSync: Не подключено',
   AppLocale.neoSyncSynchronized: 'NeoSync: Сохранения синхронизированы',
@@ -393,6 +440,34 @@ const Map<String, dynamic> appLocaleRu = {
       'Не удалось отключить NeoSync для этой игры',
   AppLocale.saveFileDeleted: 'Файл сохранения успешно удален',
   AppLocale.failedToDeleteSave: 'Не удалось удалить файл сохранения',
+  AppLocale.storageLabel: 'Хранилище',
+  AppLocale.lastSyncedSave: 'Последнее синхронизированное сохранение',
+  AppLocale.saveListMenu: 'Список Сохранений',
+  AppLocale.customSaveFoldersMenu: 'Пользовательские Папки Сохранений',
+  AppLocale.updateYourPlanMenu: 'Обновить Ваш План',
+  AppLocale.customFoldersSubtitle:
+      'Добавьте пользовательскую папку автономного эмулятора, чтобы его сохранения тоже синхронизировались.',
+  AppLocale.noCustomFoldersConfigured: 'Пользовательские папки не настроены',
+  AppLocale.foldersConfigured: '{count} настроено',
+  AppLocale.searchSavesHint: 'Поиск сохранений...',
+  AppLocale.filterAll: 'Все',
+  AppLocale.filterPerGameSaves: 'Сохранения по Играм',
+  AppLocale.filterMemoryCards: 'Карты Памяти',
+  AppLocale.filterScope: 'Область',
+  AppLocale.filterSystem: 'Система',
+  AppLocale.filterEmulator: 'Эмулятор',
+  AppLocale.filterSort: 'Сортировка',
+  AppLocale.sortNewest: 'Сначала новые',
+  AppLocale.sortOldest: 'Сначала старые',
+  AppLocale.sortNameAsc: 'Имя А–Я',
+  AppLocale.sortNameDesc: 'Имя Я–А',
+  AppLocale.scopePerGame: 'По Игре',
+  AppLocale.scopeMemCards: 'Карты Пам.',
+  AppLocale.pageOf: 'Страница {current} из {total}',
+  AppLocale.noSavesMatchFilters: 'Ни одно сохранение не соответствует фильтрам',
+  AppLocale.statSaves: 'Сохранения',
+  AppLocale.statStates: 'Состояния',
+  AppLocale.statShared: 'Общие',
 
   AppLocale.syncConflictDetected: 'Обнаружен конфликт синхронизации',
   AppLocale.localVersion: 'Локальная версия',
@@ -586,6 +661,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.cancelScan: 'Отмена',
   AppLocale.progress: 'Прогресс',
   AppLocale.raLogin: 'Вход в RetroAchievements',
+  AppLocale.raOfflineBanner:
+      'Не в сети — показаны последние синхронизированные достижения',
   AppLocale.raWhatIs: 'Что такое RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements — это сообщество, добавляющее достижения в классические игры.',
@@ -882,6 +959,88 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.toolsSubtitle: 'Инструменты для организации ваших ROM',
   AppLocale.addRomFolder: 'Добавить папку ROM',
   AppLocale.removeRomFolder: 'Удалить',
+  // RomM (remote library browse + download)
+  AppLocale.romm: 'RomM',
+  AppLocale.rommLibrary: 'Библиотека RomM',
+  AppLocale.rommLogin: 'Вход в RomM',
+  AppLocale.rommWhatIs: 'Что такое RomM?',
+  AppLocale.rommDescription:
+      'RomM — это самостоятельно размещаемый менеджер ROM. Подключитесь к своему серверу, чтобы просматривать библиотеку, скачивать игры прямо на это устройство и синхронизировать сохранения.',
+  AppLocale.rommInfoBrowse:
+      'Просматривайте и скачивайте всю свою библиотеку игр',
+  AppLocale.rommInfoSaveSync: 'Синхронизируйте сохранения между устройствами',
+  AppLocale.rommInfoSelfHosted:
+      'Собственный хостинг: ваша коллекция, ваш сервер',
+  AppLocale.rommLearnMoreAt: 'Подробнее: ',
+  AppLocale.rommServerUrl: 'URL сервера',
+  AppLocale.rommServerUrlHint: 'https://romm.example.com',
+  AppLocale.rommTestConnection: 'Проверить подключение',
+  AppLocale.rommDisconnect: 'Отключиться',
+  AppLocale.rommUseForSaveSync:
+      'Использовать RomM для синхронизации сохранений',
+  AppLocale.rommSaveSyncLabel: 'Синх. RomM',
+  AppLocale.rommSaveSyncActive: 'RomM — ваш сервис синхронизации сохранений',
+  AppLocale.saveSyncHandledBy:
+      'Синхронизацией сохранений занимается {provider}',
+  AppLocale.saveSyncSingleProvider:
+      'Сохранения синхронизирует только один провайдер одновременно',
+  AppLocale.saveSyncNoneActive: 'Синхронизация сохранений не активна',
+  AppLocale.rommBrowseLibrary: 'Просмотр библиотеки',
+  AppLocale.rommStatusConnected: 'Подключено',
+  AppLocale.rommStatusDisconnected: 'Не подключено',
+  AppLocale.rommConnecting: 'Подключение...',
+  AppLocale.rommTesting: 'Проверка...',
+  AppLocale.rommConnectionSuccess: 'Подключение установлено',
+  AppLocale.rommConnectionFailed: 'Не удалось подключиться',
+  AppLocale.rommConnectedAs: 'Подключено как {user}',
+  AppLocale.rommCredentialsRequired:
+      'Введите URL сервера, имя пользователя и пароль',
+  AppLocale.rommAuthPassword: 'Пароль',
+  AppLocale.rommAuthApiKey: 'Ключ API',
+  AppLocale.rommApiKey: 'Ключ API',
+  AppLocale.rommApiKeyHint: 'rmm_...',
+  AppLocale.rommApiKeyRequired: 'Введите URL сервера и ключ API',
+  AppLocale.rommPlatforms: 'Платформы',
+  AppLocale.rommNoPlatforms: 'Платформы не найдены',
+  AppLocale.rommCollections: 'Коллекции',
+  AppLocale.rommNoCollections: 'Коллекции не найдены',
+  AppLocale.rommNoRoms: 'ROM не найдены',
+  AppLocale.rommSearch: 'Поиск',
+  AppLocale.rommDownloading: 'Загрузка...',
+  AppLocale.rommDownloaded: 'Загружено',
+  AppLocale.rommDownloadComplete: 'Загрузка завершена',
+  AppLocale.rommDownloadFailed: 'Не удалось загрузить',
+  AppLocale.rommDownloadCancelled: 'Загрузка отменена',
+  AppLocale.rommLoadMore: 'Загрузить ещё',
+  AppLocale.rommNoSystemMatch:
+      'Нет подходящей локальной системы для этой платформы',
+  AppLocale.rommPlatformUnsupported: 'Не поддерживается',
+  AppLocale.rommNoWritableFolder:
+      'Не удалось записать в папку с ROM. Предоставьте NeoStation «Доступ ко всем файлам» и повторите попытку.',
+  AppLocale.rommNotConnected:
+      'Сначала подключитесь к серверу RomM в Настройках',
+  // Bulk "sync a whole platform/collection".
+  AppLocale.rommSyncAll: 'Синхронизировать всё',
+  AppLocale.rommSyncCancel: 'Отменить синхронизацию',
+  AppLocale.rommSyncConfirmTitle: 'Синхронизировать {name}?',
+  AppLocale.rommSyncConfirmPlan:
+      'Загрузит {count} игр ({size}). Это может занять много времени.',
+  AppLocale.rommSyncConfirmSkipped: '{count} уже есть на устройстве.',
+  AppLocale.rommSyncConfirmFree: 'Свободно {free}.',
+  AppLocale.rommSyncConfirmNoSpace:
+      'Недостаточно места: нужно {size}, свободно только {free}.',
+  AppLocale.rommSyncConfirmVolumeFree:
+      '{volume}: нужно {size}, свободно {free}.',
+  AppLocale.rommSyncConfirmVolumeNoSpace:
+      '{volume}: нужно {size}, свободно только {free}.',
+  AppLocale.rommSyncConfirmVolumeUnknown:
+      '{volume}: нужно {size}, свободное место неизвестно.',
+  AppLocale.rommSyncPreparing: 'Подготовка…',
+  AppLocale.rommSyncCancelling: 'Отмена…',
+  AppLocale.rommSyncComplete: 'Синхронизировано игр: {count}',
+  AppLocale.rommSyncCancelled: 'Синхронизация отменена',
+  AppLocale.rommSyncNothingToDo: 'Всё уже загружено',
+  AppLocale.rommSyncFailedCount: 'Не удалось: {count}',
   AppLocale.searchTitle: 'Поиск',
   AppLocale.searchNameHint: 'Поиск...',
   AppLocale.searchNoResults: 'Игры не найдены',
@@ -896,7 +1055,19 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.filterGenre: 'Жанр',
   AppLocale.filterRating: 'Рейтинг',
   AppLocale.filterYear: 'Год',
+  AppLocale.filterAchievements: 'Достижения',
+  AppLocale.raCoverageMatched: 'Есть',
+  AppLocale.raCoverageNoSet: 'Нет набора',
+  AppLocale.raCoverageNotChecked: 'Не проверено',
+  AppLocale.raCoverageDiscPending: 'Диск, ожидается',
   AppLocale.filterAny: 'Любой',
+  AppLocale.filterSource: 'Источник',
+  AppLocale.sourceLocal: 'На этом устройстве',
+  AppLocale.searchRatingLocalOnly:
+      'Фильтр рейтинга применяется только к локальным играм',
+  AppLocale.searchAchievementsLocalOnly:
+      'Фильтр достижений применяется только к локальным играм',
+  AppLocale.searchNoRommEquivalent: 'В RomM ничего не отнесено к «{value}»',
   AppLocale.resetPlayTimeConfirm: 'Сбросить время игры',
   AppLocale.resetPlayTimeConfirmBody:
       'Записанное время игры для этой игры будет безвозвратно сброшено до нуля. Это действие нельзя отменить.',
@@ -949,6 +1120,26 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.raRecentlyPlayedTitle: 'Недавно сыгранные',
   AppLocale.raNoRecentlyPlayed: 'Нет недавно сыгранных игр',
 
+  // Custom save folders (NeoSync v2)
+  AppLocale.customSaveFoldersTitle: 'Пользовательские папки сохранений',
+  AppLocale.customSaveFolderPickSystem: 'Выберите систему',
+  AppLocale.customSaveFolderPickEmulator: 'Выберите эмулятор',
+  AppLocale.customSaveFolderSelect: 'Выбрать папку',
+  AppLocale.customSaveFolderConfigure: 'Настроить',
+  AppLocale.customSaveFolderConfiguredList: 'Настроенные папки',
+  AppLocale.customSaveFolderSync: 'Синхронизировать сейчас',
+  AppLocale.customSaveFolderInvalid: 'Выбранная папка не существует',
+  AppLocale.removeCustomFolder: 'Удалить Папку',
+  AppLocale.removeCustomFolderConfirm:
+      'Удалить эту пользовательскую папку сохранений? Локальные файлы не будут удалены, только отключены от синхронизации.',
+  AppLocale.uploadingCustomFolder: 'Загрузка сохранений из {folder}...',
+  AppLocale.customFolderUploadComplete:
+      'Пользовательская папка синхронизирована: {uploaded} загружено, {skipped} уже актуальны',
+  AppLocale.customFolderUploadFailed:
+      'Не удалось синхронизировать пользовательскую папку',
+  AppLocale.customSaveFoldersMigrate:
+      'Мигрировать облачные сохранения на NeoSync v2',
+
   // ES-DE import
   AppLocale.esdeImport: 'ES-DE Import',
   AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
@@ -999,4 +1190,18 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.wizardArtPackUnavailable:
       'Сейчас не удалось получить набор обложек. Вы можете установить его позже '
       'в Настройках, когда будете онлайн.',
+
+  // Hide / unhide games
+  AppLocale.hideGame: 'Скрыть игру',
+  AppLocale.hideGameSubtitle: 'Игра исчезнет из списков. Ничего не удаляется.',
+  AppLocale.hide: 'Скрыть',
+  AppLocale.unhide: 'Показать',
+  AppLocale.unhideAll: 'Показать все',
+  AppLocale.gameHidden: '{name} скрыта',
+  AppLocale.gameUnhidden: '{name} восстановлена',
+  AppLocale.allGamesUnhidden: 'Все скрытые игры восстановлены',
+  AppLocale.hiddenGames: 'Скрытые',
+  AppLocale.noHiddenGames: 'Нет скрытых игр',
+  AppLocale.noHiddenGamesSubtitle:
+      'Скройте игру в её настройках, и она появится здесь.',
 };

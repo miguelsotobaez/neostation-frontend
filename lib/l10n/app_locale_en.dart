@@ -114,6 +114,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.retroArchPathConfigured: 'RetroArch path configured successfully',
   AppLocale.errorConfiguringRetroArchPath:
       'Error configuring RetroArch path: {error}',
+  AppLocale.androidSystemSettings: 'System Settings',
+  AppLocale.androidSystemSettingsSubtitle: 'Open android system settings',
   AppLocale.scanOnStartup: 'Scan folders on Startup',
   AppLocale.nowPlayingDimAfter: 'Dim Now Playing after',
   AppLocale.nowPlayingDimAfterSubtitle:
@@ -151,9 +153,26 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.sfxSounds: 'UI Navigation Sounds',
   AppLocale.sfxSoundsSubtitle:
       'Play sound effects for gamepad, keyboard and touch navigation',
+  AppLocale.sfxVolume: 'UI Sounds Volume',
+  AppLocale.sfxVolumeSubtitle: 'Adjust volume and play a preview sound',
+  AppLocale.sfxVolumeLow: 'Low',
+  AppLocale.sfxVolumeMedium: 'Medium',
+  AppLocale.sfxVolumeHigh: 'High',
   AppLocale.use12HourClock: 'Use 12-Hour Clock',
   AppLocale.use12HourClockSubtitle:
       'Show the clock in 12-hour format with AM/PM instead of 24-hour',
+  AppLocale.showAchievementsBadge: 'Achievement Badges',
+  AppLocale.showAchievementsBadgeSubtitle:
+      'Show the achievement count on games matched to RetroAchievements',
+  AppLocale.raMatchOnStartup: 'Match achievements on Startup',
+  AppLocale.raMatchOnStartupSubtitle:
+      'Matches new ROMs after the startup scan. To match a whole library, run Match RetroAchievements Games in Tools first.',
+  AppLocale.raMatchOnStartupBacklogWarning:
+      '{count} games have never been checked. Matching them all on the next start can take several minutes. Run Match RetroAchievements Games in Tools to do it now instead, with progress you can watch.',
+  AppLocale.raMatchNotificationTitle: 'RetroAchievements',
+  AppLocale.raMatchProgressBusy: 'Matching RetroAchievements...',
+  AppLocale.raMatchProgressCounted:
+      'Matching RetroAchievements... {done}/{total}',
   AppLocale.fullscreenMode: 'Fullscreen Mode',
   AppLocale.fullscreenModeSubtitle: 'Display the app in fullscreen mode',
   AppLocale.allFilesAccess: 'All Files Access',
@@ -171,15 +190,17 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.bartopShutdownSubtitle:
       'Shut down the computer when exiting the application',
 
-  AppLocale.showSyncTab: 'Show Sync tab',
+  AppLocale.showSyncTab: 'Show NeoSync tab',
   AppLocale.showSyncTabSubtitle:
-      'Display the Cloud Sync tab in the navigation bar',
+      'Display the NeoSync tab in the navigation bar',
   AppLocale.showAchievementsTab: 'Show Achievements tab',
   AppLocale.showAchievementsTabSubtitle:
       'Display the RetroAchievements tab in the navigation bar',
   AppLocale.showScraperTab: 'Show Scraper tab',
   AppLocale.showScraperTabSubtitle:
       'Display the Scraping tab in the navigation bar',
+  AppLocale.showRommTab: 'Show RomM tab',
+  AppLocale.showRommTabSubtitle: 'Display the RomM tab in the navigation bar',
   AppLocale.showSearchTab: 'Show Search tab',
   AppLocale.showSearchTabSubtitle:
       'Display the Search tab in the navigation bar',
@@ -230,6 +251,31 @@ const Map<String, dynamic> appLocaleEn = {
       ' {count} ES-DE entr(y/ies) were left untouched.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Failed to clean orphaned metadata: {error}',
+  AppLocale.rematchAchievements: 'Match RetroAchievements Games',
+  AppLocale.rematchAchievementsSubtitle:
+      'Check your whole library for achievement sets, instead of one game at a time',
+  AppLocale.rematchAchievementsWarning:
+      'This reads every unmatched ROM to identify it, which can take a while on a large library. Select it again to pause: everything matched so far is kept, and running it again carries on where it left off. Disc images are read too, but only a few sectors of each. Nothing is moved or deleted.',
+  AppLocale.rematchAchievementsSignedOut:
+      'Matching runs while you are signed out, but you need to sign in to RetroAchievements to see the results.',
+  AppLocale.rematchAchievementsLookingUp:
+      'Looking up games that are already hashed...',
+  AppLocale.rematchAchievementsHashing: 'Matching {done} of {total}',
+  AppLocale.rematchAchievementsDone:
+      'Done: {matched} game(s) matched, {hashed} newly identified.',
+  AppLocale.rematchAchievementsNothingToDo:
+      'Every supported game has already been checked.',
+  AppLocale.rematchAchievementsPaused:
+      'Paused: {matched} game(s) matched so far. Run it again to carry on.',
+  AppLocale.rematchAchievementsFailed:
+      'Failed to match RetroAchievements games: {error}',
+  AppLocale.raFixMatch: 'Fix match',
+  AppLocale.raFixMatchTitle: 'Choose the right game',
+  AppLocale.raFixMatchSearchHint: 'Search RetroAchievements titles',
+  AppLocale.raFixMatchNoResults: 'No matching games found.',
+  AppLocale.raFixMatchUseAutomatic: 'Use automatic matching',
+  AppLocale.raFixMatchUpdated: 'Game match updated.',
+  AppLocale.raFixMatchAchievements: '{count} achievements',
   AppLocale.notifications: 'Notifications',
   AppLocale.clearAll: 'Clear all',
   AppLocale.noActiveNotifications: 'No active notifications',
@@ -271,6 +317,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.loadingAchievements: 'Loading achievements...',
 
   AppLocale.neoSync: 'NeoSync',
+  AppLocale.neoSyncLogin: 'NeoSync Login',
   AppLocale.neoSyncSynchronizing: 'NeoSync: Synchronizing...',
   AppLocale.neoSyncNotConnected: 'NeoSync: Not connected',
   AppLocale.neoSyncSynchronized: 'NeoSync: Saves synchronized',
@@ -383,6 +430,34 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.failedToDisableNeoSync: 'Failed to disable NeoSync for this game',
   AppLocale.saveFileDeleted: 'Save file deleted successfully',
   AppLocale.failedToDeleteSave: 'Failed to delete save file',
+  AppLocale.storageLabel: 'Storage',
+  AppLocale.lastSyncedSave: 'Last synced save',
+  AppLocale.saveListMenu: 'Save List',
+  AppLocale.customSaveFoldersMenu: 'Custom Save Folders',
+  AppLocale.updateYourPlanMenu: 'Update Your Plan',
+  AppLocale.customFoldersSubtitle:
+      'Add a custom folder from a standalone emulator so its saves are synced too.',
+  AppLocale.noCustomFoldersConfigured: 'No custom folders configured',
+  AppLocale.foldersConfigured: '{count} configured',
+  AppLocale.searchSavesHint: 'Search saves...',
+  AppLocale.filterAll: 'All',
+  AppLocale.filterPerGameSaves: 'Per-Game Saves',
+  AppLocale.filterMemoryCards: 'Memory Cards',
+  AppLocale.filterScope: 'Scope',
+  AppLocale.filterSystem: 'System',
+  AppLocale.filterEmulator: 'Emulator',
+  AppLocale.filterSort: 'Sort',
+  AppLocale.sortNewest: 'Newest',
+  AppLocale.sortOldest: 'Oldest',
+  AppLocale.sortNameAsc: 'Name A–Z',
+  AppLocale.sortNameDesc: 'Name Z–A',
+  AppLocale.scopePerGame: 'Per-Game',
+  AppLocale.scopeMemCards: 'MemCards',
+  AppLocale.pageOf: 'Page {current} of {total}',
+  AppLocale.noSavesMatchFilters: 'No saves match the filters',
+  AppLocale.statSaves: 'Saves',
+  AppLocale.statStates: 'States',
+  AppLocale.statShared: 'Shared',
 
   AppLocale.syncConflictDetected: 'Sync Conflict Detected',
   AppLocale.localVersion: 'Local Version',
@@ -576,6 +651,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.cancelScan: 'Cancel Scan',
   AppLocale.progress: 'Progress',
   AppLocale.raLogin: 'RetroAchievements Login',
+  AppLocale.raOfflineBanner: 'Offline — showing your last synced achievements',
   AppLocale.raWhatIs: 'What is RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements is a community effort to provide achievements for classic games using emulators.',
@@ -882,6 +958,81 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.toolsSubtitle: 'Tools to help organise your ROMs',
   AppLocale.addRomFolder: 'Add ROM Folder',
   AppLocale.removeRomFolder: 'Remove',
+  // RomM (remote library browse + download)
+  AppLocale.romm: 'RomM',
+  AppLocale.rommLibrary: 'RomM Library',
+  AppLocale.rommLogin: 'RomM Login',
+  AppLocale.rommWhatIs: 'What is RomM?',
+  AppLocale.rommDescription:
+      'RomM is a self-hosted ROM manager. Connect to your server to browse your '
+      'library, download games straight to this device, and sync your saves.',
+  AppLocale.rommInfoBrowse: 'Browse and download your full game library',
+  AppLocale.rommInfoSaveSync: 'Sync save files across your devices',
+  AppLocale.rommInfoSelfHosted: 'Self-hosted: your collection, your server',
+  AppLocale.rommLearnMoreAt: 'Learn more at ',
+  AppLocale.rommServerUrl: 'Server URL',
+  AppLocale.rommServerUrlHint: 'https://romm.example.com',
+  AppLocale.rommTestConnection: 'Test Connection',
+  AppLocale.rommDisconnect: 'Disconnect',
+  AppLocale.rommUseForSaveSync: 'Use RomM for save sync',
+  AppLocale.rommSaveSyncLabel: 'RomM Sync',
+  AppLocale.rommSaveSyncActive: 'RomM is your save-sync provider',
+  AppLocale.saveSyncHandledBy: 'Save sync is handled by {provider}',
+  AppLocale.saveSyncSingleProvider: 'Only one provider syncs saves at a time',
+  AppLocale.saveSyncNoneActive: 'No save sync active',
+  AppLocale.rommBrowseLibrary: 'Browse Library',
+  AppLocale.rommStatusConnected: 'Connected',
+  AppLocale.rommStatusDisconnected: 'Not connected',
+  AppLocale.rommConnecting: 'Connecting...',
+  AppLocale.rommTesting: 'Testing...',
+  AppLocale.rommConnectionSuccess: 'Connection successful',
+  AppLocale.rommConnectionFailed: 'Connection failed',
+  AppLocale.rommConnectedAs: 'Connected as {user}',
+  AppLocale.rommCredentialsRequired:
+      'Enter the server URL, username and password',
+  AppLocale.rommAuthPassword: 'Password',
+  AppLocale.rommAuthApiKey: 'API key',
+  AppLocale.rommApiKey: 'API key',
+  AppLocale.rommApiKeyHint: 'rmm_...',
+  AppLocale.rommApiKeyRequired: 'Enter the server URL and API key',
+  AppLocale.rommPlatforms: 'Platforms',
+  AppLocale.rommNoPlatforms: 'No platforms found',
+  AppLocale.rommCollections: 'Collections',
+  AppLocale.rommNoCollections: 'No collections found',
+  AppLocale.rommNoRoms: 'No ROMs found',
+  AppLocale.rommSearch: 'Search',
+  AppLocale.rommDownloading: 'Downloading...',
+  AppLocale.rommDownloaded: 'Downloaded',
+  AppLocale.rommDownloadComplete: 'Download complete',
+  AppLocale.rommDownloadFailed: 'Download failed',
+  AppLocale.rommDownloadCancelled: 'Download cancelled',
+  AppLocale.rommLoadMore: 'Load more',
+  AppLocale.rommNoSystemMatch: 'No matching local system for this platform',
+  AppLocale.rommPlatformUnsupported: 'Unsupported',
+  AppLocale.rommNoWritableFolder:
+      'Could not write to your ROM folder. Grant "All files access" to NeoStation and try again.',
+  AppLocale.rommNotConnected: 'Connect to a RomM server in Settings first',
+  // Bulk "sync a whole platform/collection".
+  AppLocale.rommSyncAll: 'Sync all',
+  AppLocale.rommSyncCancel: 'Cancel sync',
+  AppLocale.rommSyncConfirmTitle: 'Sync {name}?',
+  AppLocale.rommSyncConfirmPlan:
+      'Downloads {count} games ({size}). This can take a long time.',
+  AppLocale.rommSyncConfirmSkipped: '{count} already on this device.',
+  AppLocale.rommSyncConfirmFree: '{free} free.',
+  AppLocale.rommSyncConfirmNoSpace:
+      'Not enough space: needs {size}, only {free} free.',
+  AppLocale.rommSyncConfirmVolumeFree: '{volume}: {size} needed, {free} free.',
+  AppLocale.rommSyncConfirmVolumeNoSpace:
+      '{volume}: needs {size}, only {free} free.',
+  AppLocale.rommSyncConfirmVolumeUnknown:
+      '{volume}: {size} needed, free space unknown.',
+  AppLocale.rommSyncPreparing: 'Preparing…',
+  AppLocale.rommSyncCancelling: 'Cancelling…',
+  AppLocale.rommSyncComplete: 'Synced {count} games',
+  AppLocale.rommSyncCancelled: 'Sync cancelled',
+  AppLocale.rommSyncNothingToDo: 'Everything is already downloaded',
+  AppLocale.rommSyncFailedCount: '{count} failed',
   AppLocale.searchTitle: 'Search',
   AppLocale.searchNameHint: 'Search...',
   AppLocale.searchNoResults: 'No games found',
@@ -896,7 +1047,19 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.filterGenre: 'Genre',
   AppLocale.filterRating: 'Rating',
   AppLocale.filterYear: 'Year',
+  AppLocale.filterAchievements: 'Achievements',
+  AppLocale.raCoverageMatched: 'Yes',
+  AppLocale.raCoverageNoSet: 'No set',
+  AppLocale.raCoverageNotChecked: 'Not checked',
+  AppLocale.raCoverageDiscPending: 'Disc, pending',
   AppLocale.filterAny: 'Any',
+  AppLocale.filterSource: 'Source',
+  AppLocale.sourceLocal: 'On this device',
+  AppLocale.searchRatingLocalOnly:
+      'The rating filter applies to local games only',
+  AppLocale.searchAchievementsLocalOnly:
+      'The achievements filter applies to local games only',
+  AppLocale.searchNoRommEquivalent: 'RomM has nothing filed under “{value}”',
   AppLocale.resetPlayTimeConfirm: 'Reset Play Time',
   AppLocale.resetPlayTimeConfirmBody:
       'This will permanently reset the recorded play time for this game to zero. This cannot be undone.',
@@ -947,6 +1110,24 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raRecentlyPlayedTitle: 'Recently Played',
   AppLocale.raNoRecentlyPlayed: 'No recently played games',
 
+  // Custom save folders (NeoSync v2)
+  AppLocale.customSaveFoldersTitle: 'Custom save folders',
+  AppLocale.customSaveFolderPickSystem: 'Pick a system',
+  AppLocale.customSaveFolderPickEmulator: 'Pick an emulator',
+  AppLocale.customSaveFolderSelect: 'Select folder',
+  AppLocale.customSaveFolderConfigure: 'Configure',
+  AppLocale.customSaveFolderConfiguredList: 'Configured folders',
+  AppLocale.customSaveFolderSync: 'Sync now',
+  AppLocale.customSaveFolderInvalid: 'The selected folder does not exist',
+  AppLocale.removeCustomFolder: 'Remove Folder',
+  AppLocale.removeCustomFolderConfirm:
+      'Remove this custom save folder? Its local files will not be deleted, only unlinked from sync.',
+  AppLocale.uploadingCustomFolder: 'Uploading saves from {folder}...',
+  AppLocale.customFolderUploadComplete:
+      'Custom folder synced: {uploaded} uploaded, {skipped} already up to date',
+  AppLocale.customFolderUploadFailed: 'Failed to sync custom folder',
+  AppLocale.customSaveFoldersMigrate: 'Migrate cloud saves to NeoSync v2',
+
   // ES-DE import
   AppLocale.esdeImport: 'ES-DE Import',
   AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
@@ -995,4 +1176,19 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.wizardArtPackUnavailable:
       'The art pack couldn\'t be reached right now. You can install it later '
       'from Settings once you\'re online.',
+
+  // Hide / unhide games
+  AppLocale.hideGame: 'Hide Game',
+  AppLocale.hideGameSubtitle:
+      'Hides it from your game lists. Nothing is deleted.',
+  AppLocale.hide: 'Hide',
+  AppLocale.unhide: 'Unhide',
+  AppLocale.unhideAll: 'Unhide All',
+  AppLocale.gameHidden: '{name} hidden',
+  AppLocale.gameUnhidden: '{name} restored',
+  AppLocale.allGamesUnhidden: 'All hidden games restored',
+  AppLocale.hiddenGames: 'Hidden',
+  AppLocale.noHiddenGames: 'No hidden games',
+  AppLocale.noHiddenGamesSubtitle:
+      'Hide a game from its own settings and it appears here.',
 };

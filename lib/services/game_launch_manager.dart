@@ -142,6 +142,13 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   /// Resets the controller state and restores audio preferences.
   void _finalize() {
     if (!isActive) return;
+    // Safety net for the session itself. The session normally ends via the
+    // dialog's post-sync step or the emulator-exit poll, but _triggerClose()
+    // cancels that poll, so a dialog torn down before its post-sync completes
+    // left the session open: no playtime recorded, no saves uploaded. This is
+    // the one teardown that always runs. endGameSession() no-ops when the
+    // session already ended, so the normal path is unaffected.
+    GameService.endGameSession();
     _monitoringTimer?.cancel();
     _monitoringTimer = null;
     GameService.clearOnGameReturnedCallback();

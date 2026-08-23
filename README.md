@@ -55,7 +55,10 @@ Folders that already contain `.m3u` playlists are skipped during the scan.
 
 ## Prerequisites
 
-- Flutter SDK ≥ 3.9.2
+- Flutter SDK ≥ 3.9.2 — but CI pins an exact version in [`.fvmrc`](.fvmrc), and
+  `pubspec.lock` is committed as that version resolves it. Build on the pinned
+  version (`fvm use` reads `.fvmrc` directly) or CI will reject your lockfile:
+  every job runs `flutter pub get --enforce-lockfile`.
 - Dart SDK (bundled with Flutter)
 - Git
 - RetroArch or standalone emulators

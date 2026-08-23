@@ -25,6 +25,52 @@ class RetroArchConfigService {
   /// In-memory cache of the last successfully resolved configuration.
   RetroArchConfig? _cachedConfig;
 
+  /// Signature of the last resolution written to the log, so the uncached
+  /// fallback path does not repeat the same line on every call.
+  String? _lastLoggedResolution;
+
+  /// Flatpak app id RetroArch ships under; the same id EmuDeck installs.
+  static const String _retroArchFlatpakId = 'org.libretro.RetroArch';
+
+  /// Candidate `retroarch.cfg` locations on Linux, in probe order, for the case
+  /// where no config sits beside the executable.
+  ///
+  /// A Flatpak RetroArch — which is what EmuDeck installs, and therefore what a
+  /// Steam Deck actually runs — keeps its config under
+  /// `~/.var/app/org.libretro.RetroArch/config/retroarch/`, not in
+  /// `~/.config/retroarch/`. Neither install puts a `retroarch.cfg` next to the
+  /// binary the launcher resolves (a Flatpak export wrapper or an EmuDeck
+  /// `retroarch.sh`), so without the Flatpak candidate below discovery fell
+  /// through to the `~/.config/retroarch/{saves,states}` *defaults* — a tree no
+  /// RetroArch on the machine reads or writes. Saves then synced into a dead
+  /// directory while real save data sat elsewhere, silently, with the sync
+  /// reporting success.
+  ///
+  /// When both installs are present the resolved [exePath] breaks the tie, so
+  /// the config that wins belongs to the RetroArch we actually launch.
+  @visibleForTesting
+  static List<String> linuxConfigCandidates({String? exePath}) {
+    final home = ConfigService.getRealHomePath();
+    final flatpakCfg = path.join(
+      home,
+      '.var',
+      'app',
+      _retroArchFlatpakId,
+      'config',
+      'retroarch',
+      'retroarch.cfg',
+    );
+    final xdgCfg = path.join(home, '.config', 'retroarch', 'retroarch.cfg');
+
+    // A Flatpak export wrapper or an EmuDeck launcher script both name the app
+    // id in their path; treat either as "this machine runs the Flatpak".
+    final looksFlatpak =
+        exePath != null &&
+        (exePath.contains(_retroArchFlatpakId) || exePath.contains('flatpak'));
+
+    return looksFlatpak ? [flatpakCfg, xdgCfg] : [xdgCfg, flatpakCfg];
+  }
+
   /// Attempts to locate the `retroarch.cfg` file on Android by checking
   /// standard package data directories.
   Future<String?> detectAndroidConfigPath() async {
@@ -62,6 +108,8 @@ class RetroArchConfigService {
     String? systemDir;
     String? saveDir;
     String? stateDir;
+    var sortSaves = false;
+    var sortStates = false;
 
     try {
       final lines = await file.readAsLines();
@@ -76,6 +124,10 @@ class RetroArchConfigService {
           saveDir = _extractValue(timmedLine);
         } else if (timmedLine.startsWith('savestate_directory')) {
           stateDir = _extractValue(timmedLine);
+        } else if (timmedLine.startsWith('sort_savefiles_enable')) {
+          sortSaves = _extractBool(timmedLine);
+        } else if (timmedLine.startsWith('sort_savestates_enable')) {
+          sortStates = _extractBool(timmedLine);
         }
       }
     } catch (e) {
@@ -88,12 +140,40 @@ class RetroArchConfigService {
       systemDirectory: _normalizePath(systemDir, configPath),
       savefileDirectory: _normalizePath(saveDir, configPath),
       savestateDirectory: _normalizePath(stateDir, configPath),
+      sortSavefilesByCore: sortSaves,
+      sortSavestatesByCore: sortStates,
     );
 
     return resolvedConfig;
   }
 
-  /// Extracts the configuration value from a line, stripping quotes and whitespace.
+  /// Reads a RetroArch boolean setting, which the config file writes as a
+  /// quoted `"true"`/`"false"` rather than a bare literal.
+  bool _extractBool(String line) =>
+      _extractValue(line)?.trim().toLowerCase() == 'true';
+
+  /// RetroArch's per-core subfolder name for the emulator display name
+  /// [emulatorName], or null when the emulator is not a RetroArch core.
+  ///
+  /// With `sort_savefiles_enable`/`sort_savestates_enable` on, RetroArch files
+  /// saves under the core's own name — `FCEUmm`, `Mesen-S`, `Beetle PSX HW`.
+  /// Our emulator entries name the same cores as `RetroArch <Core>` (or
+  /// `RetroArch64 <Core>` on Android), so dropping that prefix reproduces the
+  /// folder. Verified against a real device: 7 of the 8 core folders present
+  /// matched exactly, the miss being a core upstream has since renamed
+  /// (`Beetle WonderSwan` is now `Beetle Cygne`) — which is why callers treat
+  /// this as a hint and prefer an observed local layout when one exists.
+  static String? coreFolderName(String? emulatorName) {
+    if (emulatorName == null) return null;
+    final match = RegExp(
+      r'^RetroArch(?:64)?\s+(.+)$',
+    ).firstMatch(emulatorName.trim());
+    final core = match?.group(1)?.trim();
+    return (core == null || core.isEmpty) ? null : core;
+  }
+
+  /// Extracts the configuration value from a line, stripping quotes and
+  /// whitespace.
   String? _extractValue(String line) {
     if (!line.contains('=')) return null;
 
@@ -186,10 +266,11 @@ class RetroArchConfigService {
         }
       }
     } else if (Platform.isLinux) {
+      String? linuxExePath;
       try {
-        final exePath = await EmulatorRepository.getRetroArchExecutablePath();
-        if (exePath != null) {
-          final dir = path.dirname(exePath);
+        linuxExePath = await EmulatorRepository.getRetroArchExecutablePath();
+        if (linuxExePath != null) {
+          final dir = path.dirname(linuxExePath);
           final possibleCfg = path.join(dir, 'retroarch.cfg');
           if (await File(possibleCfg).exists()) {
             configPath = possibleCfg;
@@ -200,10 +281,11 @@ class RetroArchConfigService {
       }
 
       if (configPath == null) {
-        final home = ConfigService.getRealHomePath();
-        final p = path.join(home, '.config', 'retroarch', 'retroarch.cfg');
-        if (await File(p).exists()) {
-          configPath = p;
+        for (final p in linuxConfigCandidates(exePath: linuxExePath)) {
+          if (await File(p).exists()) {
+            configPath = p;
+            break;
+          }
         }
       }
     } else if (Platform.isMacOS) {
@@ -245,6 +327,7 @@ class RetroArchConfigService {
     if (configPath != null) {
       try {
         _cachedConfig = await parseConfig(configPath);
+        _logResolution(_cachedConfig!);
         return _cachedConfig!;
       } catch (e) {
         _log.e('Error parsing RetroArch config at $configPath: $e');
@@ -325,7 +408,35 @@ class RetroArchConfigService {
       );
     }
 
+    // Logged because this resolution is exactly where a save-sync failure hides:
+    // when no config is found the directory *defaults* below are used, and if
+    // those point somewhere no RetroArch actually reads, sync moves bytes into
+    // a dead tree and still reports success. An empty `cfg=` in this line is
+    // the tell.
+    _logResolution(finalConfig);
+
     return finalConfig;
+  }
+
+  /// Logs where RetroArch's directories were resolved to, de-duplicated so the
+  /// uncached no-config-found path doesn't repeat it on every call.
+  ///
+  /// This resolution is exactly where a save-sync failure hides: when no config
+  /// file is found the platform *defaults* are used, and if those point
+  /// somewhere no RetroArch actually reads, sync moves bytes into a dead tree
+  /// and still reports success. An empty `cfg=""` in this line is the tell.
+  void _logResolution(RetroArchConfig cfg) {
+    final signature =
+        '${cfg.configPath}|${cfg.savefileDirectory}|${cfg.savestateDirectory}|'
+        '${cfg.sortSavefilesByCore}|${cfg.sortSavestatesByCore}';
+    if (signature == _lastLoggedResolution) return;
+    _lastLoggedResolution = signature;
+    _log.i(
+      'RetroArch config resolved: cfg="${cfg.configPath}" '
+      'saves="${cfg.savefileDirectory}" states="${cfg.savestateDirectory}" '
+      'sortSaves=${cfg.sortSavefilesByCore} '
+      'sortStates=${cfg.sortSavestatesByCore}',
+    );
   }
 
   /// Clears the in-memory configuration cache.

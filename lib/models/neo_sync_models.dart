@@ -111,6 +111,15 @@ class NeoSyncFile {
   /// MD5/SHA checksum for verifying file integrity and detecting changes.
   final String? checksum;
 
+  /// NeoSync v2: system folder name this save belongs to (e.g. `snes`).
+  final String? systemName;
+
+  /// NeoSync v2: emulator slug that produced this save (e.g. `retroarch.snes9x`).
+  final String? emulator;
+
+  /// NeoSync v2: RetroAchievements hash of the ROM behind this save.
+  final String? gameHash;
+
   NeoSyncFile({
     required this.id,
     required this.fileName,
@@ -122,6 +131,9 @@ class NeoSyncFile {
     this.fileModifiedAtTimestamp,
     required this.userId,
     this.checksum,
+    this.systemName,
+    this.emulator,
+    this.gameHash,
   });
 
   /// Creates a [NeoSyncFile] from a JSON-compatible map.
@@ -153,6 +165,15 @@ class NeoSyncFile {
       fileModifiedAtTimestamp: finalTimestamp,
       userId: (json['user_id'] ?? '').toString(),
       checksum: (json['file_hash'] ?? json['checksum'])?.toString(),
+      systemName: (json['system_name'] ?? '').toString().isEmpty
+          ? null
+          : (json['system_name'] ?? '').toString(),
+      emulator: (json['emulator'] ?? '').toString().isEmpty
+          ? null
+          : (json['emulator'] ?? '').toString(),
+      gameHash: (json['game_hash'] ?? '').toString().isEmpty
+          ? null
+          : (json['game_hash'] ?? '').toString(),
     );
   }
 
@@ -184,6 +205,80 @@ class NeoSyncFile {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+}
+
+/// Optional filtering and pagination for the cloud file list API.
+///
+/// Mirrors the query parameters accepted by `GET /api/v2/files`:
+/// `limit`, `offset`, `scope`, `system`, `emulator`, `state`, `q`, `sort`, `dir`.
+class NeoSyncFileFilter {
+  final int? limit;
+  final int? offset;
+  final String? scope;
+  final String? system;
+  final String? emulator;
+  final bool? state;
+  final String? query;
+  final String? sort;
+  final String? dir;
+
+  const NeoSyncFileFilter({
+    this.limit,
+    this.offset,
+    this.scope,
+    this.system,
+    this.emulator,
+    this.state,
+    this.query,
+    this.sort,
+    this.dir,
+  });
+
+  /// The API query parameters this filter maps to, omitting empty values.
+  Map<String, String> toQueryParameters() {
+    final params = <String, String>{};
+    if (limit != null) params['limit'] = '$limit';
+    if (offset != null) params['offset'] = '$offset';
+    if (scope != null && scope!.isNotEmpty) params['scope'] = scope!;
+    if (system != null && system!.isNotEmpty) params['system'] = system!;
+    if (emulator != null && emulator!.isNotEmpty) {
+      params['emulator'] = emulator!;
+    }
+    if (state != null) params['state'] = '$state';
+    if (query != null && query!.trim().isNotEmpty) params['q'] = query!.trim();
+    if (sort != null && sort!.isNotEmpty) params['sort'] = sort!;
+    if (dir != null && dir!.isNotEmpty) params['dir'] = dir!;
+    return params;
+  }
+
+  /// This filter with the given fields replaced. Passing `null` for a field
+  /// clears it back to "Any"; use the [kNeoSyncFilterUnset] sentinel (the
+  /// default) to leave a field untouched.
+  static const Object _unset = Object();
+
+  NeoSyncFileFilter copyWith({
+    Object? limit = _unset,
+    Object? offset = _unset,
+    Object? scope = _unset,
+    Object? system = _unset,
+    Object? emulator = _unset,
+    Object? state = _unset,
+    Object? query = _unset,
+    Object? sort = _unset,
+    Object? dir = _unset,
+  }) {
+    return NeoSyncFileFilter(
+      limit: limit == _unset ? this.limit : limit as int?,
+      offset: offset == _unset ? this.offset : offset as int?,
+      scope: scope == _unset ? this.scope : scope as String?,
+      system: system == _unset ? this.system : system as String?,
+      emulator: emulator == _unset ? this.emulator : emulator as String?,
+      state: state == _unset ? this.state : state as bool?,
+      query: query == _unset ? this.query : query as String?,
+      sort: sort == _unset ? this.sort : sort as String?,
+      dir: dir == _unset ? this.dir : dir as String?,
+    );
   }
 }
 

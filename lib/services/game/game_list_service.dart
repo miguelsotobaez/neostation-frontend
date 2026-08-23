@@ -125,13 +125,14 @@ class GameListService {
   static Future<List<GameModel>> loadGamesForSystem(SystemModel system) async {
     try {
       if (system.folderName == SystemFolderNames.favorites) {
-        return _loadFavoriteGames();
+        return await _loadFavoriteGames();
       }
 
       if (system.folderName == 'all') {
         final databaseGames = (await GameRepository.getAllGames())
             .where(
               (dbGame) =>
+                  !dbGame.isHidden &&
                   dbGame.systemFolderName != 'android' &&
                   dbGame.systemFolderName != 'music',
             )
@@ -187,6 +188,9 @@ class GameListService {
             emulatorName: dbGame.emulatorName,
             coreName: dbGame.coreName,
             raHash: dbGame.raHash,
+            idRa: dbGame.idRa,
+            systemRaId: dbGame.systemRaId,
+            raNumAchievements: dbGame.raNumAchievements,
             systemId: dbGame.appSystemId,
             systemFolderName: dbGame.systemFolderName,
             systemRealName: dbGame.systemRealName,
@@ -201,7 +205,9 @@ class GameListService {
         return [];
       }
 
-      final databaseGames = await GameRepository.getGamesBySystem(system.id!);
+      final databaseGames = (await GameRepository.getGamesBySystem(
+        system.id!,
+      )).where((dbGame) => !dbGame.isHidden).toList();
       final validExtensions = await SystemRepository.getExtensionsForSystem(
         system.id!,
       );
@@ -245,6 +251,9 @@ class GameListService {
           emulatorName: dbGame.emulatorName,
           coreName: dbGame.coreName,
           raHash: dbGame.raHash,
+          idRa: dbGame.idRa,
+          systemRaId: dbGame.systemRaId,
+          raNumAchievements: dbGame.raNumAchievements,
           systemId: dbGame.appSystemId,
           systemFolderName: system.folderName,
           cloudSyncEnabled: dbGame.cloudSyncEnabled,
@@ -261,7 +270,9 @@ class GameListService {
   }
 
   static Future<List<GameModel>> _loadFavoriteGames() async {
-    final databaseGames = await GameRepository.getFavoriteGames();
+    final databaseGames = (await GameRepository.getFavoriteGames())
+        .where((dbGame) => !dbGame.isHidden)
+        .toList();
 
     final systemIds = databaseGames
         .map((g) => g.appSystemId)
@@ -313,6 +324,9 @@ class GameListService {
         emulatorName: dbGame.emulatorName,
         coreName: dbGame.coreName,
         raHash: dbGame.raHash,
+        idRa: dbGame.idRa,
+        systemRaId: dbGame.systemRaId,
+        raNumAchievements: dbGame.raNumAchievements,
         systemId: dbGame.appSystemId,
         systemFolderName: dbGame.systemFolderName,
         systemRealName: dbGame.systemRealName,
@@ -374,6 +388,9 @@ class GameListService {
         emulatorName: dbGame.emulatorName,
         coreName: dbGame.coreName,
         raHash: dbGame.raHash,
+        idRa: dbGame.idRa,
+        systemRaId: dbGame.systemRaId,
+        raNumAchievements: dbGame.raNumAchievements,
         systemId: dbGame.appSystemId,
         systemFolderName: system.folderName,
         cloudSyncEnabled: dbGame.cloudSyncEnabled,

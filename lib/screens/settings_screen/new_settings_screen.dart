@@ -39,6 +39,7 @@ class NewSettingsScreen extends StatefulWidget {
   static void navigateLeft() => _currentInstance?._navigateLeft();
   static void navigateRight() => _currentInstance?._navigateRight();
   static void selectCurrent() => _currentInstance?._selectItem();
+  static void backCurrent() => _currentInstance?._navigateBack();
   static void deleteCurrent() => _currentInstance?._deleteCurrentItem();
 
   static _NewSettingsScreenState? _currentInstance;
@@ -274,6 +275,10 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _systemsSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.about) {
       _aboutSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.themes) {
+      _themesSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.systemArt) {
+      _systemArtSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     }
   }
 
@@ -307,6 +312,19 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     return _selectedContentIndex != previousIndex;
   }
 
+  /// Hands focus back to the category menu and resets the content cursor.
+  ///
+  /// The panel is scrolled back to its first item as well: the cursor moves to
+  /// index 0, so leaving the viewport parked wherever the user had scrolled to
+  /// would show a selection that is off-screen until focus re-enters.
+  void _returnFocusToMenu() {
+    setState(() {
+      _focusOnMenu = true;
+      _selectedContentIndex = 0;
+    });
+    _triggerContentScroll();
+  }
+
   /// Leftward Navigation Protocol: Returns focus to the master menu from the detail panel.
   void _navigateLeft() {
     if (_focusOnMenu) return;
@@ -315,26 +333,13 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     if (selectedKey == AppLocale.themes) {
       final returnToMenu =
           _themesSettingsKey.currentState?.navigateLeft() ?? true;
-      if (returnToMenu) {
-        setState(() {
-          _focusOnMenu = true;
-          _selectedContentIndex = 0;
-        });
-      }
+      if (returnToMenu) _returnFocusToMenu();
     } else if (selectedKey == AppLocale.systemArt) {
       final returnToMenu =
           _systemArtSettingsKey.currentState?.navigateLeft() ?? true;
-      if (returnToMenu) {
-        setState(() {
-          _focusOnMenu = true;
-          _selectedContentIndex = 0;
-        });
-      }
+      if (returnToMenu) _returnFocusToMenu();
     } else {
-      setState(() {
-        _focusOnMenu = true;
-        _selectedContentIndex = 0;
-      });
+      _returnFocusToMenu();
     }
   }
 
@@ -358,12 +363,30 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   }
 
   /// Execution Protocol: Triggers the action associated with the current focus point.
+  ///
+  /// On the category menu, A enters the detail panel, matching the A-to-open /
+  /// B-to-back convention used by the game list. D-pad Right still does the
+  /// same thing, so the existing muscle memory keeps working.
   void _selectItem() {
     if (_focusOnMenu) {
       _onMenuItemSelected(_selectedMenuIndex);
+      // Exit auto-focuses its own content, so only step right when the
+      // selection actually stayed on the menu.
+      if (_focusOnMenu) _navigateRight();
     } else {
       _selectContentItem();
     }
+  }
+
+  /// Back Protocol: B always returns focus to the category menu in one press.
+  ///
+  /// It deliberately does not reuse [_navigateLeft]: in the grid-based
+  /// categories (Themes, System Art) Left is a cell move, so delegating there
+  /// would make B walk the row instead of backing out. On the menu itself B is
+  /// a no-op, as elsewhere at the root of a tab.
+  void _navigateBack() {
+    if (_focusOnMenu) return;
+    _returnFocusToMenu();
   }
 
   /// Delete Protocol: routes the X button to a delete action on the focused
@@ -656,12 +679,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
         onExitPressed: _executeExit,
-        onCancel: () {
-          setState(() {
-            _focusOnMenu = true;
-            _selectedContentIndex = 0;
-          });
-        },
+        onCancel: _returnFocusToMenu,
       );
     } else {
       return Center(

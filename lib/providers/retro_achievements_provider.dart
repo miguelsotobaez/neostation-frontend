@@ -5,19 +5,30 @@ import 'package:neostation/services/logger_service.dart';
 import '../models/retro_achievements_user.dart';
 import '../models/retro_achievements_summary.dart';
 import '../services/retro_achievements_service.dart';
+import '../services/retro_achievements_cache.dart';
 import '../repositories/retro_achievements_repository.dart';
 import '../models/retro_achievements_dashboard_models.dart';
 import '../models/retro_achievements_game_info.dart';
 import '../models/retro_achievements_gotw.dart';
 import '../models/retro_achievements_user_awards.dart';
+import '../services/game/game_session_manager.dart';
 import 'retro_achievements_credentials.dart';
-import 'retroachievements/strategy_factory.dart';
 
 /// Provider responsible for managing the integration with RetroAchievements.org.
 ///
 /// Handles user authentication, profile synchronization, achievement progress
 /// tracking, and ROM identification via console-specific hashing algorithms.
 class RetroAchievementsProvider extends ChangeNotifier {
+  RetroAchievementsProvider() {
+    GameSessionManager.addSessionEndListener(invalidateCachedReads);
+  }
+
+  @override
+  void dispose() {
+    GameSessionManager.removeSessionEndListener(invalidateCachedReads);
+    super.dispose();
+  }
+
   static const String _dashboardApiKeyError =
       'A RetroAchievements web API key is required for this dashboard data.';
 
@@ -128,6 +139,13 @@ class RetroAchievementsProvider extends ChangeNotifier {
   RetroAchievementsUser? get user => _user;
   bool get isLoading => _isLoading;
   bool get isConnected => _isConnected;
+
+  /// True while any part of the signed-in dashboard is being served from the
+  /// offline cache, so the UI can say the data is stale. Derived rather than
+  /// latched: each endpoint drops out of it the moment the API answers that
+  /// endpoint live again.
+  bool get isOffline =>
+      _isConnected && RetroAchievementsCache.anyServedFromCache;
   String? get error => _error;
   String get username => _username;
   String get apiKey => _apiKey;
@@ -189,6 +207,14 @@ class RetroAchievementsProvider extends ChangeNotifier {
   OwnedWeekGameResolution? get ownedWeekGame => _ownedWeekGame;
   bool get hasResolvedApiKey =>
       RetroAchievementsService.resolveApiKey(_apiKey).trim().isNotEmpty;
+
+  /// Whether any dashboard section is currently in flight.
+  bool get isDashboardLoading =>
+      _recentUnlocksLoading ||
+      _recentlyPlayedLoading ||
+      _userAwardsLoading ||
+      _completionProgressLoading ||
+      _gotwLoading;
 
   bool get dashboardLoaded =>
       _recentUnlocksLoaded &&
@@ -450,6 +476,73 @@ class RetroAchievementsProvider extends ChangeNotifier {
     }
   }
 
+  /// Incremented by every [invalidateCachedReads]. A mounted dashboard watches
+  /// this rather than the `*Loaded` flags: the flags cannot distinguish "was
+  /// invalidated" from "the last load failed", so reacting to them would retry
+  /// a failing section forever. A counter changes only when someone actually
+  /// asked for fresh data.
+  int _cacheGeneration = 0;
+  int get cacheGeneration => _cacheGeneration;
+
+  /// How long a dashboard read stays good enough to show without re-fetching.
+  ///
+  /// Entering the RetroAchievements tab re-reads anything older than this, so
+  /// leaving the tab and coming back is the way to refresh — there is no
+  /// refresh control, and a gamepad launcher is a poor place to hunt for one.
+  /// Long enough that walking between tabs costs nothing, short enough that
+  /// achievements earned on another device, or a section that failed the first
+  /// time, are not stuck until the app restarts.
+  static const Duration dashboardStaleAfter = Duration(minutes: 2);
+
+  /// When the dashboard last finished a load *attempt*. Set whether or not the
+  /// sections succeeded, so a failing endpoint is retried on the next entry
+  /// rather than on every entry.
+  DateTime? _dashboardAttemptedAt;
+
+  /// Whether entering the tab should re-read the dashboard.
+  bool get dashboardIsStale =>
+      _dashboardAttemptedAt == null ||
+      DateTime.now().difference(_dashboardAttemptedAt!) > dashboardStaleAfter;
+
+  /// Records that a dashboard load attempt has just finished.
+  void markDashboardAttempted() => _dashboardAttemptedAt = DateTime.now();
+
+  /// Drops every cached RetroAchievements read so the next look re-fetches.
+  ///
+  /// [_gameInfoCache] and the dashboard's `*Loaded` flags both live for the
+  /// whole app session and are only cleared on [disconnect]. That is right
+  /// while browsing the library — it is what stops a grid of tiles hammering
+  /// the API — and wrong the moment the player has actually been playing: the
+  /// emulator submits their unlocks to RetroAchievements, but NeoStation would
+  /// go on showing the pre-session achievement list and the pre-session
+  /// dashboard until the app was restarted.
+  ///
+  /// The whole per-game map goes rather than one entry: mapping the finished
+  /// game back to its RetroAchievements id means a resolve on the game-exit
+  /// path, and the cost of being wrong here (stale progress the user just
+  /// earned) is worse than the cost of being thorough (one re-fetch per game
+  /// they next open).
+  ///
+  /// Also resets the staleness clock, so this beats [dashboardStaleAfter]: a
+  /// session that ended ten seconds ago still forces a re-read.
+  void invalidateCachedReads() {
+    _cacheGeneration++;
+    _dashboardAttemptedAt = null;
+    // Infrequent (a finished session, or a sign-out) and the only trace this
+    // leaves, so it is worth a line: without it there is no way to tell a
+    // dashboard that reloaded because the player just finished a game from one
+    // that reloaded because it aged out.
+    _log.i('RA: cached reads invalidated (generation $_cacheGeneration)');
+    _gameInfoCache.clear();
+    _summaryLoaded = false;
+    _gotwLoaded = false;
+    _userAwardsLoaded = false;
+    _recentUnlocksLoaded = false;
+    _recentlyPlayedLoaded = false;
+    _completionProgressLoaded = false;
+    notifyListeners();
+  }
+
   /// Initializes the provider and attempts automatic login with stored credentials.
   Future<void> initialize() async {
     try {
@@ -571,25 +664,11 @@ class RetroAchievementsProvider extends ChangeNotifier {
     if (clearSavedUser) {
       _clearRAUserFromConfig();
       _clearRAApiKeyFromConfig();
+      // Drop cached API payloads so a different user can't see stale data.
+      unawaited(RetroAchievementsCache.clear());
     }
 
     notifyListeners();
-  }
-
-  /// Calculates the RetroAchievements-specific hash for a given ROM file.
-  Future<String?> calculateRomRAHash(String filePath, String? systemId) async {
-    return await _calculateRAHash(filePath, systemId);
-  }
-
-  /// Internal logic to dispatch hash calculation to the appropriate platform strategy.
-  Future<String?> _calculateRAHash(String filePath, String? systemId) async {
-    try {
-      final strategy = RetroAchievementsStrategyFactory.getStrategy(systemId);
-      return await strategy.calculateHash(filePath);
-    } catch (e) {
-      _log.e('Error calculating RA hash for $filePath: $e');
-      return null;
-    }
   }
 
   void _setLoading(bool loading) {

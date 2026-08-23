@@ -15,6 +15,15 @@ const String _unreachableRomFoldersNotificationId = 'rom-folders-unreachable';
 /// Bell entry for a ROM folder refused because its path was transient.
 const String _transientRomFolderNotificationId = 'rom-folder-transient';
 
+/// Bell entry for a desktop scan that had no ROM root left to walk. A fixed id
+/// for the same reason as [_unreachableRomFoldersNotificationId].
+const String _noRomFoldersNotificationId = 'rom-folders-missing';
+
+/// Bell entry for Android ROM folders that are configured but hold no
+/// persistent SAF grant, so their games silently scan as empty. A fixed id so
+/// consecutive scans replace the warning in place.
+const String _safPermissionNotificationId = 'rom-folders-saf-permission';
+
 extension SqliteConfigScanning on SqliteConfigProvider {
   /// Registers a new filesystem directory as a ROM source.
   ///
@@ -100,6 +109,55 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     }
   }
 
+  /// On Android, every configured ROM root must hold its own persistent SAF
+  /// grant for the scan to read it. A folder can end up configured without one
+  /// (a path entered outside the SAF picker, or a grant revoked in system
+  /// settings), and the scan then silently walks it as if it were empty and
+  /// every game inside is lost — exactly the "Switch games on a second disk
+  /// never show up" report.
+  ///
+  /// Rather than opening the system picker from inside a background scan
+  /// (which risks a hung `_isScanning` if the activity is recreated while the
+  /// picker is up, and re-prompts on every scan because a re-picked parent
+  /// rarely matches the stored URI), this just tells the user what is wrong and
+  /// where to fix it via a bell notification. The re-grant happens on the
+  /// Settings > Directories screen, where a picker can never stall the scan.
+  ///
+  /// Note: even with All-Files-Access held, the native fast walk only covers
+  /// the primary volume on API 30+; folders on SD/USB volumes still fall back
+  /// to the SAF walk and need their own grant, so every configured root is
+  /// checked here regardless of the broad-permission flag.
+  Future<void> _ensureAndroidSafPermissions() async {
+    if (!Platform.isAndroid) return;
+
+    final missing = <String>[];
+    for (final folder in _config.romFolders) {
+      if (!folder.startsWith('content://')) continue;
+      final ok = await SafDirectoryService.hasPermission(folder);
+      if (!ok) {
+        missing.add(folder);
+      }
+    }
+
+    if (missing.isEmpty) {
+      GlobalNotificationService().dismiss(_safPermissionNotificationId);
+      return;
+    }
+
+    final plural = missing.length == 1 ? '' : 's';
+    SqliteConfigProvider._log.w(
+      'SAF permission missing for ${missing.length} ROM folder(s): $missing',
+    );
+    GlobalNotificationService().show(
+      id: _safPermissionNotificationId,
+      title: 'ROM folder$plural missing storage access',
+      message:
+          '${missing.length} ROM folder$plural cannot be read. '
+          'Re-grant access in Settings > Directories.',
+      type: GlobalNotificationType.error,
+    );
+  }
+
   /// Scans the registered ROM folders to detect supported emulation systems.
   ///
   /// Orchestrates permission checks, platform identification, and background
@@ -122,8 +180,17 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
     // granted or revoked between scans, but not during one.
     SafDirectoryService.resetFastWalkAvailability();
+    // Settle fast-scan mode before anything reports it. `_config.romFolders`
+    // cannot change for the rest of this call, so deciding here is the same
+    // decision the scan phase used to make further down — except the line
+    // below now describes the scan actually about to run. It used to print the
+    // value left by provider init, so the first scan after a folder was added
+    // logged `romFolders=1, fastScan=true`: self-contradictory, and misleading
+    // in exactly the situation this log line exists to diagnose.
+    _isFastScan = _config.romFolders.isEmpty;
     SqliteConfigProvider._log.i(
-      'scanSystems starting (romFolders=${_config.romFolders.length}, fastScan=$_isFastScan)',
+      'scanSystems starting (romFolders=${_config.romFolders.length}, '
+      'fastScan=$_isFastScan)',
     );
 
     // Verify permissions in Android BEFORE scanning
@@ -160,6 +227,18 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           _notify();
           return;
         }
+      }
+
+      // Detect configured folders that lost their persistent SAF grant and
+      // tell the user, otherwise the scan walks them as empty and drops the
+      // games inside. Guarded so a surprise failure here can never leave the
+      // scan half-started (`_isScanning` is only cleared in the finally below).
+      try {
+        await _ensureAndroidSafPermissions();
+      } catch (e) {
+        SqliteConfigProvider._log.e(
+          'Error checking SAF permissions before scan: $e',
+        );
       }
 
       // On some handhelds launched as the default launcher, Android starts the
@@ -237,10 +316,50 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       }
     }
 
+    // The same silence covers the case where no root is configured at all.
+    // `_isFastScan` below turns an empty folder list into a scan that walks
+    // nothing and still reports success: that is deliberate on Android, where
+    // the virtual Android Apps systems are injected regardless, but off
+    // Android it leaves nothing to scan and no way to tell. The list can empty
+    // itself without the user removing anything — a blanket config save that
+    // carried no folders (fixed in #316, but older databases already lost
+    // theirs), or a `loadConfig` failure falling back to `ConfigModel.empty` —
+    // while Settings > Directories reads the folder table directly and so
+    // still shows a folder that is configured as far as the user can tell.
+    // Every scan is then a no-op that flickers past, and the library keeps
+    // working from stored `rom_path` rows, so nothing new is ever picked up.
+    if (!Platform.isAndroid &&
+        _config.romFolders.isEmpty &&
+        await _hasStoredRoms()) {
+      _error =
+          'No ROM folder is configured, so there was nothing to scan. '
+          'Existing games were kept. Add your ROM folder again in '
+          'Settings > Directories.';
+      SqliteConfigProvider._log.e(
+        'Scan aborted, no ROM folders configured while the library holds '
+        'ROMs; library preserved',
+      );
+      // Same reasoning as the unreachable-roots branch above: flip
+      // `_scanCompleted` so the systems screen renders the preserved library,
+      // and report through the bell because `_error` only reaches the
+      // initial-setup widget.
+      _scanCompleted = true;
+      GlobalNotificationService().show(
+        id: _noRomFoldersNotificationId,
+        title: 'No ROM folder configured',
+        message: _error!,
+        type: GlobalNotificationType.error,
+      );
+      _setScanning(false);
+      _notify();
+      return;
+    }
+
     // Getting this far means nothing blocked the scan, so retire a warning
     // left by an earlier one instead of leaving the user chasing a folder they
     // have already reconnected or removed.
     GlobalNotificationService().dismiss(_unreachableRomFoldersNotificationId);
+    GlobalNotificationService().dismiss(_noRomFoldersNotificationId);
 
     // Initialize progress
     _totalSystemsToScan = 0;
@@ -252,8 +371,8 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // Reload from synchronized database during initialization
       await _loadAvailableSystems();
 
-      // Detect if we are in "Fast Scan" mode (without ROM folders)
-      _isFastScan = _config.romFolders.isEmpty;
+      // Fast Scan mode (no ROM folders) was settled before the opening log
+      // line, so that it and this agree.
       final bool isFastScan = _isFastScan;
 
       // Detect systems
@@ -370,6 +489,11 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
           return false;
         }).toList();
+
+        SqliteConfigProvider._log.i(
+          'AndroidPreFilter: ${allExistingFolders.length} existing subfolder(s); '
+          '${filteredSystems.length} system(s) matched',
+        );
 
         // Android Fix: Combine filtered systems with legacy systems from DB
         // so that deleted systems get a chance to be pruned.
@@ -555,6 +679,13 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           .expand((m) => m.keys.map((k) => k.toLowerCase()))
           .toSet();
 
+      // Hidden games per system, in a single query. They stay in the ROM count
+      // that decides whether a system is kept (otherwise a system whose games
+      // are all hidden would vanish, taking the unhide UI with it) but are
+      // subtracted from the count shown on the system card, which has to match
+      // the list the user actually sees.
+      final hiddenBySystem = await GameRepository.getHiddenRomCountsBySystem();
+
       // First pass: collect all systems except 'all'
       for (final system in allSystems) {
         if (system.folderName == 'all') continue;
@@ -582,7 +713,8 @@ extension SqliteConfigScanning on SqliteConfigProvider {
             (system.folderName == 'android' && Platform.isAndroid);
 
         if (romCount > 0 || hasFolderWhenNonRecursive || isAndroidVirtual) {
-          systemsToKeep.add(system.copyWith(romCount: romCount));
+          final visibleRomCount = romCount - (hiddenBySystem[system.id!] ?? 0);
+          systemsToKeep.add(system.copyWith(romCount: visibleRomCount));
 
           // Increment count for 'all' logic if it's a real emulator system with games
           if (romCount > 0 && !virtualSystems.contains(system.folderName)) {
@@ -659,6 +791,11 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         rootFoldersMap: rootFoldersMap,
       );
 
+      SqliteConfigProvider._log.i(
+        'ScanResult[${system.realName}]: added=${summary.added} '
+        'removed=${summary.removed} total=${summary.total}',
+      );
+
       // Update ROM count in system
       await refreshSystem(system, rootFoldersMap: rootFoldersMap);
 
@@ -729,11 +866,19 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         }
       }
 
+      // Raw ROM count, hidden games included. [updatedSystem.romCount] is the
+      // visible one (what the card shows), and pruning on it would make a
+      // system whose games are all hidden disappear — along with the only place
+      // to unhide them.
+      final totalRomCount = await SystemRepository.getRomCountForSystem(
+        updatedSystem.id!,
+      );
+
       // INCREMENTAL PERSISTENCE: Keep a system when it has ROMs, when its
       // folder exists and recursive scan is explicitly OFF (user can re-enable),
       // or when it is a virtual system (android / all).
       final bool shouldKeep =
-          updatedSystem.romCount > 0 ||
+          totalRomCount > 0 ||
           hasFolderWhenNonRecursive ||
           (updatedSystem.folderName == 'android' && Platform.isAndroid) ||
           updatedSystem.folderName == 'all' ||

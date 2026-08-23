@@ -19,11 +19,20 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          # Pinned via .fvmrc (the single source of truth for the SDK version),
+          # not `channel: stable`. An unpinned stable silently moves under CI:
+          # 3.47.0 shipped a `dart format` that relaid out a file nobody had
+          # touched and an `unawaited_return_in_try_block` lint that fires in
+          # four existing files, so main went red without a commit.
+          # Bump .fvmrc deliberately, in its own PR, with the fallout fixed.
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
 
+      # --enforce-lockfile, so a pubspec.lock resolved on a different SDK fails
+      # here instead of being silently rewritten in the runner. See pr-checks.yml.
       - name: Install dependencies
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed .
@@ -80,13 +89,14 @@ jobs:
         if: matrix.target != 'linux-arm'
         uses: subosito/flutter-action@v2
         with:
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
 
       - name: Setup Flutter (ARM64 Manual)
         if: matrix.target == 'linux-arm'
         run: |
-          git clone -b stable --depth 1 https://github.com/flutter/flutter.git $HOME/flutter
+          git clone -b "$(jq -r .flutter .fvmrc)" --depth 1 https://github.com/flutter/flutter.git $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
           export PATH="$HOME/flutter/bin:$PATH"
           flutter config --no-analytics

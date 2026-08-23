@@ -12,7 +12,11 @@
     },
     "ids": {
       "screenscraper": 171,
-      "retroachievements": null
+      "retroachievements": 77
+    },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
     },
     "folders": [
       "jagcd",

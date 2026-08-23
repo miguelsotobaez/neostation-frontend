@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../providers/file_provider.dart';
+import '../utils/ra_coverage.dart';
 import 'database_game_model.dart';
 
 /// Represents a unified game entity combining metadata, filesystem info, and database state.
@@ -41,6 +42,10 @@ class GameModel {
   /// Whether the user has marked this game as a favorite.
   final bool? isFavorite;
 
+  /// Whether the user hid this game from the game lists. Hidden games are
+  /// filtered out of every list; the row and the ROM file are left untouched.
+  final bool isHidden;
+
   /// Timestamp of the last time the game was launched.
   final DateTime? lastPlayed;
 
@@ -61,6 +66,18 @@ class GameModel {
 
   /// Computed RetroAchievements hash used for game identification.
   final String? raHash;
+
+  /// Unique identifier on RetroAchievements.org, once the ROM has been matched.
+  final int? idRa;
+
+  /// The system's RetroAchievements console id, or null when they do not cover
+  /// it. Lets a view tell "no set for this game" from "no sets for this whole
+  /// system" without a systems lookup.
+  final String? systemRaId;
+
+  /// How many achievements the bundled snapshot lists for [idRa]. Read from the
+  /// local snapshot, so a tile can show it without an API call.
+  final int? raNumAchievements;
 
   /// Platform-specific Title ID (e.g., for Switch or PS Vita).
   final String? titleId;
@@ -101,6 +118,7 @@ class GameModel {
     required this.players,
     required this.rating,
     this.isFavorite,
+    this.isHidden = false,
     this.lastPlayed,
     this.playTime,
     this.romPath,
@@ -108,6 +126,9 @@ class GameModel {
     this.emulatorPath,
     this.coreName,
     this.raHash,
+    this.idRa,
+    this.systemRaId,
+    this.raNumAchievements,
     this.systemId,
     this.systemFolderName,
     this.systemRealName,
@@ -163,6 +184,7 @@ class GameModel {
       players: db.players ?? '',
       rating: db.rating ?? 0.0,
       isFavorite: db.isFavorite,
+      isHidden: db.isHidden,
       lastPlayed: db.lastPlayed,
       playTime: db.playTime,
       romPath: db.romPath,
@@ -170,6 +192,9 @@ class GameModel {
       emulatorPath: db.emulatorPath,
       coreName: db.coreName,
       raHash: db.raHash,
+      idRa: db.idRa,
+      systemRaId: db.systemRaId,
+      raNumAchievements: db.raNumAchievements,
       systemId: db.appSystemId,
       systemFolderName: db.systemFolderName,
       systemRealName: db.systemRealName,
@@ -181,6 +206,17 @@ class GameModel {
       showRomFileNameSubtitle: false,
     );
   }
+
+  /// What is known locally about this ROM's RetroAchievements coverage.
+  ///
+  /// Derived entirely from persisted columns, so it is safe to read while
+  /// building a tile — no network call and no database round trip.
+  RaCoverage get raCoverage => raCoverageOf(
+    systemRaId: systemRaId,
+    filename: romname,
+    raHash: raHash,
+    idRa: idRa,
+  );
 
   /// Converts the model instance into a JSON-compatible map.
   Map<String, dynamic> toJson() {
@@ -212,6 +248,7 @@ class GameModel {
     String? players,
     double? rating,
     bool? isFavorite,
+    bool? isHidden,
     DateTime? lastPlayed,
     int? playTime,
     String? romPath,
@@ -219,6 +256,9 @@ class GameModel {
     String? emulatorPath,
     String? coreName,
     String? raHash,
+    int? idRa,
+    String? systemRaId,
+    int? raNumAchievements,
     String? systemId,
     String? systemFolderName,
     String? systemRealName,
@@ -241,6 +281,7 @@ class GameModel {
       players: players ?? this.players,
       rating: rating ?? this.rating,
       isFavorite: isFavorite ?? this.isFavorite,
+      isHidden: isHidden ?? this.isHidden,
       lastPlayed: lastPlayed ?? this.lastPlayed,
       playTime: playTime ?? this.playTime,
       romPath: romPath ?? this.romPath,
@@ -248,6 +289,9 @@ class GameModel {
       emulatorPath: emulatorPath ?? this.emulatorPath,
       coreName: coreName ?? this.coreName,
       raHash: raHash ?? this.raHash,
+      idRa: idRa ?? this.idRa,
+      systemRaId: systemRaId ?? this.systemRaId,
+      raNumAchievements: raNumAchievements ?? this.raNumAchievements,
       systemId: systemId ?? this.systemId,
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,
@@ -279,45 +323,12 @@ class GameModel {
     FileProvider? fileProvider,
   ]) {
     if (fileProvider != null && fileProvider.isInitialized) {
-      final pngPath = fileProvider.getMediaPath(
+      final owned = _existingNeoStationImagePath(
+        fileProvider,
         systemFolderName,
         imageType,
-        romname,
-        'png',
       );
-      if (File(pngPath).existsSync()) {
-        return pngPath;
-      }
-      final jpgPath = fileProvider.getMediaPath(
-        systemFolderName,
-        imageType,
-        romname,
-        'jpg',
-      );
-      if (File(jpgPath).existsSync()) {
-        return jpgPath;
-      }
-
-      // Fallback for files with complex extensions (e.g., 'v1.11.zip').
-      final pngPathOriginal = path.join(
-        fileProvider.getMediaDirectoryPath(),
-        systemFolderName,
-        imageType,
-        '$romname.png',
-      );
-      if (File(pngPathOriginal).existsSync()) {
-        return pngPathOriginal;
-      }
-
-      final jpgPathOriginal = path.join(
-        fileProvider.getMediaDirectoryPath(),
-        systemFolderName,
-        imageType,
-        '$romname.jpg',
-      );
-      if (File(jpgPathOriginal).existsSync()) {
-        return jpgPathOriginal;
-      }
+      if (owned != null) return owned;
 
       // ES-DE read-time fallback: use the user's ES-DE downloaded_media art
       // when NeoStation has no art of its own. A later NeoStation scrape writes
@@ -332,10 +343,91 @@ class GameModel {
         }
       }
 
-      return pngPath;
+      return fileProvider.getMediaPath(
+        systemFolderName,
+        imageType,
+        romname,
+        'png',
+      );
     }
 
     // Manual filesystem lookup logic.
+    return _manualImagePath(systemFolderName, imageType);
+  }
+
+  /// Resolves the path new art for [imageType] must be *written* to.
+  ///
+  /// Always inside NeoStation's own `media/` directory: an existing NeoStation
+  /// file when there is one (so replacing art keeps the same file), otherwise
+  /// the default `.png` destination. Unlike [getImagePath] this never returns a
+  /// path inside ES-DE's `downloaded_media/`, which is the user's own library
+  /// and must stay untouched — writing there would destroy their ES-DE art
+  /// (e.g. a miximage) instead of shadowing it.
+  String getWritableImagePath(
+    String systemFolderName,
+    String imageType, [
+    FileProvider? fileProvider,
+  ]) {
+    if (fileProvider != null && fileProvider.isInitialized) {
+      return _existingNeoStationImagePath(
+            fileProvider,
+            systemFolderName,
+            imageType,
+          ) ??
+          fileProvider.getMediaPath(
+            systemFolderName,
+            imageType,
+            romname,
+            'png',
+          );
+    }
+
+    return _manualImagePath(systemFolderName, imageType);
+  }
+
+  /// Extensions a NeoStation-owned media file may carry, in probe order.
+  ///
+  /// `webp` is last and costs a stat only for a ROM that has no art at all:
+  /// scrapes write `png`/`jpg`, so any game with artwork answers on the first
+  /// or second entry. It is probed because RomM imports before 0.10.1 saved
+  /// covers under the source's own extension, leaving `.webp` box art on disk
+  /// that nothing could resolve.
+  static const List<String> _mediaExtensions = ['png', 'jpg', 'webp'];
+
+  /// The existing NeoStation-owned media file for [imageType], or null when
+  /// NeoStation has no art of its own for this ROM.
+  String? _existingNeoStationImagePath(
+    FileProvider fileProvider,
+    String systemFolderName,
+    String imageType,
+  ) {
+    for (final extension in _mediaExtensions) {
+      final candidate = fileProvider.getMediaPath(
+        systemFolderName,
+        imageType,
+        romname,
+        extension,
+      );
+      if (File(candidate).existsSync()) return candidate;
+    }
+
+    // Fallback for files with complex extensions (e.g., 'v1.11.zip').
+    for (final extension in _mediaExtensions) {
+      final candidate = path.join(
+        fileProvider.getMediaDirectoryPath(),
+        systemFolderName,
+        imageType,
+        '$romname.$extension',
+      );
+      if (File(candidate).existsSync()) return candidate;
+    }
+
+    return null;
+  }
+
+  /// Relative-path lookup used when no initialized [FileProvider] is available.
+  /// Resolves inside NeoStation's `media/` folder only.
+  String _manualImagePath(String systemFolderName, String imageType) {
     final baseName = _stripRomExtension(romname);
 
     final pngRelativePath = path.join(

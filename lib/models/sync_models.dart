@@ -1,6 +1,27 @@
 /// Shared data types for the sync provider abstraction layer.
 library;
 
+/// Cooperative cancellation signal for the pre-launch save sync.
+///
+/// [Future.timeout] bounds how long the launch waits, but it cannot cancel the
+/// in-flight computation: a slow download can complete *after* the timeout has
+/// fired and the game has already launched on the local save, then write remote
+/// bytes over the .srm the emulator has open — corrupting/reverting it.
+///
+/// Providers thread this deadline through their pre-launch download path and
+/// check [isExpired] AFTER the network download completes but BEFORE writing
+/// bytes to the local file or persisting sync state, abandoning the write once
+/// the deadline has passed. The invariant: once the launch-blocking wait has
+/// elapsed, the abandoned sync must never touch save files or sync state.
+class SyncDeadline {
+  SyncDeadline(Duration budget) : _expiry = DateTime.now().add(budget);
+
+  final DateTime _expiry;
+
+  /// True once the budget has elapsed; further writes must be abandoned.
+  bool get isExpired => DateTime.now().isAfter(_expiry);
+}
+
 /// Descriptive metadata about a sync provider, shown in the provider picker UI.
 class SyncProviderMeta {
   final String id;

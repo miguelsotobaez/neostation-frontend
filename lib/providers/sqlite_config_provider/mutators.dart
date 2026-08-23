@@ -84,6 +84,13 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether library tiles show the RetroAchievements badge.
+  Future<void> updateShowAchievementsBadge(bool value) async {
+    _config = _config.copyWith(showAchievementsBadge: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Persists whether the game action-button legend is hidden (Select + B).
   Future<void> updateLegendHidden(bool value) async {
     _config = _config.copyWith(legendHidden: value);
@@ -141,6 +148,14 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether the startup scan is followed by a RetroAchievements
+  /// match pass over the ROMs it added.
+  Future<void> updateRaMatchOnStartup(bool value) async {
+    _config = _config.copyWith(raMatchOnStartup: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Updates whether hidden files/folders are ignored during ROM scans.
   Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
     _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);
@@ -162,6 +177,18 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     // Apply immediately to the running service — no restart needed.
     SfxService().setEnabled(value);
     _notify();
+  }
+
+  /// Updates and persists the UI SFX volume, playing a sound at the new level
+  /// so the choice can be heard as it is made.
+  Future<void> updateSfxVolume(double value) async {
+    final volume = value.clamp(0.0, SfxService.maxVolume).toDouble();
+    _config = _config.copyWith(sfxVolume: volume);
+    // Apply immediately to the running service — no restart needed.
+    SfxService().setVolume(volume);
+    _notify();
+    unawaited(SfxService().playVolumePreview());
+    await SqliteConfigService.saveConfig(_config);
   }
 
   /// Updates the app display language and applies it immediately

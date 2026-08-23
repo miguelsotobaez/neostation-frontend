@@ -26,6 +26,7 @@ class _NotificationBellState extends State<NotificationBell>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  late ValueNotifier<List<GlobalNotificationData>> _notifications;
   OverlayEntry? _overlayEntry;
 
   /// Vertical gap between the bell icon and the top of the dropdown.
@@ -44,11 +45,35 @@ class _NotificationBellState extends State<NotificationBell>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 0.4).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _pulseController.repeat(reverse: true);
+
+    // The pulse only runs while there is something to pulse about. Repeating
+    // unconditionally kept a ticker alive for the life of the app: the bell
+    // lives in the header on every screen, so a controller that never stops
+    // requested a frame every vsync forever, and the whole display re-rastered
+    // at 60 fps while the user sat still (~26% of a core in the raster thread).
+    _notifications = GlobalNotificationService().notifier;
+    _notifications.addListener(_syncPulse);
+    _syncPulse();
+  }
+
+  /// Starts the pulse when notifications appear and stops it when the last one
+  /// goes away, parking the controller at its opaque end.
+  void _syncPulse() {
+    final bool hasNotifications = _notifications.value.isNotEmpty;
+    if (hasNotifications) {
+      if (!_pulseController.isAnimating) {
+        _pulseController.repeat(reverse: true);
+      }
+    } else if (_pulseController.isAnimating) {
+      _pulseController.stop();
+      // Tween begin (1.0 = fully opaque) sits at controller value 0.
+      _pulseController.value = 0;
+    }
   }
 
   @override
   void dispose() {
+    _notifications.removeListener(_syncPulse);
     _closeDropdown();
     _pulseController.dispose();
     super.dispose();
@@ -65,14 +90,12 @@ class _NotificationBellState extends State<NotificationBell>
           child: Stack(
             alignment: Alignment.center,
             children: [
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: hasNotifications ? _pulseAnimation.value : 1.0,
-                    child: child,
-                  );
-                },
+              // FadeTransition rather than AnimatedBuilder + Opacity: it drives
+              // the opacity layer directly, so a running pulse repaints without
+              // rebuilding this subtree every frame. Parked at 1.0 (opaque)
+              // whenever the controller is stopped.
+              FadeTransition(
+                opacity: _pulseAnimation,
                 child: Icon(
                   hasNotifications
                       ? Symbols.notifications_active_rounded

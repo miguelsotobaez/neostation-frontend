@@ -14,6 +14,10 @@
       "screenscraper": 3,
       "retroachievements": 7
     },
+    "ra_hash": {
+      "algo": "nes",
+      "mode": "hash_only"
+    },
     "folders": [
       "fc",
       "Famicom",

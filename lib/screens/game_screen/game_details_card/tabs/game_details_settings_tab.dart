@@ -16,6 +16,7 @@ import '../../../../models/game_model.dart';
 import '../../../../models/core_emulator_model.dart';
 import '../../../../sync/i_sync_provider.dart';
 import '../../../../providers/neo_sync_provider.dart';
+import '../../../../providers/romm_provider.dart';
 import '../../../../repositories/game_repository.dart';
 import '../../../../utils/emulator_loader.dart';
 import '../../../../utils/game_utils.dart';
@@ -254,6 +255,8 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
         : widget.system.folderName;
     final targetSystemId = _game.systemId ?? widget.system.id;
     final fileProvider = Provider.of<FileProvider>(context, listen: false);
+    // Read before the await: the card can be gone by the time deletion ends.
+    final rommProvider = Provider.of<RommProvider>(context, listen: false);
     final deletedRomname = _game.romname;
 
     try {
@@ -264,6 +267,11 @@ class GameDetailsSettingsTabState extends State<GameDetailsSettingsTab> {
         romBaseName: deletedRomname,
         romPath: _game.romPath,
         fileProvider: fileProvider,
+      );
+      // Unlink from RomM so the browse grid stops calling it downloaded.
+      await rommProvider.forgetLocalDownload(
+        romname: deletedRomname,
+        systemFolder: targetSystemFolder,
       );
     } catch (e) {
       _log.e('Game deletion failed: $e');

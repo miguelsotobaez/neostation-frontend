@@ -14,6 +14,10 @@
       "screenscraper": 86,
       "retroachievements": 38
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
+    },
     "folders": [
       "a2",
       "apple2",

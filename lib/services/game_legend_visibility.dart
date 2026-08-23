@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 /// Visibility of the vertical action-button legend, shared across all game views
-/// (list, grid, carousel). Toggled by the Select + B chord.
+/// (list, grid, carousel) and the RomM browser's ROM views. Toggled by the
+/// Select + B chord, so hiding it in one library hides it in the other.
 ///
 /// The value is persisted to `user_config.legend_hidden` so a toggle survives
 /// restarts and upgrades. [bind] seeds the in-memory notifier from the loaded

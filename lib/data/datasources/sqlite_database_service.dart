@@ -231,6 +231,10 @@ class SqliteDatabaseService {
     ];
 
     final walkedDirs = <String>{};
+    _log.i(
+      'Scan[${system.realName}]: ${scanTargets.length} target(s) resolved '
+      '(folders=${allPossibleFolderNames.join(', ')}, romFolders=${romFolders.length})',
+    );
     for (final target in orderedTargets) {
       // An alias pointing at a directory already walked for this system.
       if (!walkedDirs.add(target.canonicalPath)) continue;
@@ -250,6 +254,10 @@ class SqliteDatabaseService {
                 ignoreHiddenFiles: ignoreHiddenFiles,
               );
 
+        _log.i(
+          'Scan[${system.realName}]: walked ${target.dirPath} -> '
+          '${entries.length} entries',
+        );
         if (entries.isNotEmpty) {
           romEntries.addAll(entries);
         }
@@ -257,6 +265,11 @@ class SqliteDatabaseService {
         _log.e('Error scanning folder ${target.dirPath}: $e');
       }
     }
+
+    _log.i(
+      'Scan[${system.realName}]: ${romEntries.length} raw entries before '
+      'dedup/filter',
+    );
 
     // Apply M3U and redundancy filters
     if (validExtensionsSet.contains('m3u') && romEntries.isNotEmpty) {
@@ -888,6 +901,7 @@ class SqliteDatabaseService {
 
     const columns =
         'is_favorite, play_time, last_played, id_ra, ra_hash, ss_hash, '
+        'rom_crc32, rom_size, rom_fingerprint_skipped, '
         'app_emulator_unique_id, app_emulator_os_id, '
         'app_alternative_emulators_id';
 
@@ -927,6 +941,9 @@ class SqliteDatabaseService {
             id_ra = ?,
             ra_hash = ?,
             ss_hash = ?,
+            rom_crc32 = ?,
+            rom_size = ?,
+            rom_fingerprint_skipped = ?,
             app_emulator_unique_id = ?,
             app_emulator_os_id = ?,
             app_alternative_emulators_id = ?,
@@ -942,6 +959,12 @@ class SqliteDatabaseService {
             s['id_ra'] ?? d['id_ra'],
             s['ra_hash'] ?? d['ra_hash'],
             s['ss_hash'] ?? d['ss_hash'],
+            // Both paths are the same file (a symlinked duplicate), so the
+            // dump identity transfers verbatim; a computed fingerprint on
+            // either row beats losing it and re-reading the ROM.
+            s['rom_crc32'] ?? d['rom_crc32'],
+            s['rom_size'] ?? d['rom_size'],
+            s['rom_fingerprint_skipped'] ?? d['rom_fingerprint_skipped'],
             s['app_emulator_unique_id'] ?? d['app_emulator_unique_id'],
             s['app_emulator_os_id'] ?? d['app_emulator_os_id'],
             s['app_alternative_emulators_id'] ??
@@ -1150,11 +1173,23 @@ class SqliteDatabaseService {
           ),
         );
       }
+      final fastWalkNote = fastEntries.isEmpty ? ' (empty, non-null)' : '';
+      _log.i(
+        'SafScan[${path.basename(uri)}]: fast walk found ${entries.length} '
+        'entries$fastWalkNote',
+      );
       return entries;
     }
 
     try {
       final content = await SafDirectoryService.listFiles(uri);
+      // _scanSafUri recurses through subdirectories on this slow path, so this
+      // line fires once per directory — keep it at debug level to avoid
+      // flooding (and rotating away) the production log.
+      _log.d(
+        'SafScan[${path.basename(uri)}]: SAF walk returned ${content.length} '
+        'items',
+      );
       for (final item in content) {
         final name = item['name'].toString();
         final itemUri = item['uri'].toString();

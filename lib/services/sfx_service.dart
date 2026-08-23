@@ -17,6 +17,8 @@ import 'package:path_provider/path_provider.dart';
 /// - Confirm/Enter: `enter.wav`.
 /// - Back/Cancel: `back.wav`.
 class SfxService {
+  /// Maximum UI SFX volume. The UI presents this as 100%.
+  static const double maxVolume = 0.75;
   static final SfxService _instance = SfxService._internal();
   factory SfxService() => _instance;
   SfxService._internal();
@@ -55,8 +57,8 @@ class SfxService {
   /// Global toggle for SFX audio.
   bool _enabled = true;
 
-  /// Global SFX playback volume (0.0 to 0.75).
-  double _volume = 0.75;
+  /// Global SFX playback volume (0.0 to [maxVolume]).
+  double _volume = maxVolume;
 
   double get volume => _volume;
   bool get isInitialized => _isInitialized;
@@ -207,11 +209,14 @@ class SfxService {
 
   /// Updates the global SFX volume.
   ///
-  /// [value] is clamped between 0.0 and 0.75.
+  /// [value] is clamped between 0.0 and [maxVolume].
   void setVolume(double value) {
-    _volume = value.clamp(0.0, 0.75);
+    _volume = value.clamp(0.0, maxVolume);
     _log.d('[SfxService] Volume set to $_volume');
   }
+
+  /// Plays a navigation sound to preview a newly selected SFX volume.
+  Future<void> playVolumePreview() => playNavSound();
 
   /// Globally enables or disables SFX playback.
   void setEnabled(bool value) {

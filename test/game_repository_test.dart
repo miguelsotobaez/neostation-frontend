@@ -66,6 +66,18 @@ void main() {
       expect(result['folder_name'], 'snes');
     });
 
+    test('findRomByFilenamePrefix returns the ROM emulator unique id', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, title_name, app_system_id, app_emulator_unique_id) VALUES ('super-mario-all-stars-usa.smc', '/roms/snes/super-mario-all-stars-usa.smc', 'Super Mario All Stars', 'snes', 'snes.ra64.snes9x')",
+      );
+
+      final result = await GameRepository.findRomByFilenamePrefix(
+        'super-mario-all-stars-usa',
+      );
+      expect(result, isNotNull);
+      expect(result!['emulator_name'], 'snes.ra64.snes9x');
+    });
+
     test('findSwitchGameByTitleId returns match by title_id', () async {
       await db.execute(
         "INSERT INTO user_roms (filename, rom_path, title_name, title_id, app_system_id) VALUES ('game.nsp', '/roms/switch/game.nsp', 'Super Mario', '0100000000010000', 'switch')",

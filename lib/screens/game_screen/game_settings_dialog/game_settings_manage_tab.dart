@@ -7,7 +7,11 @@ import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
+import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/repositories/game_repository.dart';
+import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/utils/enabled_index_nav.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -18,10 +22,11 @@ import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/custom_toggle_switch.dart';
 import 'package:neostation/widgets/delete_game_dialog.dart';
+import 'package:provider/provider.dart';
 
 /// Manage tab for [GameSettingsDialog]: cloud sync, grid size/style,
-/// play-time reset, and permanent game deletion. View mode is selected from the
-/// game view itself (X button), not here.
+/// play-time reset, hiding the game, and permanent game deletion. View mode is
+/// selected from the game view itself (X button), not here.
 class GameSettingsManageTab extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
@@ -30,6 +35,7 @@ class GameSettingsManageTab extends StatefulWidget {
   final bool isAllMode;
   final VoidCallback? onGameUpdated;
   final void Function(String romname)? onGameDeleted;
+  final void Function(String romname)? onGameHidden;
 
   const GameSettingsManageTab({
     super.key,
@@ -40,6 +46,7 @@ class GameSettingsManageTab extends StatefulWidget {
     required this.isAllMode,
     this.onGameUpdated,
     this.onGameDeleted,
+    this.onGameHidden,
   });
 
   @override
@@ -53,6 +60,7 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   late bool _cloudSyncEnabled;
   bool _isUpdatingCloudSync = false;
   bool _isResettingPlayTime = false;
+  bool _isHiding = false;
   bool _isDeleting = false;
 
   final ScrollController _scrollController = ScrollController();
@@ -65,8 +73,9 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   // cloud sync visibility or the grid options change.
   int get _cloudSyncIdx => 0;
   int get _playTimeIdx => 1;
-  int get _deleteIdx => 2;
-  int get _totalItems => 3;
+  int get _hideIdx => 2;
+  int get _deleteIdx => 3;
+  int get _totalItems => 4;
 
   bool get _showCloudSync => widget.syncProvider?.isAuthenticated == true;
 
@@ -125,6 +134,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       if ((widget.game.playTime ?? 0) > 0 && !_isResettingPlayTime) {
         _confirmResetPlayTime();
       }
+    } else if (idx == _hideIdx) {
+      if (!_isHiding) _hideGame();
     } else if (idx == _deleteIdx) {
       _confirmDeleteGame();
     }
@@ -224,6 +235,59 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     }
   }
 
+  // ── Hide ────────────────────────────────────────────────────────────────
+
+  /// Hides the game from every game list.
+  ///
+  /// Deliberately unconfirmed: nothing is deleted and the game is one visit to
+  /// the system's settings dialog away from coming back, so a confirmation
+  /// would only get in the way.
+  Future<void> _hideGame() async {
+    if (_isHiding) return;
+    setState(() => _isHiding = true);
+
+    final hiddenRomname = widget.game.romname;
+    final displayName = widget.game.name.isNotEmpty
+        ? widget.game.name
+        : hiddenRomname;
+    // Read before the awaits: the dialog is popped as soon as this finishes.
+    final databaseProvider = context.read<SqliteDatabaseProvider>();
+    final configProvider = context.read<SqliteConfigProvider>();
+
+    try {
+      await GameRepository.setGameHidden(
+        _targetSystemFolder,
+        hiddenRomname,
+        true,
+      );
+      // The systems screen keeps its own cached copies — the recent-games row
+      // and the ROM count on the system card — so both are re-read here rather
+      // than left showing a game that no longer appears in any list.
+      await databaseProvider.loadGamesForSystem(_targetSystemFolder);
+      final system = await SystemRepository.getSystemByFolderName(
+        _targetSystemFolder,
+      );
+      if (system != null) await configProvider.refreshSystem(system);
+    } catch (e) {
+      _log.e('Hiding game failed: $e');
+      if (mounted) setState(() => _isHiding = false);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isHiding = false);
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.gameHidden
+          .getString(context)
+          .replaceFirst('{name}', displayName),
+      type: NotificationType.info,
+    );
+
+    widget.onGameHidden?.call(hiddenRomname);
+  }
+
   // ── Delete ──────────────────────────────────────────────────────────────
 
   Future<void> _confirmDeleteGame() async {
@@ -247,6 +311,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
     final targetSystemId = widget.game.systemId ?? widget.system.id;
     final deletedRomname = widget.game.romname;
+    // Read before the await: the dialog can be gone by the time deletion ends.
+    final rommProvider = context.read<RommProvider>();
 
     try {
       await GameRepository.deleteGame(
@@ -256,6 +322,11 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         romBaseName: deletedRomname,
         romPath: widget.game.romPath,
         fileProvider: widget.fileProvider,
+      );
+      // Unlink from RomM so the browse grid stops calling it downloaded.
+      await rommProvider.forgetLocalDownload(
+        romname: deletedRomname,
+        systemFolder: _targetSystemFolder,
       );
     } catch (e) {
       _log.e('Game deletion failed: $e');
@@ -381,6 +452,58 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
                               : theme.colorScheme.onSurface.withValues(
                                   alpha: 0.3,
                                 ),
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+
+          SizedBox(height: 12.r),
+
+          // Hide game.
+          GestureDetector(
+            onTap: () {
+              SfxService().playNavSound();
+              setState(() => _selectedIndex = _hideIdx);
+              if (!_isHiding) _hideGame();
+            },
+            child: SettingRow(
+              key: _itemKey(_hideIdx),
+              focused: _selectedIndex == _hideIdx,
+              title: AppLocale.hideGame.getString(context),
+              subtitle: AppLocale.hideGameSubtitle.getString(context),
+              trailing: _isHiding
+                  ? SizedBox(
+                      width: 20.r,
+                      height: 20.r,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    )
+                  : Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 8.r,
+                        vertical: 3.r,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.15,
+                        ),
+                        borderRadius: BorderRadius.circular(4.r),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.4,
+                          ),
+                          width: 1.r,
+                        ),
+                      ),
+                      child: Text(
+                        AppLocale.hide.getString(context),
+                        style: TextStyle(
+                          fontSize: 11.r,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
                         ),
                       ),
                     ),

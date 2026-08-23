@@ -6,13 +6,17 @@ import 'package:provider/provider.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/global_notification_service.dart';
+import 'package:neostation/services/ra_library_match_runner.dart';
 import 'package:neostation/services/metadata_cleanup_service.dart';
+import 'package:neostation/services/retroachievements_hash_service.dart';
 import 'package:neostation/services/rom_folder_organizer_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/info_dialog.dart';
@@ -36,6 +40,16 @@ class ToolsSettingsContent extends StatefulWidget {
 
 class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   static final _log = LoggerService.instance;
+
+  final ScrollController _scrollController = ScrollController();
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
+
+  /// Keys used for calculating viewport alignment during navigation, one per
+  /// tool row.
+  final List<GlobalKey> _itemKeys = List.generate(3, (_) => GlobalKey());
+
   bool _isOrganizingMultiDisc = false;
   bool _isCleaningMetadata = false;
   List<String> _currentRomFolders = [];
@@ -44,6 +58,12 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   void initState() {
     super.initState();
     _loadRomFolders();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRomFolders() async {
@@ -55,16 +75,25 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     }
   }
 
-  int getItemCount() => 2;
+  int getItemCount() => 3;
 
-  void scrollToIndex(int index) {}
+  /// Synchronizes the scroll viewport with the currently focused tool row.
+  void scrollToIndex(int index) {
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
+  }
 
   void selectItem(int index) {
     switch (index) {
       case 0:
-        _organizeMultiDiscGames();
+        _rematchAchievements();
       case 1:
         _cleanOrphanedMetadata();
+      case 2:
+        _organizeMultiDiscGames();
     }
   }
 
@@ -115,6 +144,10 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         .expand((system) => [system.folderName, ...system.folders])
         .where((folder) => folder.isNotEmpty)
         .toSet();
+    final supportedRomExtensions = multiDiscSystems
+        .expand((system) => system.extensions)
+        .where((extension) => extension.isNotEmpty)
+        .toSet();
 
     String? completionMessage;
     NotificationType? completionType;
@@ -132,6 +165,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
 
       final result = await RomFolderOrganizerService.organizeRomFolders(
         _currentRomFolders,
+        supportedRomExtensions: supportedRomExtensions,
         supportedSystemFolders: supportedFolders,
         onProgress: (completed, total) {
           if (total == 0) return;
@@ -366,6 +400,67 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     }
   }
 
+  /// Walks the whole library looking for RetroAchievements matches, instead of
+  /// waiting for the user to open each game.
+  ///
+  /// Runs the cheap pass first — ROMs that already carry a hash but never
+  /// resolved to a game id cost nothing but a local lookup — then hashes the
+  /// ROMs that have never been hashed at all. Selecting the row again while it
+  /// runs stops it after the current ROM.
+  Future<void> _rematchAchievements() async {
+    // The service owns "is it running", not this widget: leaving Tools disposes
+    // the screen while the pass carries on, so a local flag reads idle on the
+    // way back and would start a second run over the same ROMs.
+    if (RetroAchievementsHashService.isRematchRunning) {
+      RetroAchievementsHashService.requestRematchPause();
+      setState(() {});
+      return;
+    }
+
+    final localeTitle = AppLocale.rematchAchievements.getString(context);
+    var localeWarning = AppLocale.rematchAchievementsWarning.getString(context);
+
+    // The pass itself needs no account — it hashes locally and looks the hash
+    // up in the bundled RA database. Every screen that *shows* a match does
+    // need one, though, so without this a signed-out user would watch a long
+    // run finish and see nothing change anywhere.
+    if (!context.read<RetroAchievementsProvider>().isConnected) {
+      localeWarning =
+          '$localeWarning\n\n'
+          '${AppLocale.rematchAchievementsSignedOut.getString(context)}';
+    }
+    final strings = RaMatchStrings(
+      title: AppLocale.raMatchNotificationTitle.getString(context),
+      lookingUp: AppLocale.rematchAchievementsLookingUp.getString(context),
+      hashing: AppLocale.rematchAchievementsHashing.getString(context),
+      done: AppLocale.rematchAchievementsDone.getString(context),
+      nothingToDo: AppLocale.rematchAchievementsNothingToDo.getString(context),
+      paused: AppLocale.rematchAchievementsPaused.getString(context),
+      failed: AppLocale.rematchAchievementsFailed.getString(context),
+    );
+    final localeConfirm = AppLocale.confirm.getString(context);
+
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: localeTitle,
+      body: localeWarning,
+      confirmLabel: localeConfirm,
+      icon: Symbols.emoji_events_rounded,
+      accentColor: Theme.of(context).colorScheme.primary,
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Redraw so the row renders as "stop" for the duration of the run.
+    setState(() {});
+
+    await RaLibraryMatchRunner.run(
+      strings: strings,
+      onProgressStateChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSelected =
@@ -391,28 +486,38 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                 notifications,
                 'clean_orphaned_metadata',
               );
+              final rematchProgress = _progressFor(
+                notifications,
+                'rematch_achievements',
+              );
 
               return ListView(
+                controller: _scrollController,
                 physics: const ClampingScrollPhysics(),
                 children: [
                   SettingsCardRow(
-                    icon: Symbols.folder_managed_rounded,
-                    title: AppLocale.organizeMultiDiscGames.getString(context),
-                    subtitle: AppLocale.organizeMultiDiscGamesSubtitle
-                        .getString(context),
+                    key: _itemKeys[0],
+                    icon: Symbols.emoji_events_rounded,
+                    title: AppLocale.rematchAchievements.getString(context),
+                    subtitle: AppLocale.rematchAchievementsSubtitle.getString(
+                      context,
+                    ),
                     subtitleMaxLines: 2,
                     selected: isSelected,
-                    onTap: () => _organizeMultiDiscGames(),
+                    onTap: () => _rematchAchievements(),
                     trailing: SettingsActionButton(
-                      icon: Symbols.folder_managed_rounded,
+                      icon: RetroAchievementsHashService.isRematchRunning
+                          ? Symbols.pause_rounded
+                          : Symbols.emoji_events_rounded,
                       selected: isSelected,
                     ),
                     belowContent: _buildInlineProgress(
                       context,
-                      multiDiscProgress,
+                      rematchProgress,
                     ),
                   ),
                   SettingsCardRow(
+                    key: _itemKeys[1],
                     icon: Symbols.cleaning_services_rounded,
                     title: AppLocale.cleanOrphanedMetadata.getString(context),
                     subtitle: AppLocale.cleanOrphanedMetadataSubtitle.getString(
@@ -432,6 +537,28 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     belowContent: _buildInlineProgress(
                       context,
                       metadataProgress,
+                    ),
+                  ),
+                  SettingsCardRow(
+                    key: _itemKeys[2],
+                    icon: Symbols.folder_managed_rounded,
+                    title: AppLocale.organizeMultiDiscGames.getString(context),
+                    subtitle: AppLocale.organizeMultiDiscGamesSubtitle
+                        .getString(context),
+                    subtitleMaxLines: 2,
+                    selected:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == 2,
+                    onTap: () => _organizeMultiDiscGames(),
+                    trailing: SettingsActionButton(
+                      icon: Symbols.folder_managed_rounded,
+                      selected:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == 2,
+                    ),
+                    belowContent: _buildInlineProgress(
+                      context,
+                      multiDiscProgress,
                     ),
                   ),
                 ],

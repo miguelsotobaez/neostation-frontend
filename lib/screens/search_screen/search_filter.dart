@@ -1,4 +1,6 @@
 import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/romm_rom.dart';
+import 'package:neostation/utils/ra_coverage.dart';
 
 /// Pure search / filter logic backing the library-wide [SearchScreen].
 ///
@@ -28,6 +30,41 @@ const String kFilterGenre = 'genre';
 const String kFilterYear = 'year';
 const String kFilterRating = 'rating';
 
+/// RetroAchievements coverage. Values are [RaCoverage] names; see
+/// [searchAchievementsBucket] for why the dimension is not a plain yes/no.
+const String kFilterAchievements = 'achievements';
+
+/// Which library a result comes from. Only offered while RomM is connected —
+/// with no remote source there is nothing to choose between.
+const String kFilterSource = 'source';
+
+/// Values for [kFilterSource]. [kSourceAny] is the "Any" option and is never
+/// stored on [SearchCriteria] (null means Any there, as for every dimension).
+const String kSourceAny = 'any';
+const String kSourceLocal = 'local';
+const String kSourceRomm = 'romm';
+
+/// The RetroAchievements coverage bucket a game is filed under.
+///
+/// Deliberately not a "has achievements" boolean. "No" would have to cover four
+/// different situations — a system RetroAchievements does not carry, a disc
+/// image the app cannot hash yet, a ROM nothing has hashed, and a ROM that was
+/// hashed and genuinely has no set — and reporting the first three as "no
+/// achievements" is what makes coverage look like a bug rather than a fact
+/// about RetroAchievements' catalogue.
+///
+/// Games on a system RetroAchievements does not cover return null and stay out
+/// of the dimension entirely: there is no question to answer for them.
+RaCoverage? searchAchievementsBucket(DatabaseGameModel g) {
+  final coverage = raCoverageOf(
+    systemRaId: g.systemRaId,
+    filename: g.filename,
+    raHash: g.raHash,
+    idRa: g.idRa,
+  );
+  return coverage == RaCoverage.unsupportedSystem ? null : coverage;
+}
+
 /// Active filter selection. A null field means "Any" for that dimension.
 class SearchCriteria {
   const SearchCriteria({
@@ -37,6 +74,8 @@ class SearchCriteria {
     this.genre,
     this.year,
     this.rating,
+    this.source,
+    this.achievements,
   });
 
   final String query;
@@ -47,6 +86,15 @@ class SearchCriteria {
 
   /// Whole 1..10 score to match exactly (null == Any); see [searchRatingBucket].
   final int? rating;
+
+  /// [kSourceLocal] / [kSourceRomm], or null for both. Partitions which
+  /// sections the screen renders; it never participates in per-game matching,
+  /// which is why [matchesCriteria] ignores it.
+  final String? source;
+
+  /// A [RaCoverage] name to match exactly (null == Any); see
+  /// [searchAchievementsBucket].
+  final String? achievements;
 
   /// This selection with [dimension] reset to "Any".
   ///
@@ -59,6 +107,8 @@ class SearchCriteria {
     genre: dimension == kFilterGenre ? null : genre,
     year: dimension == kFilterYear ? null : year,
     rating: dimension == kFilterRating ? null : rating,
+    source: dimension == kFilterSource ? null : source,
+    achievements: dimension == kFilterAchievements ? null : achievements,
   );
 
   /// The active value for a string-valued [dimension] (null == Any).
@@ -67,8 +117,39 @@ class SearchCriteria {
     kFilterDeveloper => developer,
     kFilterGenre => genre,
     kFilterYear => year,
+    kFilterSource => source,
+    kFilterAchievements => achievements,
     _ => null,
   };
+
+  /// Whether the local library should be shown at all.
+  bool get includesLocal => source != kSourceRomm;
+
+  /// Whether the RomM section should be shown at all.
+  bool get includesRomm => source != kSourceLocal;
+
+  /// Whether every active dimension can be evaluated against a RomM result.
+  ///
+  /// Rating is one that can't: local scores come from the scraper on a
+  /// 0..20 scale while RomM carries IGDB's 0..100 and populates it sparsely, so
+  /// the same chip would return inconsistent sets across the two sources.
+  ///
+  /// Achievement coverage is the other: it is derived from the local hash and
+  /// match columns, which a ROM that only exists on RomM has never had. The
+  /// screen surfaces both rather than quietly leaving remote rows unfiltered.
+  bool get rommFilterable => rating == null && achievements == null;
+
+  /// The part of this selection RomM cannot apply server-side.
+  ///
+  /// Platform, genre and developer go to `/api/roms` as query parameters and
+  /// are matched across the whole library. RomM has no release-year filter, so
+  /// year is the one dimension still applied to the rows that come back — which
+  /// means it only narrows the pages fetched so far.
+  SearchCriteria get remoteClientSide => SearchCriteria(year: year);
+
+  /// Whether any dimension still has to be applied client-side; used to decide
+  /// whether the loaded-pages caveat applies at all.
+  bool get hasClientSideRemoteFilter => year != null;
 }
 
 /// Extracts a 4-digit year from a raw year / ISO release-date string.
@@ -125,6 +206,58 @@ bool matchesCriteria(DatabaseGameModel g, SearchCriteria criteria) {
       searchRatingBucket(g.rating) != criteria.rating) {
     return false;
   }
+  if (criteria.achievements != null &&
+      searchAchievementsBucket(g)?.name != criteria.achievements) {
+    return false;
+  }
+  return true;
+}
+
+/// The subset of a RomM result the filters can be evaluated against.
+///
+/// Deliberately a plain value type rather than `RommRom` itself: [platform] is
+/// the *local* system name the ROM resolves to, not RomM's platform slug, so
+/// the platform chip keeps offering one vocabulary across both sources. The
+/// screen resolves that per page and hands it in here.
+class RemoteGameFields {
+  const RemoteGameFields({
+    required this.name,
+    this.platform,
+    this.genres = const [],
+    this.companies = const [],
+    this.year,
+  });
+
+  final String name;
+  final String? platform;
+  final List<String> genres;
+  final List<String> companies;
+  final String? year;
+}
+
+/// Whether a RomM result satisfies every dimension of [criteria] that can be
+/// evaluated remotely.
+///
+/// Genre and developer match if *any* of the ROM's values match, because RomM
+/// carries lists where the local database carries one joined string — a game
+/// filed under "Role-playing, Adventure" should still answer an Adventure
+/// filter. Rating is not evaluated here; see [SearchCriteria.rommFilterable].
+bool matchesRemoteCriteria(RemoteGameFields g, SearchCriteria criteria) {
+  final query = criteria.query.trim().toLowerCase();
+  if (query.isNotEmpty && !g.name.toLowerCase().contains(query)) return false;
+
+  if (criteria.platform != null && g.platform != criteria.platform) {
+    return false;
+  }
+  if (criteria.developer != null &&
+      !g.companies.any((c) => c.trim() == criteria.developer)) {
+    return false;
+  }
+  if (criteria.genre != null &&
+      !g.genres.any((v) => v.trim() == criteria.genre)) {
+    return false;
+  }
+  if (criteria.year != null && g.year != criteria.year) return false;
   return true;
 }
 
@@ -154,6 +287,7 @@ class SearchFacets {
     this.genres = const [],
     this.years = const [],
     this.ratings = const [],
+    this.achievements = const [],
   });
 
   final List<String> platforms;
@@ -164,6 +298,11 @@ class SearchFacets {
   /// Whole 1..10 scores at least one candidate game is filed under, ascending.
   final List<int> ratings;
 
+  /// [RaCoverage] names at least one candidate game falls into, in
+  /// [kFilterableRaCoverage] order. A library that has been fully hashed never
+  /// offers "not checked"; one with no disc systems never offers "disc".
+  final List<String> achievements;
+
   static const SearchFacets empty = SearchFacets();
 
   /// String options for a dimension ([kFilterRating] has its own list).
@@ -172,6 +311,7 @@ class SearchFacets {
     kFilterDeveloper => developers,
     kFilterGenre => genres,
     kFilterYear => years,
+    kFilterAchievements => achievements,
     _ => const [],
   };
 }
@@ -188,6 +328,7 @@ SearchFacets computeFacets(
     genres: _facet(all, criteria, kFilterGenre, (g) => g.genre),
     years: _yearFacet(all, criteria),
     ratings: _ratingFacet(all, criteria),
+    achievements: _achievementsFacet(all, criteria),
   );
 }
 
@@ -251,6 +392,147 @@ List<int> _ratingFacet(List<DatabaseGameModel> games, SearchCriteria criteria) {
   final active = criteria.rating;
   if (active != null) scores.add(active);
   return scores.toList()..sort();
+}
+
+/// Coverage buckets actually present in the candidate set, in a fixed order
+/// rather than alphabetically: "has achievements" is the answer most people
+/// want and belongs at the head of the cycle.
+List<String> _achievementsFacet(
+  List<DatabaseGameModel> games,
+  SearchCriteria criteria,
+) {
+  final present = <RaCoverage>{};
+  for (final g in _candidates(games, criteria, kFilterAchievements)) {
+    final bucket = searchAchievementsBucket(g);
+    if (bucket != null) present.add(bucket);
+  }
+  final options = [
+    for (final c in kFilterableRaCoverage)
+      if (present.contains(c)) c.name,
+  ];
+  final active = criteria.achievements;
+  if (active != null && !options.contains(active)) options.add(active);
+  return options;
+}
+
+/// One line in the results list.
+///
+/// Local games, the "On RomM" divider, remote ROMs and the remote section's
+/// loading / error / load-more line all share a single flat list so the
+/// existing index-based gamepad navigation and fixed-extent scroll maths keep
+/// working unchanged. Rows the user can't focus (the header, the spinner) are
+/// simply left out of the focusable index.
+sealed class ResultRow {
+  const ResultRow();
+}
+
+class LocalRow extends ResultRow {
+  const LocalRow(this.game);
+  final DatabaseGameModel game;
+}
+
+class RemoteHeaderRow extends ResultRow {
+  const RemoteHeaderRow();
+}
+
+class RemoteRow extends ResultRow {
+  const RemoteRow(this.rom);
+  final RommRom rom;
+}
+
+/// The remote section's trailing line: a spinner, an error, "load more", or a
+/// note that the active filters can't be applied to RomM results.
+enum RemoteStatus { loading, error, loadMore, unsupported, noEquivalent }
+
+class RemoteStatusRow extends ResultRow {
+  const RemoteStatusRow(this.status);
+  final RemoteStatus status;
+}
+
+/// Headers and the spinner are skipped by Up/Down; everything else stops.
+bool isFocusableRow(ResultRow row) => switch (row) {
+  LocalRow() => true,
+  RemoteRow() => true,
+  RemoteStatusRow(:final status) =>
+    status == RemoteStatus.loadMore || status == RemoteStatus.error,
+  RemoteHeaderRow() => false,
+};
+
+/// The rendered rows plus the subset of their indices that can take focus.
+///
+/// The two index spaces are deliberately separate and must not be used
+/// interchangeably: [rows] is what the list builder renders, while selection is
+/// tracked as a position in [focusable]. They coincide only while the results
+/// are local-only — as soon as the unfocusable RomM header is present, every
+/// row below it sits at a different index in each. Translate with
+/// [focusableIndexOfRow].
+class ResultRows {
+  const ResultRows({required this.rows, required this.focusable});
+
+  final List<ResultRow> rows;
+  final List<int> focusable;
+
+  static const ResultRows empty = ResultRows(rows: [], focusable: []);
+
+  /// The selection index for a row at [rowIndex] in [rows], or -1 when that row
+  /// can't take focus (the RomM header, the spinner).
+  int focusableIndexOfRow(int rowIndex) => focusable.indexOf(rowIndex);
+
+  /// The row [selectionIndex] points at, or null when the list is empty.
+  ResultRow? rowAtSelection(int selectionIndex) =>
+      selectionIndex >= 0 && selectionIndex < focusable.length
+      ? rows[focusable[selectionIndex]]
+      : null;
+}
+
+/// Builds the flat row list from the local results plus the RomM section.
+///
+/// The chip filters deliberately do not narrow the RomM section beyond what
+/// [visibleRemote] already carries: [RommRom] has no rating, so applying that
+/// criterion remotely would silently drop everything. The caller reports that
+/// case through [rommFilterable] instead, and a filter value RomM's vocabulary
+/// has no entry for through [unmatchedFilter] — each replaces the remote rows
+/// with a single explanatory line rather than an unexplained empty list.
+ResultRows buildResultRows({
+  required List<DatabaseGameModel> results,
+  bool remoteSectionVisible = false,
+  bool rommFilterable = true,
+  String? unmatchedFilter,
+  List<RommRom> visibleRemote = const [],
+  bool hasError = false,
+  bool isLoading = false,
+  bool hasMore = false,
+}) {
+  final rows = <ResultRow>[...results.map(LocalRow.new)];
+
+  if (remoteSectionVisible) {
+    rows.add(const RemoteHeaderRow());
+
+    if (!rommFilterable) {
+      // A rating filter is active and can't be evaluated remotely; say so
+      // instead of listing rows the filter never touched.
+      rows.add(const RemoteStatusRow(RemoteStatus.unsupported));
+    } else if (unmatchedFilter != null) {
+      rows.add(const RemoteStatusRow(RemoteStatus.noEquivalent));
+    } else {
+      rows.addAll(visibleRemote.map(RemoteRow.new));
+      if (hasError) {
+        rows.add(const RemoteStatusRow(RemoteStatus.error));
+      } else if (isLoading) {
+        rows.add(const RemoteStatusRow(RemoteStatus.loading));
+      } else if (hasMore) {
+        rows.add(const RemoteStatusRow(RemoteStatus.loadMore));
+      }
+    }
+  }
+
+  return ResultRows(
+    rows: rows,
+    focusable: [
+      for (var i = 0; i < rows.length; i++)
+        if (isFocusableRow(rows[i])) i,
+    ],
+  );
 }
 
 /// Cycles through [options] with an "Any" (null) slot at the head, moving by

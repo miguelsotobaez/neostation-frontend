@@ -9,6 +9,11 @@ import 'package:neostation/services/systems_update_service.dart';
 import 'package:neostation/widgets/update_dialog.dart';
 import 'package:neostation/widgets/systems_update_dialog.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/game/game_session_manager.dart';
+import 'package:neostation/services/ra_library_match_runner.dart';
+import 'package:neostation/services/retroachievements_hash_service.dart';
+import 'package:neostation/l10n/app_locale.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import '../widgets/fixed_header.dart';
 import 'systems_screen/system_content.dart';
 import 'systems_screen/my_systems_section/initial_setup_widget.dart';
@@ -16,7 +21,8 @@ import 'search_screen/search_screen.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
-import 'neo_sync_screen/neo_sync_tab.dart';
+import 'neo_sync_screen/login_screen/neo_sync_content.dart';
+import 'romm_screen/romm_tab.dart';
 import '../widgets/scraper_content.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
@@ -47,10 +53,11 @@ abstract final class AppTabs {
   static const int sync = 2;
   static const int achievements = 3;
   static const int scraper = 4;
-  static const int settings = 5;
+  static const int romm = 5;
+  static const int settings = 6;
 
   /// Total number of tabs, used for wrap-around when cycling with the bumpers.
-  static const int count = 6;
+  static const int count = 7;
 }
 
 /// Bridge class providing static access to the main application navigation state.
@@ -101,6 +108,15 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
 
   ThemeProvider? _themeProvider;
 
+  /// Whether the startup RetroAchievements pass stopped before it finished.
+  ///
+  /// The pass is paused when a game launches, so the common reason it is set
+  /// is the user starting a game partway through a first, long run. Resumed
+  /// once the session ends, which is what lets an unmatched library seed
+  /// itself across several sessions instead of demanding one long supervised
+  /// run.
+  bool _raMatchInterrupted = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -122,6 +138,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     super.initState();
     _currentInstance = this;
     WidgetsBinding.instance.addObserver(this);
+    GameSessionManager.addSessionEndListener(_onGameSessionEnded);
 
     // Initialize the navigation bridge with core application callbacks.
     _gamepadNav = GamepadNavigation(
@@ -206,15 +223,94 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     }
 
     // Systems/emulator config update check (network).
+    Future<void>? systemsRescan;
     if (configProvider.config.autoUpdateSystems) {
       final systemsUpdated = await _checkAndShowSystemsUpdate(configProvider);
       if (systemsUpdated && mounted) {
         // New definitions were applied — re-scan to reflect them. Wait for the
         // initial scan to settle first, since scanSystems ignores concurrent calls.
         await initialScan;
-        if (mounted) configProvider.scanSystems();
+        if (mounted) systemsRescan = configProvider.scanSystems();
       }
     }
+
+    // Match whatever the scan just added. After the scan, never before it: the
+    // candidate set is "ROMs with no hash", and before the scan settles the new
+    // ROMs are not in it yet. That includes the systems-update re-scan, which
+    // can bring a system into RA range for the first time.
+    await initialScan;
+    await systemsRescan;
+    await _runStartupRaMatch(configProvider, holdsSplash: true);
+  }
+
+  /// Runs the RetroAchievements match pass over ROMs the startup scan added.
+  ///
+  /// Opt-in, and silent when there is nothing to do. Hashing is otherwise only
+  /// ever triggered by the user opening a game or walking to Tools, so a ROM
+  /// added last week carries no match and no badge until somebody remembers to
+  /// press a button.
+  ///
+  /// [holdsSplash] is set only by the startup sequence, which keeps the startup
+  /// screen up until the pass finishes so the user is told what is happening
+  /// rather than watching a library appear mid-work. The resume-after-a-game
+  /// path leaves it false: that library is already on screen.
+  Future<void> _runStartupRaMatch(
+    SqliteConfigProvider configProvider, {
+    bool holdsSplash = false,
+  }) async {
+    if (!mounted) return;
+    if (!configProvider.config.raMatchOnStartup) return;
+
+    // Nothing to walk, and nothing the user would see if we did.
+    if (configProvider.config.romFolders.isEmpty) return;
+
+    // The Tools button may already be running one; it is single-flight anyway,
+    // but starting a pass that immediately refuses itself would log a warning
+    // on every launch.
+    if (RetroAchievementsHashService.isRematchRunning) return;
+
+    // Deliberately not gated on being signed in to RetroAchievements. The pass
+    // hashes locally and resolves against the bundled RA database, so it needs
+    // no account, and what it produces — the match, and the achievement count
+    // behind the library badge — is visible without one. Tools takes the same
+    // view: signed out it warns and still runs, rather than refusing.
+
+    final strings = _raMatchStrings();
+    if (strings == null) return;
+
+    _raMatchInterrupted = await RaLibraryMatchRunner.run(
+      strings: strings,
+      trigger: RaMatchTrigger.automatic,
+      holdsSplash: holdsSplash,
+    );
+  }
+
+  /// Picks the startup pass back up after a game session, when it was stopped
+  /// by that session starting.
+  void _onGameSessionEnded() {
+    if (!_raMatchInterrupted || !mounted) return;
+    final configProvider = Provider.of<SqliteConfigProvider>(
+      context,
+      listen: false,
+    );
+    // Fire and forget: this runs on the game-exit path, which already has UI
+    // waiting on it.
+    unawaited(_runStartupRaMatch(configProvider));
+  }
+
+  /// Resolves the runner's strings, or null when there is no context to
+  /// resolve them against.
+  RaMatchStrings? _raMatchStrings() {
+    if (!mounted) return null;
+    return RaMatchStrings(
+      title: AppLocale.raMatchNotificationTitle.getString(context),
+      lookingUp: AppLocale.rematchAchievementsLookingUp.getString(context),
+      hashing: AppLocale.rematchAchievementsHashing.getString(context),
+      done: AppLocale.rematchAchievementsDone.getString(context),
+      nothingToDo: AppLocale.rematchAchievementsNothingToDo.getString(context),
+      paused: AppLocale.rematchAchievementsPaused.getString(context),
+      failed: AppLocale.rematchAchievementsFailed.getString(context),
+    );
   }
 
   /// Detects which RetroArch variant the user has installed on Android and sets
@@ -296,6 +392,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _currentInstance = null;
+    GameSessionManager.removeSessionEndListener(_onGameSessionEnded);
     WidgetsBinding.instance.removeObserver(this);
     _themeProvider?.removeListener(_onThemeChanged);
     GamepadNavigationManager.popLayer('app_screen');
@@ -439,6 +536,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   void _handleBackNavigation() {
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.backCurrent();
+    } else if (_selectedTabIndex == AppTabs.settings) {
+      NewSettingsScreen.backCurrent();
     }
   }
 
@@ -526,6 +625,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         case AppTabs.scraper:
           tabName = 'Scraper';
           break;
+        case AppTabs.romm:
+          tabName = 'RomM';
+          break;
         case AppTabs.settings:
           tabName = 'Settings';
           break;
@@ -559,6 +661,14 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   /// Steps [step] places through the visible tabs, wrapping at both ends, so a
   /// hidden tab is skipped rather than selected and immediately bounced.
   void _cycleTab(int step) {
+    // A pushed full-screen route (the system games list and its grid/carousel
+    // views, a game's details screen) covers AppScreen entirely. Switching the
+    // tab underneath one is invisible on the main display and leaves the user
+    // driving a screen they cannot see — see the bumper comment in
+    // my_games_carousel.dart. Screens on a route own their own bumpers; the
+    // app strip is only reachable from the tab that is actually on screen.
+    if (Navigator.maybeOf(context)?.canPop() ?? false) return;
+
     final visible = _visibleTabs;
     if (visible.isEmpty) return;
 
@@ -668,11 +778,18 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _gamepadNav.deactivate();
         });
-        return const NeoSyncTab();
+        return const NeoSyncContent();
       case AppTabs.achievements:
         return RAContent();
       case AppTabs.scraper:
         return ScraperContent();
+      case AppTabs.romm:
+        // RomM tab hosts its own gamepad navigation layer (browse/connect),
+        // so hand off focus like the NeoSync tab does.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _gamepadNav.deactivate();
+        });
+        return const RommTab();
       case AppTabs.settings:
         return NewSettingsScreen();
       default:

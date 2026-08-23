@@ -4,10 +4,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/ra_coverage.dart';
 import 'package:neostation/themes/app_themes.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/marquee_text.dart';
@@ -123,8 +125,16 @@ class GameViewFooter extends StatelessWidget {
                   _SteamStyleRating(game: game),
                   SizedBox(width: 6.r),
                 ],
-                if (hasRetroAchievements) ...[
+                // Signed out, no achievement data is ever loaded, so the pill
+                // would render its "none" state for every game in the library
+                // and read as "this game has no achievements" rather than
+                // "nobody asked RetroAchievements". Say nothing instead.
+                if (hasRetroAchievements &&
+                    context.select<RetroAchievementsProvider, bool>(
+                      (ra) => ra.isConnected,
+                    )) ...[
                   _CompactAchievementsIndicator(
+                    game: game,
                     isLoading: isLoadingAchievements,
                     gameInfo: currentGameInfo,
                     onTap: onShowAchievements,
@@ -357,11 +367,13 @@ class _SteamStyleRating extends StatelessWidget {
 
 /// Compact RetroAchievements indicator reused from the details footer.
 class _CompactAchievementsIndicator extends StatelessWidget {
+  final GameModel game;
   final bool isLoading;
   final GameInfoAndUserProgress? gameInfo;
   final VoidCallback? onTap;
 
   const _CompactAchievementsIndicator({
+    required this.game,
     required this.isLoading,
     this.gameInfo,
     this.onTap,
@@ -371,18 +383,34 @@ class _CompactAchievementsIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
 
-    final noAchievements =
-        !isLoading && (gameInfo == null || gameInfo!.numAchievements == 0);
+    // The bundled snapshot already records how many achievements a matched
+    // game has, so the total needs no network call — only the user's earned
+    // count does. Show it straight away instead of a spinner, and let the live
+    // lookup overwrite it when it lands.
+    final localTotal = game.raCoverage == RaCoverage.matched
+        ? (game.raNumAchievements ?? 0)
+        : 0;
+    final total = gameInfo?.numAchievements ?? localTotal;
+    final awarded = gameInfo?.numAwardedToUser;
+    final knowsProgress = awarded != null && gameInfo != null;
 
-    final awarded = gameInfo?.numAwardedToUser ?? 0;
-    final total = gameInfo?.numAchievements ?? 0;
-    final progress = total > 0 ? awarded / total : 0.0;
+    final noAchievements = !isLoading && total == 0;
 
-    final progressText = isLoading
-        ? AppLocale.loading.getString(context)
-        : (noAchievements
-              ? AppLocale.noAchievements.getString(context)
-              : '$awarded/$total');
+    // A dash rather than a zero while the earned count is outstanding: "0/45"
+    // is a claim about the user's progress that has not been fetched yet.
+    final progressText = total > 0
+        ? (knowsProgress ? '$awarded/$total' : '\u2013/$total')
+        : (isLoading
+              ? AppLocale.loading.getString(context)
+              : AppLocale.noAchievements.getString(context));
+
+    // Indeterminate only while something is genuinely outstanding: a known
+    // total whose earned count has not arrived, or a lookup still running. A
+    // settled "no achievements" is an answer, so its bar sits empty and still
+    // rather than animating as though more were coming.
+    final progress = knowsProgress && total > 0
+        ? awarded / total
+        : (total > 0 || isLoading ? null : 0.0);
 
     final theme = Theme.of(context);
     final statusColor = noAchievements
@@ -472,7 +500,7 @@ class _CompactAchievementsIndicator extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: radii.radiusInternal,
                         child: LinearProgressIndicator(
-                          value: isLoading ? null : progress,
+                          value: progress,
                           minHeight: 3.5.r,
                           backgroundColor: theme.colorScheme.onSurface
                               .withValues(alpha: 0.1),

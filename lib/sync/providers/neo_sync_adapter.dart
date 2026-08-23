@@ -168,9 +168,12 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
       _provider.getGameSyncState(gameId);
 
   @override
-  Future<SyncResult> syncGameSavesBeforeLaunch(GameModel game) async {
+  Future<SyncResult> syncGameSavesBeforeLaunch(
+    GameModel game, {
+    SyncDeadline? deadline,
+  }) async {
     try {
-      await _provider.syncGameSavesBeforeLaunch(game);
+      await _provider.syncGameSavesBeforeLaunch(game, deadline: deadline);
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.unknown, message: e.toString());

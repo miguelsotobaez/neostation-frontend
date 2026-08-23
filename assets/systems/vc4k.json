@@ -12,7 +12,11 @@
     },
     "ids": {
       "screenscraper": 281,
-      "retroachievements": null
+      "retroachievements": 74
+    },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "filename_fallback"
     },
     "folders": [
       "vc4k",

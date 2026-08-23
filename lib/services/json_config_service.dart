@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/systems_update_service.dart';
@@ -54,6 +55,11 @@ class JsonConfigService {
       final allFileNames = {...bundledFileNames, ...cachedOnlyFileNames};
       final List<SystemConfiguration> systems = [];
 
+      // Asked once rather than per system: it is a property of the cache as a
+      // whole, and it costs a database read.
+      final preferBundledPolicy =
+          !await SystemsUpdateService.cacheIsNewerThanBundle();
+
       for (final fileName in allFileNames) {
         try {
           final String content;
@@ -71,6 +77,17 @@ class JsonConfigService {
           if (jsonMap.containsKey('system')) {
             final systemData = jsonMap['system'];
 
+            // The hashing policy names algorithms implemented in this binary,
+            // so it is resolved separately from the rest of the definition —
+            // see [resolveRaHashPolicy].
+            final raHash = resolveRaHashPolicy(
+              cached: systemData['ra_hash'],
+              bundled: cachedPath != null && bundledFileNames.contains(fileName)
+                  ? await bundledRaHash(fileName)
+                  : null,
+              preferBundled: preferBundledPolicy,
+            );
+
             final flatMap = <String, dynamic>{
               'id': _generateId(systemData['id']),
               'folderName': systemData['id'],
@@ -82,6 +99,8 @@ class JsonConfigService {
               'type': systemData['details']?['type'],
               'screenscraperId': systemData['ids']?['screenscraper'],
               'raId': systemData['ids']?['retroachievements'],
+              'raHashAlgo': raHash?['algo'],
+              'raHashMode': raHash?['mode'],
               'iconImage': 'assets/images/systems/${systemData['id']}-icon.png',
               'backgroundImage':
                   'assets/images/systems/${systemData['id']}-bg.jpg',
@@ -128,6 +147,54 @@ class JsonConfigService {
     } catch (e) {
       _log.e('Error loading system configurations: $e');
       return [];
+    }
+  }
+
+  /// Decides which copy of a system's `ra_hash` block to believe.
+  ///
+  /// Every other field describes the system — its folders, extensions, launch
+  /// arguments — and a downloaded definition is the newer statement about
+  /// those. The hashing policy is different: it names algorithms implemented in
+  /// this binary, so the copy that shipped with the binary is the one that
+  /// agrees with it.
+  ///
+  /// Hence the rule: the newer generation wins, and a tie goes to the bundle.
+  /// A tie is the steady state — after any systems update, the cached version
+  /// equals the version the next app release bundles, because the remote
+  /// manifest *is* the bundled one — so preferring the cache there would mean a
+  /// corrected algorithm never reached anyone who had ever taken an update.
+  /// That is not hypothetical: it is how the disc policies failed to arrive on
+  /// a device that already had a cache.
+  ///
+  /// A genuinely newer cache still wins, which is what keeps a policy fix
+  /// shippable as data rather than as a release.
+  @visibleForTesting
+  static Map<String, dynamic>? resolveRaHashPolicy({
+    required Object? cached,
+    required Map<String, dynamic>? bundled,
+    required bool preferBundled,
+  }) {
+    final cachedPolicy = cached is Map<String, dynamic> ? cached : null;
+    return preferBundled
+        ? (bundled ?? cachedPolicy)
+        : (cachedPolicy ?? bundled);
+  }
+
+  /// Reads just the `ra_hash` block from the *bundled* copy of [fileName].
+  ///
+  /// Used when a cached definition predates the hashing policy. Returns null if
+  /// the bundled copy has none either, in which case the system genuinely
+  /// declares no policy and gets the permissive default.
+  @visibleForTesting
+  Future<Map<String, dynamic>?> bundledRaHash(String fileName) async {
+    try {
+      final content = await rootBundle.loadString('assets/systems/$fileName');
+      final jsonMap = json.decode(content) as Map<String, dynamic>;
+      final raHash = (jsonMap['system'] as Map?)?['ra_hash'];
+      return raHash is Map<String, dynamic> ? raHash : null;
+    } catch (e) {
+      _log.w('Could not read bundled ra_hash for $fileName: $e');
+      return null;
     }
   }
 

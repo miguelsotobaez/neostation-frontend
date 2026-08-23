@@ -1,0 +1,118 @@
+name: Flutter Stable Watch
+
+# Dependabot has no Flutter/Dart SDK ecosystem: `pub` only tracks pub.dev
+# packages and `github-actions` only tracks the action ref
+# (subosito/flutter-action@v2 -> @v3), never the version we pin in .fvmrc.
+# So nothing tells us a new stable shipped. This does.
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Compare .fvmrc against current stable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve pinned and current stable versions
+        id: versions
+        run: |
+          set -euo pipefail
+
+          PINNED="$(jq -r '.flutter' .fvmrc)"
+          curl -sSfL --retry 3 \
+            https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json \
+            -o releases.json
+
+          # current_release.stable is a commit hash; look up its release entry.
+          read -r LATEST LATEST_DART LATEST_DATE < <(
+            jq -r '.current_release.stable as $h
+                   | .releases[]
+                   | select(.hash == $h and .channel == "stable")
+                   | "\(.version) \(.dart_sdk_version) \(.release_date[0:10])"' releases.json | head -1
+          )
+          PINNED_DART="$(jq -r --arg v "$PINNED" \
+            '.releases[] | select(.version == $v and .channel == "stable") | .dart_sdk_version' \
+            releases.json | head -1)"
+
+          echo "pinned=$PINNED"             >> "$GITHUB_OUTPUT"
+          echo "pinned_dart=$PINNED_DART"   >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST"             >> "$GITHUB_OUTPUT"
+          echo "latest_dart=$LATEST_DART"   >> "$GITHUB_OUTPUT"
+          echo "latest_date=$LATEST_DATE"   >> "$GITHUB_OUTPUT"
+
+          if [ "$PINNED" = "$LATEST" ]; then
+            echo "outdated=false" >> "$GITHUB_OUTPUT"
+            echo "Pin $PINNED is current stable. Nothing to do."
+          else
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pinned $PINNED, current stable is $LATEST (Dart $LATEST_DART)."
+          fi
+
+      - name: Open tracking issue
+        if: steps.versions.outputs.outdated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PINNED: ${{ steps.versions.outputs.pinned }}
+          PINNED_DART: ${{ steps.versions.outputs.pinned_dart }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+          LATEST_DART: ${{ steps.versions.outputs.latest_dart }}
+          LATEST_DATE: ${{ steps.versions.outputs.latest_date }}
+        run: |
+          set -euo pipefail
+
+          TITLE="Flutter $LATEST is stable (pinned: $PINNED)"
+
+          # --state all, not open: closing the issue has to mean "decided, stop
+          # telling me", otherwise declining a bump would reopen it every
+          # morning. The title carries both versions, so a genuinely new stable
+          # produces a new title and a new issue regardless of what was closed.
+          #
+          # Assign first: inside an `if` condition `set -e` is suspended, so a
+          # failing `gh issue list` would read as "no match" and we would open a
+          # duplicate issue every morning.
+          SEEN_TITLES="$(gh issue list --state all --label ci --limit 200 --json title --jq '.[].title')"
+          if grep -Fxq "$TITLE" <<< "$SEEN_TITLES"; then
+            echo "Already filed: $TITLE"
+            exit 0
+          fi
+
+          {
+            echo "Flutter **$LATEST** (Dart $LATEST_DART) became stable on $LATEST_DATE."
+            echo "This repo pins **$PINNED** (Dart $PINNED_DART) in \`.fvmrc\`."
+            echo
+
+            if [ "$PINNED_DART" != "$LATEST_DART" ]; then
+              echo "> [!IMPORTANT]"
+              echo "> The Dart SDK also moves ($PINNED_DART -> $LATEST_DART), so the SDK-vendored"
+              echo "> transitives in \`pubspec.lock\` (\`meta\`, \`matcher\`, \`test_api\`,"
+              echo "> \`vector_math\`, \`intl\`) will change. The lock **must** be regenerated on"
+              echo "> the new pin or CI fails at \`flutter pub get --enforce-lockfile\`."
+              echo
+            fi
+
+            echo "Bump deliberately, in its own PR, with the fallout fixed in the same PR:"
+            echo
+            echo "- [ ] Update \`.fvmrc\` to \`$LATEST\`. That is the only place the version lives: both workflows read it via \`flutter-version-file\`, and the ARM64 leg reads it with \`jq\`."
+            echo "- [ ] Install $LATEST locally, run \`flutter pub get\` (no \`--enforce-lockfile\`) to regenerate \`pubspec.lock\`, and commit it."
+            echo "- [ ] \`dart format .\` and commit any reflowed files."
+            echo "- [ ] \`flutter analyze\` and fix new lints."
+            echo "- [ ] \`flutter test\`."
+            echo
+            echo "Not urgent: staying a release behind is fine. The point is that the move is a"
+            echo "commit, not a surprise."
+            echo
+            echo "<sub>Opened automatically by \`.github/workflows/flutter-stable-watch.yml\`.</sub>"
+          } > issue-body.md
+
+          gh issue create \
+            --title "$TITLE" \
+            --label ci --label dependencies \
+            --body-file issue-body.md

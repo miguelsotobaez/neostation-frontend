@@ -6,7 +6,10 @@ import '../../models/game_model.dart';
 import '../../models/system_model.dart';
 import '../../repositories/game_repository.dart';
 import '../../repositories/system_repository.dart';
+import '../../sync/sync_manager.dart';
 import '../game_session_persistence.dart';
+import '../retroachievements_hash_service.dart';
+import '../romm_playtime_service.dart';
 
 /// Owns the game-session lifecycle and its mutable tracking state.
 ///
@@ -40,7 +43,22 @@ class GameSessionManager {
   /// Opens the launch-pending window. Call when a launch is initiated, before
   /// the emulator handoff. Cleared by [registerGameLaunch] on success or
   /// [clearLaunchPending] on failure.
-  static void beginLaunchPending() => _launchPending = true;
+  static void beginLaunchPending() {
+    _launchPending = true;
+    _pauseBackgroundHashing();
+  }
+
+  /// Stops a library-wide RetroAchievements pass for the duration of a game.
+  ///
+  /// Hashing reads whole ROMs off storage; on a handheld, doing that while an
+  /// emulator is running is a worse trade than finishing the pass later. The
+  /// pass is resumable by construction, so nothing is lost: whoever started it
+  /// picks it up from where it stopped. A no-op when no pass is running.
+  static void _pauseBackgroundHashing() {
+    if (!RetroAchievementsHashService.isRematchRunning) return;
+    _log.i('Pausing RA match pass for the duration of the game session');
+    RetroAchievementsHashService.requestRematchPause();
+  }
 
   /// Closes the launch-pending window (e.g. on launch failure).
   static void clearLaunchPending() => _launchPending = false;
@@ -88,6 +106,40 @@ class GameSessionManager {
     _onProcessExitCallback = null;
   }
 
+  /// Listeners notified once a session has been finalized.
+  ///
+  /// Separate from [_onProcessExitCallback] and [_onGameReturnedCallback],
+  /// which are single-slot and owned by whichever screen launched the game.
+  /// This is a broadcast for state that is not tied to a launch site — anything
+  /// cached about the player's progress is stale the moment they stop playing,
+  /// whichever screen started the game and whichever platform ended it. Every
+  /// launcher funnels its exit through [endGameSession], so registering here
+  /// covers them all.
+  static final List<VoidCallback> _sessionEndListeners = <VoidCallback>[];
+
+  static void addSessionEndListener(VoidCallback listener) {
+    if (!_sessionEndListeners.contains(listener)) {
+      _sessionEndListeners.add(listener);
+    }
+  }
+
+  static void removeSessionEndListener(VoidCallback listener) {
+    _sessionEndListeners.remove(listener);
+  }
+
+  /// Fires every session-end listener, isolating them from each other: this
+  /// runs on the game-exit path, which already has UI waiting on it, so one
+  /// listener throwing must not skip the rest or fail the teardown.
+  static void _notifySessionEnded() {
+    for (final listener in List<VoidCallback>.from(_sessionEndListeners)) {
+      try {
+        listener();
+      } catch (e) {
+        _log.e('Session-end listener failed: $e');
+      }
+    }
+  }
+
   /// Recovers playtime from a previously interrupted game session.
   ///
   /// Handles cases where the application was terminated by the OS (Android)
@@ -119,6 +171,13 @@ class GameSessionManager {
 
         if (game != null && game.romPath.isNotEmpty) {
           await GameRepository.updatePlayTime(game.romPath, elapsedSeconds);
+          await _recordRommPlaySession(
+            romname: filename,
+            systemFolder: game.systemFolderName ?? systemFolderName,
+            romPath: game.romPath,
+            start: DateTime.fromMillisecondsSinceEpoch(startTimestamp),
+            end: DateTime.fromMillisecondsSinceEpoch(currentTimestamp),
+          );
         }
       }
 
@@ -136,6 +195,9 @@ class GameSessionManager {
   ]) {
     _isGameLaunched = true;
     _launchPending = false;
+    // Also here, not only in beginLaunchPending: a launch path that never
+    // opened the pending window would otherwise leave the pass running.
+    _pauseBackgroundHashing();
     _gameLaunchTime = DateTime.now();
     _lastPlaytimeSave = _gameLaunchTime;
     _launchedEmulatorExe = emulatorExeName;
@@ -202,6 +264,21 @@ class GameSessionManager {
           elapsedSinceLastSave,
         );
       }
+
+      // Report the session as a whole (not just the un-persisted tail) to the
+      // RomM outbox: RomM stores playtime as sessions, and the incremental
+      // 10s writes above are a local persistence detail.
+      final game = _currentGame!;
+      if (game.romPath != null) {
+        await _recordRommPlaySession(
+          romname: game.romname,
+          systemFolder: game.systemFolderName ?? _currentGameSystem!.folderName,
+          romPath: game.romPath!,
+          start: _gameLaunchTime!,
+          end: now,
+        );
+      }
+      _syncSavesAfterClose(game);
     }
 
     _stopPlaytimeTimer();
@@ -222,6 +299,8 @@ class GameSessionManager {
     _launchedEmulatorExe = null;
     _currentGameSystem = null;
     _currentGame = null;
+
+    _notifySessionEnded();
   }
 
   static Future<void> _savePlayTime(
@@ -233,6 +312,61 @@ class GameSessionManager {
       await GameRepository.updatePlayTime(game.romPath!, elapsedSeconds);
     } catch (e) {
       _log.e('Error saving game time: $e');
+    }
+  }
+
+  /// Uploads the save files the just-closed game left behind.
+  ///
+  /// This belongs here rather than in a screen because every launcher — the
+  /// games list, the recently-played carousel, the systems grid, search —
+  /// funnels its exit through [endGameSession]. It used to live in the games
+  /// list alone, so a game started from anywhere else uploaded nothing on
+  /// exit; the save only went up later, when browsing the list happened to
+  /// re-detect it.
+  ///
+  /// Deliberately not awaited, and deliberately delayed: the emulator has just
+  /// died and may still be flushing its save to disk, while the exit path
+  /// itself has UI waiting on it. Failures are logged and dropped — the next
+  /// detect pass will pick the save up.
+  static void _syncSavesAfterClose(GameModel game) {
+    final provider = SyncManager.instance.active;
+    if (provider == null) {
+      _log.w('Post-game save sync skipped: no active sync provider');
+      return;
+    }
+    _log.i(
+      'Post-game save sync queued for ${game.romname} (${provider.providerId})',
+    );
+    Future.delayed(const Duration(seconds: 2), () async {
+      try {
+        await provider.syncGameSavesAfterClose(game);
+      } catch (e) {
+        _log.e('Post-game save sync failed: $e');
+      }
+    });
+  }
+
+  /// Queues a finished session for RomM playtime sync. A local DB write only —
+  /// no network — so it costs nothing on the game-exit path and survives being
+  /// offline; the upload happens on the next RomM sync. No-ops for games that
+  /// didn't come from RomM.
+  static Future<void> _recordRommPlaySession({
+    required String romname,
+    required String systemFolder,
+    required String romPath,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    try {
+      await RommPlaytimeService.recordCompletedSession(
+        romname: romname,
+        systemFolder: systemFolder,
+        romPath: romPath,
+        startTime: start,
+        endTime: end,
+      );
+    } catch (e) {
+      _log.e('Error queueing RomM play session: $e');
     }
   }
 }

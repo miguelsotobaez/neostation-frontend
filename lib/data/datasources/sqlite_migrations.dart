@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/utils/cloud_path_builder.dart';
 
 /// Service responsible for managing SQLite database schema evolutions.
 ///
@@ -12,6 +13,119 @@ import 'package:neostation/services/logger_service.dart';
 /// to be idempotent, allowing them to be safely re-run if necessary.
 class SqliteMigrations {
   static final _log = LoggerService.instance;
+
+  // ── RomM schema — single source of truth ──────────────────────────────────
+  // Referenced by migration v111 and by the fresh-install table list, so a
+  // future column change is made in exactly one place.
+
+  /// CREATE for the singleton RomM credentials/token table (v111).
+  ///
+  /// `api_key` (v131) holds a RomM Client API Token and is the alternative to
+  /// `username`/`password`: exactly one of the two is populated, and a non-empty
+  /// `api_key` is what marks the row as API-key authentication.
+  static const String createUserRommConfigTableSql = '''
+    CREATE TABLE IF NOT EXISTS user_romm_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      server_url TEXT,
+      username TEXT,
+      password TEXT,
+      api_key TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      token_expires INTEGER,
+      last_verified TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  ''';
+
+  /// CREATE for the local-game → RomM rom_id save-sync map (v111).
+  static const String createAppRommRomMapTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_rom_map (
+      romname TEXT NOT NULL,
+      system_folder TEXT NOT NULL,
+      romm_rom_id INTEGER NOT NULL,
+      romm_fs_name TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (romname, system_folder)
+    );
+  ''';
+
+  /// Lookup index for [createAppRommRomMapTableSql] (v111).
+  static const String createAppRommRomMapIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_romm_rom_map_id
+    ON app_romm_rom_map(romm_rom_id);
+  ''';
+
+  /// CREATE for the play-session outbox (v111).
+  ///
+  /// A finished game session is written here the moment it ends — including
+  /// while offline — and pushed to RomM's `/api/play-sessions` on the next
+  /// sync. `UNIQUE(romm_rom_id, start_time)` mirrors RomM's own duplicate key
+  /// so a session can never be queued (or counted) twice.
+  static const String createAppRommPlaySessionsTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_play_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      romm_rom_id INTEGER NOT NULL,
+      rom_path TEXT,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(romm_rom_id, start_time)
+    );
+  ''';
+
+  /// Lookup index for [createAppRommPlaySessionsTableSql] (v111).
+  static const String createAppRommPlaySessionsIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_romm_play_sessions_rom_id
+    ON app_romm_play_sessions(romm_rom_id);
+  ''';
+
+  /// CREATE for the per-ROM playtime reconciliation ledger (v111).
+  ///
+  /// RomM stores playtime as individual sessions, not a total, and it strips
+  /// the `device_id` of clients it doesn't know — so a pulled session list
+  /// cannot be filtered back down to "sessions from other devices" by device.
+  /// Instead we track what this device contributed:
+  ///
+  /// * `pushed_ms` — session time this device successfully pushed (server
+  ///   total minus this = time played elsewhere).
+  /// * `remote_applied_ms` — how much of that elsewhere-time is already folded
+  ///   into `user_roms.play_time`, so repeated pulls are idempotent.
+  static const String createAppRommPlaytimeStateTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_playtime_state (
+      romm_rom_id INTEGER PRIMARY KEY,
+      pushed_ms INTEGER NOT NULL DEFAULT 0,
+      remote_applied_ms INTEGER NOT NULL DEFAULT 0,
+      last_pulled_at TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  ''';
+
+  /// CREATE for the provider-scoped save-sync state table (v111).
+  ///
+  /// Keyed on (provider, file_path) so each sync provider (NeoSync, RomM, …)
+  /// owns its own row for a given local file — a foreign provider's cloud
+  /// timestamp can no longer poison another provider's newer/older decision.
+  /// The `provider` column defaults to 'neosync' for backward compatibility.
+  static const String createAppNeoSyncStateTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_neo_sync_state (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider TEXT NOT NULL DEFAULT 'neosync',
+      file_path TEXT NOT NULL,
+      local_modified_at INTEGER NOT NULL,
+      cloud_updated_at INTEGER NOT NULL,
+      file_size INTEGER NOT NULL,
+      file_hash TEXT,
+      UNIQUE(provider, file_path)
+    );
+  ''';
+
+  /// Lookup index for [createAppNeoSyncStateTableSql] (v111).
+  static const String createAppNeoSyncStateIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_neo_sync_state_provider_file_path
+    ON app_neo_sync_state(provider, file_path);
+  ''';
 
   /// Routes a specific version upgrade request to its corresponding migration logic.
   ///
@@ -347,6 +461,62 @@ class SqliteMigrations {
         break;
       case 114:
         await _migrateToVersion114(db);
+        break;
+      case 115:
+        await _migrateToVersion115(db);
+        break;
+      case 116:
+        await _migrateToVersion116(db);
+        break;
+      case 117:
+        await _migrateToVersion117(db);
+        break;
+      case 118:
+        await _migrateToVersion118(db);
+        break;
+      case 119:
+        await _migrateToVersion119(db);
+        break;
+      case 122:
+        await _migrateToVersion122(db);
+        break;
+      case 125:
+        await _migrateToVersion125(db);
+        break;
+      case 126:
+        await _migrateToVersion126(db);
+        break;
+      case 127:
+        await _migrateToVersion127(db);
+        break;
+      case 128:
+        await _migrateToVersion128(db);
+        break;
+      case 130:
+        await _migrateToVersion130(db);
+        break;
+      case 131:
+        await _migrateToVersion131(db);
+        break;
+      case 134:
+        await _migrateToVersion134(db);
+        break;
+      case 135:
+        await _migrateToVersion135(db);
+        break;
+      case 138:
+        await _migrateToVersion138(db);
+        break;
+      // 139 and 140 are claimed by another branch that is not merged yet.
+      // Taking the next free number instead of the next sequential one is
+      // deliberate: a shared slot with different contents is skipped silently
+      // on any device that already migrated past it.
+      case 141:
+        await _migrateToVersion141(db);
+        break;
+      // 142 and 143 are claimed by another branch that is not merged yet.
+      case 144:
+        await _migrateToVersion144(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -4985,6 +5155,70 @@ class SqliteMigrations {
     }
   }
 
+  /// Makes `app_neo_sync_state` provider-scoped so RomM and NeoSync no longer
+  /// corrupt each other's recorded cloud timestamps. Part of migration v111.
+  ///
+  /// The legacy table keyed on `file_path` alone (`file_path ... UNIQUE`), so a
+  /// row written by one provider was read/overwritten by the other. SQLite
+  /// can't drop that column-level UNIQUE in place, so we rebuild the table with
+  /// a composite `UNIQUE(provider, file_path)` and backfill every existing row
+  /// to 'neosync' — the only provider that wrote these rows historically.
+  static Future<void> _providerScopeAppNeoSyncState(Database db) async {
+    _log.i('Migration v111: Adding provider column to app_neo_sync_state');
+    try {
+      final tableExists = db
+          .select(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='app_neo_sync_state' LIMIT 1",
+          )
+          .isNotEmpty;
+
+      if (!tableExists) {
+        // Fresh/absent table → just create the new provider-scoped schema.
+        db.execute(createAppNeoSyncStateTableSql);
+        db.execute(createAppNeoSyncStateIndexSql);
+        _log.i('app_neo_sync_state created with provider column (v111)');
+        return;
+      }
+
+      final alreadyMigrated = await _columnExists(
+        db,
+        'app_neo_sync_state',
+        'provider',
+      );
+      if (alreadyMigrated) {
+        _log.i('app_neo_sync_state already provider-scoped, skipping');
+        return;
+      }
+
+      db.execute('BEGIN TRANSACTION');
+      try {
+        db.execute(
+          'ALTER TABLE app_neo_sync_state RENAME TO app_neo_sync_state_old',
+        );
+        db.execute(createAppNeoSyncStateTableSql);
+        // Existing rows were all written by NeoSync → attribute them to it.
+        db.execute('''
+          INSERT INTO app_neo_sync_state
+            (id, provider, file_path, local_modified_at, cloud_updated_at, file_size, file_hash)
+          SELECT id, 'neosync', file_path, local_modified_at, cloud_updated_at, file_size, file_hash
+          FROM app_neo_sync_state_old
+        ''');
+        db.execute('DROP TABLE app_neo_sync_state_old');
+        db.execute('DROP INDEX IF EXISTS idx_neo_sync_state_file_path');
+        db.execute(createAppNeoSyncStateIndexSql);
+        db.execute('COMMIT');
+      } catch (e) {
+        db.execute('ROLLBACK');
+        rethrow;
+      }
+      _log.i('app_neo_sync_state migrated to (provider, file_path) via v111');
+    } catch (e, stackTrace) {
+      _log.e('Error provider-scoping app_neo_sync_state: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
   /// Migration v104: Defensively recreate the [app_os] lookup table if it is
   /// missing and re-seed the base operating system rows.
   ///
@@ -5094,29 +5328,161 @@ class SqliteMigrations {
   static Future<void> _migrateToVersion106(Database db) async {
     _log.i('Migration v106: Adding nav tab visibility flags to user_config');
     try {
-      final tableInfo = db.select('PRAGMA table_info(user_config)');
-      final columns = tableInfo.map((c) => c['name'].toString()).toList();
-
-      const newColumns = [
+      _addNavTabVisibilityColumns(db, 'v106', const [
         'hide_tab_sync',
         'hide_tab_achievements',
         'hide_tab_scraper',
-      ];
-
-      for (final column in newColumns) {
-        if (!columns.contains(column)) {
-          db.execute(
-            'ALTER TABLE user_config ADD COLUMN $column INTEGER DEFAULT 0',
-          );
-          _log.i('Column $column added via v106');
-        } else {
-          _log.i('Column $column already exists');
-        }
-      }
-
+      ]);
       _log.i('Migration v106 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v106: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Adds any missing entry of [newColumns] to `user_config`, logging against
+  /// [version]. Idempotent, so a re-run of the same migration is a no-op.
+  static void _addNavTabVisibilityColumns(
+    Database db,
+    String version,
+    List<String> newColumns,
+  ) {
+    final tableInfo = db.select('PRAGMA table_info(user_config)');
+    final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+    for (final column in newColumns) {
+      if (!columns.contains(column)) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN $column INTEGER DEFAULT 0',
+        );
+        _log.i('Column $column added via $version');
+      } else {
+        _log.i('Column $column already exists');
+      }
+    }
+  }
+
+  /// Migration v119: Creates the whole RomM schema in one step.
+  ///
+  /// **Renumbered three times: v111 -> v114 -> v115 -> v119.** This branch
+  /// authored it as v111, but main independently shipped v111–v114 for the
+  /// ROM-subfolder feature (#318) while the branch was open, then v115–v118 for
+  /// the NeoSync v2 cloud path standard (#336). Two lineages cannot both own a
+  /// number: a device that ran main's v115 is already past that version, so
+  /// `case 115` would never fire for it and the RomM schema would never be
+  /// created — every RomM query then fails against tables that do not exist.
+  /// Sitting above main's numbering means every device reaches this migration
+  /// exactly once, whichever branch it came from. Main hit the same collision
+  /// from the other side; that is what its v113 backfill and its v116/v117
+  /// repairs exist for.
+  ///
+  /// Note the branch has no v115–v118 of its own until main is merged in, so a
+  /// device upgrading on this branch alone logs "No migration defined" for those
+  /// four versions and lands on v119 regardless. The merge fills them in.
+  ///
+  /// Safe to re-run on a device that already has the schema from the pre-merge
+  /// v111/v115 builds: every statement here is `IF NOT EXISTS` or checks for the
+  /// column first, so it is a no-op rather than a second create.
+  ///
+  /// RomM's tables all land together with the feature, so they get a single
+  /// version rather than one apiece:
+  ///
+  /// * `user_romm_config` — singleton server credentials/token row.
+  /// * `app_romm_rom_map` — links a local game (romname + system folder) to its
+  ///   RomM `rom_id` so save/state sync can target the right ROM. Populated
+  ///   when a ROM is downloaded from RomM.
+  /// * `app_romm_play_sessions` — outbox of finished sessions awaiting upload.
+  /// * `app_romm_playtime_state` — ledger that keeps repeated pulls from
+  ///   double-counting time this device already contributed.
+  /// * `app_neo_sync_state` — rebuilt as provider-scoped, so RomM and NeoSync
+  ///   no longer overwrite each other's rows for the same file.
+  /// * `user_config.hide_tab_romm` — lets the RomM nav tab be hidden like Sync,
+  ///   Achievements and Scraper. Defaults to `0` (visible), so nobody's strip
+  ///   changes on upgrade.
+  /// * `user_config.game_details_tab` — repeated from v110, which a device
+  ///   running the pre-merge RomM build skips. See [_addGameDetailsTabColumn].
+  static Future<void> _migrateToVersion119(Database db) async {
+    _log.i('Migration v119: Creating RomM schema');
+    try {
+      db.execute(createUserRommConfigTableSql);
+      db.execute(createAppRommRomMapTableSql);
+      db.execute(createAppRommRomMapIndexSql);
+      db.execute(createAppRommPlaySessionsTableSql);
+      db.execute(createAppRommPlaySessionsIndexSql);
+      db.execute(createAppRommPlaytimeStateTableSql);
+      await _providerScopeAppNeoSyncState(db);
+      _addNavTabVisibilityColumns(db, 'v119', const ['hide_tab_romm']);
+      _addGameDetailsTabColumn(db, 'v119');
+      _log.i('Migration v119 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v119: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v122: Adds `user_roms.is_hidden`, the per-game hide flag.
+  ///
+  /// Hiding is a view filter, not a deletion: the row keeps its favorite flag,
+  /// play time, emulator override and cloud-sync state, and the ROM file is
+  /// untouched. Games hidden here are restored from the system settings dialog.
+  /// Defaults to `0`, so nobody's library changes on upgrade.
+  ///
+  /// Numbered above every slot in use anywhere — main is at v119 and
+  /// `feat/ra-improvements` claims v121 — rather than at main + 1. A device
+  /// that migrated on that branch is already past 120, so it would skip a
+  /// `case 120` forever and every game query would then fail on the missing
+  /// column. Taking the highest number keeps this step reachable whatever
+  /// order the branches merge in.
+  static Future<void> _migrateToVersion122(Database db) async {
+    _log.i('Migration v122: Adding is_hidden to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('is_hidden')) {
+        db.execute(
+          'ALTER TABLE user_roms ADD COLUMN is_hidden INTEGER DEFAULT 0',
+        );
+        _log.i('Column is_hidden added via v122');
+      } else {
+        _log.i('Column is_hidden already exists');
+      }
+
+      _log.i('Migration v122 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v122: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v125: Stores the user's UI sound-effects playback level.
+  ///
+  /// Numbered above every slot in use anywhere — main is at v122 and
+  /// `feat/ra-improvements` claims v123 and v124 — rather than at main + 1,
+  /// so the step stays reachable whatever order the branches merge in.
+  /// Defaults to `0.75`, the volume the service has always played at, so
+  /// nothing changes for existing users on upgrade.
+  static Future<void> _migrateToVersion125(Database db) async {
+    _log.i('Migration v125: Adding sfx_volume to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('sfx_volume')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN sfx_volume REAL DEFAULT 0.75',
+        );
+        _log.i('Column sfx_volume added via v125');
+      } else {
+        _log.i('Column sfx_volume already exists');
+      }
+
+      _log.i('Migration v125 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v125: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
@@ -5279,21 +5645,32 @@ class SqliteMigrations {
   static Future<void> _migrateToVersion110(Database db) async {
     _log.i('Migration v110: Adding game_details_tab to user_config');
     try {
-      final tableInfo = db.select('PRAGMA table_info(user_config)');
-      final columns = tableInfo.map((c) => c['name'].toString()).toList();
-      if (!columns.contains('game_details_tab')) {
-        db.execute(
-          "ALTER TABLE user_config ADD COLUMN game_details_tab TEXT DEFAULT 'wheel'",
-        );
-        _log.i('Column game_details_tab added via v110');
-      } else {
-        _log.i('Column game_details_tab already exists');
-      }
+      _addGameDetailsTabColumn(db, 'v110');
       _log.i('Migration v110 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v110: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
+    }
+  }
+
+  /// Adds `user_config.game_details_tab` if it is missing.
+  ///
+  /// Shared by v110 and v111 because the RomM branch shipped its own v110
+  /// before [_migrateToVersion110] landed on main. A device that ran that
+  /// build sits at user_version 110 without the column, so it would skip
+  /// straight to v111 and never gain it — and every config write names the
+  /// column. v111 repeats the add so those databases converge.
+  static void _addGameDetailsTabColumn(Database db, String version) {
+    final tableInfo = db.select('PRAGMA table_info(user_config)');
+    final columns = tableInfo.map((c) => c['name'].toString()).toList();
+    if (!columns.contains('game_details_tab')) {
+      db.execute(
+        "ALTER TABLE user_config ADD COLUMN game_details_tab TEXT DEFAULT 'wheel'",
+      );
+      _log.i('Column game_details_tab added via $version');
+    } else {
+      _log.i('Column game_details_tab already exists');
     }
   }
 
@@ -5398,6 +5775,676 @@ class SqliteMigrations {
       _log.i('Migration v114 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v114: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v115: Adds the `neosync_slug` column to [app_emulators] and
+  /// backfills it by deriving a slug from each emulator's `unique_identifier`.
+  ///
+  /// The slug is the stable identifier used in NeoSync v2 cloud paths
+  /// (e.g. `saves/<system>/<slug>/...`). RetroArch core variants (RA/RA64/RA32)
+  /// collapse into one `retroarch.<core>` slug so saves are portable between
+  /// them; standalone emulators use the last segment of their unique id.
+  ///
+  /// Also creates the [user_custom_save_folders] table used by the NeoSync
+  /// module to remember the user-selected save/memcard folder per system +
+  /// emulator (ARMSX2, ARMSX1, etc.). Keeping it in its own table separates
+  /// the module's configuration from the global [user_config].
+  static Future<void> _migrateToVersion115(Database db) async {
+    _log.i('Migration v115: Adding neosync_slug to app_emulators');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_emulators)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('neosync_slug')) {
+        db.execute('ALTER TABLE app_emulators ADD COLUMN neosync_slug TEXT');
+        _log.i('Column neosync_slug added via v115');
+      }
+
+      await _backfillNeoSyncSlugs(db);
+
+      _log.i('Migration v115: Creating user_custom_save_folders table');
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS user_custom_save_folders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          system_folder_name TEXT NOT NULL COLLATE NOCASE,
+          emulator_slug TEXT NOT NULL,
+          folder_path TEXT NOT NULL,
+          UNIQUE(system_folder_name, emulator_slug)
+        );
+      ''');
+      _log.i('Table user_custom_save_folders created');
+
+      _log.i('Migration v115 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v115: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v116: Ensures the NeoSync v2 emulator slug column and the custom
+  /// save folders table exist.
+  ///
+  /// Devices that already reached v115 via an earlier feature branch created
+  /// `user_custom_save_folders` but never added `neosync_slug` to
+  /// [app_emulators]. Because their DB is already at version 115, the v115
+  /// migration above is skipped, so this migration re-applies the missing bits
+  /// idempotently.
+  static Future<void> _migrateToVersion116(Database db) async {
+    _log.i(
+      'Migration v116: Ensuring neosync_slug and user_custom_save_folders',
+    );
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_emulators)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('neosync_slug')) {
+        db.execute('ALTER TABLE app_emulators ADD COLUMN neosync_slug TEXT');
+        _log.i('Column neosync_slug added via v116');
+      }
+
+      await _backfillNeoSyncSlugs(db);
+
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS user_custom_save_folders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          system_folder_name TEXT NOT NULL COLLATE NOCASE,
+          emulator_slug TEXT NOT NULL,
+          folder_path TEXT NOT NULL,
+          UNIQUE(system_folder_name, emulator_slug)
+        );
+      ''');
+      _log.i('Migration v116 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v116: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Backfills `neosync_slug` on [app_emulators] for rows that have none.
+  ///
+  /// Runs in Dart using [CloudPathBuilder.slugFromEmulatorUniqueId] — the exact
+  /// same derivation the runtime uses — instead of reimplementing it in SQL.
+  /// That guarantees the stored slug always matches the one `_resolveEmulatorSlugForGame`
+  /// computes, so `findSystemsByEmulatorSlug` finds the emulator's systems on
+  /// every upgraded install. Idempotent: only touches rows with an empty slug.
+  ///
+  /// Tolerant by design: `app_emulators` is keyed by the composite
+  /// `(os_id, unique_identifier)` (no `id` column), and any failure here must
+  /// not abort the whole migration and wedge the app in a lower DB version.
+  /// The slug is re-derivable at runtime, so a missed row only means one
+  /// emulator keeps its runtime-derived slug — the backfill is best-effort.
+  static Future<void> _backfillNeoSyncSlugs(Database db) async {
+    try {
+      final rows = db.select(
+        'SELECT os_id, unique_identifier FROM app_emulators '
+        "WHERE neosync_slug IS NULL OR neosync_slug = ''",
+      );
+      var updated = 0;
+      for (final row in rows) {
+        final osId = row['os_id'];
+        final uniqueId = row['unique_identifier']?.toString() ?? '';
+        if (uniqueId.isEmpty) continue;
+        final slug = CloudPathBuilder.slugFromEmulatorUniqueId(uniqueId);
+        if (slug.isEmpty) continue;
+        db.execute(
+          'UPDATE app_emulators SET neosync_slug = ? '
+          'WHERE os_id = ? AND unique_identifier = ?',
+          [slug, osId, uniqueId],
+        );
+        updated++;
+      }
+      if (updated > 0) {
+        _log.i('Backfilled neosync_slug for $updated emulators');
+      }
+    } catch (e, stackTrace) {
+      _log.e('Error backfilling neosync_slug: $e');
+      _log.e('   StackTrace: $stackTrace');
+    }
+  }
+
+  /// Migration v117: Adds the `emulator_slug` column to an existing
+  /// [user_custom_save_folders] table.
+  ///
+  /// Devices that created the table via an earlier feature branch only have
+  /// `system_folder_name` + `folder_path`, so `CREATE TABLE IF NOT EXISTS` in
+  /// v116 silently left it unchanged and later inserts failed with "no such
+  /// column: emulator_slug". This migrates the legacy rows to the default slug
+  /// `unknown` and adds the column when missing.
+  static Future<void> _migrateToVersion117(Database db) async {
+    _log.i(
+      'Migration v117: Ensuring emulator_slug on user_custom_save_folders',
+    );
+    try {
+      final tableInfo = db.select(
+        'PRAGMA table_info(user_custom_save_folders)',
+      );
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('emulator_slug')) {
+        _log.i('Migration v117: Adding emulator_slug column');
+        db.execute(
+          'ALTER TABLE user_custom_save_folders ADD COLUMN emulator_slug TEXT NOT NULL DEFAULT \'unknown\'',
+        );
+      }
+      _log.i('Migration v117 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v117: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v118: Backfills `user_system_settings.subfolder_view` for
+  /// databases that skipped main's v111/v113.
+  ///
+  /// This branch originally claimed the v111-113 numbers for NeoSync, so a
+  /// device that migrated while on that branch is already past main's v111
+  /// (subfolder_view) and v113 (backfill) — their `case` clauses never fire and
+  /// `user_system_settings.subfolder_view` is missing, breaking every query
+  /// that joins it. Idempotent: adds the column only when absent, mirroring the
+  /// main-branch backfill so this is a no-op on databases that took the normal
+  /// path.
+  static Future<void> _migrateToVersion118(Database db) async {
+    _log.i('Migration v118: Backfilling subfolder_view if absent');
+    try {
+      final settingsColumns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (!settingsColumns.contains('subfolder_view')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN subfolder_view INTEGER DEFAULT 0',
+        );
+        _log.i('Column subfolder_view backfilled via v118');
+      } else {
+        _log.i('Column subfolder_view already present');
+      }
+      _log.i('Migration v118 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v118: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v126: Records how a ROM's RetroAchievements match was
+  /// established, in `user_roms.ra_match_source`.
+  ///
+  /// Values: 'hash', 'filename', 'title' or 'manual'. A NULL means the match
+  /// predates this column. Only 'manual' is protected: bulk re-hash and
+  /// re-match passes must never overwrite a match a user chose by hand.
+  ///
+  /// Numbered above every version main has already shipped (125 at the time of
+  /// writing): a slot at or below main's floor never fires on a device that
+  /// migrated past it, and the column would silently never appear. Idempotent
+  /// — the column is added only when absent — so it doubles as the backfill
+  /// for any database that took an earlier numbering of this branch.
+  static Future<void> _migrateToVersion126(Database db) async {
+    _log.i('Migration v126: Adding ra_match_source to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_match_source')) {
+        db.execute('ALTER TABLE user_roms ADD COLUMN ra_match_source TEXT');
+        _log.i('Column ra_match_source added via v126');
+      } else {
+        _log.i('Column ra_match_source already exists');
+      }
+      _log.i('Migration v126 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v126: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v127: Records why a ROM could not be hashed, in
+  /// `user_roms.ra_hash_skipped`.
+  ///
+  /// A ROM that cannot produce a hash — the file is gone, it is over the size
+  /// cap, it is a disc image, or extraction failed — writes nothing, so the
+  /// bulk pass would revisit it on every single run and its candidate list
+  /// would never empty. Storing the reason takes those rows out of the queue
+  /// and makes the gap diagnosable rather than invisible.
+  ///
+  /// Values: 'missing', 'oversize', 'disc', 'extract_failed', 'error'.
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion127(Database db) async {
+    _log.i('Migration v127: Adding ra_hash_skipped to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_hash_skipped')) {
+        db.execute('ALTER TABLE user_roms ADD COLUMN ra_hash_skipped TEXT');
+        _log.i('Column ra_hash_skipped added via v127');
+      } else {
+        _log.i('Column ra_hash_skipped already exists');
+      }
+      _log.i('Migration v127 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v127: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v128: Adds `user_config.show_achievements_badge`, the opt-in for
+  /// the achievement count drawn on library tiles.
+  ///
+  /// Defaults to 0 — off. The badge is only as complete as the library's
+  /// RetroAchievements matching, so on a library nothing has hashed yet it
+  /// would be absent from almost every tile and read as broken. Users who have
+  /// run the match tool turn it on.
+  ///
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion128(Database db) async {
+    _log.i('Migration v128: Adding show_achievements_badge to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('show_achievements_badge')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN show_achievements_badge '
+          'INTEGER DEFAULT 0',
+        );
+        _log.i('Column show_achievements_badge added via v128');
+      } else {
+        _log.i('Column show_achievements_badge already exists');
+      }
+      _log.i('Migration v128 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v128: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v130: Adds `app_systems.ra_hash_algo` and
+  /// `app_systems.ra_hash_mode`, the per-system RetroAchievements hashing
+  /// policy.
+  ///
+  /// The policy used to be three hardcoded lists in the hash service that could
+  /// disagree with one another; it now lives in `assets/systems/<sys>.json` and
+  /// is synced into these columns, so it reaches existing installs through the
+  /// systems OTA update rather than an app release.
+  ///
+  /// Both columns are left NULL here rather than backfilled. `syncSystems`
+  /// rewrites every row from the JSON definitions on the launch that follows,
+  /// and a NULL reads as the permissive default — hash the whole file, allow
+  /// the filename fallback — which is what an undeclared system did before.
+  ///
+  /// It also drops the stored hash for the three hack folders whose algorithm
+  /// the policy corrects, so the match pass recomputes them. See
+  /// [_clearStaleHackHashes].
+  ///
+  /// Idempotent — each column is added only when absent, and the hash clear is
+  /// scoped to rows that still carry a hash.
+  static Future<void> _migrateToVersion130(Database db) async {
+    _log.i('Migration v130: Adding RA hash policy columns to app_systems');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_systems)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_hash_algo')) {
+        db.execute('ALTER TABLE app_systems ADD COLUMN ra_hash_algo TEXT');
+        _log.i('Column ra_hash_algo added via v130');
+      } else {
+        _log.i('Column ra_hash_algo already exists');
+      }
+      if (!columns.contains('ra_hash_mode')) {
+        db.execute('ALTER TABLE app_systems ADD COLUMN ra_hash_mode TEXT');
+        _log.i('Column ra_hash_mode added via v130');
+      } else {
+        _log.i('Column ra_hash_mode already exists');
+      }
+      _clearStaleHackHashes(db);
+      _log.i('Migration v130 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v130: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v131: Adds `user_romm_config.api_key`, so a RomM server can be
+  /// connected with a Client API Token instead of a username and password.
+  ///
+  /// Numbered 131 rather than the next free 129 deliberately: main already
+  /// ships a v130, so a device that migrated on that branch would be past 129
+  /// when it first saw this build and would silently skip this step, leaving
+  /// `saveConfig` to fail with "no such column: api_key". 131 is above every
+  /// number in use, so it runs wherever that device has got to.
+  ///
+  /// Existing rows keep their credentials and read back with an empty key,
+  /// which is exactly what keeps them on the password grant.
+  ///
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion131(Database db) async {
+    _log.i('Migration v131: Adding api_key to user_romm_config');
+    try {
+      // The table only exists from v111; a database that somehow never got it
+      // has nothing to alter and gets the column from the CREATE instead.
+      final tableInfo = db.select('PRAGMA table_info(user_romm_config)');
+      if (tableInfo.isEmpty) {
+        _log.i('Table user_romm_config absent — nothing to migrate');
+        return;
+      }
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('api_key')) {
+        db.execute('ALTER TABLE user_romm_config ADD COLUMN api_key TEXT');
+        _log.i('Column api_key added via v131');
+      } else {
+        _log.i('Column api_key already exists');
+      }
+      _log.i('Migration v131 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v131: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v135: caches a ROM's dump identity for ScreenScraper matching.
+  ///
+  /// ScreenScraper indexes ROMs by the crc32/md5/size of the image itself, and
+  /// each of those resolves a lookup on its own. Caching them per ROM turns a
+  /// re-scrape into a lookup instead of a re-read of every file.
+  ///
+  /// `rom_crc32` is the primary key for matching (widest coverage — their DB is
+  /// seeded from No-Intro/Redump DATs) and is often obtainable without reading
+  /// the ROM at all, straight from a zip's central directory. `rom_size` is
+  /// ScreenScraper's `romtaille`. `rom_fingerprint_skipped` parks ROMs that
+  /// cannot be fingerprinted so a bulk pass stops re-walking them, mirroring
+  /// `ra_hash_skipped`.
+  ///
+  /// The md5 reuses the existing `ss_hash` column rather than adding a fourth:
+  /// it is named for exactly this, indexed for exactly this lookup, and has
+  /// always been dead — no caller has ever passed a value for it, so there is
+  /// no older meaning to collide with.
+  ///
+  /// Numbered 135, having moved twice while this branch was open — the exact
+  /// churn the merge-order rule exists for. It started at the next free slot,
+  /// went to 133 when `feat/discovery-store` turned out to hold committed v132
+  /// and v133 migrations (`user_discovery_picks`, `hide_tab_discovery`), then
+  /// to 134, and finally to 135 when `feat/ra-disc-hashing` claimed 134 in the
+  /// open PR #380. A device that migrated on any of those branches would
+  /// already sit past a lower number and would skip this step silently,
+  /// leaving every fingerprint query failing with "no such column".
+  ///
+  /// The lesson for whoever renumbers next: scan on-disk working trees, not
+  /// just refs, and re-scan immediately before opening the PR rather than once
+  /// at the start. Both collisions here appeared *after* a clean scan.
+  ///
+  /// Idempotent per column — a device whose DB was already past 135 when it
+  /// first saw this binary skips the case entirely, so nothing may assume it
+  /// ran.
+  static Future<void> _migrateToVersion135(Database db) async {
+    _log.i('Migration v135: Adding ROM fingerprint cache to user_roms');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_roms)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toSet();
+
+      const additions = {
+        'rom_crc32': 'TEXT',
+        'rom_size': 'INTEGER',
+        'rom_fingerprint_skipped': 'TEXT',
+      };
+
+      for (final entry in additions.entries) {
+        if (!columns.contains(entry.key)) {
+          db.execute(
+            'ALTER TABLE user_roms ADD COLUMN ${entry.key} ${entry.value}',
+          );
+          _log.i('Column ${entry.key} added via v135');
+        } else {
+          _log.i('Column ${entry.key} already exists');
+        }
+      }
+
+      db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_user_roms_rom_crc32 '
+        'ON user_roms(rom_crc32)',
+      );
+
+      _log.i('Migration v135 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v135: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Adds `user_config.ra_seed_stamp`, which records the generation stamp of
+  /// the bundled RA seed asset currently loaded into `app_ra_game_list`.
+  ///
+  /// Before this, `refreshRetroAchievementsData()` deleted and re-inserted all
+  /// 18,079 rows on every single launch, re-parsing a 6 MB asset one character
+  /// at a time to do it. The stamp is what lets that be skipped when the asset
+  /// has not changed since the last launch.
+  ///
+  /// Defaults to `''`, which matches no real stamp, so the first launch after
+  /// upgrading re-seeds once and records the stamp — the existing rows stay
+  /// valid either way, so there is nothing to backfill.
+  ///
+  /// Slot 138, not 136 or 137: `feat/collections-feature` holds BOTH of those,
+  /// committed. The worktree scan in RA_IMPROVEMENT_PLAN.md missed its 137
+  /// because it fed `sort -n` output to `comm`, which needs lexicographic
+  /// order — the snippet has been corrected. Gaps are normal here: main already
+  /// skips 129/132/133.
+  static Future<void> _migrateToVersion138(Database db) async {
+    _log.i('Migration v138: Add ra_seed_stamp to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toSet();
+
+      if (!columns.contains('ra_seed_stamp')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN ra_seed_stamp TEXT DEFAULT ''",
+        );
+        _log.i('Column ra_seed_stamp added to user_config');
+      } else {
+        _log.i('Column ra_seed_stamp already exists');
+      }
+
+      _log.i('Migration v138 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v138: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Drops the RetroAchievements hash for ROMs in the hack folders whose
+  /// algorithm v130 corrects, so the match pass hashes them again.
+  ///
+  /// `nes-hacks`, `snes-hacks` and `sfc-hacks` were in none of the three
+  /// hardcoded lists the policy replaces, so their ROMs were hashed as whole
+  /// files — headers included — and could never match. The bulk pass only walks
+  /// ROMs with no hash, so without this the correction would reach only ROMs
+  /// added after the update, which is the refresh gap that makes a bad cached
+  /// match permanent.
+  ///
+  /// The folder list is a statement about history, not a policy: these are the
+  /// folders whose stored hashes are known wrong. The live policy lives in
+  /// `assets/systems/<sys>.json`, and this migration runs before `syncSystems`
+  /// has written it, so it could not read it even if it wanted to.
+  ///
+  /// A hand-picked match is left alone — the user's choice outranks any
+  /// automatic answer.
+  static void _clearStaleHackHashes(Database db) {
+    const folders = ['nes-hacks', 'snes-hacks', 'sfc-hacks'];
+
+    final romColumns = db
+        .select('PRAGMA table_info(user_roms)')
+        .map((c) => c['name'].toString())
+        .toSet();
+    if (!romColumns.contains('ra_hash')) return;
+
+    final placeholders = List.filled(folders.length, '?').join(', ');
+    final manualGuard = romColumns.contains('ra_match_source')
+        ? "AND (ra_match_source IS NULL OR ra_match_source != 'manual')"
+        : '';
+    final skipClear = romColumns.contains('ra_hash_skipped')
+        ? ', ra_hash_skipped = NULL'
+        : '';
+
+    db.execute('''
+      UPDATE user_roms
+      SET ra_hash = NULL, id_ra = NULL$skipClear
+      WHERE ra_hash IS NOT NULL AND ra_hash != ''
+        $manualGuard
+        AND app_system_id IN (
+          SELECT id FROM app_systems WHERE folder_name IN ($placeholders)
+        )
+    ''', folders);
+
+    final cleared = db.select('SELECT changes() AS n').first['n'];
+    if ((cleared as int) > 0) {
+      _log.i('v130: cleared $cleared stale hack-folder hashes for re-matching');
+    }
+  }
+
+  /// Migration v134: reopens disc ROMs now that they can be hashed properly.
+  ///
+  /// Adds no column. Everything a disc system has stored so far is wrong or
+  /// absent: ROMs the bulk pass reached were parked with `ra_hash_skipped =
+  /// 'disc'`, and the handful the lazy path hashed before that carry a
+  /// whole-file MD5 of the container, which RetroAchievements has never
+  /// registered for anything. Neither state would ever be revisited — the pass
+  /// walks ROMs with no hash and skips parked ones — so the disc support this
+  /// migration accompanies would reach only newly added ROMs without it.
+  static Future<void> _migrateToVersion134(Database db) async {
+    _log.i('Migration v134: Reopening disc ROMs for re-matching');
+    try {
+      final romColumns = db
+          .select('PRAGMA table_info(user_roms)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!romColumns.contains('ra_hash')) {
+        _log.i('v134: user_roms has no ra_hash yet, nothing to reopen');
+        return;
+      }
+
+      final manualGuard = romColumns.contains('ra_match_source')
+          ? "AND (ra_match_source IS NULL OR ra_match_source != 'manual')"
+          : '';
+
+      if (romColumns.contains('ra_hash_skipped')) {
+        db.execute('''
+          UPDATE user_roms SET ra_hash_skipped = NULL
+          WHERE ra_hash_skipped = 'disc'
+        ''');
+        final reopened = db.select('SELECT changes() AS n').first['n'] as int;
+        if (reopened > 0) {
+          _log.i('v134: reopened $reopened ROMs parked as unhashable discs');
+        }
+      }
+
+      // The folders whose stored hashes are known wrong, which is a statement
+      // about history rather than a policy: the live policy is in
+      // `assets/systems/<sys>.json`, and this runs before `syncSystems` has
+      // written it. A hand-picked match outranks any automatic answer.
+      const folders = ['ps1', 'ps2', 'psp', 'scd', 'sat', 'pccd', 'tgcd'];
+      final placeholders = List.filled(folders.length, '?').join(', ');
+      db.execute('''
+        UPDATE user_roms
+        SET ra_hash = NULL, id_ra = NULL
+        WHERE ra_hash IS NOT NULL AND ra_hash != ''
+          $manualGuard
+          AND app_system_id IN (
+            SELECT id FROM app_systems WHERE folder_name IN ($placeholders)
+          )
+      ''', folders);
+
+      final cleared = db.select('SELECT changes() AS n').first['n'] as int;
+      if (cleared > 0) {
+        _log.i('v134: cleared $cleared container hashes from disc systems');
+      }
+
+      _log.i('Migration v134 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v134: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v141: Adds `user_config.ra_match_on_startup`, the opt-in for
+  /// running the RetroAchievements match pass after the startup folder scan.
+  ///
+  /// Defaults to 0 — off. On a library that has never been matched the first
+  /// pass hashes every ROM, which takes minutes; that is a cost the user opts
+  /// into, not one imposed on an upgrade.
+  ///
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion141(Database db) async {
+    _log.i('Migration v141: Adding ra_match_on_startup to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('ra_match_on_startup')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN ra_match_on_startup '
+          'INTEGER DEFAULT 0',
+        );
+        _log.i('Column ra_match_on_startup added via v141');
+      } else {
+        _log.i('Column ra_match_on_startup already exists');
+      }
+      _log.i('Migration v141 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v141: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v144: reopens disc ROMs parked while the CHD reader misread
+  /// cooked tracks.
+  ///
+  /// Adds no column. A CHD written by `chdman createcd` from a `.iso` holds
+  /// one `MODE1` track whose frames are user data from byte zero, and the
+  /// reader stepped over a 16-byte sector header that is not there. Every
+  /// lookup on such a disc missed, the hash came back null, and the ROM was
+  /// parked with `ra_hash_skipped = 'error'` — which the match pass then walks
+  /// past for good. That is most of a PlayStation 2 library.
+  ///
+  /// Scoped to the disc systems, because `'error'` is the bulk pass's general
+  /// bucket and a cartridge parked under it failed for some other reason. The
+  /// folder list is a statement about history rather than policy — the live
+  /// policy is in `assets/systems/<sys>.json`, and this runs before
+  /// `syncSystems` has written it.
+  static Future<void> _migrateToVersion144(Database db) async {
+    _log.i('Migration v144: Reopening disc ROMs parked by the CHD reader');
+    try {
+      final romColumns = db
+          .select('PRAGMA table_info(user_roms)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!romColumns.contains('ra_hash_skipped')) {
+        _log.i('v144: user_roms has no ra_hash_skipped yet, nothing to reopen');
+        return;
+      }
+
+      const folders = ['ps1', 'ps2', 'psp', 'scd', 'sat', 'pccd', 'tgcd'];
+      final placeholders = List.filled(folders.length, '?').join(', ');
+      db.execute('''
+        UPDATE user_roms SET ra_hash_skipped = NULL
+        WHERE ra_hash_skipped IN ('error', 'disc')
+          AND app_system_id IN (
+            SELECT id FROM app_systems WHERE folder_name IN ($placeholders)
+          )
+      ''', folders);
+
+      final reopened = db.select('SELECT changes() AS n').first['n'] as int;
+      if (reopened > 0) {
+        _log.i('v144: reopened $reopened disc ROMs for re-matching');
+      }
+
+      _log.i('Migration v144 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v144: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

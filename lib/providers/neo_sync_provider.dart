@@ -6,6 +6,7 @@ import 'package:neostation/services/logger_service.dart';
 import '../services/neosync/neo_sync_service.dart';
 import '../services/neosync/auth_service.dart';
 import '../models/neo_sync_models.dart';
+import '../models/sync_models.dart';
 import '../widgets/quota_exceeded_dialog.dart';
 import '../models/neo_sync_models.dart' as neo_sync;
 import '../models/system_model.dart';
@@ -16,8 +17,12 @@ import '../repositories/system_repository.dart';
 import '../repositories/sync_repository.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/emulator_repository.dart';
+import '../repositories/neosync_save_folder_repository.dart';
+import '../data/datasources/sqlite_service.dart';
+import '../utils/cloud_path_builder.dart';
 import '../services/config_service.dart';
 import '../services/retroarch_config_service.dart';
+import '../services/retroachievements_hash_service.dart';
 
 part 'neosync/neosync_exceptions.dart';
 part 'neosync/neosync_status.dart';
@@ -32,14 +37,62 @@ part 'neosync/neosync_core.dart';
 /// tracking, and per-game sync status. Splitted into multiple part files to
 /// manage the complexity of filesystem resolution and network operations.
 class NeoSyncProvider extends ChangeNotifier {
+  /// Provider identity used to key rows in `app_neo_sync_state`. Historical
+  /// rows (written before the table was provider-scoped) are attributed to
+  /// NeoSync by migration v99, so this value must stay 'neosync'.
+  static const String kSyncProviderId = 'neosync';
+
   /// Local cache of user files currently stored in the cloud.
   List<NeoSyncFile> _onlineFiles = [];
 
   /// Whether a network request to fetch the cloud file list is active.
   bool _isLoadingOnlineFiles = false;
 
+  /// Total number of online files matching the active filter.
+  int _onlineTotal = 0;
+
+  /// Per-kind breakdown (game_saves/states/shared) of the filtered set.
+  Map<String, dynamic>? _onlineCounts;
+
+  /// Distinct system names offered by the online filter controls.
+  List<String> _onlineSystems = [];
+
+  /// Distinct emulator names offered by the online filter controls.
+  List<String> _onlineEmulators = [];
+
+  /// Current page of the online file list (1-based).
+  int _onlinePage = 1;
+
+  /// Number of files requested per online page.
+  static const int _onlinePageSize = 50;
+
+  /// Active filter for the online file list.
+  NeoSyncFileFilter _onlineFilter = const NeoSyncFileFilter(
+    sort: 'modified',
+    dir: 'desc',
+  );
+
+  /// Monotonic token that invalidates stale async online list loads.
+  int _onlineLoadGeneration = 0;
+
   List<NeoSyncFile> get onlineFiles => _onlineFiles;
   bool get isLoadingOnlineFiles => _isLoadingOnlineFiles;
+  int get onlineTotal => _onlineTotal;
+  Map<String, dynamic>? get onlineCounts => _onlineCounts;
+  List<String> get onlineSystems => _onlineSystems;
+  List<String> get onlineEmulators => _onlineEmulators;
+  int get onlinePage => _onlinePage;
+  int get onlinePageSize => _onlinePageSize;
+  NeoSyncFileFilter get onlineFilter => _onlineFilter;
+
+  /// Total pages for the current filter, always at least 1.
+  int get onlineTotalPages {
+    final pages = (_onlineTotal / _onlinePageSize).ceil();
+    return pages < 1 ? 1 : pages;
+  }
+
+  bool get hasOnlineNext => _onlinePage < onlineTotalPages;
+  bool get hasOnlinePrevious => _onlinePage > 1;
 
   static final _log = LoggerService.instance;
 
@@ -86,6 +139,13 @@ class NeoSyncProvider extends ChangeNotifier {
 
   /// Consecutive failed upload attempts due to storage quota limits.
   int _quotaExceededAttempts = 0;
+
+  /// Active pre-launch deadline, set for the duration of
+  /// [syncGameSavesBeforeLaunch]. When expired, [_downloadCloudFile] abandons
+  /// its write so a late download can't clobber a save the emulator already
+  /// has open. Null outside the pre-launch path (background syncs are
+  /// unaffected).
+  SyncDeadline? _launchDeadline;
 
   /// Whether the user has already been notified of a quota issue in the current session.
   bool _quotaExceededDialogShown = false;
@@ -208,12 +268,24 @@ class NeoSyncProvider extends ChangeNotifier {
   Future<void> _downloadCloudFile(NeoSyncFile cloudFile, File localFile) async {
     final result = await _neoSyncService.downloadFile(cloudFile.id);
     if (result['success'] == true && result['data'] != null) {
+      // Pre-launch deadline guard: the network fetch is done, but if the
+      // launch-blocking wait has already elapsed the game is running on the
+      // local save. Abandon before any write so we never clobber the file the
+      // emulator now has open or record bogus sync state.
+      if (_launchDeadline?.isExpired ?? false) {
+        _log.i(
+          'Abandoning download of ${cloudFile.fileName} (launch deadline passed)',
+        );
+        return;
+      }
+
       final bytes = result['data'] as List<int>;
       await localFile.writeAsBytes(bytes);
 
       try {
         final stat = await localFile.stat();
         await SyncRepository.saveSyncState(
+          kSyncProviderId,
           localFile.path,
           stat.modified.millisecondsSinceEpoch,
           cloudFile.fileModifiedAtTimestamp ?? 0,

@@ -30,6 +30,11 @@ This project includes or depends on the following third-party software:
 - 7-Zip / LZMA SDK (via flutter_7zip FFI bindings)
   See: packages/flutter_7zip/LICENSE
 
+- libchdr (via flutter_chd FFI bindings), together with the LZMA SDK,
+  miniz and Zstandard decoders it vendors
+  See: packages/flutter_chd/LICENSE
+  See: packages/flutter_chd/src/libchdr/deps
+
 For full attribution and licensing details of all dependencies,
 please refer to the respective package repositories and license files.
 

@@ -607,7 +607,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
     return Container(
       padding: EdgeInsets.all(16.r),
       decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.25),
+        color: theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(12.r),
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.2),
@@ -632,7 +632,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
                         : _showResetPassword
                         ? AppLocale.resetPassword.getString(context)
                         : (_isLogin
-                              ? 'NeoSync'
+                              ? AppLocale.neoSyncLogin.getString(context)
                               : AppLocale.joinNeoSync.getString(context)),
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -643,7 +643,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
                 ),
               ],
             ),
-            SizedBox(height: 6.r),
+            SizedBox(height: 12.r),
 
             if (_showResetPassword) ...[
               _buildResetPasswordForm(context),
@@ -797,8 +797,8 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
                               _obscurePassword
                                   ? Symbols.visibility_rounded
                                   : Symbols.visibility_off_rounded,
-                              size: 16.r,
-                              color: theme.colorScheme.primary.withValues(
+                              size: 18.r,
+                              color: theme.colorScheme.onSurface.withValues(
                                 alpha: 0.5,
                               ),
                             ),
@@ -890,7 +890,14 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
 
   // Wraps a field with the gamepad selection highlight border
   Widget _buildFieldHighlight({required int slot, required Widget child}) {
-    if (!isSelected(slot)) return child;
+    // 220.r is the field width shared with the RetroAchievements, ScreenScraper
+    // and RomM login forms, which constrain each field container individually.
+    // Applying it here covers every field in this form from one place.
+    final field = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: 220.r),
+      child: child,
+    );
+    if (!isSelected(slot)) return field;
     final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
@@ -903,7 +910,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
           ),
         ],
       ),
-      child: child,
+      child: field,
     );
   }
 
@@ -985,6 +992,16 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
           : null,
       child: TextButton(
         onPressed: onPressed,
+        // Callers box these at 24.r. A TextButton's default 8+8 padding and
+        // 36px minimum leave less than a line of room inside that at RG DS
+        // scale (where .r is 1.0), which clipped the glyphs top and bottom;
+        // the Thor's ~3x scale hid it. Shrink the chrome so the label fits at
+        // every scale.
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
         child: Text(
           label,
           style: TextStyle(fontSize: fontSize, color: color),
@@ -1142,8 +1159,8 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
                       _obscurePassword
                           ? Symbols.visibility_rounded
                           : Symbols.visibility_off_rounded,
-                      size: 16.r,
-                      color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                      size: 18.r,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                     onPressed: () {
                       setState(() {

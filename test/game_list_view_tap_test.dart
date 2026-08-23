@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/screens/game_screen/game_list_view.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 GameModel game(String romname, String name) => GameModel(
@@ -76,14 +78,20 @@ void main() {
             localizationsDelegates:
                 FlutterLocalization.instance.localizationsDelegates,
             supportedLocales: FlutterLocalization.instance.supportedLocales,
-            home: Scaffold(
-              body: GameListView(
-                system: _system,
-                games: _games,
-                selectedIndex: selectedIndex,
-                systemColor: Colors.pink,
-                onGameSelected: (g) => selected.add(g.romname),
-                onGameConfirmed: () => confirmed.add(selectedIndex),
+            // The row builder reads the achievements-badge setting off the
+            // config provider, as it does in the app; a default provider leaves
+            // it off, which is also the shipped default.
+            home: ChangeNotifierProvider<SqliteConfigProvider>(
+              create: (_) => SqliteConfigProvider(),
+              child: Scaffold(
+                body: GameListView(
+                  system: _system,
+                  games: _games,
+                  selectedIndex: selectedIndex,
+                  systemColor: Colors.pink,
+                  onGameSelected: (g) => selected.add(g.romname),
+                  onGameConfirmed: () => confirmed.add(selectedIndex),
+                ),
               ),
             ),
           ),

@@ -14,12 +14,17 @@
       "screenscraper": 114,
       "retroachievements": 76
     },
+    "ra_hash": {
+      "algo": "pcecd",
+      "mode": "hash_only"
+    },
     "folders": [
       "pccd",
       "PCEngine CD",
       "NEC PC Engine CD",
       "PCECD",
-      "pcenginecd"
+      "pcenginecd",
+      "turbografx-cd"
     ],
     "colors": [
       "#F5F5F5",

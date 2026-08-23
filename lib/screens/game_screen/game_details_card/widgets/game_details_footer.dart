@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -15,6 +17,7 @@ import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../../../../widgets/marquee_text.dart';
 import '../../music/music_player.dart';
+import 'package:neostation/utils/ra_coverage.dart';
 
 /// A sticky footer component for the game details card that provides actionable controls and status summaries.
 ///
@@ -208,6 +211,12 @@ class GameDetailsFooter extends StatelessWidget {
         final isFocused = Focus.of(context).hasFocus;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
+          // Deliberately a fixed width. The footer row has no slack — the
+          // achievements pill beside it is Expanded, so anything this button
+          // takes comes straight out of that pill (at 104.r it is already only
+          // ~97.r wide on a 640x480-design handheld, just enough for "0/9").
+          // Long labels are absorbed by scaling the text down, not by growing
+          // the button; see the FittedBox below.
           width: 104.r,
           height: 45.r,
           decoration: BoxDecoration(
@@ -255,14 +264,28 @@ class GameDetailsFooter extends StatelessWidget {
                       color: Theme.of(context).colorScheme.onPrimary,
                     ),
                     SizedBox(width: 8.r),
-                    Text(
-                      AppLocale.playButton.getString(context),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onPrimary,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14.r,
-                        letterSpacing: 1.5,
-                        height: 1.0,
+                    // The label is localized and the button is a fixed width,
+                    // so only "PLAY" fits at the full 14.r: "SPIELEN",
+                    // "ИГРАТЬ" and "开始游戏" used to render past the pill's
+                    // right edge and off the screen. scaleDown shrinks just
+                    // those to fit — it never scales up, so every label that
+                    // already fit is untouched — and keeps the button's
+                    // footprint constant so the pills beside it don't move.
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          AppLocale.playButton.getString(context),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14.r,
+                            letterSpacing: 1.5,
+                            height: 1.0,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -283,25 +306,45 @@ class GameDetailsFooter extends StatelessWidget {
   }) {
     if (!hasRetroAchievements) return const SizedBox.shrink();
 
+    // Signed out, nothing ever loads achievement data, so the badge below
+    // would settle on its "none" state for every game and claim the game has
+    // no achievements when the truth is that nobody asked.
+    if (!context.select<RetroAchievementsProvider, bool>(
+      (ra) => ra.isConnected,
+    )) {
+      return const SizedBox.shrink();
+    }
+
     // The badge fills its (Expanded) slot when the legend is hidden, or when
     // there is no play-time pill claiming the space to its right (otherwise it
     // would leave dead space between itself and PLAY). When neither applies it
     // rests at 120.r. The width is animated so toggling eases in/out.
     final bool legendHidden = GameLegendVisibility.hidden.value;
     final bool expand = legendHidden || !hasPlayTime;
-    final bool noAchievements =
-        !isLoadingAchievements &&
-        (currentGameInfo == null || currentGameInfo!.numAchievements == 0);
+    // The bundled snapshot already records how many achievements a matched
+    // game has, so the total costs no network call — only the user's earned
+    // count does. See _CompactAchievementsIndicator, which does the same.
+    final int localTotal = game.raCoverage == RaCoverage.matched
+        ? (game.raNumAchievements ?? 0)
+        : 0;
+    final int total = currentGameInfo?.numAchievements ?? localTotal;
+    final int? awarded = currentGameInfo?.numAwardedToUser;
+    final bool knowsProgress = awarded != null && currentGameInfo != null;
 
-    final int awarded = currentGameInfo?.numAwardedToUser ?? 0;
-    final int total = currentGameInfo?.numAchievements ?? 0;
-    final double progress = total > 0 ? awarded / total : 0.0;
+    final bool noAchievements = !isLoadingAchievements && total == 0;
 
-    final String progressText = isLoadingAchievements
-        ? AppLocale.loading.getString(context)
-        : (noAchievements
-              ? AppLocale.noAchievements.getString(context)
-              : '$awarded/$total');
+    // A dash rather than a zero while the earned count is outstanding.
+    final String progressText = total > 0
+        ? (knowsProgress ? '$awarded/$total' : '\u2013/$total')
+        : (isLoadingAchievements
+              ? AppLocale.loading.getString(context)
+              : AppLocale.noAchievements.getString(context));
+
+    // Indeterminate only while something is genuinely outstanding; a settled
+    // "no achievements" gets an empty, still bar. See the compact pill.
+    final double? progress = knowsProgress && total > 0
+        ? awarded / total
+        : (total > 0 || isLoadingAchievements ? null : 0.0);
 
     final theme = Theme.of(context);
     final Color statusColor = noAchievements
@@ -425,7 +468,7 @@ class GameDetailsFooter extends StatelessWidget {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(4.r),
                           child: LinearProgressIndicator(
-                            value: isLoadingAchievements ? null : progress,
+                            value: progress,
                             minHeight: 5.r,
                             backgroundColor: theme.colorScheme.onSurface
                                 .withValues(alpha: 0.1),

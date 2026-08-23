@@ -183,6 +183,18 @@ class GameRepository {
   static Future<void> updatePlayTime(String romPath, int seconds) =>
       SqliteService.updatePlayTime(romPath, seconds);
 
+  /// Folds playtime played on another device (pulled from a cloud provider)
+  /// into a game's total, without stamping `last_played` as "now".
+  static Future<void> applyRemotePlayTime(
+    String romPath,
+    int seconds, {
+    DateTime? remoteLastPlayed,
+  }) => SqliteService.applyRemotePlayTime(
+    romPath,
+    seconds,
+    remoteLastPlayed: remoteLastPlayed,
+  );
+
   static Future<void> toggleRomFavoriteByPath(String romPath) =>
       SqliteService.toggleRomFavorite(romPath);
 
@@ -239,22 +251,47 @@ class GameRepository {
     return result.isNotEmpty ? Map<String, dynamic>.from(result.first) : null;
   }
 
-  /// Finds a ROM by filename prefix and returns {filename, title_name, folder_name} or null.
+  /// Finds a ROM by filename prefix and returns
+  /// {filename, title_name, folder_name, emulator_name, rom_path} or null.
   static Future<Map<String, dynamic>?> findRomByFilenamePrefix(
     String prefix,
   ) async {
     final db = await SqliteService.getDatabase();
     final result = await db.rawQuery(
       '''
-      SELECT ur.filename, ur.title_name, s.folder_name
+      SELECT ur.filename, ur.title_name, s.folder_name,
+        ur.app_emulator_unique_id as emulator_name, ur.rom_path
       FROM user_roms ur
       JOIN app_systems s ON ur.app_system_id = s.id
       WHERE ur.filename LIKE ?
+      ORDER BY LENGTH(ur.filename) ASC, ur.filename ASC
       LIMIT 1
       ''',
       ['$prefix%'],
     );
     return result.isNotEmpty ? Map<String, dynamic>.from(result.first) : null;
+  }
+
+  /// Finds the ROM a RetroArch save name belongs to, or null.
+  ///
+  /// RetroArch names saves after the *loaded content*, so a save like
+  /// `Game (USA).srm` can come from a ROM stored as `Game.zip` (the zip holds
+  /// `Game (USA).sfc`). A plain prefix match would miss it, so the save base
+  /// name is progressively shortened at region/edition markers (`(`, `[`)
+  /// until a ROM prefix matches (e.g. `Game (USA)` -> `Game` -> `Game.zip`).
+  static Future<Map<String, dynamic>?> findRomForSaveName(
+    String saveBaseName,
+  ) async {
+    var candidate = saveBaseName.trim();
+    while (candidate.isNotEmpty) {
+      final row = await findRomByFilenamePrefix(candidate);
+      if (row != null) return row;
+      final marker = RegExp(r'^(.*?)\s*[\(\[].*$').firstMatch(candidate);
+      final next = marker?.group(1)?.trim() ?? '';
+      if (next.isEmpty || next == candidate) break;
+      candidate = next;
+    }
+    return null;
   }
 
   /// Finds a Switch ROM by [titleId]. Returns {filename, title_name} or null.
@@ -316,6 +353,30 @@ class GameRepository {
     romname,
     enabled,
   );
+
+  /// Hides or unhides a ROM. Hidden games stay in the database — only the
+  /// game lists filter them out.
+  static Future<void> setGameHidden(
+    String systemFolderName,
+    String romname,
+    bool hidden,
+  ) => SqliteService.setRomHidden(systemFolderName, romname, hidden);
+
+  /// Returns the hidden games of [systemId], or of the whole library when
+  /// [systemId] is null.
+  static Future<List<DatabaseGameModel>> getHiddenGames({String? systemId}) =>
+      SqliteService.getHiddenGames(systemId: systemId);
+
+  /// Restores every hidden game of [systemId].
+  static Future<void> unhideAllGamesForSystem(String systemId) =>
+      SqliteService.unhideAllRomsForSystem(systemId);
+
+  /// Restores every hidden game across all systems.
+  static Future<void> unhideAllGames() => SqliteService.unhideAllRoms();
+
+  /// Returns the number of hidden games per system id.
+  static Future<Map<String, int>> getHiddenRomCountsBySystem() =>
+      SqliteService.getHiddenRomCountsBySystem();
 
   /// Resets play time and last played timestamp for a ROM.
   static Future<void> resetPlayTime(String systemFolderName, String romname) =>

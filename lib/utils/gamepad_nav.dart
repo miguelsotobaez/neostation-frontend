@@ -149,8 +149,10 @@ class GamepadNavigation {
   /// new tap rather than continuing a hold.
   static bool _shoulderReleasedSinceDispatch = true;
 
-  /// Cadence at which a HELD bumper walks the tabs (~3 tabs/second).
-  static const int _shoulderRepeatIntervalMs = 300;
+  /// Cadence at which a HELD bumper walks the tabs (~4 tabs/second). Fast
+  /// enough to cross the tab bar in one hold, still slow enough to release on
+  /// the tab you want.
+  static const int _shoulderRepeatIntervalMs = 255;
 
   /// Debounce between two separate bumper TAPS. Short, so deliberate rapid
   /// taps to skip several tabs all register.
@@ -159,6 +161,53 @@ class GamepadNavigation {
   /// Safety net for a dropped release: a gap this long means the button can't
   /// still be held, so the next press counts as a fresh tap regardless.
   static const int _shoulderHoldLapsedMs = 500;
+
+  // ---------------------------------------------------------------------
+  // Desktop (Linux/Windows/macOS) synthetic shoulder repeat.
+  //
+  // The pacing above assumes the platform re-delivers a held bumper. Only
+  // Android does: the Linux joystick API (`/dev/input/jsX`, see the vendored
+  // gamepads_linux plugin) and the Windows/macOS backends report STATE CHANGES
+  // only, so a held bumper is one press event and nothing more until release.
+  // With nothing to pace, a hold moved exactly one tab and every tab needed its
+  // own press — the Steam Deck symptom. Synthesize the repeat stream with a
+  // timer instead, matching the Android cadence.
+  //
+  // The timer is STATIC for the same reason the pacing is: switching a tab
+  // rebuilds the navigation layer, so the instance that saw the press is
+  // deactivated long before the hold ends. Ticks are dispatched to whichever
+  // layer is active at the time via [_activeNavigator].
+  // ---------------------------------------------------------------------
+
+  /// Navigator currently receiving input, i.e. the layer a synthetic shoulder
+  /// repeat should be dispatched to.
+  static GamepadNavigation? _activeNavigator;
+
+  /// Running synthetic repeat for a held bumper on desktop.
+  static Timer? _shoulderHoldTimer;
+
+  /// Which bumper the synthetic repeat is walking with.
+  static GamepadInputType? _shoulderHoldInput;
+
+  /// Raw key + gamepad that started the hold. The release is matched on the RAW
+  /// key rather than a translated event because a tab switch clears the new
+  /// layer's translator state, so the release reads as "no edge" there and is
+  /// dropped — the same trap the Android release check at [_handleGamepadEvent]
+  /// works around. Matching the raw key needs no mapping and cannot miss.
+  static String? _shoulderHoldRawKey;
+  static String? _shoulderHoldGamepadId;
+
+  /// When the current synthetic hold started, for [_shoulderHoldMaxMs].
+  static DateTime? _shoulderHoldStartedAt;
+
+  /// How long a bumper must stay down before the synthetic repeat kicks in.
+  /// Longer than [_shoulderTapDebounceMs] so a normal tap never repeats.
+  static const Duration _shoulderHoldStartDelay = Duration(milliseconds: 400);
+
+  /// Hard stop for a synthetic hold. Nothing on the app side can prove the
+  /// button is still down, so if the release is ever lost the tabs would cycle
+  /// forever; this bounds the damage to a few seconds.
+  static const int _shoulderHoldMaxMs = 10000;
 
   /// Debounce duration for action buttons to prevent double-presses.
   static const int _actionDebounceMs = 128;
@@ -408,6 +457,9 @@ class GamepadNavigation {
   void activate() {
     final wasInactive = !_isActive;
     _isActive = true;
+    // Take over any synthetic shoulder repeat still running from the layer we
+    // just displaced, so a hold keeps walking tabs across the switch.
+    _activeNavigator = this;
 
     // Start grace period only on true transitions to prevent discarding mid-flight release events.
     if (wasInactive) {
@@ -433,6 +485,10 @@ class GamepadNavigation {
     _activationTime = null;
     _resetSelectModifier();
     cancelAllRepeatTimers();
+    // Leave [_shoulderHoldTimer] alone: a tab switch deactivates this layer
+    // while the bumper is still physically down, and the next layer picks the
+    // hold up. Only the release (or the safety cap) ends it.
+    if (identical(_activeNavigator, this)) _activeNavigator = null;
   }
 
   /// Clears Select chord-modifier state so it can't leak across layer changes
@@ -548,6 +604,10 @@ class GamepadNavigation {
     _subscription = null;
     _resetSelectModifier();
     cancelAllRepeatTimers();
+    if (identical(_activeNavigator, this)) {
+      _activeNavigator = null;
+      _stopShoulderHold();
+    }
 
     if (_keyboardInitialized && isDesktop) {
       ServicesBinding.instance.keyboard.removeHandler(_handleKeyEvent);
@@ -572,6 +632,13 @@ class GamepadNavigation {
 
   /// Orchestrates the processing of a raw [GamepadEvent].
   void _handleGamepadEvent(GamepadEvent event) async {
+    // Ends a synthetic shoulder repeat. Deliberately ahead of the active check:
+    // every navigator subscribes to the raw stream, and the release that ends a
+    // hold can land while this layer is the deactivated one (mid tab switch, or
+    // after a game launch deactivated everything). Dropping it there would
+    // leave the tabs cycling until the safety cap.
+    _checkShoulderHoldRelease(event);
+
     if (!_isActive) return;
 
     // NOTE: the reactivation grace period is applied AFTER translation (see
@@ -915,21 +982,8 @@ class GamepadNavigation {
       // top): a plain tap fires onSelectButton on release, combos fire on press.
 
       case GamepadInputType.buttonLB:
-        SfxService().playNavSound();
-        if (onLeftBumper != null) {
-          onLeftBumper!.call();
-        } else {
-          onPreviousTab?.call();
-        }
-        break;
-
       case GamepadInputType.buttonRB:
-        SfxService().playNavSound();
-        if (onRightBumper != null) {
-          onRightBumper!.call();
-        } else {
-          onNextTab?.call();
-        }
+        if (_dispatchShoulder(event.inputType)) _startShoulderHold(event);
         break;
 
       // L3 (left stick click) only — the UI hint shows the Left-Stick-Click
@@ -1069,16 +1123,13 @@ class GamepadNavigation {
       }
       handled = true;
     } else if (key == LogicalKeyboardKey.keyQ) {
-      if (isKeyDown) {
-        SfxService().playNavSound();
-        onPreviousTab?.call();
-      }
+      // Q/E are the keyboard's bumpers, so they go through the same dispatch:
+      // it honours a screen's bumper override and stays silent where the
+      // screen binds nothing.
+      if (isKeyDown) _dispatchShoulder(GamepadInputType.buttonLB);
       handled = true;
     } else if (key == LogicalKeyboardKey.keyE) {
-      if (isKeyDown) {
-        SfxService().playNavSound();
-        onNextTab?.call();
-      }
+      if (isKeyDown) _dispatchShoulder(GamepadInputType.buttonRB);
       handled = true;
     } else if (key == LogicalKeyboardKey.enter) {
       if (isKeyDown) {
@@ -1298,6 +1349,88 @@ class GamepadNavigation {
   void _stopRepeatTimer(dynamic key) {
     _repeatTimers[key]?.cancel();
     _repeatTimers.remove(key);
+  }
+
+  /// Walks one tab for [input], honouring the per-screen bumper overrides.
+  ///
+  /// Screens that bind neither the override nor the tab walk (the games grid
+  /// and carousel) stay silent rather than clicking: a nav sound with nothing
+  /// behind it is what made the carousel's dead bumpers read as a frozen
+  /// screen rather than an unbound button.
+  /// Returns whether anything was bound to walk, so an unbound bumper does not
+  /// start a hold-repeat that would fire into the void.
+  bool _dispatchShoulder(GamepadInputType input) {
+    final action = input == GamepadInputType.buttonLB
+        ? (onLeftBumper ?? onPreviousTab)
+        : (onRightBumper ?? onNextTab);
+    if (action == null) return false;
+
+    SfxService().playNavSound();
+    action();
+    return true;
+  }
+
+  /// Starts the synthetic repeat for a bumper held on desktop.
+  ///
+  /// No-op on Android, where the platform already delivers the hold as a stream
+  /// of auto-repeat presses that the pacing in [_handleGamepadEvent] throttles.
+  void _startShoulderHold(TranslatedGamepadEvent event) {
+    if (isAndroid) return;
+
+    _stopShoulderHold();
+    _shoulderHoldInput = event.inputType;
+    _shoulderHoldRawKey = event.originalKey.toLowerCase();
+    _shoulderHoldGamepadId = event.gamepadId;
+    _shoulderHoldStartedAt = DateTime.now();
+
+    void schedule(Duration delay) {
+      _shoulderHoldTimer = Timer(delay, () {
+        final startedAt = _shoulderHoldStartedAt;
+        final input = _shoulderHoldInput;
+        if (startedAt == null || input == null) return;
+
+        if (DateTime.now().difference(startedAt).inMilliseconds >
+            _shoulderHoldMaxMs) {
+          _stopShoulderHold();
+          return;
+        }
+
+        // Mid tab switch the old layer is already deactivated and the new one
+        // is pushed a frame later, so a tick can land with nothing active.
+        // Skip it and keep the hold alive rather than ending it early.
+        _activeNavigator?._dispatchShoulder(input);
+        schedule(const Duration(milliseconds: _shoulderRepeatIntervalMs));
+      });
+    }
+
+    schedule(_shoulderHoldStartDelay);
+  }
+
+  /// Ends the synthetic repeat when the raw event is the release of the bumper
+  /// that started it. Matching on the raw key sidesteps translated-release
+  /// detection, which a layer swap breaks.
+  static void _checkShoulderHoldRelease(GamepadEvent event) {
+    if (_shoulderHoldTimer == null) return;
+    if (event.gamepadId != _shoulderHoldGamepadId) return;
+    if (event.key.toLowerCase() != _shoulderHoldRawKey) return;
+    // Desktop reports buttons unencoded: non-zero is down, zero is up.
+    if (event.value > 0.5) return;
+    // A raw release is proof the hold ended, so the next press is a fresh tap.
+    // The translated release this normally comes from is lost whenever the tab
+    // switch rebuilt the layer, which would pace a deliberate second tap as if
+    // it were still a hold.
+    _shoulderReleasedSinceDispatch = true;
+    _stopShoulderHold();
+  }
+
+  /// Cancels the synthetic shoulder repeat and clears its tracking state.
+  static void _stopShoulderHold() {
+    _shoulderHoldTimer?.cancel();
+    _shoulderHoldTimer = null;
+    _shoulderHoldInput = null;
+    _shoulderHoldRawKey = null;
+    _shoulderHoldGamepadId = null;
+    _shoulderHoldStartedAt = null;
   }
 }
 

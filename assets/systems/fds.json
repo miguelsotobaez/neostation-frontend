@@ -12,7 +12,11 @@
     },
     "ids": {
       "screenscraper": 106,
-      "retroachievements": 7
+      "retroachievements": 81
+    },
+    "ra_hash": {
+      "algo": "nes",
+      "mode": "filename_fallback"
     },
     "folders": [
       "fds",

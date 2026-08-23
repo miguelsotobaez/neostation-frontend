@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
+import 'package:neostation/data/datasources/sqlite_migrations.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 
 /// Helper for setting up an in-memory SQLite database for repository tests.
@@ -35,6 +36,8 @@ class DatabaseTestHelper {
         folder_name TEXT,
         screenscraper_id INTEGER,
         ra_id TEXT,
+        ra_hash_algo TEXT,
+        ra_hash_mode TEXT,
         short_name TEXT,
         description TEXT,
         launch_date TEXT,
@@ -76,8 +79,14 @@ class DatabaseTestHelper {
         app_system_id TEXT,
         ra_hash TEXT,
         ss_hash TEXT,
+        rom_crc32 TEXT,
+        rom_size INTEGER,
+        rom_fingerprint_skipped TEXT,
         id_ra INTEGER,
+        ra_match_source TEXT,
+        ra_hash_skipped TEXT,
         is_favorite INTEGER DEFAULT 0,
+        is_hidden INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,
         last_played TEXT,
         cloud_sync_enabled INTEGER DEFAULT 0,
@@ -112,6 +121,7 @@ class DatabaseTestHelper {
         setup_completed INTEGER DEFAULT 0,
         hide_bottom_screen INTEGER DEFAULT 0,
         sfx_enabled INTEGER DEFAULT 1,
+        sfx_volume REAL DEFAULT 0.75,
         system_sort_by TEXT DEFAULT 'alphabetical',
         system_sort_order TEXT DEFAULT 'asc',
         app_language TEXT DEFAULT 'en',
@@ -134,6 +144,7 @@ class DatabaseTestHelper {
         hide_tab_sync INTEGER DEFAULT 0,
         hide_tab_achievements INTEGER DEFAULT 0,
         hide_tab_scraper INTEGER DEFAULT 0,
+        hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
         game_grid_columns TEXT DEFAULT 'M',
         game_carousel_card_style TEXT DEFAULT 'fanart',
@@ -142,7 +153,9 @@ class DatabaseTestHelper {
         dock_slot_count INTEGER DEFAULT 3,
         now_playing_dim_delay INTEGER DEFAULT 3,
         now_playing_dim_level INTEGER DEFAULT 100,
-        fanart_dim_level INTEGER DEFAULT 25
+        fanart_dim_level INTEGER DEFAULT 25,
+        show_achievements_badge INTEGER DEFAULT 0,
+        ra_match_on_startup INTEGER DEFAULT 0
       )
     ''');
 
@@ -150,6 +163,16 @@ class DatabaseTestHelper {
       CREATE TABLE user_rom_folders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         path TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE user_custom_save_folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        system_folder_name TEXT NOT NULL,
+        emulator_slug TEXT NOT NULL,
+        folder_path TEXT NOT NULL,
+        UNIQUE(system_folder_name, emulator_slug)
       )
     ''');
 
@@ -167,7 +190,8 @@ class DatabaseTestHelper {
         is_default INTEGER,
         is_default_core INTEGER,
         is_default_standalone INTEGER NOT NULL DEFAULT 0,
-        is_ra_compatible INTEGER
+        is_ra_compatible INTEGER,
+        neosync_slug TEXT
       )
     ''');
 
@@ -215,11 +239,18 @@ class DatabaseTestHelper {
 
     await db.execute('''
       CREATE TABLE app_ra_game_list (
+        id INTEGER,
         hash TEXT,
         game_id INTEGER,
         console_id TEXT,
         console_name TEXT,
-        title TEXT
+        title TEXT,
+        image_icon TEXT,
+        num_achievements INTEGER NOT NULL DEFAULT 0,
+        num_leaderboards INTEGER NOT NULL DEFAULT 0,
+        points INTEGER NOT NULL DEFAULT 0,
+        date_modified TEXT,
+        forum_topic_id INTEGER
       )
     ''');
 
@@ -292,15 +323,7 @@ class DatabaseTestHelper {
       )
     ''');
 
-    await db.execute('''
-      CREATE TABLE app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      )
-    ''');
+    await db.execute(SqliteMigrations.createAppNeoSyncStateTableSql);
+    await db.execute(SqliteMigrations.createAppNeoSyncStateIndexSql);
   }
 }

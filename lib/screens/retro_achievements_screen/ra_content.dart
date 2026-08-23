@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:provider/provider.dart';
 import '../../providers/retro_achievements_provider.dart';
+import '../../repositories/retro_achievements_repository.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/custom_notification.dart';
 import '../../responsive.dart';
@@ -60,6 +61,17 @@ class _RAContentState extends State<RAContent>
     attachFocusSelectionListeners();
     _dashboardScrollController.addListener(_releaseLogoutOnScroll);
     _initControllerNavigation();
+    _prefillUsername();
+  }
+
+  /// Pre-populates the username field with the last saved user so the form is
+  /// not blank after a failed auto-login (e.g. when the device is offline).
+  Future<void> _prefillUsername() async {
+    final saved = await RetroAchievementsRepository.getRAUser();
+    if (!mounted || saved == null || saved.isEmpty) return;
+    if (_usernameController.text.isEmpty) {
+      _usernameController.text = saved;
+    }
   }
 
   void _initControllerNavigation() {
@@ -309,6 +321,7 @@ class _RAContentState extends State<RAContent>
               ),
             ),
           ] else ...[
+            if (raProvider.isOffline) _buildOfflineBanner(context),
             Expanded(
               child: RepaintBoundary(
                 child: RADashboardHub(
@@ -319,6 +332,43 @@ class _RAContentState extends State<RAContent>
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Slim banner shown above the dashboard when the session was signed in from
+  /// cached data because the network was unreachable at launch.
+  Widget _buildOfflineBanner(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.r).copyWith(bottom: 8.r),
+      padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10.r),
+        border: Border.all(
+          color: theme.colorScheme.secondary.withValues(alpha: 0.3),
+          width: 1.r,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Symbols.cloud_off_rounded,
+            color: theme.colorScheme.secondary,
+            size: 18.r,
+          ),
+          SizedBox(width: 10.r),
+          Expanded(
+            child: Text(
+              AppLocale.raOfflineBanner.getString(context),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSecondaryContainer,
+                fontSize: 12.r,
+              ),
+            ),
+          ),
         ],
       ),
     );

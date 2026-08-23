@@ -55,6 +55,17 @@ abstract class ISyncProvider {
   Future<SyncResult> login();
 
   /// Clear credentials and end the session.
+  ///
+  /// **Signing a provider out does not release save sync.** A provider cannot
+  /// do that itself: handing ownership back means `SyncManager.setActive`,
+  /// which needs a `persist` callback that lives at the config layer. The
+  /// caller must therefore pair a sign-out with
+  /// `SyncManager.instance.releaseIfActive(providerId, persist: …)`, or the
+  /// signed-out provider keeps owning save sync and every save hook fails
+  /// silently while the other providers sit idle.
+  ///
+  /// Both RomM disconnect paths do this today; this method has no callers at
+  /// all, so nothing currently depends on the pairing being remembered.
   Future<void> logout();
 
   // ── Core Sync Operations ───────────────────────────────────────────────────
@@ -92,11 +103,19 @@ abstract class ISyncProvider {
 
   /// Performs pre-launch synchronization (e.g. download cloud saves before
   /// starting the game).
-  Future<SyncResult> syncGameSavesBeforeLaunch(GameModel game) async =>
-      SyncResult.fail(
-        SyncError.unknown,
-        message: 'syncGameSavesBeforeLaunch not supported by $providerId',
-      );
+  ///
+  /// [deadline] cooperatively bounds the work: the launch caller also applies a
+  /// hard [Future.timeout], but that cannot cancel an in-flight download, so
+  /// implementations must check [SyncDeadline.isExpired] after each network
+  /// fetch and abandon the write (without touching save files or sync state)
+  /// once it expires. See [SyncDeadline].
+  Future<SyncResult> syncGameSavesBeforeLaunch(
+    GameModel game, {
+    SyncDeadline? deadline,
+  }) async => SyncResult.fail(
+    SyncError.unknown,
+    message: 'syncGameSavesBeforeLaunch not supported by $providerId',
+  );
 
   /// Performs post-close synchronization (e.g. upload modified saves after
   /// the game exits).

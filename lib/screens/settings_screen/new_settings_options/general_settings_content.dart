@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,12 +14,15 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/utils/nav_tabs.dart';
 import '../../../providers/sqlite_config_provider.dart';
+import '../../../repositories/retro_achievements_repository.dart';
+import '../../../widgets/info_dialog.dart';
 import '../../../widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
 import 'widgets/setting_row.dart';
 import 'widgets/setting_value_chip.dart';
 import 'widgets/language_picker_overlay.dart';
 import '../../../services/permission_service.dart';
+import '../../../services/sfx_service.dart';
 
 /// A specialized content panel for system-wide configuration, including platform-specific orchestration (Windows/Android/Linux).
 ///
@@ -54,6 +58,14 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
   /// Snaps during rapid D-pad navigation, animates on a single move.
   final AdaptiveScroller _scroller = AdaptiveScroller();
 
+  /// The UI sound volume stops the SFX volume row cycles through, quietest
+  /// first. The last entry is the level the app has always played at.
+  static const List<double> _sfxVolumeCycle = [
+    SfxService.maxVolume / 3,
+    SfxService.maxVolume * 2 / 3,
+    SfxService.maxVolume,
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +75,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
     // Pre-allocate keys for maximum theoretical setting items (the fixed rows
     // plus one per navigation tab that can be toggled).
-    for (int i = 0; i < 14 + NavTab.values.length; i++) {
+    for (int i = 0; i < 15 + NavTab.values.length; i++) {
       _itemKeys.add(GlobalKey());
     }
   }
@@ -167,15 +179,33 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     }
   }
 
+  /// Platform: Android - Triggers the native system settings activity.
+  Future<void> _openSystemSettings() async {
+    if (Platform.isAndroid) {
+      try {
+        const platform = MethodChannel('com.neogamelab.neostation/launcher');
+        await platform.invokeMethod('openSystemSettings');
+      } catch (e) {
+        _log.e('System settings activity could not be resolved: $e');
+      }
+    }
+  }
+
   /// Dynamic Item Resolution: Calculates the total setting items available for the current platform/configuration.
   int getItemCount() {
     int count = 0;
+    if (Platform.isAndroid) {
+      count++; // System Settings
+    }
     count++; // Scan on Startup
     count++; // Ignore hidden files in scan
     count++; // Auto-update App
     count++; // Auto-update Systems
     count++; // SFX Sounds
+    count++; // SFX volume (dimmed, but still navigable, while SFX are off)
     count++; // 12-Hour Clock
+    count++; // Achievement badges on game tiles
+    count++; // Match RetroAchievements on startup
     count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
@@ -194,9 +224,59 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
   }
 
   /// Selection Dispatcher: Executes the action associated with the specified setting index.
+  /// ROMs left to hash before the startup pass is worth warning about.
+  ///
+  /// The pass runs at roughly 20-60 ROMs a second depending on how large the
+  /// files are, so a few hundred is a few seconds and not worth interrupting
+  /// anyone for. Thousands is minutes, and minutes of it is what the Tools
+  /// matcher exists to do properly, with a progress bar and somebody watching.
+  static const int _raBacklogWarnThreshold = 500;
+
+  /// Writes the startup-match toggle, warning first when switching it on would
+  /// leave a large backlog for the next launch.
+  ///
+  /// The toggle is for keeping an already-matched library up to date as ROMs
+  /// are added. Enabling it on a library that has never been matched instead
+  /// hands the next launch the whole job, so this points at the Tools matcher
+  /// rather than letting people discover the cost on their next start. It is
+  /// advice, not a gate: the setting is written either way.
+  Future<void> _setRaMatchOnStartup(bool value) async {
+    final configProvider = context.read<SqliteConfigProvider>();
+    if (!value) {
+      configProvider.updateRaMatchOnStartup(false);
+      return;
+    }
+
+    final coverage = await RetroAchievementsRepository.getRaHashCoverage();
+    final backlog = coverage.eligible - coverage.hashed;
+    if (!mounted) return;
+    configProvider.updateRaMatchOnStartup(true);
+
+    if (backlog < _raBacklogWarnThreshold) return;
+    await InfoDialog.show(
+      context,
+      title: AppLocale.raMatchOnStartup.getString(context),
+      body: AppLocale.raMatchOnStartupBacklogWarning
+          .getString(context)
+          .replaceFirst('{count}', backlog.toString()),
+      okLabel: AppLocale.ok.getString(context),
+      icon: Symbols.trophy_rounded,
+    );
+  }
+
   void selectItem(int index) {
+    SfxService().playNavSound();
     int currentItemIndex = 0;
     final configProvider = context.read<SqliteConfigProvider>();
+
+    // Protocol: Native Android Settings.
+    if (Platform.isAndroid) {
+      if (index == currentItemIndex) {
+        _openSystemSettings();
+        return;
+      }
+      currentItemIndex++;
+    }
 
     // Protocol: Background ROM Scanning.
     if (index == currentItemIndex) {
@@ -238,11 +318,38 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     }
     currentItemIndex++;
 
+    // Protocol: Interface Sound Effects Volume. The row stays navigable while
+    // SFX are off so the setting is still discoverable, but selecting it then
+    // does nothing — there is no level to hear.
+    if (index == currentItemIndex) {
+      if (configProvider.config.sfxEnabled) {
+        _cycleSfxVolume(configProvider);
+      }
+      return;
+    }
+    currentItemIndex++;
+
     // Protocol: 12-Hour Clock Format.
     if (index == currentItemIndex) {
       configProvider.updateUse12HourClock(
         !configProvider.config.use12HourClock,
       );
+      return;
+    }
+    currentItemIndex++;
+
+    // Protocol: Achievement badges on game tiles.
+    if (index == currentItemIndex) {
+      configProvider.updateShowAchievementsBadge(
+        !configProvider.config.showAchievementsBadge,
+      );
+      return;
+    }
+    currentItemIndex++;
+
+    // Protocol: Match RetroAchievements after the startup scan.
+    if (index == currentItemIndex) {
+      _setRaMatchOnStartup(!configProvider.config.raMatchOnStartup);
       return;
     }
     currentItemIndex++;
@@ -313,14 +420,42 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     }
   }
 
+  /// Advances the UI sound volume to the next stop and persists it, wrapping
+  /// round at the loudest. If the stored value isn't on a stop — a database
+  /// written by an older build, or one hand-edited — snaps to the nearest one
+  /// first so the first press is never a silent no-op.
+  void _cycleSfxVolume(SqliteConfigProvider provider) {
+    final current = provider.config.sfxVolume;
+    final index = _sfxVolumeCycle.indexWhere(
+      (stop) => (stop - current).abs() < 0.001,
+    );
+    final next = index < 0
+        ? _sfxVolumeCycle.reduce(
+            (a, b) => (a - current).abs() <= (b - current).abs() ? a : b,
+          )
+        : _sfxVolumeCycle[(index + 1) % _sfxVolumeCycle.length];
+    provider.updateSfxVolume(next);
+  }
+
+  /// The localized label for a UI sound volume stop.
+  String _sfxVolumeLabel(BuildContext context, double volume) {
+    final index = _sfxVolumeCycle.indexWhere(
+      (stop) => (stop - volume).abs() < 0.001,
+    );
+    return switch (index) {
+      0 => AppLocale.sfxVolumeLow.getString(context),
+      1 => AppLocale.sfxVolumeMedium.getString(context),
+      _ => AppLocale.sfxVolumeHigh.getString(context),
+    };
+  }
+
   /// Synchronizes the scroll viewport with the currently focused setting item.
   void scrollToIndex(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final context = _itemKeys[index].currentContext;
-      if (context != null) {
-        _scroller.ensureVisible(context);
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   @override
@@ -344,11 +479,37 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Setting: System Settings (Android only).
+                if (Platform.isAndroid) ...[
+                  () {
+                    final index = currentItemIdx++;
+                    return SettingRow(
+                      key: _itemKeys[index],
+                      onTap: () => selectItem(index),
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.androidSystemSettings.getString(context),
+                      subtitle: AppLocale.androidSystemSettingsSubtitle
+                          .getString(context),
+                      trailing: Icon(
+                        Symbols.open_in_new_rounded,
+                        size: 18.r,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    );
+                  }(),
+                  SizedBox(height: 12.r),
+                ],
+
                 // Setting: Scan on Startup.
                 () {
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
@@ -374,6 +535,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
@@ -399,6 +561,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
@@ -424,6 +587,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
@@ -449,6 +613,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
@@ -466,12 +631,36 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   );
                 }(),
 
+                // Setting: SFX Volume. Only meaningful when SFX are on, so it
+                // greys out and ignores input while they are off — the same
+                // treatment Secondary Screen gives its dependent value rows.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return Opacity(
+                    opacity: config.sfxEnabled ? 1.0 : 0.4,
+                    child: SettingRow(
+                      key: _itemKeys[index],
+                      onTap: () => selectItem(index),
+                      focused:
+                          widget.isContentFocused &&
+                          widget.selectedContentIndex == index,
+                      title: AppLocale.sfxVolume.getString(context),
+                      subtitle: AppLocale.sfxVolumeSubtitle.getString(context),
+                      trailing: SettingValueChip(
+                        text: _sfxVolumeLabel(context, config.sfxVolume),
+                      ),
+                    ),
+                  );
+                }(),
+
                 // Setting: 12-Hour Clock Format.
                 SizedBox(height: 12.r),
                 () {
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
@@ -491,6 +680,54 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   );
                 }(),
 
+                // Setting: Achievement badges on game tiles.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    onTap: () => selectItem(index),
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.showAchievementsBadge.getString(context),
+                    subtitle: AppLocale.showAchievementsBadgeSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.showAchievementsBadge,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateShowAchievementsBadge(value);
+                      },
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Match RetroAchievements after the startup scan.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    onTap: () => selectItem(index),
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.raMatchOnStartup.getString(context),
+                    subtitle: AppLocale.raMatchOnStartupSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.raMatchOnStartup,
+                      onChanged: _setRaMatchOnStartup,
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
                 // Setting: Navigation Tab Visibility — one row per hidable tab,
                 // so a future tab gets its toggle from its NavTabSpec alone.
                 for (final tab in hidableNavTabs()) ...[
@@ -502,6 +739,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     final hidden = spec.hidden?.call(config) ?? false;
                     return SettingRow(
                       key: _itemKeys[index],
+                      onTap: () => selectItem(index),
                       focused:
                           widget.isContentFocused &&
                           widget.selectedContentIndex == index,
@@ -528,20 +766,17 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                   final index = currentItemIdx++;
                   return SettingRow(
                     key: _itemKeys[index],
+                    onTap: () => selectItem(index),
                     focused:
                         widget.isContentFocused &&
                         widget.selectedContentIndex == index,
                     title: AppLocale.language.getString(context),
                     subtitle: AppLocale.languageSub.getString(context),
-                    trailing: GestureDetector(
-                      onTap: () =>
-                          _showLanguagePicker(context, _itemKeys[index]),
-                      child: SettingValueChip(
-                        text:
-                            AppLocale.supportedLanguages[config.appLanguage] ??
-                            config.appLanguage,
-                        trailingIcon: Symbols.arrow_drop_down_rounded,
-                      ),
+                    trailing: SettingValueChip(
+                      text:
+                          AppLocale.supportedLanguages[config.appLanguage] ??
+                          config.appLanguage,
+                      trailingIcon: Symbols.arrow_drop_down_rounded,
                     ),
                   );
                 }(),
@@ -556,6 +791,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     final index = currentItemIdx++;
                     return SettingRow(
                       key: _itemKeys[index],
+                      onTap: () => selectItem(index),
                       expandTitle: false,
                       focused:
                           widget.isContentFocused &&
@@ -580,6 +816,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     final index = currentItemIdx++;
                     return SettingRow(
                       key: _itemKeys[index],
+                      onTap: () => selectItem(index),
                       focused:
                           widget.isContentFocused &&
                           widget.selectedContentIndex == index,
@@ -627,6 +864,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     final index = currentItemIdx++;
                     return SettingRow(
                       key: _itemKeys[index],
+                      onTap: () => selectItem(index),
                       focused:
                           widget.isContentFocused &&
                           widget.selectedContentIndex == index,
@@ -650,6 +888,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     final index = currentItemIdx++;
                     return SettingRow(
                       key: _itemKeys[index],
+                      onTap: () => selectItem(index),
                       focused:
                           widget.isContentFocused &&
                           widget.selectedContentIndex == index,
@@ -681,6 +920,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     final index = currentItemIdx++;
                     return SettingRow(
                       key: _itemKeys[index],
+                      onTap: () => selectItem(index),
                       focused:
                           widget.isContentFocused &&
                           widget.selectedContentIndex == index,

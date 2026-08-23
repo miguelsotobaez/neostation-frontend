@@ -56,6 +56,29 @@ void main() {
     );
   });
 
+  test('emulator unique IDs are global across systems', () {
+    final owners = <String, String>{};
+    final offenders = <String>[];
+    for (final system in systems) {
+      for (final emulator in system.emulators) {
+        final previous = owners[emulator.uniqueId];
+        if (previous != null && previous != system.name) {
+          offenders.add('${emulator.uniqueId}: $previous, ${system.name}');
+        }
+        owners[emulator.uniqueId] = system.name;
+      }
+    }
+
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'app_emulators uses (os_id, unique_identifier) as its key; '
+          'duplicate IDs make one system overwrite another:\n'
+          '${offenders.join('\n')}',
+    );
+  });
+
   test(
     'per (system, os) at most one default_standalone emulator is offered',
     () {

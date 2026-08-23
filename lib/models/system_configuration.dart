@@ -1,4 +1,5 @@
 import 'system_model.dart';
+import '../utils/cloud_path_builder.dart';
 
 /// Represents a standardized definition for an emulator available for a system.
 ///
@@ -26,6 +27,11 @@ class EmulatorDefinition {
   /// Whether the emulator supports RetroAchievements synchronization.
   final bool? isretroAchievementsCompatible;
 
+  /// Optional stable slug used by NeoSync cloud paths. When null, the slug is
+  /// derived from [uniqueId] (RetroArch cores -> `retroarch.<core>`,
+  /// standalone -> last unique-id segment).
+  final String? neosyncSlug;
+
   const EmulatorDefinition({
     required this.name,
     required this.uniqueId,
@@ -34,6 +40,7 @@ class EmulatorDefinition {
     this.isDefaultCore = false,
     this.isDefaultStandalone = false,
     this.isretroAchievementsCompatible,
+    this.neosyncSlug,
   });
 
   /// Creates an [EmulatorDefinition] from a JSON-compatible map.
@@ -62,7 +69,17 @@ class EmulatorDefinition {
                       0)
                   .toString() ==
               '1',
+      neosyncSlug: (json['neosync_slug'] ?? json['neosyncSlug'])
+          ?.toString()
+          .trim(),
     );
+  }
+
+  /// Resolves the effective NeoSync cloud slug, falling back to a derivation
+  /// from [uniqueId] when no explicit slug is declared.
+  String get effectiveNeoSyncSlug {
+    if (neosyncSlug != null && neosyncSlug!.isNotEmpty) return neosyncSlug!;
+    return CloudPathBuilder.standaloneSlugFromUniqueId(uniqueId);
   }
 }
 

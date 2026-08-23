@@ -81,7 +81,12 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     _error = null;
 
     try {
-      _database = await GameRepository.loadDatabase();
+      // The cache feeds the recent / most-played / favorites rows, so the games
+      // the user hid are dropped on the way in rather than at each reader.
+      _database = {
+        for (final entry in (await GameRepository.loadDatabase()).entries)
+          entry.key: entry.value.where((game) => !game.isHidden).toList(),
+      };
       _lastUpdate = DateTime.now();
       _log.i('Database loaded: ${_database.length} systems with games');
       notifyListeners();
@@ -103,7 +108,9 @@ class SqliteDatabaseProvider extends ChangeNotifier {
     String systemFolderName,
   ) async {
     try {
-      final games = await GameRepository.loadGamesForSystem(systemFolderName);
+      final games = (await GameRepository.loadGamesForSystem(
+        systemFolderName,
+      )).where((game) => !game.isHidden).toList();
       _database[systemFolderName] = games;
       notifyListeners();
       return games;

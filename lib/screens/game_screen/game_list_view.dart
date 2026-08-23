@@ -14,6 +14,7 @@ import '../../providers/sqlite_config_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../utils/rom_tree.dart';
+import '../../widgets/achievements_badge.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
 
@@ -71,6 +72,10 @@ class GameListViewState extends State<GameListView>
 
   // Constants for pixel-perfect highlight positioning.
   static const double _itemHeightBase = 26.0;
+
+  // Read once per build rather than per row: the row builder runs for every
+  // visible entry, and a provider lookup there would subscribe each one.
+  bool _showAchievementsBadge = false;
 
   /// Public API to trigger list scrolling from the parent widget.
   void scrollToIndex(
@@ -213,6 +218,12 @@ class GameListViewState extends State<GameListView>
 
   @override
   Widget build(BuildContext context) {
+    // `select` rather than `watch`: this view rebuilds on every selection move,
+    // and watching the whole config would add unrelated settings writes to that.
+    _showAchievementsBadge = context.select<SqliteConfigProvider, bool>(
+      (p) => p.config.showAchievementsBadge,
+    );
+
     final theme = Theme.of(context);
     final itemHeight = _itemHeightBase.r;
     final totalItemHeight = itemHeight;
@@ -370,6 +381,20 @@ class GameListViewState extends State<GameListView>
                                     ),
                                   ),
                                 ),
+                                if (_showAchievementsBadge &&
+                                    AchievementsBadge.showsFor(game))
+                                  Padding(
+                                    padding: EdgeInsets.only(left: 4.r),
+                                    child: AchievementsBadge.inline(
+                                      game: game,
+                                      // The same colour as the row's title, so
+                                      // the trophy reads as part of the line
+                                      // rather than a warning next to it.
+                                      color: isSelected
+                                          ? theme.colorScheme.onPrimary
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

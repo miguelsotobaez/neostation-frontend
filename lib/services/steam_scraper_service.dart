@@ -159,7 +159,7 @@ class SteamScraperService {
 
     // Steam API Mapping to NeoStation Media Convention:
     // - Static URL based on AppID -> fanarts/ (Background art)
-    // - Static URL based on AppID -> box2D/ (Box art)
+    // - Static URL based on AppID -> box2d/ (Box art)
     // - Static URL based on AppID -> wheels/ (Transparent Logo)
     // - screenshots[0] -> screenshots/ (In-game thumbnail)
 
@@ -179,7 +179,7 @@ class SteamScraperService {
 
     await _downloadFile(
       box2dUrl,
-      path.join(mediaDir, systemFolder, 'box2D', '$romBaseName.jpg'),
+      path.join(mediaDir, systemFolder, 'box2d', '$romBaseName.jpg'),
     );
 
     // Standardize logos to PNG format; perform cleanup of legacy JPG assets.
@@ -241,7 +241,7 @@ class SteamScraperService {
     // Define the core media requirements for a 'complete' entry.
     final imageConfigs = [
       {'folder': 'fanarts', 'ext': 'jpg'},
-      {'folder': 'box2D', 'ext': 'jpg'},
+      {'folder': 'box2d', 'ext': 'jpg'},
       {'folder': 'wheels', 'ext': 'png'},
       {'folder': 'screenshots', 'ext': 'jpg'},
     ];

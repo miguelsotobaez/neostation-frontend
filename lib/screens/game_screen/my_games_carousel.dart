@@ -15,7 +15,7 @@ import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/letter_jump.dart';
-import 'package:neostation/screens/app_screen.dart';
+import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
@@ -106,6 +106,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   int _currentIndex = 0;
   late GamepadNavigation _gamepadNav;
+
+  // Set from the config this view already watches in build(); the card builders
+  // below read it rather than looking the provider up per card.
+  bool _showAchievementsBadge = false;
 
   // RetroAchievements info for the selected game (shown in the footer pill).
   GameInfoAndUserProgress? _currentGameInfo;
@@ -372,10 +376,17 @@ class _GamesCarouselState extends State<GamesCarousel> {
       onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-      onLeftBumper: AppNavigation.previousTab,
-      onRightBumper: AppNavigation.nextTab,
+      // The bumpers deliberately bind nothing here. This view lives on a route
+      // PUSHED OVER AppScreen, so cycling the app's top-level tabs from it
+      // switched the tab underneath a screen that stays on top: the main
+      // display never changed while the secondary display and the tab sounds
+      // said it had. Landing on a tab that hosts its own navigation layer
+      // (Search, NeoSync, RomM) then stacked that layer above this one, so
+      // every further press — B included — went to a screen the user could not
+      // see, and the device needed a restart. The list and grid views never
+      // reached the app tabs from here either (the list sends its bumpers to
+      // the details card's tabs, the grid binds none), which is why only
+      // carousel mode locked up.
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -473,9 +484,16 @@ class _GamesCarouselState extends State<GamesCarousel> {
     // A folder has no hash and no video: the RetroAchievements pill and the
     // mute pill must both stay away, or they render their empty states.
     final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
+    // Mid-burst the cursor has left the settled game, so the loaded verdict
+    // belongs to a game the user is no longer on. Reporting it as this game's
+    // is how the pill came to read "No achievements" for most of a fast scroll.
+    // Treat unsettled as still loading — the signature flips once on the way
+    // out and once on the way back, so the memoization survives the burst.
+    final settled = _currentIndex == _settledIndex;
+    final loadingRa = _isLoadingAchievements || !settled;
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
-        '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
+        '|$hasRa|$loadingRa|${identityHashCode(_currentGameInfo)}';
     if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
       return;
     }
@@ -484,8 +502,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
       game: settledGame,
       onPlay: widget.onPlay,
       hasRetroAchievements: hasRa,
-      isLoadingAchievements: _isLoadingAchievements,
-      currentGameInfo: _currentGameInfo,
+      isLoadingAchievements: loadingRa,
+      currentGameInfo: settled ? _currentGameInfo : null,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
       hasVideo: !isFolder && _hasVideoFor(settledGame),
@@ -848,6 +866,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
+            if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
+              Positioned(
+                top: 8.r,
+                left: 8.r,
+                child: AchievementsBadge(game: game),
+              ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               Positioned(
                 left: 0,
@@ -1123,6 +1147,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
+            if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
+              Positioned(
+                top: 8.r,
+                left: 8.r,
+                child: AchievementsBadge(game: game),
+              ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               _buildScrapeProgress(game),
           ],
@@ -1191,6 +1221,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
                         ),
                       ),
                     ),
+                  if (_showAchievementsBadge &&
+                      AchievementsBadge.showsFor(game))
+                    Positioned(
+                      top: 8.r,
+                      left: 8.r,
+                      child: AchievementsBadge(game: game),
+                    ),
                   if (widget.scrapingGameRomnames.contains(game.romname))
                     Positioned(
                       left: 0,
@@ -1224,6 +1261,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
     final config = context.watch<SqliteConfigProvider>().config;
     final isFanart = config.gameCarouselCardStyle != 'box';
+    _showAchievementsBadge = config.showAchievementsBadge;
     final theme = Theme.of(context);
     final currentGame =
         widget.games[_currentIndex.clamp(0, widget.games.length - 1)];

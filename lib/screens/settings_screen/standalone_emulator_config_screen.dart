@@ -129,14 +129,14 @@ class _StandaloneEmulatorConfigScreenState
 
       if (Platform.isWindows) {
         // Windows Environment: Utilize the specialized executable filter.
-        final result = await FilePicker.pickFiles(
+        final result = await FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: ['exe'],
           dialogTitle: 'Select ${emulator['name']} executable',
         );
 
-        if (result != null && result.files.single.path != null) {
-          executablePath = result.files.single.path!;
+        if (result != null && result.path != null) {
+          executablePath = result.path!;
         }
       } else if (Platform.isLinux) {
         executablePath = await TvDirectoryPicker.showExecutablePicker(context);
@@ -147,13 +147,13 @@ class _StandaloneEmulatorConfigScreenState
         }
       } else {
         // macOS: Utilize generic binary selection.
-        final result = await FilePicker.pickFiles(
+        final result = await FilePicker.pickFile(
           type: FileType.any,
           dialogTitle: 'Select ${emulator['name']} executable',
         );
 
-        if (result != null && result.files.single.path != null) {
-          executablePath = result.files.single.path!;
+        if (result != null && result.path != null) {
+          executablePath = result.path!;
         }
       }
 

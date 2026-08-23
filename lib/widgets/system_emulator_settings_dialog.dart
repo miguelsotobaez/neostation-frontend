@@ -8,7 +8,9 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/app_themes.dart';
 import 'package:provider/provider.dart';
+import '../constants/system_folder_names.dart';
 import '../models/core_emulator_model.dart';
+import '../models/database_game_model.dart';
 import '../models/standalone_emulator_model.dart';
 import '../themes/corner_radii.dart';
 import 'system_emulator_settings_dialog/models/emulator_list_item.dart';
@@ -17,6 +19,7 @@ import '../providers/sqlite_config_provider.dart';
 import '../providers/sqlite_database_provider.dart';
 import '../repositories/system_repository.dart';
 import '../repositories/emulator_repository.dart';
+import '../repositories/game_repository.dart';
 import '../services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../utils/gamepad_nav.dart';
@@ -65,6 +68,13 @@ class _SystemEmulatorSettingsDialogState
   int _currentTab = 0; // Default to General tab
   int _generalIndex = 0; // Index for General tab items
   int _appearanceIndex = 0; // Index for Appearance tab items
+  // Hidden-games tab: the games this system (or the whole library, for the
+  // virtual ones) has hidden, plus the row that restores them all at once.
+  List<DatabaseGameModel> _hiddenGames = [];
+  bool _isLoadingHiddenGames = true;
+  int _hiddenIndex = 0;
+  final Map<int, GlobalKey> _hiddenItemKeys = {};
+  late ScrollController _hiddenScrollController;
   // Emulators tab: 0 = default/core action, 1 = executable picker.
   int _emulatorActionIndex = 0;
   // 0: Prefer filename, 1: Hide ext, 2: (), 3: [], 4: Recursive?,
@@ -109,6 +119,7 @@ class _SystemEmulatorSettingsDialogState
         : 6;
 
     _generalScrollController = ScrollController();
+    _hiddenScrollController = ScrollController();
     _generalItemKeys = List.generate(
       _totalGeneralItems,
       (index) => GlobalKey(
@@ -126,6 +137,7 @@ class _SystemEmulatorSettingsDialogState
     );
 
     _loadCores();
+    _loadHiddenGames();
     _initializeGamepad();
   }
 
@@ -134,6 +146,7 @@ class _SystemEmulatorSettingsDialogState
     _cleanupGamepad();
     _centeredScrollController.dispose();
     _generalScrollController.dispose();
+    _hiddenScrollController.dispose();
     // Dispose focus nodes
     _headerCloseButtonFocusNode.dispose();
     _footerCloseButtonFocusNode.dispose();
@@ -311,6 +324,163 @@ class _SystemEmulatorSettingsDialogState
           context,
         ),
         type: NotificationType.info,
+      );
+    }
+  }
+
+  // ── Hidden games ──────────────────────────────────────────────────────────
+
+  /// True for the virtual libraries ('all' / 'favorites'), which aggregate
+  /// other systems and therefore list every hidden game rather than their own.
+  bool get _isVirtualLibrarySystem =>
+      _system.folderName == 'all' ||
+      _system.folderName == SystemFolderNames.favorites;
+
+  /// System to scope the hidden list to, or null for the whole library.
+  String? get _hiddenScopeSystemId =>
+      _isVirtualLibrarySystem ? null : _system.id;
+
+  /// Whether a game of this system can be hidden in the first place.
+  ///
+  /// The Android system is browsed through [AndroidAppsGrid], a separate screen
+  /// that binds no settings action, so an installed app has no "Hide Game" row
+  /// to reach — a Hidden tab there could only ever be empty. Everything else
+  /// (music included) goes through the games list, where START opens the game
+  /// settings dialog.
+  bool get _systemSupportsHiding => _system.folderName != 'android';
+
+  /// Whether the Hidden tab is offered. Kept visible whenever games *are*
+  /// hidden even if the system can't hide them, so a row can never end up with
+  /// no way back — and so this starts working on its own if hiding is later
+  /// wired into the Android apps grid.
+  bool get _showHiddenTab => _systemSupportsHiding || _hiddenGames.isNotEmpty;
+
+  /// Tab indices this system offers, in strip order. Single source of truth for
+  /// the strip, the LB/RB cycle and the body switch.
+  List<int> get _availableTabs => [
+    0,
+    if (_system.folderName != 'all' && _system.folderName != 'android') 1,
+    2,
+    if (_showHiddenTab) 3,
+  ];
+
+  /// Rows in the Hidden tab: one per hidden game, plus a final "unhide all"
+  /// row once there is more than one game to restore.
+  int get _totalHiddenItems =>
+      _hiddenGames.length + (_hiddenGames.length > 1 ? 1 : 0);
+
+  bool get _hasUnhideAllRow => _hiddenGames.length > 1;
+
+  Future<void> _loadHiddenGames() async {
+    try {
+      final games = await GameRepository.getHiddenGames(
+        systemId: _hiddenScopeSystemId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _hiddenGames = games;
+        _isLoadingHiddenGames = false;
+        if (_hiddenIndex >= _totalHiddenItems) {
+          _hiddenIndex = _totalHiddenItems > 0 ? _totalHiddenItems - 1 : 0;
+        }
+        // Restoring the last hidden game of a system that can't hide any takes
+        // the tab away underneath the user; step back to one that still exists.
+        if (_currentTab == 3 && !_showHiddenTab) _currentTab = 2;
+      });
+    } catch (e) {
+      _log.e('Error loading hidden games: $e');
+      if (mounted) setState(() => _isLoadingHiddenGames = false);
+    }
+  }
+
+  /// Restores a single game to its system's list.
+  Future<void> _unhideGame(DatabaseGameModel game) async {
+    final folderName = game.systemFolderName ?? _system.folderName;
+    final displayName = game.realName ?? game.filename;
+    try {
+      await GameRepository.setGameHidden(folderName, game.filename, false);
+    } catch (e) {
+      _log.e('Error unhiding ${game.filename}: $e');
+      return;
+    }
+
+    await _loadHiddenGames();
+    if (!mounted) return;
+    await _refreshSystemAfterHiddenChange({folderName});
+    if (!mounted) return;
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.gameUnhidden
+          .getString(context)
+          .replaceFirst('{name}', displayName),
+      type: NotificationType.success,
+    );
+  }
+
+  /// Restores every game listed in the tab.
+  Future<void> _unhideAllGames() async {
+    final affectedFolders = _hiddenGames
+        .map((g) => g.systemFolderName ?? _system.folderName)
+        .toSet();
+    try {
+      final scopeId = _hiddenScopeSystemId;
+      if (scopeId == null) {
+        await GameRepository.unhideAllGames();
+      } else {
+        await GameRepository.unhideAllGamesForSystem(scopeId);
+      }
+    } catch (e) {
+      _log.e('Error unhiding all games: $e');
+      return;
+    }
+
+    await _loadHiddenGames();
+    if (!mounted) return;
+    await _refreshSystemAfterHiddenChange(affectedFolders);
+    if (!mounted) return;
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.allGamesUnhidden.getString(context),
+      type: NotificationType.success,
+    );
+  }
+
+  /// Re-reads the systems whose libraries just changed size so their ROM count
+  /// and game list catch up with the restored games.
+  Future<void> _refreshSystemAfterHiddenChange(
+    Set<String> affectedFolders,
+  ) async {
+    if (!mounted) return;
+    final configProvider = context.read<SqliteConfigProvider>();
+    final databaseProvider = context.read<SqliteDatabaseProvider>();
+
+    for (final folderName in affectedFolders) {
+      SystemModel? system = folderName == _system.folderName ? _system : null;
+      if (system == null) {
+        try {
+          system = await SystemRepository.getSystemByFolderName(folderName);
+        } catch (e) {
+          _log.w('Hidden-games refresh: unknown system $folderName ($e)');
+        }
+      }
+      if (system != null) {
+        await configProvider.refreshSystem(system);
+      }
+      await databaseProvider.loadGamesForSystem(folderName);
+      if (!mounted) return;
+    }
+  }
+
+  void _scrollToHiddenSelected() {
+    final key = _hiddenItemKeys[_hiddenIndex];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
       );
     }
   }
@@ -711,14 +881,14 @@ class _SystemEmulatorSettingsDialogState
 
       final selectedPath = Platform.isLinux
           ? await TvDirectoryPicker.showExecutablePicker(context)
-          : (await FilePicker.pickFiles(
+          : (await FilePicker.pickFile(
               dialogTitle: AppLocale.selectEmulatorExecutable
                   .getString(context)
                   .replaceFirst('{name}', standalone.name),
               type: extension != null ? FileType.custom : FileType.any,
               allowedExtensions: extension != null ? [extension] : null,
-              lockParentWindow: true,
-            ))?.files.firstOrNull?.path;
+              windowsOptions: const WindowsOptions(lockParentWindow: true),
+            ))?.path;
 
       if (selectedPath == null) return;
 
@@ -779,11 +949,11 @@ class _SystemEmulatorSettingsDialogState
     try {
       final selectedPath = Platform.isLinux
           ? await TvDirectoryPicker.showExecutablePicker(context)
-          : (await FilePicker.pickFiles(
+          : (await FilePicker.pickFile(
               type: Platform.isWindows ? FileType.custom : FileType.any,
               allowedExtensions: Platform.isWindows ? ['exe'] : null,
               dialogTitle: AppLocale.selectRetroArchExe.getString(context),
-            ))?.files.firstOrNull?.path;
+            ))?.path;
 
       if (selectedPath == null) return;
 
@@ -874,7 +1044,9 @@ class _SystemEmulatorSettingsDialogState
                         : _errorMessage != null
                         ? _buildErrorState()
                         : _buildEmulatorsTab())
-                  : _buildAppearanceTab(),
+                  : _currentTab == 2 || !_showHiddenTab
+                  ? _buildAppearanceTab()
+                  : _buildHiddenGamesTab(),
             ),
             _buildFooter(),
           ],

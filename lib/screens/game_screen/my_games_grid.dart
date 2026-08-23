@@ -13,6 +13,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_utils.dart';
+import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
@@ -108,6 +109,11 @@ class _GamesGridState extends State<GamesGrid> {
   int _selectedIndex = 0;
   int _crossAxisCount = 5;
   bool _isNavigatingFast = false;
+
+  // Read once per build from the user's setting rather than per tile: the tile
+  // builders run for every visible card, and a `context.select` there would
+  // subscribe each one of them separately.
+  bool _showAchievementsBadge = false;
 
   // RetroAchievements info for the selected game (shown in the footer pill).
   GameInfoAndUserProgress? _currentGameInfo;
@@ -1042,6 +1048,13 @@ class _GamesGridState extends State<GamesGrid> {
 
   @override
   Widget build(BuildContext context) {
+    // `select` rather than `watch`: the grid is the perf-sensitive view, and
+    // watching the whole config would rebuild it on every unrelated settings
+    // write — including the details-card tab, which persists on each L1/R1.
+    _showAchievementsBadge = context.select<SqliteConfigProvider, bool>(
+      (p) => p.config.showAchievementsBadge,
+    );
+
     if (widget.games.isEmpty) {
       return Center(
         child: Column(
@@ -1322,9 +1335,16 @@ class _GamesGridState extends State<GamesGrid> {
     // A folder has no hash and no video: the RetroAchievements pill and the
     // mute pill must both stay away, or they render their empty states.
     final hasRa = !isFolder && _hasRetroAchievementsFor(settledGame);
+    // Mid-burst the cursor has left the settled game, so the loaded verdict
+    // belongs to a game the user is no longer on. Reporting it as this game's
+    // is how the pill came to read "No achievements" for most of a fast scroll.
+    // Treat unsettled as still loading — the signature flips once on the way
+    // out and once on the way back, so the memoization survives the burst.
+    final settled = _selectedIndex == _settledIndex;
+    final loadingRa = _isLoadingAchievements || !settled;
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
-        '|$hasRa|$_isLoadingAchievements|${identityHashCode(_currentGameInfo)}';
+        '|$hasRa|$loadingRa|${identityHashCode(_currentGameInfo)}';
     if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
       return;
     }
@@ -1333,8 +1353,8 @@ class _GamesGridState extends State<GamesGrid> {
       game: settledGame,
       onPlay: widget.onPlay,
       hasRetroAchievements: hasRa,
-      isLoadingAchievements: _isLoadingAchievements,
-      currentGameInfo: _currentGameInfo,
+      isLoadingAchievements: loadingRa,
+      currentGameInfo: settled ? _currentGameInfo : null,
       onShowAchievements: _showAchievementsDialog,
       onToggleMute: _toggleVideoMute,
       hasVideo: !isFolder && _hasVideoFor(settledGame),
@@ -1446,6 +1466,12 @@ class _GamesGridState extends State<GamesGrid> {
                     color: Colors.redAccent,
                   ),
                 ),
+              ),
+            if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
+              Positioned(
+                top: 6.r,
+                left: 6.r,
+                child: AchievementsBadge(game: game),
               ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               Positioned(
@@ -1612,6 +1638,12 @@ class _GamesGridState extends State<GamesGrid> {
                         color: Colors.redAccent,
                       ),
                     ),
+                  ),
+                if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
+                  Positioned(
+                    top: 6.r,
+                    left: 6.r,
+                    child: AchievementsBadge(game: game),
                   ),
                 if (widget.scrapingGameRomnames.contains(game.romname))
                   Positioned(

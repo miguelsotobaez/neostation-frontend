@@ -137,26 +137,81 @@ extension NeoSyncUpload on NeoSyncProvider {
         return;
       }
 
+      // 3. Collect user-configured custom save folders (ARMSX2, ARMSX1, etc.)
+      // from the NeoSync module. Each entry carries its system + emulator slug
+      // so the cloud path identifies the emulator that produced the save.
+      final customFiles =
+          <
+            ({File file, String system, String emulatorSlug, String folderRoot})
+          >[];
+      try {
+        final systems = await SystemRepository.getAllSystems();
+        for (final system in systems) {
+          final folders = await NeoSyncSaveFolderRepository.getFoldersForSystem(
+            system.folderName,
+          );
+          for (final entry in folders.entries) {
+            if (!Directory(entry.value).existsSync()) continue;
+            final files = await _getSaveFiles(entry.value);
+            for (final file in files) {
+              customFiles.add((
+                file: file,
+                system: system.folderName,
+                emulatorSlug: entry.key,
+                folderRoot: entry.value,
+              ));
+            }
+          }
+        }
+      } catch (e) {
+        NeoSyncProvider._log.e('Error scanning custom save folders: $e');
+      }
+
       _totalFiles =
           retroArchSaves.length +
           retroArchStates.length +
+          customFiles.length +
           saveFiles.length; // saveFiles contains Switch files here
 
       _processedItems.add('Auto-syncing $_totalFiles local files...');
       _syncStatus = 'Checking files for upload...';
       notify();
 
-      // Process RetroArch Saves
+      // Process RetroArch Saves (derive emulator slug from the core folder)
       for (final file in retroArchSaves) {
-        await _processAutoUploadFile(file, savesPath!, isState: false);
+        await _processAutoUploadFile(
+          file,
+          savesPath!,
+          isState: false,
+          retroArchBasePath: savesPath,
+        );
         _processedFiles++;
         _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
         notify();
       }
 
-      // Process RetroArch States
+      // Process RetroArch States (derive emulator slug from the core folder)
       for (final file in retroArchStates) {
-        await _processAutoUploadFile(file, statesPath!, isState: true);
+        await _processAutoUploadFile(
+          file,
+          statesPath!,
+          isState: true,
+          retroArchBasePath: statesPath,
+        );
+        _processedFiles++;
+        _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
+        notify();
+      }
+
+      // Process custom save folders using their emulator slug namespace.
+      for (final entry in customFiles) {
+        await _processAutoUploadFile(
+          entry.file,
+          entry.folderRoot,
+          isState: false,
+          customFolderSystem: entry.system,
+          customFolderEmulatorSlug: entry.emulatorSlug,
+        );
         _processedFiles++;
         _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
         notify();
@@ -227,6 +282,9 @@ extension NeoSyncUpload on NeoSyncProvider {
     File file,
     String basePath, {
     bool isState = false,
+    String? customFolderSystem,
+    String? customFolderEmulatorSlug,
+    String? retroArchBasePath,
   }) async {
     try {
       final isNandFile = file.path.contains(
@@ -238,17 +296,116 @@ extension NeoSyncUpload on NeoSyncProvider {
         return;
       }
 
-      String relativePath = _calculateRelativePath(
-        file,
-        basePath,
-        isState: isState,
-      );
+      final String relativePath;
+      String? syncSystemId;
+      String? syncEmulatorId;
+      if (customFolderSystem != null && customFolderEmulatorSlug != null) {
+        // The configured folder root is the basePath for custom folders, so a
+        // nested layout (e.g. `memcards/slot1/Mcd001.ps2`) is preserved on the
+        // cloud path instead of collapsing every file to its basename.
+        final relativeToFolder = path
+            .relative(file.path, from: basePath)
+            .replaceAll('\\', '/');
+        relativePath = CloudPathBuilder.build(
+          system: customFolderSystem,
+          emulatorSlug: customFolderEmulatorSlug,
+          scope: 'shared',
+          filePath: relativeToFolder,
+        );
+        syncSystemId = customFolderSystem;
+        syncEmulatorId = customFolderEmulatorSlug;
+      } else if (retroArchBasePath != null) {
+        final fileName = path.basenameWithoutExtension(file.path);
+        final lowerPath = file.path.toLowerCase();
+
+        // Only sync RetroArch saves that belong to a game still in the local
+        // library (the save base name matches a ROM) or that are shared memory
+        // cards. Orphan saves left behind by removed games (e.g. a Naomi EEPROM
+        // whose ROM is no longer on disk) must not be uploaded, otherwise the
+        // auto-sync picks them up while scanning the whole saves folder.
+        final isSharedCard =
+            lowerPath.endsWith('.ps2') ||
+            lowerPath.endsWith('.mcr') ||
+            lowerPath.endsWith('.mcd') ||
+            lowerPath.endsWith('.vmu') ||
+            lowerPath.endsWith('.vmp') ||
+            lowerPath.contains('vmu_save');
+        final gameRow = await GameRepository.findRomForSaveName(fileName);
+        if (gameRow == null && !isSharedCard) {
+          _skippedFiles++;
+          _processedItems.add(
+            '⏭️ Skipped save for a game not in your library: '
+            '${path.basename(file.path)}',
+          );
+          return;
+        }
+
+        // RetroArch stores saves as <savesPath>/<core>/<game>.srm when per-core
+        // subfolders are enabled, or flat as <savesPath>/<game>.srm otherwise.
+        // Derive the emulator slug from the core folder when present so a save
+        // lands under retroarch.<core> regardless of which standalone the game
+        // metadata points at; flat saves fall back to the game's own emulator
+        // metadata. The system is resolved from the game (a core like mgba
+        // serves several systems) and falls back to the core mapping.
+        final emulatorSlug = await _resolveRetroArchEmulatorSlug(
+          file,
+          retroArchBasePath,
+        );
+        var system = await _systemFolderForRetroArchFile(
+          file,
+          retroArchBasePath,
+        );
+        // The emulator must actually be registered for the resolved system;
+        // otherwise trust the emulator's own system (a save from a NES core can
+        // never belong to cps1, no matter what the game metadata says).
+        system = await _reconcileEmulatorSystem(system, emulatorSlug);
+        // Memory-card style files are shared between games, matching the
+        // `_buildV2CloudPath` behaviour: they go under the `shared` scope with
+        // no game segment so the download routes them to the configured custom
+        // folder.
+        relativePath = CloudPathBuilder.build(
+          system: system ?? 'unknown',
+          emulatorSlug: emulatorSlug ?? 'unknown',
+          scope: isSharedCard ? 'shared' : 'game',
+          filePath: path.basename(file.path),
+          gameName: isSharedCard
+              ? null
+              : path.basenameWithoutExtension(file.path),
+          isState: isState,
+        );
+        syncSystemId = system;
+        syncEmulatorId = emulatorSlug;
+      } else {
+        relativePath = _calculateRelativePath(file, basePath, isState: isState);
+      }
       final gameName = _extractGameNameFromPath(file.path);
+
+      // Resolve the game hash (ra_hash) so the v2 upload carries the ROM hash.
+      // The save base name usually matches the ROM name, so find the game by
+      // prefix and use its hash.
+      String? gameHash;
+      try {
+        final fileName = path.basenameWithoutExtension(file.path);
+        final row = await GameRepository.findRomForSaveName(fileName);
+        if (row != null) {
+          final game = _gameModelFromRomRow(row, fileName);
+          gameHash = await _resolveGameHashForUpload(game);
+        }
+      } catch (e) {
+        NeoSyncProvider._log.w(
+          'Error resolving game hash for ${path.basename(file.path)}: $e',
+        );
+      }
 
       final result = await _neoSyncService.syncFile(
         file,
         gameName,
         customFilename: relativePath,
+        systemId: syncSystemId,
+        emulatorId: syncEmulatorId,
+        gameHash: gameHash,
+        isState: isState,
+        scope: customFolderSystem != null ? 'shared' : null,
       );
 
       if (result['success']) {
@@ -364,10 +521,25 @@ extension NeoSyncUpload on NeoSyncProvider {
       );
       final gameName = _extractGameNameFromPath(file.path);
 
+      String? gameHash;
+      try {
+        final fileName = path.basenameWithoutExtension(file.path);
+        final row = await GameRepository.findRomForSaveName(fileName);
+        if (row != null) {
+          final game = _gameModelFromRomRow(row, fileName);
+          gameHash = await _resolveGameHashForUpload(game);
+        }
+      } catch (e) {
+        NeoSyncProvider._log.w(
+          'Error resolving game hash for ${path.basename(file.path)}: $e',
+        );
+      }
+
       final result = await _neoSyncService.syncFile(
         file,
         gameName,
         customFilename: relativePath,
+        gameHash: gameHash,
       );
 
       if (result['success']) {
@@ -393,6 +565,75 @@ extension NeoSyncUpload on NeoSyncProvider {
       } else {
         rethrow;
       }
+    }
+  }
+
+  /// Uploads every file in a single configured custom save folder.
+  ///
+  /// Used right after the user selects a folder so its existing saves are
+  /// backed up immediately, without waiting for the next global auto-sync.
+  Future<void> syncCustomSaveFolder(
+    String systemFolderName,
+    String emulatorSlug,
+  ) async {
+    if (!isNeoSyncAuthenticated) return;
+    if (_isSyncing) return;
+
+    final folder = await NeoSyncSaveFolderRepository.getFolder(
+      systemFolderName,
+      emulatorSlug,
+    );
+    if (folder == null || folder.isEmpty) return;
+    if (!Directory(folder).existsSync()) return;
+
+    _setSyncing(true);
+    _error = null;
+    _syncProgress = 0.0;
+    _syncStatus = 'Uploading custom save folder...';
+    _totalFiles = 0;
+    _processedFiles = 0;
+    _uploadedFiles = 0;
+    _skippedFiles = 0;
+    _downloadedFiles = 0;
+    _processedItems = [];
+    notify();
+
+    try {
+      final files = await _getSaveFiles(folder);
+      _totalFiles = files.length;
+      if (files.isEmpty) {
+        _syncStatus = 'No save files found in the selected folder';
+        _processedItems.add(_syncStatus);
+        return;
+      }
+
+      _processedItems.add('Uploading $_totalFiles save files...');
+      notify();
+
+      for (final file in files) {
+        await _processAutoUploadFile(
+          file,
+          folder,
+          isState: false,
+          customFolderSystem: systemFolderName,
+          customFolderEmulatorSlug: emulatorSlug,
+        );
+        _processedFiles++;
+        _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
+        notify();
+      }
+
+      _syncProgress = 1.0;
+      _syncStatus =
+          'Upload complete: $_uploadedFiles uploaded, $_skippedFiles already synced';
+      _processedItems.add(_syncStatus);
+    } catch (e) {
+      _error = 'Error uploading custom save folder: $e';
+      _syncStatus = 'Error: $_error';
+      _processedItems.add(_syncStatus);
+      NeoSyncProvider._log.e(_error!);
+    } finally {
+      _setSyncing(false);
     }
   }
 }

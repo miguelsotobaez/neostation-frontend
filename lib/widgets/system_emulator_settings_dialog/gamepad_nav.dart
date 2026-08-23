@@ -75,6 +75,13 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
         _appearanceIndex = (_appearanceIndex - 1 + 2) % 2;
       });
       _scrollToAppearanceSelected();
+    } else if (_currentTab == 3) {
+      if (_totalHiddenItems == 0) return;
+      rebuild(() {
+        _hiddenIndex =
+            (_hiddenIndex - 1 + _totalHiddenItems) % _totalHiddenItems;
+      });
+      _scrollToHiddenSelected();
     }
   }
 
@@ -117,6 +124,12 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
         _appearanceIndex = (_appearanceIndex + 1) % 2;
       });
       _scrollToAppearanceSelected();
+    } else if (_currentTab == 3) {
+      if (_totalHiddenItems == 0) return;
+      rebuild(() {
+        _hiddenIndex = (_hiddenIndex + 1) % _totalHiddenItems;
+      });
+      _scrollToHiddenSelected();
     }
   }
 
@@ -135,13 +148,9 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
   }
 
   void _previousTab() {
-    List<int> availableTabs = [0, 2];
-    if (widget.system.folderName != 'all' &&
-        widget.system.folderName != 'android') {
-      availableTabs = [0, 1, 2];
-    }
-
+    final availableTabs = _availableTabs;
     int currentIndex = availableTabs.indexOf(_currentTab);
+    if (currentIndex == -1) currentIndex = 0;
     int prevIndex =
         (currentIndex - 1 + availableTabs.length) % availableTabs.length;
     rebuild(() {
@@ -151,13 +160,9 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
   }
 
   void _nextTab() {
-    List<int> availableTabs = [0, 2];
-    if (widget.system.folderName != 'all' &&
-        widget.system.folderName != 'android') {
-      availableTabs = [0, 1, 2];
-    }
-
+    final availableTabs = _availableTabs;
     int currentIndex = availableTabs.indexOf(_currentTab);
+    if (currentIndex == -1) currentIndex = 0;
     int nextIndex = (currentIndex + 1) % availableTabs.length;
     rebuild(() {
       _currentTab = availableTabs[nextIndex];
@@ -212,6 +217,13 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
         _pickAndSaveImage();
       } else if (_appearanceIndex == 1) {
         _pickAndSaveLogoImage();
+      }
+    } else if (_currentTab == 3) {
+      if (_hiddenIndex >= _totalHiddenItems) return;
+      if (_hasUnhideAllRow && _hiddenIndex == _totalHiddenItems - 1) {
+        _unhideAllGames();
+      } else {
+        _unhideGame(_hiddenGames[_hiddenIndex]);
       }
     }
   }

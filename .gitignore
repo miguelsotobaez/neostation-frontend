@@ -277,6 +277,7 @@ ROMs/
 /linux/flutter/generated_plugin_registrant.cc
 /linux/flutter/generated_plugins.cmake
 /macos/Flutter/GeneratedPluginRegistrant.swift
+/macos/Podfile.lock
 /windows/flutter/generated_plugin_registrant.cc
 /windows/flutter/generated_plugins.cmake
 .flutter-plugins-dependencies

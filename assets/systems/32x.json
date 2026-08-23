@@ -14,6 +14,10 @@
       "screenscraper": 19,
       "retroachievements": 10
     },
+    "ra_hash": {
+      "algo": "file",
+      "mode": "hash_only"
+    },
     "folders": [
       "32x",
       "sega32x",

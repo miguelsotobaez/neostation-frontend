@@ -18,6 +18,26 @@ class LoggerService {
   Logger _logger;
   bool _initialized = false;
 
+  /// Lines logged in this isolate since [startCapture], or null when nothing
+  /// is collecting.
+  List<String>? _captured;
+
+  /// The most lines one capture holds. A capture exists to explain a single
+  /// failure, and an unbounded list in a background isolate is a memory leak
+  /// waiting for a pathological image.
+  static const int _captureLimit = 64;
+
+  /// Whether [init] has run and log output is reaching the file as well as the
+  /// console.
+  ///
+  /// False in the secondary display's engine: it is a separate isolate with its
+  /// own copy of this singleton, and its entry point ([subDisplay] in main.dart)
+  /// deliberately does not call [init] — two isolates holding a FileOutput on
+  /// the same path would interleave writes and race the rotation rename. Code
+  /// that must not lose a line in that isolate should check this and fall back
+  /// to `debugPrint`.
+  bool get isFileBacked => _initialized;
+
   LoggerService._internal()
     : _logger = Logger(
         printer: RedactingPrinter(SimplePrinter(colors: true)),
@@ -69,6 +89,57 @@ class LoggerService {
     }
   }
 
+  /// Starts collecting everything this isolate logs, on top of its normal
+  /// output.
+  ///
+  /// For work handed to a background isolate. [init] runs in the main isolate
+  /// only — a spawned one gets its own copy of this singleton with no file
+  /// output, and two isolates holding a [FileOutput] on the same path would
+  /// interleave writes and race the rotation rename, so it cannot simply open
+  /// the file too. Capturing lets it hand its diagnostics back instead: the
+  /// isolate calls this, returns [takeCapture] with its result, and the main
+  /// isolate feeds that to [replayCaptured].
+  void startCapture() => _captured = <String>[];
+
+  /// Everything captured since [startCapture], and stops collecting.
+  ///
+  /// Each line carries a one-character level prefix so [replayCaptured] can
+  /// restore the severity; the encoding is deliberately primitive because the
+  /// list crosses an isolate boundary.
+  List<String> takeCapture() {
+    final captured = _captured ?? const <String>[];
+    _captured = null;
+    return captured;
+  }
+
+  /// Re-logs lines a background isolate captured, so they reach the log file.
+  ///
+  /// Anything already collecting here keeps collecting: replaying goes through
+  /// [log] like any other line.
+  void replayCaptured(Iterable<String> lines) {
+    for (final line in lines) {
+      if (line.length < 2 || line[1] != _captureSeparator) continue;
+      log(line.substring(2), level: _levelForTag(line[0]));
+    }
+  }
+
+  /// Separates a captured line's level tag from its message.
+  static const String _captureSeparator = '|';
+
+  static String _tagForLevel(LogLevel level) => switch (level) {
+    LogLevel.info => 'i',
+    LogLevel.warning => 'w',
+    LogLevel.error => 'e',
+    LogLevel.debug => 'd',
+  };
+
+  static LogLevel _levelForTag(String tag) => switch (tag) {
+    'w' => LogLevel.warning,
+    'e' => LogLevel.error,
+    'd' => LogLevel.debug,
+    _ => LogLevel.info,
+  };
+
   /// Logs a message at the specified [LogLevel].
   void log(
     String message, {
@@ -76,6 +147,12 @@ class LoggerService {
     Object? error,
     StackTrace? stackTrace,
   }) {
+    final captured = _captured;
+    if (captured != null && captured.length < _captureLimit) {
+      final suffix = error == null ? '' : ' $error';
+      captured.add('${_tagForLevel(level)}$_captureSeparator$message$suffix');
+    }
+
     switch (level) {
       case LogLevel.info:
         _logger.i(message, error: error, stackTrace: stackTrace);

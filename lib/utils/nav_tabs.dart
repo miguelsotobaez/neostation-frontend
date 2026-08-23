@@ -9,7 +9,7 @@ import 'package:neostation/models/config_model.dart';
 /// (`_selectedTabIndex`, `_buildCurrentTabContent`, the secondary-display tab
 /// names). Append new tabs at the end — inserting one renumbers every existing
 /// tab and silently repoints all of that dispatch.
-enum NavTab { systems, search, sync, achievements, scraper, settings }
+enum NavTab { systems, search, sync, achievements, scraper, romm, settings }
 
 /// Static description of one navigation tab: how it is drawn, whether the user
 /// may hide it, and how that preference is read and written.
@@ -77,7 +77,7 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
   ),
   NavTab.sync: NavTabSpec(
     icon: 'assets/images/icons/cloud-add.webp',
-    labelKey: AppLocale.cloudSync,
+    labelKey: AppLocale.neoSync,
     hidden: _hideTabSync,
     withHidden: _withHideTabSync,
     settingsTitleKey: AppLocale.showSyncTab,
@@ -99,6 +99,14 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
     settingsTitleKey: AppLocale.showScraperTab,
     settingsSubtitleKey: AppLocale.showScraperTabSubtitle,
   ),
+  NavTab.romm: NavTabSpec(
+    icon: 'assets/images/icons/romm-light.svg',
+    labelKey: AppLocale.rommLibrary,
+    hidden: _hideTabRomm,
+    withHidden: _withHideTabRomm,
+    settingsTitleKey: AppLocale.showRommTab,
+    settingsSubtitleKey: AppLocale.showRommTabSubtitle,
+  ),
   NavTab.settings: NavTabSpec(
     icon: 'assets/images/icons/setting.webp',
     labelKey: AppLocale.settings,
@@ -109,6 +117,7 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
 bool _hideTabSync(ConfigModel c) => c.hideTabSync;
 bool _hideTabAchievements(ConfigModel c) => c.hideTabAchievements;
 bool _hideTabScraper(ConfigModel c) => c.hideTabScraper;
+bool _hideTabRomm(ConfigModel c) => c.hideTabRomm;
 bool _hideTabSearch(ConfigModel c) => c.hideTabSearch;
 
 ConfigModel _withHideTabSync(ConfigModel c, bool hidden) =>
@@ -117,6 +126,8 @@ ConfigModel _withHideTabAchievements(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabAchievements: hidden);
 ConfigModel _withHideTabScraper(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabScraper: hidden);
+ConfigModel _withHideTabRomm(ConfigModel c, bool hidden) =>
+    c.copyWith(hideTabRomm: hidden);
 ConfigModel _withHideTabSearch(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabSearch: hidden);
 
@@ -136,3 +147,37 @@ List<NavTab> visibleNavTabs(ConfigModel config) => NavTab.values
 List<NavTab> hidableNavTabs() => NavTab.values
     .where((tab) => navTabSpec(tab).isHidable)
     .toList(growable: false);
+
+/// Fewest tab slots the header strip will show.
+///
+/// The strip normally shows as many slots as fit beside the status pill, which
+/// varies with the screen and with whether the device reports a battery — see
+/// `navStripMaxSlots` in `header_layout.dart`. This is the floor for screens
+/// too narrow even for that, where the pill scales itself down instead. With
+/// more visible tabs than the strip has slots it scrolls; with that many or
+/// fewer it renders as a static strip and never scrolls.
+const int minNavTabSlots = 5;
+
+/// First slot shown by the scrolling strip after selection moves to
+/// [selectedSlot].
+///
+/// Centered windowing: the selection sits in the window's middle slot (the
+/// left-of-middle slot when [maxSlots] is even), clamped at both ends of the
+/// strip — so the selection only reaches an edge slot when it is genuinely
+/// near the first or last tab, and everywhere else the strip scrolls under a
+/// stationary highlight. A [selectedSlot] of -1 (selected tab hidden by a
+/// config change) keeps the current [windowStart] rather than snapping
+/// anywhere. The result is always clamped so the window never shows blank
+/// slots past either end.
+int navTabWindowStart({
+  required int windowStart,
+  required int selectedSlot,
+  required int tabCount,
+  int maxSlots = minNavTabSlots,
+}) {
+  if (tabCount <= maxSlots) return 0;
+  final start = selectedSlot >= 0
+      ? selectedSlot - (maxSlots - 1) ~/ 2
+      : windowStart;
+  return start.clamp(0, tabCount - maxSlots);
+}

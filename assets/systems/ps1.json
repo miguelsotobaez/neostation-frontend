@@ -14,6 +14,10 @@
       "screenscraper": 57,
       "retroachievements": 12
     },
+    "ra_hash": {
+      "algo": "psx",
+      "mode": "hash_only"
+    },
     "folders": [
       "ps1",
       "psx",
@@ -51,7 +55,7 @@
       "is_retroachievements_compatible": true,
       "platforms": {
         "android": {
-          "launch_arguments": "-n com.github.stenzek.duckstation/.EmulationActivity -e bootPath \"{file.uri}\" --ez resumeState 0 --activity-clear-task --activity-clear-top"
+          "launch_arguments": "-a android.intent.action.VIEW -n com.github.stenzek.duckstation/.EmulationActivity -e bootPath \"{file.path}\" --ez resumeState 0 --activity-clear-task --activity-clear-top"
         },
         "windows": {
           "executable": "duckstation.exe",

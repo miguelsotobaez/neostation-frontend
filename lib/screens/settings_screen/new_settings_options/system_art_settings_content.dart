@@ -11,6 +11,7 @@ import 'package:neostation/services/game_service.dart'
     show GamepadNavigationManager;
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:provider/provider.dart';
 import 'settings_title.dart';
@@ -36,6 +37,9 @@ class SystemArtSettingsContent extends StatefulWidget {
 
 class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
   final ScrollController _scrollController = ScrollController();
+
+  /// Snaps during rapid D-pad navigation, animates on a single move.
+  final AdaptiveScroller _scroller = AdaptiveScroller();
   final List<GlobalKey> _itemKeys = [];
 
   int get _gridColumns => Responsive.getThemesCrossAxisCount(context);
@@ -50,17 +54,11 @@ class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
   }
 
   void _ensureSelectedItemVisible(int index) {
-    if (index >= 0 && index < _itemKeys.length) {
-      final ctx = _itemKeys[index].currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: 0.5,
-        );
-      }
-    }
+    _scroller.ensureVisibleIndex(
+      index,
+      keys: _itemKeys,
+      controller: _scrollController,
+    );
   }
 
   void navigateUp() {

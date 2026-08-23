@@ -21,6 +21,11 @@ class GameDetailsAchievementsTab extends StatefulWidget {
   final double rightOffset;
   final Widget? headerAction;
 
+  /// Opens the manual match picker. Shown both when a set was found (the match
+  /// may still be the wrong one) and when none was, which is where a user is
+  /// most likely to want it.
+  final VoidCallback? onFixMatch;
+
   const GameDetailsAchievementsTab({
     super.key,
     this.gameInfo,
@@ -31,6 +36,7 @@ class GameDetailsAchievementsTab extends StatefulWidget {
     this.leftOffset = 12.0,
     this.rightOffset = 12.0,
     this.headerAction,
+    this.onFixMatch,
   });
 
   @override
@@ -216,6 +222,22 @@ class GameDetailsAchievementsTabState
                     fontSize: 14.r,
                   ),
                 ),
+                if (widget.onFixMatch != null) ...[
+                  SizedBox(height: 12.r),
+                  HeaderActionButton(
+                    icon: Icon(
+                      Symbols.search_rounded,
+                      size: 12.r,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                    label: AppLocale.raFixMatch
+                        .getString(context)
+                        .toUpperCase(),
+                    onTap: widget.onFixMatch!,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ],
               ],
             ),
           ),
@@ -320,6 +342,26 @@ class GameDetailsAchievementsTabState
                               context,
                             ).colorScheme.onPrimary,
                           ),
+                          if (widget.onFixMatch != null) ...[
+                            SizedBox(width: 6.r),
+                            HeaderActionButton(
+                              icon: Icon(
+                                Symbols.search_rounded,
+                                size: 12.r,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                              label: AppLocale.raFixMatch
+                                  .getString(context)
+                                  .toUpperCase(),
+                              onTap: widget.onFixMatch!,
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.onSurface,
+                            ),
+                          ],
                           if (widget.headerAction != null) ...[
                             SizedBox(width: 6.r),
                             widget.headerAction!,

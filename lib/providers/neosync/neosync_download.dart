@@ -19,7 +19,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     notify();
 
     try {
-      final result = await _neoSyncService.getFiles();
+      final result = await _neoSyncService.getAllFiles();
       if (!result['success']) {
         throw Exception('Failed to fetch cloud files: ${result['message']}');
       }
@@ -69,7 +69,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     _processedItems.add('⬇️ Phase 2: Downloading files from cloud...');
     notify();
 
-    final result = await _neoSyncService.getFiles();
+    final result = await _neoSyncService.getAllFiles();
     if (!result['success']) {
       throw Exception('Failed to fetch cloud files: ${result['message']}');
     }
@@ -96,6 +96,31 @@ extension NeoSyncDownload on NeoSyncProvider {
     String savesPath,
   ) async {
     try {
+      // NeoSync v2 paths (`saves/<system>/<emulator>/<scope>/...`) carry the
+      // emulator slug. Shared memory-card files route directly to the
+      // configured custom folder; per-game files fall through to the normal
+      // game lookup below.
+      final v2Path = CloudPathBuilder.parse(cloudFile.fileName);
+      if (v2Path != null && v2Path.isShared) {
+        final customFolder = await NeoSyncSaveFolderRepository.getFolder(
+          v2Path.system,
+          v2Path.emulatorSlug,
+        );
+        if (customFolder != null && customFolder.isNotEmpty) {
+          final localFile = File(path.join(customFolder, v2Path.filePath));
+          await localFile.parent.create(recursive: true);
+          if (!localFile.existsSync() ||
+              cloudFile.uploadedAt.isAfter(await localFile.lastModified())) {
+            await _downloadCloudFileImpl(cloudFile, localFile);
+            _downloadedFiles++;
+            _processedItems.add('⬇️ Custom save: ${cloudFile.fileName}');
+          } else {
+            _skippedFiles++;
+          }
+          return;
+        }
+      }
+
       // 1. Resolve the game associated with the file
       GameModel? game = await _findGameForCloudFile(cloudFile);
 
@@ -224,6 +249,7 @@ extension NeoSyncDownload on NeoSyncProvider {
       try {
         final stat = await localFile.stat();
         await SyncRepository.saveSyncState(
+          NeoSyncProvider.kSyncProviderId,
           localFile.path,
           stat.modified.millisecondsSinceEpoch,
           cloudFile.fileModifiedAtTimestamp ?? 0,

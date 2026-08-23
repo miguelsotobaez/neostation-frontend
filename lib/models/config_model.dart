@@ -81,6 +81,9 @@ class ConfigModel {
   /// Whether UI sound effects (navigation, clicks) are enabled.
   final bool sfxEnabled;
 
+  /// Playback volume for UI sound effects, from silent (0.0) to full (0.75).
+  final double sfxVolume;
+
   /// Whether the header clock should use a 12-hour format with AM/PM (false = 24-hour).
   final bool use12HourClock;
 
@@ -122,6 +125,9 @@ class ConfigModel {
 
   /// Whether the Scraper navigation tab is hidden. See [hideTabSync].
   final bool hideTabScraper;
+
+  /// Whether the RomM navigation tab is hidden. See [hideTabSync].
+  final bool hideTabRomm;
 
   /// Whether the Search navigation tab is hidden. See [hideTabSync].
   final bool hideTabSearch;
@@ -173,6 +179,22 @@ class ConfigModel {
   /// by the ES-DE import and read-time fallback artwork resolution.
   final String esdeFolderPath;
 
+  /// Whether library tiles show the RetroAchievements achievement count.
+  ///
+  /// Off by default: the badge only appears on ROMs matched to a
+  /// RetroAchievements game, so before the match tool has run it would be
+  /// missing from nearly every tile and read as a broken feature rather than an
+  /// empty one.
+  final bool showAchievementsBadge;
+
+  /// Whether the startup folder scan is followed by a RetroAchievements match
+  /// pass over whatever it just added.
+  ///
+  /// Off by default: on a library that has never been matched the first run is
+  /// a long one, and that is not a cost to impose on a user who has not asked
+  /// for it.
+  final bool raMatchOnStartup;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -189,6 +211,7 @@ class ConfigModel {
     this.hideBottomScreen = false,
     this.videoSound = false,
     this.sfxEnabled = true,
+    this.sfxVolume = 0.75,
     this.use12HourClock = false,
     this.systemSortBy = 'alphabetical',
     this.systemSortOrder = 'asc',
@@ -199,6 +222,7 @@ class ConfigModel {
     this.hideTabSync = false,
     this.hideTabAchievements = false,
     this.hideTabScraper = false,
+    this.hideTabRomm = false,
     this.hideTabSearch = false,
     this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
@@ -213,6 +237,8 @@ class ConfigModel {
     this.dockEnabled = true,
     this.dockSlotCount = 3,
     this.esdeFolderPath = '',
+    this.showAchievementsBadge = false,
+    this.raMatchOnStartup = false,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -282,6 +308,14 @@ class ConfigModel {
       sfxEnabled:
           (json['sfxEnabled'] ?? true).toString().toLowerCase() == 'true' ||
           (json['sfx_enabled'] ?? 1).toString() == '1',
+      sfxVolume:
+          (double.tryParse(
+                    (json['sfxVolume'] ?? json['sfx_volume'] ?? 0.75)
+                        .toString(),
+                  ) ??
+                  0.75)
+              .clamp(0.0, 0.75)
+              .toDouble(),
       use12HourClock:
           (json['use12HourClock'] ?? json['use_12_hour_clock'] ?? 0)
                   .toString() ==
@@ -324,6 +358,10 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['hideTabScraper'] ?? false).toString().toLowerCase() == 'true',
+      hideTabRomm:
+          (json['hideTabRomm'] ?? json['hide_tab_romm'] ?? 0).toString() ==
+              '1' ||
+          (json['hideTabRomm'] ?? false).toString().toLowerCase() == 'true',
       hideTabSearch:
           (json['hideTabSearch'] ?? json['hide_tab_search'] ?? 0).toString() ==
               '1' ||
@@ -385,6 +423,23 @@ class ConfigModel {
               .clamp(dockMinSlotCount, dockMaxSlotCount),
       esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
           .toString(),
+      // Absent key => 0 => off, which is also the column default: a config
+      // written before the badge existed leaves the feature opt-in.
+      showAchievementsBadge:
+          (json['showAchievementsBadge'] ??
+                      json['show_achievements_badge'] ??
+                      0)
+                  .toString() ==
+              '1' ||
+          (json['showAchievementsBadge'] ?? false).toString().toLowerCase() ==
+              'true',
+      // Same reasoning: absent => 0 => off, matching the column default.
+      raMatchOnStartup:
+          (json['raMatchOnStartup'] ?? json['ra_match_on_startup'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['raMatchOnStartup'] ?? false).toString().toLowerCase() ==
+              'true',
     );
   }
 
@@ -411,6 +466,7 @@ class ConfigModel {
       'hideBottomScreen': hideBottomScreen,
       'videoSound': videoSound,
       'sfxEnabled': sfxEnabled,
+      'sfxVolume': sfxVolume,
       'use12HourClock': use12HourClock,
       'systemSortBy': systemSortBy,
       'systemSortOrder': systemSortOrder,
@@ -421,6 +477,7 @@ class ConfigModel {
       'hideTabSync': hideTabSync,
       'hideTabAchievements': hideTabAchievements,
       'hideTabScraper': hideTabScraper,
+      'hideTabRomm': hideTabRomm,
       'hideTabSearch': hideTabSearch,
       'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
@@ -435,6 +492,8 @@ class ConfigModel {
       'dockEnabled': dockEnabled,
       'dockSlotCount': dockSlotCount,
       'esdeFolderPath': esdeFolderPath,
+      'showAchievementsBadge': showAchievementsBadge,
+      'raMatchOnStartup': raMatchOnStartup,
     };
   }
 
@@ -455,6 +514,7 @@ class ConfigModel {
     bool? hideBottomScreen,
     bool? videoSound,
     bool? sfxEnabled,
+    double? sfxVolume,
     bool? use12HourClock,
     String? systemSortBy,
     String? systemSortOrder,
@@ -465,6 +525,7 @@ class ConfigModel {
     bool? hideTabSync,
     bool? hideTabAchievements,
     bool? hideTabScraper,
+    bool? hideTabRomm,
     bool? hideTabSearch,
     String? activeSyncProvider,
     bool? autoUpdateApp,
@@ -479,6 +540,8 @@ class ConfigModel {
     bool? dockEnabled,
     int? dockSlotCount,
     String? esdeFolderPath,
+    bool? showAchievementsBadge,
+    bool? raMatchOnStartup,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -496,6 +559,7 @@ class ConfigModel {
       hideBottomScreen: hideBottomScreen ?? this.hideBottomScreen,
       videoSound: videoSound ?? this.videoSound,
       sfxEnabled: sfxEnabled ?? this.sfxEnabled,
+      sfxVolume: sfxVolume ?? this.sfxVolume,
       use12HourClock: use12HourClock ?? this.use12HourClock,
       systemSortBy: systemSortBy ?? this.systemSortBy,
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
@@ -506,6 +570,7 @@ class ConfigModel {
       hideTabSync: hideTabSync ?? this.hideTabSync,
       hideTabAchievements: hideTabAchievements ?? this.hideTabAchievements,
       hideTabScraper: hideTabScraper ?? this.hideTabScraper,
+      hideTabRomm: hideTabRomm ?? this.hideTabRomm,
       hideTabSearch: hideTabSearch ?? this.hideTabSearch,
       activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
@@ -521,6 +586,9 @@ class ConfigModel {
       dockEnabled: dockEnabled ?? this.dockEnabled,
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
       esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
+      showAchievementsBadge:
+          showAchievementsBadge ?? this.showAchievementsBadge,
+      raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
     );
   }
 

@@ -54,7 +54,7 @@ class NeoSyncService extends ChangeNotifier {
     try {
       final headers = await _getHeaders();
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/files/check');
+      final uri = Uri.parse('$baseUrl/api/v2/files/check');
 
       final requestBody = {
         'filename': filename,
@@ -96,10 +96,19 @@ class NeoSyncService extends ChangeNotifier {
   ///
   /// Performs a pre-flight check to avoid redundant uploads. Updates the local
   /// sync state in the database upon success.
+  ///
+  /// [systemId] and [emulatorId] are the NeoSync v2 structured metadata: they
+  /// let the backend index files without parsing the cloud path. [isState] and
+  /// [scope] (shared/game) describe the file kind.
   Future<Map<String, dynamic>> syncFile(
     File file,
     String gameName, {
     String? customFilename,
+    String? systemId,
+    String? emulatorId,
+    String? gameHash,
+    bool? isState,
+    String? scope,
   }) async {
     _isLoading = true;
     _lastError = null;
@@ -128,6 +137,7 @@ class NeoSyncService extends ChangeNotifier {
           if (ts is String) cloudTime = int.tryParse(ts) ?? cloudTime;
         }
         await SyncRepository.saveSyncState(
+          'neosync', // NeoSync-owned row in app_neo_sync_state.
           file.path,
           localModifiedAt.millisecondsSinceEpoch,
           cloudTime,
@@ -155,7 +165,7 @@ class NeoSyncService extends ChangeNotifier {
       }
 
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/upload');
+      final uri = Uri.parse('$baseUrl/api/v2/upload');
 
       final request = http.MultipartRequest('POST', uri);
       request.headers['Authorization'] = 'Bearer $token';
@@ -172,6 +182,21 @@ class NeoSyncService extends ChangeNotifier {
       request.fields['file_size'] = fileBytes.length.toString();
       request.fields['file_modified_at_timestamp'] = fileModifiedAtTimestamp
           .toString();
+      if (systemId != null && systemId.isNotEmpty) {
+        request.fields['system_id'] = systemId;
+      }
+      if (emulatorId != null && emulatorId.isNotEmpty) {
+        request.fields['emulator_id'] = emulatorId;
+      }
+      if (gameHash != null && gameHash.isNotEmpty) {
+        request.fields['game_hash'] = gameHash;
+      }
+      if (isState != null) {
+        request.fields['is_state'] = isState.toString();
+      }
+      if (scope != null && scope.isNotEmpty) {
+        request.fields['scope'] = scope;
+      }
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
@@ -185,6 +210,7 @@ class NeoSyncService extends ChangeNotifier {
           if (ts is String) cloudTime = int.tryParse(ts) ?? cloudTime;
         }
         await SyncRepository.saveSyncState(
+          'neosync', // NeoSync-owned row in app_neo_sync_state.
           file.path,
           localModifiedAt.millisecondsSinceEpoch,
           cloudTime,
@@ -243,7 +269,7 @@ class NeoSyncService extends ChangeNotifier {
       }
 
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/upload');
+      final uri = Uri.parse('$baseUrl/api/v2/upload');
 
       final request = http.MultipartRequest('POST', uri);
       request.headers['Authorization'] = 'Bearer $token';
@@ -280,8 +306,12 @@ class NeoSyncService extends ChangeNotifier {
     }
   }
 
-  /// Fetches the metadata list of all files currently stored in the user's cloud account.
-  Future<Map<String, dynamic>> getFiles() async {
+  /// Fetches the metadata list of the user's cloud files.
+  ///
+  /// Pass a [filter] to paginate and filter server-side. The result carries the
+  /// page's [files], the filtered [total], the per-kind [counts] breakdown, and
+  /// the distinct [systems]/[emulators] used to build the filter controls.
+  Future<Map<String, dynamic>> getFiles({NeoSyncFileFilter? filter}) async {
     _isLoading = true;
     _lastError = null;
     _safeNotifyListeners();
@@ -289,7 +319,11 @@ class NeoSyncService extends ChangeNotifier {
     try {
       final headers = await _getHeaders();
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/files');
+
+      final query = filter?.toQueryParameters() ?? <String, String>{};
+      final uri = query.isEmpty
+          ? Uri.parse('$baseUrl/api/v2/files')
+          : Uri.parse('$baseUrl/api/v2/files').replace(queryParameters: query);
 
       final response = await http.get(uri, headers: headers);
 
@@ -300,7 +334,20 @@ class NeoSyncService extends ChangeNotifier {
                 ?.map((file) => NeoSyncFile.fromJson(file))
                 .toList() ??
             [];
-        return {'success': true, 'files': files};
+        return {
+          'success': true,
+          'files': files,
+          'total': (data['total'] as num?)?.toInt() ?? files.length,
+          'counts': data['counts'] is Map
+              ? Map<String, dynamic>.from(data['counts'] as Map)
+              : null,
+          'systems':
+              (data['systems'] as List?)?.map((e) => e.toString()).toList() ??
+              const <String>[],
+          'emulators':
+              (data['emulators'] as List?)?.map((e) => e.toString()).toList() ??
+              const <String>[],
+        };
       } else {
         final data = jsonDecode(response.body);
         final error = data['error'] ?? 'Failed to fetch files';
@@ -318,6 +365,53 @@ class NeoSyncService extends ChangeNotifier {
     }
   }
 
+  /// Fetches every cloud file by walking the `limit`/`offset` pages.
+  ///
+  /// Background flows (auto-sync, downloads, migration jobs) operate on the
+  /// full set, but `GET /api/v2/files` may paginate by default. This helper
+  /// pages through the whole filtered set using the server-reported [total], so
+  /// a user with more files than one page still gets every save processed.
+  Future<Map<String, dynamic>> getAllFiles({NeoSyncFileFilter? filter}) async {
+    const int pageSize = 200;
+    final allFiles = <NeoSyncFile>[];
+    Map<String, dynamic>? lastPage;
+
+    try {
+      var offset = 0;
+      while (true) {
+        final pageResult = await getFiles(
+          filter: (filter ?? const NeoSyncFileFilter()).copyWith(
+            limit: pageSize,
+            offset: offset,
+          ),
+        );
+        if (!pageResult['success']) return pageResult;
+
+        final page = (pageResult['files'] as List<NeoSyncFile>?) ?? [];
+        allFiles.addAll(page);
+        final total = (pageResult['total'] as num?)?.toInt() ?? page.length;
+        lastPage = pageResult;
+
+        if (page.isEmpty || allFiles.length >= total) break;
+        offset += page.length;
+      }
+
+      return {
+        'success': true,
+        'files': allFiles,
+        'total': (lastPage['total'] as num?)?.toInt() ?? allFiles.length,
+        'counts': lastPage['counts'],
+        'systems': lastPage['systems'] ?? const <String>[],
+        'emulators': lastPage['emulators'] ?? const <String>[],
+      };
+    } catch (e) {
+      final error = 'Network error: $e';
+      _log.e('Get all files error: $error');
+      _lastError = error;
+      return {'success': false, 'message': error};
+    }
+  }
+
   /// Deletes a specific file from the cloud storage by its unique identifier.
   Future<Map<String, dynamic>> deleteFile(String fileId) async {
     _isLoading = true;
@@ -327,7 +421,7 @@ class NeoSyncService extends ChangeNotifier {
     try {
       final headers = await _getHeaders();
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/files/$fileId');
+      final uri = Uri.parse('$baseUrl/api/v2/files/$fileId');
 
       final response = await http.delete(uri, headers: headers);
 
@@ -359,7 +453,7 @@ class NeoSyncService extends ChangeNotifier {
     try {
       final headers = await _getHeaders();
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/quota');
+      final uri = Uri.parse('$baseUrl/api/v2/quota');
 
       final response = await http.get(uri, headers: headers);
 
@@ -397,7 +491,7 @@ class NeoSyncService extends ChangeNotifier {
     try {
       final headers = await _getHeaders();
       final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v1/download');
+      final uri = Uri.parse('$baseUrl/api/v2/download');
 
       final requestBody = {'file_id': fileId};
 

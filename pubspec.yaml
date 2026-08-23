@@ -5,6 +5,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 workspace:
   - packages/flutter_7zip
+  - packages/flutter_chd
   - packages/gamepads
   - packages/gamepads_android
   - packages/gamepads_darwin
@@ -12,7 +13,7 @@ workspace:
   - packages/gamepads_platform_interface
   - packages/gamepads_windows
 
-version: 0.9.9+124
+version: 0.11.0+126
 
 environment:
   sdk: '>=3.9.2'
@@ -27,11 +28,13 @@ dependencies:
     path: packages/gamepads
   flutter_7zip:
     path: packages/flutter_7zip
-    
+  flutter_chd:
+    path: packages/flutter_chd
+
   file_picker: ^12.0.0-beta.7
   device_info_plus: ^13.2.0
   package_info_plus: ^10.2.1
-  google_fonts: ^8.1.0
+  google_fonts: ^8.2.1
   material_symbols_icons: ^4.2960.0
   provider: ^6.1.5+1
   battery_plus: ^7.1.1
@@ -43,6 +46,7 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   shared_preferences: ^2.5.5
   http: ^1.6.0
+  flutter_svg: ^2.0.10
   crypto: ^3.0.7
   archive: ^4.0.9
   web_socket_channel: ^3.0.3
@@ -52,13 +56,13 @@ dependencies:
   window_manager: ^0.5.2
   permission_handler: ^12.0.3
   pointycastle: ^4.0.0
-  sqlite3: ^3.5.0
+  sqlite3: ^3.5.1
   fullscreen_window: ^1.2.1
   animated_toggle_switch: ^0.8.7
   marquee: ^2.3.0
   logger: ^2.7.0
   sub_screen: ^0.1.9
-  flutter_soloud: ^4.0.12
+  flutter_soloud: ^4.1.7
   audio_metadata_reader: ^1.7.1
   wakelock_plus: ^1.7.0
   flutter_localization: ^0.4.1
