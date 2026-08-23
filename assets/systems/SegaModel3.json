@@ -32,7 +32,29 @@
   },
   "emulators": [
     {
-        "name": "Standalone Super3",
+    "name": "RetroArch32 Super Model",
+      "unique_id": "sega.ra32.supermodel",
+      "description": "Supported extensions: 7z, chd, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\"" 
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Super Model",
+      "unique_id": "sega.ra64.supermodel",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""  
+        }
+      }
+    },
+    {
+      "name": "Standalone Super3",
       "unique_id": "model3.com.izzy2lost.super3",
       "description": "Supported extensions: zip.",
       "is_retroachievements_compatible": false,
