@@ -2,10 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/models/notification_models.dart';
-import 'dart:io';
 import 'package:neostation/utils/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/widgets/plan_welcome_modal.dart';
@@ -15,6 +12,7 @@ import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/sync/providers/neo_sync_adapter.dart';
 import 'package:provider/provider.dart';
+import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 
 /// Service responsible for real-time notifications via WebSockets.
@@ -24,7 +22,6 @@ import 'package:neostation/services/logger_service.dart';
 /// and UI integration for displaying system modals.
 class NotificationService extends ChangeNotifier {
   static const String _tokenKey = 'auth_token';
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final _log = LoggerService.instance;
 
   WebSocketChannel? _channel;
@@ -145,11 +142,14 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<String?> _getToken() async {
-    if (Platform.isMacOS) {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_tokenKey);
+    try {
+      return await CredentialStore.read(_tokenKey);
+    } catch (e) {
+      // An unreadable store is not a signed-out user: report "no token" for
+      // this call and leave the stored credential alone.
+      _log.w('Could not read the NeoSync token: $e');
+      return null;
     }
-    return await _storage.read(key: _tokenKey);
   }
 
   /// Establishes the WebSocket connection with the notification server.

@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/models/billing_models.dart';
+import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
-import 'dart:io';
 import 'package:neostation/utils/app_config.dart';
 import 'package:flutter/material.dart';
 
@@ -17,7 +15,6 @@ class BillingService extends ChangeNotifier {
   static const String _tokenKey = 'auth_token';
 
   /// Primary storage for sensitive credentials.
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   final _log = LoggerService.instance;
 
@@ -39,11 +36,14 @@ class BillingService extends ChangeNotifier {
 
   /// Retrieves the current authentication token from secure storage.
   Future<String?> _getToken() async {
-    if (Platform.isMacOS) {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_tokenKey);
+    try {
+      return await CredentialStore.read(_tokenKey);
+    } catch (e) {
+      // An unreadable store is not a signed-out user: report "no token" for
+      // this call and leave the stored credential alone.
+      _log.w('Could not read the NeoSync token: $e');
+      return null;
     }
-    return await _storage.read(key: _tokenKey);
   }
 
   /// Constructs the standard HTTP headers for authenticated billing API requests.

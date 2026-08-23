@@ -1,23 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/models/user.dart';
+import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
-import 'dart:io';
 import 'package:neostation/utils/app_config.dart';
 
 /// Service responsible for managing user authentication and profile synchronization.
 ///
-/// Handles registration, login, email verification, password recovery, and session
-/// persistence using secure storage (or shared preferences on macOS).
+/// Handles registration, login, email verification, password recovery, and
+/// session persistence. Where the token is kept is [CredentialStore]'s problem,
+/// including the platforms whose secure storage cannot hold it.
 class AuthService extends ChangeNotifier {
   /// Storage key for the authentication JWT token.
   static const String _tokenKey = 'auth_token';
-
-  /// Primary storage for sensitive credentials on supported platforms.
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   static final _log = LoggerService.instance;
 
@@ -37,13 +33,7 @@ class AuthService extends ChangeNotifier {
   /// while purging them on explicit authentication errors (401/403).
   Future<void> initialize() async {
     try {
-      String? token;
-      if (Platform.isMacOS) {
-        final prefs = await SharedPreferences.getInstance();
-        token = prefs.getString(_tokenKey);
-      } else {
-        token = await _storage.read(key: _tokenKey);
-      }
+      final token = await CredentialStore.read(_tokenKey);
       if (token != null) {
         final profileResult = await getProfile();
         if (profileResult['success'] == true) {
@@ -59,12 +49,7 @@ class AuthService extends ChangeNotifier {
             _log.w(
               'AuthService: Token invalid or expired ($statusCode). Clearing storage.',
             );
-            if (Platform.isMacOS) {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove(_tokenKey);
-            } else {
-              await _storage.delete(key: _tokenKey);
-            }
+            await CredentialStore.delete(_tokenKey);
           } else {
             _log.i(
               'AuthService: Unexpected server error ($statusCode). Token preserved.',
@@ -147,11 +132,13 @@ class AuthService extends ChangeNotifier {
         final token = data['token'];
         final userData = data['user'];
 
-        if (Platform.isMacOS) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(_tokenKey, token);
-        } else {
-          await _storage.write(key: _tokenKey, value: token);
+        final storage = await CredentialStore.write(_tokenKey, token);
+        final tokenPersisted = storage != CredentialWriteOutcome.sessionOnly;
+        if (!tokenPersisted) {
+          _log.w(
+            'Login succeeded but the token could not be persisted; the '
+            'session ends when the app closes',
+          );
         }
 
         _currentUser = User.fromJson(userData);
@@ -165,6 +152,7 @@ class AuthService extends ChangeNotifier {
             'message': 'Login successful, but email not verified',
             'emailVerified': false,
             'user': user,
+            'tokenPersisted': tokenPersisted,
           };
         }
 
@@ -173,6 +161,7 @@ class AuthService extends ChangeNotifier {
           'message': 'Login successful',
           'emailVerified': true,
           'user': user,
+          'tokenPersisted': tokenPersisted,
         };
       } else {
         String errorMessage = data['error'] ?? 'Login failed';
@@ -276,13 +265,7 @@ class AuthService extends ChangeNotifier {
   /// Automatically updates the internal [_currentUser] state on success.
   Future<Map<String, dynamic>> getProfile() async {
     try {
-      String? token;
-      if (Platform.isMacOS) {
-        final prefs = await SharedPreferences.getInstance();
-        token = prefs.getString(_tokenKey);
-      } else {
-        token = await _storage.read(key: _tokenKey);
-      }
+      final token = await CredentialStore.read(_tokenKey);
       if (token == null) {
         return {'success': false, 'message': 'Not authenticated'};
       }
@@ -380,12 +363,7 @@ class AuthService extends ChangeNotifier {
 
   /// Terminates the current user session and purges the stored authentication token.
   Future<void> logout() async {
-    if (Platform.isMacOS) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenKey);
-    } else {
-      await _storage.delete(key: _tokenKey);
-    }
+    await CredentialStore.delete(_tokenKey);
     _isLoggedIn = false;
     _currentUser = null;
     notifyListeners();
