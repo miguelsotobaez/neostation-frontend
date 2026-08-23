@@ -514,6 +514,10 @@ class SqliteMigrations {
       case 141:
         await _migrateToVersion141(db);
         break;
+      // 142 and 143 are claimed by another branch that is not merged yet.
+      case 144:
+        await _migrateToVersion144(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6391,6 +6395,56 @@ class SqliteMigrations {
       _log.i('Migration v141 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v141: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v144: reopens disc ROMs parked while the CHD reader misread
+  /// cooked tracks.
+  ///
+  /// Adds no column. A CHD written by `chdman createcd` from a `.iso` holds
+  /// one `MODE1` track whose frames are user data from byte zero, and the
+  /// reader stepped over a 16-byte sector header that is not there. Every
+  /// lookup on such a disc missed, the hash came back null, and the ROM was
+  /// parked with `ra_hash_skipped = 'error'` — which the match pass then walks
+  /// past for good. That is most of a PlayStation 2 library.
+  ///
+  /// Scoped to the disc systems, because `'error'` is the bulk pass's general
+  /// bucket and a cartridge parked under it failed for some other reason. The
+  /// folder list is a statement about history rather than policy — the live
+  /// policy is in `assets/systems/<sys>.json`, and this runs before
+  /// `syncSystems` has written it.
+  static Future<void> _migrateToVersion144(Database db) async {
+    _log.i('Migration v144: Reopening disc ROMs parked by the CHD reader');
+    try {
+      final romColumns = db
+          .select('PRAGMA table_info(user_roms)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!romColumns.contains('ra_hash_skipped')) {
+        _log.i('v144: user_roms has no ra_hash_skipped yet, nothing to reopen');
+        return;
+      }
+
+      const folders = ['ps1', 'ps2', 'psp', 'scd', 'sat', 'pccd', 'tgcd'];
+      final placeholders = List.filled(folders.length, '?').join(', ');
+      db.execute('''
+        UPDATE user_roms SET ra_hash_skipped = NULL
+        WHERE ra_hash_skipped IN ('error', 'disc')
+          AND app_system_id IN (
+            SELECT id FROM app_systems WHERE folder_name IN ($placeholders)
+          )
+      ''', folders);
+
+      final reopened = db.select('SELECT changes() AS n').first['n'] as int;
+      if (reopened > 0) {
+        _log.i('v144: reopened $reopened disc ROMs for re-matching');
+      }
+
+      _log.i('Migration v144 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v144: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

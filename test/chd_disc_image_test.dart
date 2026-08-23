@@ -182,6 +182,48 @@ void main() {
       disc.close();
     }, skip: skip);
 
+    test('reads a cooked track, whose frames carry no sector header', () async {
+      // Not every CD track is stored raw. `chdman createcd` on a `.iso` writes
+      // TYPE:MODE1 — 2048 cooked bytes at the front of the frame — and that is
+      // how most PS2 discs in a library are stored. Stepping the 16 bytes a
+      // raw mode 1 sector would need lands mid-payload, which reads as a disc
+      // with no filesystem on it rather than as an error.
+      final disc = ChdDisc.open(
+        write(
+          buildChd(
+            tracks: [ChdTrackSpec(type: 'MODE1', frames: 8)],
+            sectors: {
+              3: cookedSector([0x11, 0x22, 0x33, ...List.filled(2045, 0x44)]),
+            },
+          ),
+        ),
+      );
+
+      final read = disc.readSector(0, 3)!;
+      expect(read.take(3), [0x11, 0x22, 0x33]);
+      expect(read.skip(3).every((byte) => byte == 0x44), isTrue);
+
+      disc.close();
+    }, skip: skip);
+
+    test('reads a cooked mode 2 form 1 track from byte zero', () async {
+      // MODE2_FORM1 declares 2048 bytes too, so its frames start at the user
+      // data just as MODE1's do — the 24-byte step belongs to MODE2_RAW alone.
+      final disc = ChdDisc.open(
+        write(
+          buildChd(
+            tracks: [ChdTrackSpec(type: 'MODE2_FORM1', frames: 8)],
+            sectors: {2: cookedSector(List.filled(2048, 0x66))},
+          ),
+        ),
+      );
+
+      final read = disc.readSector(0, 2)!;
+      expect(read.every((byte) => byte == 0x66), isTrue);
+
+      disc.close();
+    }, skip: skip);
+
     test('reports a file that is not a CHD rather than throwing later', () {
       final path = '${temp.path}/broken.chd';
       File(path).writeAsBytesSync(Uint8List(4096));
@@ -323,6 +365,43 @@ void main() {
       );
     }, skip: skip);
 
+    test('produces the PlayStation 2 hash from a cooked CD image', () async {
+      // The other way a PS2 disc reaches a library: `chdman createcd -i
+      // game.iso`, which writes one TYPE:MODE1 track of cooked sectors rather
+      // than the flat DVD layout. Same disc, same hash — the container is not
+      // supposed to be visible from up here.
+      final executable = sector([0x7F, 0x45, 0x4C, 0x46]);
+      final path = write(
+        buildChd(
+          tracks: [ChdTrackSpec(type: 'MODE1', frames: 32)],
+          sectors: {
+            16: cookedSector(volumeDescriptor(rootSector: 20, rootSize: 2048)),
+            20: cookedSector(
+              directory({
+                'SYSTEM.CNF;1': [22, 100],
+                'SLUS_202.02;1': [24, 2048],
+              }).first,
+            ),
+            22: cookedSector(
+              'BOOT2 = cdrom0:\\SLUS_202.02;1\r\nVER=1.00\r\n'.codeUnits,
+            ),
+            24: cookedSector(executable),
+          },
+        ),
+      );
+
+      final hash = await RaDiscHash.compute(RaHashAlgo.ps2, path);
+
+      expect(
+        hash,
+        crypto.md5
+            .convert(
+              ['SLUS_202.02'.codeUnits, executable].expand((e) => e).toList(),
+            )
+            .toString(),
+      );
+    }, skip: skip);
+
     test('exposes the same tracks through the disc image', () async {
       final path = write(
         buildChd(
@@ -429,6 +508,15 @@ Uint8List dataSector(List<int> data) {
   raw[15] = 1; // mode 1
   raw.setRange(16, 16 + data.length, data);
   return raw;
+}
+
+/// A cooked sector carrying [data]: the user bytes alone, at the front of the
+/// frame, with no sync pattern and no header. What chdman stores for a track
+/// whose type declares a 2048-byte data size.
+Uint8List cookedSector(List<int> data) {
+  final frame = Uint8List(_sectorDataSize);
+  frame.setRange(0, data.length, data);
+  return frame;
 }
 
 /// A raw mode 2 form 1 sector carrying [data], behind its subheader.

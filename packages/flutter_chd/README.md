@@ -4,8 +4,14 @@ Reads tracks and sectors out of CHD disc images, so RetroAchievements hashing
 can reach the executable inside a disc's filesystem.
 
 Both CHD layouts a game library holds are read: a CD image, whose tracks are
-listed in metadata and whose frames wrap their user data in sector headers, and
-a DVD image, which has neither and is one flat run of 2048-byte sectors.
+listed in metadata, and a DVD image, which has neither track metadata nor
+sector headers and is one flat run of 2048-byte sectors.
+
+A CD track's frames are laid out as its declared type says, not always as a raw
+2352-byte sector: only the `_RAW` types carry a sync pattern and a header to
+step over, while `MODE1`, `MODE2_FORM1` and `MODE2_FORM2` are cooked and begin
+at the user data itself. `chdman createcd` on a `.iso` writes the cooked form,
+which is how a large part of a PlayStation 2 library is stored.
 
 RetroAchievements identifies a disc game by hashing its primary executable, not
 the container, so a plain MD5 of a `.chd` matches nothing in RA's database. This
