@@ -518,6 +518,10 @@ class SqliteMigrations {
       case 144:
         await _migrateToVersion144(db);
         break;
+      // 145 is claimed by another branch that is not merged yet.
+      case 146:
+        await _migrateToVersion146(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6445,6 +6449,41 @@ class SqliteMigrations {
       _log.i('Migration v144 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v144: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v146: adds `user_config.recent_card_size`.
+  ///
+  /// Holds the cell span the "Recently Played" card takes in the systems grid:
+  /// `'default'` (the 3x2 block it has always used) or `'2x1'`. Existing rows
+  /// keep the 3x2 layout, so the upgrade is invisible until the user picks the
+  /// smaller card in Settings > Systems.
+  ///
+  /// Guarded on `PRAGMA table_info` so a database that already carries the
+  /// column (a fresh install, or a device that skipped this case because its
+  /// version was already past 146) is left alone.
+  static Future<void> _migrateToVersion146(Database db) async {
+    _log.i('Migration v146: Adding recent_card_size to user_config');
+    try {
+      final columns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toSet();
+
+      if (!columns.contains('recent_card_size')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN recent_card_size TEXT DEFAULT 'default'",
+        );
+        _log.i('v146: recent_card_size column added');
+      } else {
+        _log.i('v146: recent_card_size already present, nothing to do');
+      }
+
+      _log.i('Migration v146 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v146: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

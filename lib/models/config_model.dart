@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:neostation/constants/recent_card_sizes.dart';
 import 'emulator_model.dart';
 
 /// Represents the global application configuration and user preferences.
@@ -98,6 +99,10 @@ class ConfigModel {
 
   /// Whether to hide the "Recently Played" card from the main dashboard.
   final bool hideRecentCard;
+
+  /// Cell span of the "Recently Played" card in the systems grid: `'default'`
+  /// (3x2) or `'2x1'`. Ignored by the carousel, where every card is one slot.
+  final String recentCardSize;
 
   /// Whether the vertical action-button legend is hidden across every game view
   /// (list, grid, carousel). Toggled by the Select + B chord.
@@ -217,6 +222,7 @@ class ConfigModel {
     this.systemSortOrder = 'asc',
     this.appLanguage = 'es',
     this.hideRecentCard = false,
+    this.recentCardSize = RecentCardSizes.defaultSize,
     this.legendHidden = false,
     this.gameDetailsTab = 'wheel',
     this.hideTabSync = false,
@@ -334,6 +340,11 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      recentCardSize:
+          (json['recentCardSize'] ??
+                  json['recent_card_size'] ??
+                  RecentCardSizes.defaultSize)
+              .toString(),
       legendHidden:
           (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
               '1' ||
@@ -472,6 +483,7 @@ class ConfigModel {
       'systemSortOrder': systemSortOrder,
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
+      'recentCardSize': recentCardSize,
       'legendHidden': legendHidden,
       'gameDetailsTab': gameDetailsTab,
       'hideTabSync': hideTabSync,
@@ -520,6 +532,7 @@ class ConfigModel {
     String? systemSortOrder,
     String? appLanguage,
     bool? hideRecentCard,
+    String? recentCardSize,
     bool? legendHidden,
     String? gameDetailsTab,
     bool? hideTabSync,
@@ -565,6 +578,7 @@ class ConfigModel {
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
+      recentCardSize: recentCardSize ?? this.recentCardSize,
       legendHidden: legendHidden ?? this.legendHidden,
       gameDetailsTab: gameDetailsTab ?? this.gameDetailsTab,
       hideTabSync: hideTabSync ?? this.hideTabSync,

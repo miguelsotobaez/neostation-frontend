@@ -84,6 +84,14 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists the cell span of the "Recently Played" card in the systems grid
+  /// ('default' for the 3x2 block, '2x1' for the compact wide card).
+  Future<void> updateRecentCardSize(String value) async {
+    _config = _config.copyWith(recentCardSize: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Persists whether library tiles show the RetroAchievements badge.
   Future<void> updateShowAchievementsBadge(bool value) async {
     _config = _config.copyWith(showAchievementsBadge: value);

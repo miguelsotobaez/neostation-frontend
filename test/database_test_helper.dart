@@ -127,6 +127,7 @@ class DatabaseTestHelper {
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
+        recent_card_size TEXT DEFAULT 'default',
         active_sync_provider TEXT DEFAULT 'neosync',
         game_view_mode TEXT DEFAULT 'list',
         rom_folders TEXT,

@@ -458,7 +458,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 144;
+  static const int _databaseVersion = 146;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1867,6 +1867,7 @@ class SqliteService {
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
+        recent_card_size TEXT DEFAULT 'default',
         legend_hidden INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
         hide_tab_sync INTEGER DEFAULT 0,
@@ -2687,6 +2688,7 @@ class SqliteService {
     String? appLanguage,
     String? activeTheme,
     int? hideRecentCard,
+    String? recentCardSize,
     int? legendHidden,
     String? gameDetailsTab,
     int? hideTabSync,
@@ -2773,6 +2775,9 @@ class SqliteService {
     }
     if (hideRecentCard != null) {
       updates['hide_recent_card'] = hideRecentCard;
+    }
+    if (recentCardSize != null) {
+      updates['recent_card_size'] = recentCardSize;
     }
     if (legendHidden != null) {
       updates['legend_hidden'] = legendHidden;

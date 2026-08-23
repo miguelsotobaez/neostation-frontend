@@ -8,6 +8,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../../themes/corner_radii.dart';
 import '../../../widgets/shaders/shader_gif_widget.dart';
@@ -508,20 +509,31 @@ class _SystemCardState extends State<SystemCard> {
           ),
         ),
 
-        // Central game wheel/logo.
+        // Central game wheel/logo. The inset that lets the wheel breathe on the
+        // 3x2 card would eat most of a 2x1 one, so it scales with the box and
+        // only reaches its full value on cards tall enough to spare it.
         Center(
           child: !_cachedHasWheelFile
               ? const SizedBox.shrink()
-              : Container(
-                  padding: EdgeInsetsGeometry.all(48.r),
-                  child: Image.file(
-                    _cachedWheelFile!,
-                    height: 256.r,
-                    fit: BoxFit.contain,
-                    cacheWidth: 512,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const SizedBox.shrink(),
-                  ),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final shortestSide = constraints.biggest.shortestSide;
+                    final inset = shortestSide.isFinite
+                        ? math.min(48.r, shortestSide * 0.15)
+                        : 48.r;
+
+                    return Padding(
+                      padding: EdgeInsets.all(inset),
+                      child: Image.file(
+                        _cachedWheelFile!,
+                        height: 256.r,
+                        fit: BoxFit.contain,
+                        cacheWidth: 512,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    );
+                  },
                 ),
         ),
       ],

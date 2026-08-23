@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:neostation/constants/recent_card_sizes.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
 import '../../models/config_model.dart';
@@ -171,6 +172,11 @@ class SqliteConfigService {
             (int.tryParse(userConfig?['hide_recent_card']?.toString() ?? '0') ??
                 0) ==
             1,
+        // Missing column/row => the 3x2 block the card has always used.
+        recentCardSize:
+            userConfig?['recent_card_size']?.toString().isNotEmpty == true
+            ? userConfig!['recent_card_size'].toString()
+            : RecentCardSizes.defaultSize,
         legendHidden:
             (int.tryParse(userConfig?['legend_hidden']?.toString() ?? '0') ??
                 0) ==
@@ -302,6 +308,7 @@ class SqliteConfigService {
         systemSortOrder: config.systemSortOrder,
         appLanguage: config.appLanguage,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
+        recentCardSize: config.recentCardSize,
         legendHidden: config.legendHidden ? 1 : 0,
         gameDetailsTab: config.gameDetailsTab,
         hideTabSync: config.hideTabSync ? 1 : 0,
