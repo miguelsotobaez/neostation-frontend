@@ -102,6 +102,29 @@ void main() {
     );
 
     test(
+      'auto-detected standalone paths do not change the system default',
+      () async {
+        await db.execute(
+          "INSERT INTO app_emulators (system_id, os_id, name, unique_identifier, is_standalone) VALUES ('ps2', 3, 'PCSX2', 'ps2.pcsx2', 1)",
+        );
+
+        await EmulatorRepository.setStandaloneEmulatorPath(
+          'ps2.pcsx2',
+          '/usr/bin/pcsx2',
+          setAsDefault: false,
+        );
+
+        final configured = await db.query(
+          'user_emulator_config',
+          where: 'emulator_unique_id = ?',
+          whereArgs: ['ps2.pcsx2'],
+        );
+        expect(configured.single['emulator_path'], '/usr/bin/pcsx2');
+        expect(configured.single['is_user_default'], 0);
+      },
+    );
+
+    test(
       'getUserDetectedEmulators prefers ra entry over standalone RetroArch entry',
       () async {
         await db.execute(

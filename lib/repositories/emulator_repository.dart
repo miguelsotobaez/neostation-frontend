@@ -67,8 +67,9 @@ class EmulatorRepository {
 
   static Future<void> setStandaloneEmulatorPath(
     String emulatorUniqueId,
-    String path,
-  ) async {
+    String path, {
+    bool setAsDefault = true,
+  }) async {
     final resolvedPath = await _resolveMacOsPath(
       path,
       bundleIdentifierHint: emulatorUniqueId,
@@ -76,6 +77,7 @@ class EmulatorRepository {
     await SqliteService.setStandaloneEmulatorPath(
       emulatorUniqueId,
       resolvedPath,
+      setAsDefault: setAsDefault,
     );
   }
 

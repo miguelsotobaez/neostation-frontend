@@ -3695,8 +3695,9 @@ class SqliteService {
   /// Configures a standalone emulator path and sets it as the system default.
   static Future<void> setStandaloneEmulatorPath(
     String emulatorUniqueId,
-    String path,
-  ) async {
+    String path, {
+    bool setAsDefault = true,
+  }) async {
     final db = await instance.database;
 
     // 1. Resolve the associated system ID.
@@ -3738,8 +3739,9 @@ class SqliteService {
       });
     }
 
-    // 3. Mark as default for the identified system.
-    if (systemId != null) {
+    // 3. A path selected in the UI becomes the default; discovery must not
+    // replace a user's existing default just because another emulator exists.
+    if (setAsDefault && systemId != null) {
       await setDefaultStandaloneEmulator(systemId, emulatorUniqueId);
     }
   }

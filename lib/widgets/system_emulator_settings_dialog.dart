@@ -25,6 +25,7 @@ import 'package:neostation/services/logger_service.dart';
 import '../utils/gamepad_nav.dart';
 import '../services/game_service.dart' show GamepadNavigationManager;
 import '../utils/centered_scroll_controller.dart';
+import '../utils/emulator_loader.dart';
 import 'package:path/path.dart' as path;
 
 import 'custom_notification.dart';
@@ -576,6 +577,8 @@ class _SystemEmulatorSettingsDialogState
         );
         _system = widget.system;
       }
+
+      await autoConfigureLinuxEmulatorsForSystem(_system);
 
       // Load both cores and standalone emulators
       final cores = await EmulatorRepository.getCoresBySystemId(

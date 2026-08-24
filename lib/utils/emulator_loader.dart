@@ -173,6 +173,62 @@ Future<List<CoreEmulatorModel>> loadEmulatorsForSystem(
   }
 }
 
+/// Saves Linux-discovered paths for this system without changing its default.
+///
+/// Discovery checks the configured EmuDeck location, Flatpak exports, PATH
+/// (including `/usr/bin`), and known AppImage folders in that order. Existing
+/// paths are left alone because they are an explicit user choice.
+Future<void> autoConfigureLinuxEmulatorsForSystem(SystemModel system) async {
+  if (!Platform.isLinux || system.id == null) return;
+
+  try {
+    final launcher = LauncherService.instance;
+    if (!await launcher.loadSystemConfig('${system.folderName}.json')) return;
+
+    final retroArchPath = await EmulatorRepository.getRetroArchExecutablePath();
+    if (retroArchPath == null || retroArchPath.isEmpty) {
+      final discovered = await LinuxEmulatorDiscovery.resolveExecutable(
+        executable: 'retroarch',
+        flatpakId: 'org.libretro.RetroArch',
+        emudeckLauncher: 'retroarch.sh',
+      );
+      if (discovered != null) {
+        await EmulatorRepository.saveDetectedEmulatorPath(
+          emulatorName: 'RetroArch',
+          emulatorPath: discovered,
+        );
+      }
+    }
+
+    final emulators = await EmulatorRepository.getEmulatorsForSystemCurrentOs(
+      system.id!,
+    );
+    for (final emulator in emulators) {
+      if (!emulator.isStandalone || emulator.hasConfiguredPath) continue;
+      final hints = launcher.getLinuxDiscoveryHints(
+        system.folderName,
+        emulator.uniqueId,
+      );
+      if (hints == null) continue;
+
+      final discovered = await LinuxEmulatorDiscovery.resolveExecutable(
+        executable: hints['executable'],
+        flatpakId: hints['flatpak'],
+        emudeckLauncher: hints['emudeck_launcher'],
+      );
+      if (discovered != null) {
+        await EmulatorRepository.setStandaloneEmulatorPath(
+          emulator.uniqueId,
+          discovered,
+          setAsDefault: false,
+        );
+      }
+    }
+  } catch (e) {
+    LoggerService.instance.w('Linux emulator auto-configuration failed: $e');
+  }
+}
+
 /// Returns whether a libretro core exists in [coresDir] on a desktop host.
 ///
 /// The DB [coreFilename] may carry the Android-style name (e.g.
