@@ -200,6 +200,9 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     await SqliteConfigService.saveConfig(_config);
     // Apply immediately to the running service — no restart needed.
     SfxService().setEnabled(value);
+    // The secondary display runs its own engine with its own SfxService
+    // singleton, so it has to be told separately or it keeps playing.
+    _secondaryDisplayState?.updateState(sfxEnabled: value);
     _notify();
   }
 
@@ -210,6 +213,8 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _config = _config.copyWith(sfxVolume: volume);
     // Apply immediately to the running service — no restart needed.
     SfxService().setVolume(volume);
+    // Mirror it to the secondary engine's own SfxService (see updateSfxEnabled).
+    _secondaryDisplayState?.updateState(sfxVolume: volume);
     _notify();
     unawaited(SfxService().playVolumePreview());
     await SqliteConfigService.saveConfig(_config);

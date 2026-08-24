@@ -213,6 +213,17 @@ class SecondaryDisplayStateData {
   /// picked a ROM folder.
   final bool setupWizardActive;
 
+  /// Whether UI navigation sounds are enabled. User setting, pushed by the main
+  /// engine. The secondary display runs its own engine/isolate with its own
+  /// [SfxService] singleton, so the main engine's `setEnabled` never reaches it
+  /// — without this the bottom screen kept clicking after the user turned UI
+  /// sounds off.
+  final bool sfxEnabled;
+
+  /// UI navigation sound volume (0.0–[SfxService.maxVolume]). User setting,
+  /// pushed by the main engine for the same cross-engine reason as [sfxEnabled].
+  final double sfxVolume;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -277,6 +288,11 @@ class SecondaryDisplayStateData {
     this.dockSlotCount = 3,
     this.appReady = false,
     this.setupWizardActive = false,
+    // Mirror the config defaults (sfx_enabled DEFAULT 1, sfx_volume DEFAULT
+    // 0.75) so a snapshot built before the main engine's seed lands behaves
+    // like the persisted setting rather than silently muting or blasting.
+    this.sfxEnabled = true,
+    this.sfxVolume = 0.75,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -355,6 +371,8 @@ class SecondaryDisplayStateData {
     int? dockSlotCount,
     bool? appReady,
     bool? setupWizardActive,
+    bool? sfxEnabled,
+    double? sfxVolume,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -434,6 +452,8 @@ class SecondaryDisplayStateData {
       dockSlotCount: dockSlotCount ?? this.dockSlotCount,
       appReady: appReady ?? this.appReady,
       setupWizardActive: setupWizardActive ?? this.setupWizardActive,
+      sfxEnabled: sfxEnabled ?? this.sfxEnabled,
+      sfxVolume: sfxVolume ?? this.sfxVolume,
     );
   }
 
@@ -515,6 +535,8 @@ class SecondaryDisplayStateData {
       dockSlotCount: (json['dockSlotCount'] as num?)?.toInt() ?? 3,
       appReady: json['appReady'] as bool? ?? false,
       setupWizardActive: json['setupWizardActive'] as bool? ?? false,
+      sfxEnabled: json['sfxEnabled'] as bool? ?? true,
+      sfxVolume: (json['sfxVolume'] as num?)?.toDouble() ?? 0.75,
     );
   }
 
@@ -579,6 +601,8 @@ class SecondaryDisplayStateData {
       'dockSlotCount': dockSlotCount,
       'appReady': appReady,
       'setupWizardActive': setupWizardActive,
+      'sfxEnabled': sfxEnabled,
+      'sfxVolume': sfxVolume,
     };
   }
 }
@@ -693,6 +717,8 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     int? dockSlotCount,
     bool? appReady,
     bool? setupWizardActive,
+    bool? sfxEnabled,
+    double? sfxVolume,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -776,6 +802,8 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           dockSlotCount: dockSlotCount,
           appReady: appReady,
           setupWizardActive: setupWizardActive,
+          sfxEnabled: sfxEnabled,
+          sfxVolume: sfxVolume,
         ),
       );
     } catch (e) {

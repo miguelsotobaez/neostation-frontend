@@ -796,6 +796,17 @@ Future<void> subDisplay() async {
       initLang = rawConfig['app_language'].toString();
     }
     initThemeName = rawConfig?['theme_name']?.toString();
+    // Same story for UI sounds: this engine has its own SfxService singleton,
+    // so the main engine's setEnabled/setVolume never reach it. The main engine
+    // also pushes these through the shared state, but that can land after the
+    // first tap — seed from the same config row so the very first sound already
+    // respects the setting.
+    SfxService().setEnabled(
+      (int.tryParse(rawConfig?['sfx_enabled']?.toString() ?? '1') ?? 1) == 1,
+    );
+    SfxService().setVolume(
+      double.tryParse(rawConfig?['sfx_volume']?.toString() ?? '0.75') ?? 0.75,
+    );
   } catch (e) {
     debugPrint('Secondary display could not load saved config: $e');
   }

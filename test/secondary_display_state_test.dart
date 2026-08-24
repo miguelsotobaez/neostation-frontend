@@ -91,6 +91,10 @@ void main() {
       // same value and the comparison passes regardless.
       appReady: true,
       setupWizardActive: true,
+      // Both non-default: the secondary engine has its own SfxService, so these
+      // are the only way the UI-sound setting crosses the engine boundary.
+      sfxEnabled: false,
+      sfxVolume: 0.25,
     );
 
     test('round-trips every field through toJson/fromJson', () {
@@ -145,6 +149,11 @@ void main() {
       // must not read as "wizard running" — that would park the dock forever.
       expect(restored.appReady, isFalse);
       expect(restored.setupWizardActive, isFalse);
+      // Mirror the config defaults (sfx_enabled DEFAULT 1, sfx_volume DEFAULT
+      // 0.75) so a snapshot predating these fields sounds like the persisted
+      // setting rather than silently muting the bottom screen.
+      expect(restored.sfxEnabled, isTrue);
+      expect(restored.sfxVolume, 0.75);
     });
 
     test('coerces numeric fields delivered as doubles', () {
@@ -154,12 +163,15 @@ void main() {
         'lastPlayedMillis': 1700000000000.0,
         'nowPlayingDimLevel': 75.0,
         'dockSlotCount': 5.0,
+        'sfxVolume': 0,
       });
 
       expect(restored.playTimeSeconds, 120);
       expect(restored.lastPlayedMillis, 1700000000000);
       expect(restored.nowPlayingDimLevel, 75);
       expect(restored.dockSlotCount, 5);
+      // An int-valued volume must not blow up the double cast.
+      expect(restored.sfxVolume, 0.0);
     });
   });
 
@@ -245,6 +257,31 @@ void main() {
         inWizard.copyWith(setupWizardActive: false).setupWizardActive,
         isFalse,
       );
+    });
+
+    test('a partial update that omits the SFX settings preserves them', () {
+      // UI sounds off is pushed once, from General settings. Every later push
+      // from either engine — a mute toggle, a screen-power edge, an art change
+      // — must carry it through, or the bottom screen starts clicking again.
+      final muted = SecondaryDisplayStateData(
+        systemName: 'snes',
+        sfxEnabled: false,
+        sfxVolume: 0.25,
+      );
+
+      final next = muted.copyWith(isVideoMuted: true, deviceScreenOn: false);
+
+      expect(next.sfxEnabled, isFalse);
+      expect(next.sfxVolume, 0.25);
+    });
+
+    test('an explicit sfxEnabled: false clears it (sounds turned off)', () {
+      // How the setting reaches the secondary engine: the mutator pushes the
+      // toggle, and the secondary applies it to its own SfxService.
+      final loud = SecondaryDisplayStateData(systemName: 'snes');
+
+      expect(loud.sfxEnabled, isTrue);
+      expect(loud.copyWith(sfxEnabled: false).sfxEnabled, isFalse);
     });
   });
 }

@@ -219,6 +219,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     final state = _secondaryDisplayState?.value;
     if (state == null) return;
 
+    // This engine has its own SfxService singleton, so the main engine's
+    // setEnabled/setVolume never reach it — the UI-sounds setting arrives only
+    // as pushed state. Without this the bottom screen kept clicking after the
+    // user turned UI sounds off in General settings.
+    _applySfxSettings(state);
+
     // Warm the app list + dock icons exactly once, only after the dock has
     // revealed. Gating on `appReady` keeps this heavy work off the cold-boot
     // reveal path so it can't perturb the cross-engine dock-reveal race — and
@@ -282,6 +288,16 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         _videoController!.setVolume(state.isVideoMuted ? 0.0 : 1.0);
       }
     }
+  }
+
+  /// Mirrors the pushed UI-sound settings onto this engine's [SfxService].
+  ///
+  /// Cheap enough to run on every state push: [SfxService] only stores the
+  /// values, and skipping the unchanged case keeps the log quiet.
+  void _applySfxSettings(SecondaryDisplayStateData state) {
+    final sfx = SfxService();
+    if (sfx.isEnabled != state.sfxEnabled) sfx.setEnabled(state.sfxEnabled);
+    if (sfx.volume != state.sfxVolume) sfx.setVolume(state.sfxVolume);
   }
 
   /// Whether the device screen is on, according to *both* signals that carry
