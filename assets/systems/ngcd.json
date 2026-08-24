@@ -49,7 +49,7 @@
     },
     {
       "name": "RetroArch32 NeoCD",
-      "default_core": true,
+      "default_core": false,
       "unique_id": "ngcd.ra32.neocd",
       "description": "Supported extensions: chd, cue.",
       "is_retroachievements_compatible": true,
@@ -61,7 +61,7 @@
     },
     {
       "name": "RetroArch NeoCD",
-      "default_core": true,
+      "default_core": false,
       "unique_id": "ngcd.ra.neocd",
       "description": "Supported extensions: chd, cue.",
       "is_retroachievements_compatible": true,
