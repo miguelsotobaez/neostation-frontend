@@ -127,6 +127,7 @@ class DatabaseTestHelper {
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
+        recent_card_size TEXT DEFAULT 'default',
         active_sync_provider TEXT DEFAULT 'neosync',
         game_view_mode TEXT DEFAULT 'list',
         rom_folders TEXT,
@@ -155,7 +156,8 @@ class DatabaseTestHelper {
         now_playing_dim_level INTEGER DEFAULT 100,
         fanart_dim_level INTEGER DEFAULT 25,
         show_achievements_badge INTEGER DEFAULT 0,
-        ra_match_on_startup INTEGER DEFAULT 0
+        ra_match_on_startup INTEGER DEFAULT 0,
+        subfolder_view_all INTEGER DEFAULT 0
       )
     ''');
 

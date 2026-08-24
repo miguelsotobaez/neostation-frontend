@@ -64,6 +64,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.hideRecentCard: 'Zuletzt gespielt',
   AppLocale.hideRecentCardSubtitle:
       'Karte der zuletzt gespielten Spiele im Raster anzeigen',
+  AppLocale.recentCardSize: 'Größe der Karte',
+  AppLocale.recentCardSizeSubtitle:
+      'Größe der Karte für zuletzt gespielte Spiele im Raster',
+  AppLocale.recentCardSizeDefault: 'Standard',
+  AppLocale.recentCardSize2x1: 'Kompakt',
   AppLocale.themesSubtitle: 'Personalisiere das Design von NeoStation',
   AppLocale.systemTheme: 'Systemdesign',
   AppLocale.importTheme: 'Theme importieren',
@@ -98,6 +103,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.subfolderView: 'Unterordner anzeigen',
   AppLocale.subfolderViewSubtitle:
       'ROMs in Unterordnern als durchsuchbare Ordner gruppieren, statt sie mit Spielen zu vermischen',
+  AppLocale.subfolderViewAll: 'Unterordner in allen Systemen anzeigen',
+  AppLocale.subfolderViewAllSubtitle:
+      'Die Einstellung „Unterordner anzeigen“ auf einmal für alle Systeme übernehmen',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} System(e) hatten eine eigene Einstellung „Unterordner anzeigen“. Alle Systeme folgen jetzt diesem Schalter; du kannst jedes einzelne weiterhin in seinen Systemeinstellungen ändern.',
   AppLocale.subfolderViewEnabled: 'Unterordner werden als Ordner angezeigt',
   AppLocale.subfolderViewDisabled: 'Unterordner mit Spielen vermischt',
   AppLocale.errorScanningSystem: 'Fehler beim Scannen des Systems: {error}',

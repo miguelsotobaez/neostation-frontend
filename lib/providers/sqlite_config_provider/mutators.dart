@@ -84,6 +84,14 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists the cell span of the "Recently Played" card in the systems grid
+  /// ('default' for the 3x2 block, '2x1' for the compact wide card).
+  Future<void> updateRecentCardSize(String value) async {
+    _config = _config.copyWith(recentCardSize: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Persists whether library tiles show the RetroAchievements badge.
   Future<void> updateShowAchievementsBadge(bool value) async {
     _config = _config.copyWith(showAchievementsBadge: value);
@@ -153,6 +161,22 @@ extension SqliteConfigMutators on SqliteConfigProvider {
   Future<void> updateRaMatchOnStartup(bool value) async {
     _config = _config.copyWith(raMatchOnStartup: value);
     await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Persists the global "Show Subfolders" choice and applies it to every
+  /// system.
+  ///
+  /// The game list reads the per-system flag, so the stored config value alone
+  /// would change nothing: the stamp is what makes the toggle global. Systems
+  /// keep their own toggle afterwards, and a later flip of this one overwrites
+  /// them again.
+  Future<void> updateSubfolderViewAll(bool value) async {
+    _config = _config.copyWith(subfolderViewAll: value);
+    await SqliteConfigService.saveConfig(_config);
+    await SystemRepository.setSubfolderViewForAll(value);
+    // The in-memory system models still carry the old per-system flag.
+    await refreshDetectedSystems();
     _notify();
   }
 

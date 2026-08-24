@@ -64,6 +64,11 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.hideRecentCard: 'Tarjeta de Recientes',
   AppLocale.hideRecentCardSubtitle:
       'Muestra la tarjeta de jugados recientemente en la grilla',
+  AppLocale.recentCardSize: 'Tamaño de la tarjeta',
+  AppLocale.recentCardSizeSubtitle:
+      'Tamaño de la tarjeta de jugados recientemente en la grilla',
+  AppLocale.recentCardSizeDefault: 'Predeterminado',
+  AppLocale.recentCardSize2x1: 'Compacto',
   AppLocale.themesSubtitle: 'Personaliza la apariencia de tu NeoStation',
   AppLocale.systemTheme: 'Sistema',
   AppLocale.importTheme: 'Importar tema',
@@ -98,6 +103,11 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.subfolderView: 'Mostrar subcarpetas',
   AppLocale.subfolderViewSubtitle:
       'Agrupar las ROMs de subcarpetas en carpetas navegables en lugar de mezclarlas con los juegos',
+  AppLocale.subfolderViewAll: 'Mostrar subcarpetas en todos los sistemas',
+  AppLocale.subfolderViewAllSubtitle:
+      'Aplicar de una vez la opción Mostrar subcarpetas a todos los sistemas',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} sistema(s) tenían su propia opción Mostrar subcarpetas. Ahora todos los sistemas siguen este interruptor; puedes volver a cambiar cualquiera de ellos en los ajustes de ese sistema.',
   AppLocale.subfolderViewEnabled: 'Subcarpetas mostradas como carpetas',
   AppLocale.subfolderViewDisabled: 'Subcarpetas mezcladas con los juegos',
   AppLocale.errorScanningSystem: 'Error al escanear el sistema: {error}',

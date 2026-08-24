@@ -90,6 +90,10 @@ mixin AppLocale {
   static const String systemsSettingsSubtitle = 'systems_settings_subtitle';
   static const String hideRecentCard = 'hide_recent_card';
   static const String hideRecentCardSubtitle = 'hide_recent_card_subtitle';
+  static const String recentCardSize = 'recent_card_size';
+  static const String recentCardSizeSubtitle = 'recent_card_size_subtitle';
+  static const String recentCardSizeDefault = 'recent_card_size_default';
+  static const String recentCardSize2x1 = 'recent_card_size_2x1';
 
   // ---------------------------------------------------------------------------
   // General settings
@@ -112,6 +116,10 @@ mixin AppLocale {
   static const String recursiveScanDisabled = 'recursive_scan_disabled';
   static const String subfolderView = 'subfolder_view';
   static const String subfolderViewSubtitle = 'subfolder_view_subtitle';
+  static const String subfolderViewAll = 'subfolder_view_all';
+  static const String subfolderViewAllSubtitle = 'subfolder_view_all_subtitle';
+  static const String subfolderViewAllOverridesNotice =
+      'subfolder_view_all_overrides_notice';
   static const String subfolderViewEnabled = 'subfolder_view_enabled';
   static const String subfolderViewDisabled = 'subfolder_view_disabled';
   static const String errorScanningSystem = 'error_scanning_system';

@@ -64,6 +64,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.hideRecentCard: 'Carte Récents',
   AppLocale.hideRecentCardSubtitle:
       'Afficher la carte des jeux récents dans la grille',
+  AppLocale.recentCardSize: 'Taille de la carte',
+  AppLocale.recentCardSizeSubtitle:
+      'Taille de la carte des jeux récents dans la grille',
+  AppLocale.recentCardSizeDefault: 'Par défaut',
+  AppLocale.recentCardSize2x1: 'Compact',
   AppLocale.themesSubtitle: 'Personnalisez le look de NeoStation',
   AppLocale.systemTheme: 'Thème du Système',
   AppLocale.importTheme: 'Importer un thème',
@@ -101,6 +106,12 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.subfolderView: 'Afficher les sous-dossiers',
   AppLocale.subfolderViewSubtitle:
       'Regrouper les ROMs des sous-dossiers dans des dossiers navigables au lieu de les mélanger avec les jeux',
+  AppLocale.subfolderViewAll:
+      'Afficher les sous-dossiers dans tous les systèmes',
+  AppLocale.subfolderViewAllSubtitle:
+      'Appliquer d’un coup l’option Afficher les sous-dossiers à tous les systèmes',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} système(s) avaient leur propre réglage Afficher les sous-dossiers. Tous les systèmes suivent désormais cet interrupteur ; vous pouvez toujours modifier chacun d’eux dans ses propres réglages.',
   AppLocale.subfolderViewEnabled: 'Sous-dossiers affichés comme dossiers',
   AppLocale.subfolderViewDisabled: 'Sous-dossiers mélangés aux jeux',
   AppLocale.errorScanningSystem:

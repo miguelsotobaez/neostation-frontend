@@ -1,4 +1,5 @@
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:neostation/constants/recent_card_sizes.dart';
 import 'package:neostation/models/my_systems.dart';
 
 /// Pure spatial-layout helpers for the systems grid.
@@ -8,19 +9,36 @@ import 'package:neostation/models/my_systems.dart';
 /// live widget. They hold no state — the grid's memoization cache stays in the
 /// widget, which calls [buildVirtualGrid] and stores the result.
 
+/// Cell span `(columns, rows)` of a 'Recent Games' card for the user's chosen
+/// [size] (a [RecentCardSizes] value) in a grid of [cols] columns.
+///
+/// A grid too narrow to hold the card's width falls back to a single cell, so
+/// the packing never has to place a card wider than the grid itself.
+(int, int) recentCardSpan(String size, int cols) {
+  if (size == RecentCardSizes.twoByOne) {
+    return cols >= 2 ? (2, 1) : (1, 1);
+  }
+  return cols >= 3 ? (3, 2) : (1, 1);
+}
+
 /// Packs [cards] into a virtual spatial grid of [cols] columns.
 ///
 /// Returns a row-major matrix where each cell holds the index of the card
 /// occupying it, or `-1` for an empty slot. 'Recent Games' cards (`isGame`)
-/// expand to a 3x2 block on wide displays (`cols >= 3`); every other card
-/// occupies a single cell. Cards are placed by a first-fit scan for the first
-/// spatial slot large enough to hold their span.
-List<List<int>> buildVirtualGrid(List<SystemInfo> cards, int cols) {
+/// expand to the span [recentCardSpan] resolves for [recentCardSize]; every
+/// other card occupies a single cell. Cards are placed by a first-fit scan for
+/// the first spatial slot large enough to hold their span.
+List<List<int>> buildVirtualGrid(
+  List<SystemInfo> cards,
+  int cols, {
+  String recentCardSize = RecentCardSizes.defaultSize,
+}) {
   final List<List<int>> grid = [];
 
-  // 'Recent Games' cards expand to 3x2 on high-resolution displays.
-  int getSpanW(SystemInfo card) => (card.isGame && cols >= 3) ? 3 : 1;
-  int getSpanH(SystemInfo card) => (card.isGame && cols >= 3) ? 2 : 1;
+  // 'Recent Games' cards expand to their configured block; the rest are 1x1.
+  final (recentW, recentH) = recentCardSpan(recentCardSize, cols);
+  int getSpanW(SystemInfo card) => card.isGame ? recentW : 1;
+  int getSpanH(SystemInfo card) => card.isGame ? recentH : 1;
 
   for (int i = 0; i < cards.length; i++) {
     final card = cards[i];

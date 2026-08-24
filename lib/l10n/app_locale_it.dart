@@ -64,6 +64,11 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.hideRecentCard: 'Scheda Recenti',
   AppLocale.hideRecentCardSubtitle:
       'Mostra la scheda dei giochi recenti nella griglia',
+  AppLocale.recentCardSize: 'Dimensione scheda recenti',
+  AppLocale.recentCardSizeSubtitle:
+      'Dimensione della scheda dei giochi recenti nella griglia',
+  AppLocale.recentCardSizeDefault: 'Predefinita',
+  AppLocale.recentCardSize2x1: 'Compatta',
   AppLocale.themesSubtitle: "Personalizza l'aspetto di NeoStation",
   AppLocale.systemTheme: 'Tema di Sistema',
   AppLocale.importTheme: 'Importa tema',
@@ -97,6 +102,11 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.subfolderView: 'Mostra sottocartelle',
   AppLocale.subfolderViewSubtitle:
       'Raggruppa le ROM nelle sottocartelle in cartelle navigabili invece di mescolarle con i giochi',
+  AppLocale.subfolderViewAll: 'Mostra sottocartelle in tutti i sistemi',
+  AppLocale.subfolderViewAllSubtitle:
+      'Applica in una volta l’opzione Mostra sottocartelle a tutti i sistemi',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} sistema/i avevano una propria impostazione Mostra sottocartelle. Ora tutti i sistemi seguono questo interruttore; puoi comunque modificarne ognuno nelle impostazioni di quel sistema.',
   AppLocale.subfolderViewEnabled: 'Sottocartelle mostrate come cartelle',
   AppLocale.subfolderViewDisabled: 'Sottocartelle mescolate ai giochi',
   AppLocale.errorScanningSystem:

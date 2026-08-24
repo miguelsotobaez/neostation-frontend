@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:neostation/constants/recent_card_sizes.dart';
 import 'emulator_model.dart';
 
 /// Represents the global application configuration and user preferences.
@@ -99,6 +100,10 @@ class ConfigModel {
   /// Whether to hide the "Recently Played" card from the main dashboard.
   final bool hideRecentCard;
 
+  /// Cell span of the "Recently Played" card in the systems grid: `'default'`
+  /// (3x2) or `'2x1'`. Ignored by the carousel, where every card is one slot.
+  final String recentCardSize;
+
   /// Whether the vertical action-button legend is hidden across every game view
   /// (list, grid, carousel). Toggled by the Select + B chord.
   final bool legendHidden;
@@ -195,6 +200,14 @@ class ConfigModel {
   /// for it.
   final bool raMatchOnStartup;
 
+  /// The remembered Settings > General "Show Subfolders" master choice.
+  ///
+  /// Not what the game list reads — flipping the switch stamps every system's
+  /// own subfolder setting, and the per-system toggle stays free to differ
+  /// afterwards. This is the value the switch shows, and the one a system added
+  /// by a later systems update inherits.
+  final bool subfolderViewAll;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -217,6 +230,7 @@ class ConfigModel {
     this.systemSortOrder = 'asc',
     this.appLanguage = 'es',
     this.hideRecentCard = false,
+    this.recentCardSize = RecentCardSizes.defaultSize,
     this.legendHidden = false,
     this.gameDetailsTab = 'wheel',
     this.hideTabSync = false,
@@ -239,6 +253,7 @@ class ConfigModel {
     this.esdeFolderPath = '',
     this.showAchievementsBadge = false,
     this.raMatchOnStartup = false,
+    this.subfolderViewAll = false,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -334,6 +349,11 @@ class ConfigModel {
                   .toString() ==
               '1' ||
           (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      recentCardSize:
+          (json['recentCardSize'] ??
+                  json['recent_card_size'] ??
+                  RecentCardSizes.defaultSize)
+              .toString(),
       legendHidden:
           (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
               '1' ||
@@ -440,6 +460,13 @@ class ConfigModel {
               '1' ||
           (json['raMatchOnStartup'] ?? false).toString().toLowerCase() ==
               'true',
+      // Same reasoning: absent => 0 => off, matching the column default.
+      subfolderViewAll:
+          (json['subfolderViewAll'] ?? json['subfolder_view_all'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
+              'true',
     );
   }
 
@@ -472,6 +499,7 @@ class ConfigModel {
       'systemSortOrder': systemSortOrder,
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
+      'recentCardSize': recentCardSize,
       'legendHidden': legendHidden,
       'gameDetailsTab': gameDetailsTab,
       'hideTabSync': hideTabSync,
@@ -494,6 +522,7 @@ class ConfigModel {
       'esdeFolderPath': esdeFolderPath,
       'showAchievementsBadge': showAchievementsBadge,
       'raMatchOnStartup': raMatchOnStartup,
+      'subfolderViewAll': subfolderViewAll,
     };
   }
 
@@ -520,6 +549,7 @@ class ConfigModel {
     String? systemSortOrder,
     String? appLanguage,
     bool? hideRecentCard,
+    String? recentCardSize,
     bool? legendHidden,
     String? gameDetailsTab,
     bool? hideTabSync,
@@ -542,6 +572,7 @@ class ConfigModel {
     String? esdeFolderPath,
     bool? showAchievementsBadge,
     bool? raMatchOnStartup,
+    bool? subfolderViewAll,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -565,6 +596,7 @@ class ConfigModel {
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
+      recentCardSize: recentCardSize ?? this.recentCardSize,
       legendHidden: legendHidden ?? this.legendHidden,
       gameDetailsTab: gameDetailsTab ?? this.gameDetailsTab,
       hideTabSync: hideTabSync ?? this.hideTabSync,
@@ -589,6 +621,7 @@ class ConfigModel {
       showAchievementsBadge:
           showAchievementsBadge ?? this.showAchievementsBadge,
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
+      subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
     );
   }
 

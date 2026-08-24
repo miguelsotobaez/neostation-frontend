@@ -91,6 +91,17 @@ class SystemRepository {
   static Future<void> setSubfolderView(String systemId, bool value) =>
       SqliteService.setSystemSubfolderView(systemId, value);
 
+  /// Applies "Show Subfolders" to every system at once (the global toggle in
+  /// Settings > General).
+  static Future<void> setSubfolderViewForAll(bool value) =>
+      SqliteService.setSubfolderViewForAllSystems(value);
+
+  /// How many systems carry a "Show Subfolders" setting of their own — one that
+  /// differs from [globalValue], the last global choice — and would therefore
+  /// be overwritten by the next global stamp.
+  static Future<int> countSubfolderViewOverrides(bool globalValue) =>
+      SqliteService.countSubfolderViewOverrides(globalValue);
+
   static Future<void> setHideExtension(String systemId, bool value) =>
       SqliteService.setSystemHideExtension(systemId, value);
 

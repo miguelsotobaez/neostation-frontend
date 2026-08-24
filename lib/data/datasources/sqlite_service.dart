@@ -13,6 +13,7 @@ import '../../models/emulator_model.dart';
 import '../../models/core_emulator_model.dart';
 // import '../models/neo_sync_models.dart'; // Removido si no se usa directamente aquí
 import '../../models/database_game_model.dart';
+import '../../constants/system_folder_names.dart';
 import '../../utils/cloud_path_builder.dart';
 import '../../utils/semaphore.dart';
 import 'sqlite_migrations.dart';
@@ -458,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 144;
+  static const int _databaseVersion = 147;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -531,6 +532,15 @@ class SqliteService {
     final syncedSystems = <SystemModel>[];
     final Set<String> syncedSystemIds = {};
 
+    // The global "Show Subfolders" choice, so a system this sync adds for the
+    // first time (a systems update shipping a new platform) starts out matching
+    // the rest of the library instead of silently opting out of it.
+    final userConfig = await getUserConfig();
+    final subfolderViewAll =
+        (int.tryParse(userConfig?['subfolder_view_all']?.toString() ?? '0') ??
+            0) ==
+        1;
+
     // Cache OS IDs
     final osMap = <String, int>{};
     final osResults = await db.query('app_os');
@@ -595,6 +605,19 @@ class SqliteService {
             'multidisc': jsonSystem.multiDisc ? 1 : 0,
             'neosync_json': json.encode(jsonSystem.neosync.toJson()),
           });
+
+          // Only for a brand-new system: an existing one keeps whatever the
+          // user set on it, and a virtual system never reads the flag.
+          if (subfolderViewAll &&
+              !SystemFolderNames.subfolderViewExcluded.contains(
+                jsonSystem.folderName,
+              )) {
+            await txn.insert('user_system_settings', {
+              'app_system_id': systemId,
+              'subfolder_view': 1,
+              'updated_at': DateTime.now().toIso8601String(),
+            }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          }
         }
 
         // SYNC FOLDERS: Source of Truth is JSON. Overwrite DB.
@@ -1867,6 +1890,7 @@ class SqliteService {
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
+        recent_card_size TEXT DEFAULT 'default',
         legend_hidden INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
         hide_tab_sync INTEGER DEFAULT 0,
@@ -1895,7 +1919,8 @@ class SqliteService {
         fanart_dim_level INTEGER DEFAULT 25,
         esde_folder_path TEXT DEFAULT '',
         show_achievements_badge INTEGER DEFAULT 0,
-        ra_match_on_startup INTEGER DEFAULT 0
+        ra_match_on_startup INTEGER DEFAULT 0,
+        subfolder_view_all INTEGER DEFAULT 0
       );
       ''',
       '''
@@ -2687,6 +2712,7 @@ class SqliteService {
     String? appLanguage,
     String? activeTheme,
     int? hideRecentCard,
+    String? recentCardSize,
     int? legendHidden,
     String? gameDetailsTab,
     int? hideTabSync,
@@ -2712,6 +2738,7 @@ class SqliteService {
     String? esdeFolderPath,
     int? showAchievementsBadge,
     int? raMatchOnStartup,
+    int? subfolderViewAll,
   }) async {
     final db = await instance.database;
 
@@ -2773,6 +2800,9 @@ class SqliteService {
     }
     if (hideRecentCard != null) {
       updates['hide_recent_card'] = hideRecentCard;
+    }
+    if (recentCardSize != null) {
+      updates['recent_card_size'] = recentCardSize;
     }
     if (legendHidden != null) {
       updates['legend_hidden'] = legendHidden;
@@ -2845,6 +2875,9 @@ class SqliteService {
     }
     if (raMatchOnStartup != null) {
       updates['ra_match_on_startup'] = raMatchOnStartup;
+    }
+    if (subfolderViewAll != null) {
+      updates['subfolder_view_all'] = subfolderViewAll;
     }
 
     if (showAchievementsBadge != null) {
@@ -2955,6 +2988,78 @@ class SqliteService {
     bool enabled,
   ) async {
     await _updateSystemSetting(systemId, 'subfolder_view', enabled ? 1 : 0);
+  }
+
+  /// The `NOT IN (?, ?, ...)` fragment and arguments that keep a statement off
+  /// the systems the subfolder view cannot apply to.
+  static (String, List<Object?>) get _nonVirtualSystemsFilter {
+    final names = SystemFolderNames.subfolderViewExcluded.toList();
+    final holes = List.filled(names.length, '?').join(', ');
+    return ('s.folder_name NOT IN ($holes)', names);
+  }
+
+  /// How many systems currently carry a `subfolder_view` of their own, i.e. one
+  /// that differs from [globalValue], the last global choice.
+  ///
+  /// This is what the settings screen reports before the global toggle
+  /// overwrites them. Counting rows that *deviate* rather than rows that will
+  /// change is the whole point: on a plain global flip every system moves
+  /// together, and saying so would be noise, not information.
+  ///
+  /// A system with no settings row reads as off, exactly as the game list reads
+  /// it, hence the LEFT JOIN and the COALESCE.
+  static Future<int> countSubfolderViewOverrides(bool globalValue) async {
+    final db = await instance.database;
+    final (filter, args) = _nonVirtualSystemsFilter;
+
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM app_systems s '
+      'LEFT JOIN user_system_settings ss ON s.id = ss.app_system_id '
+      'WHERE $filter AND COALESCE(ss.subfolder_view, 0) != ?',
+      [...args, globalValue ? 1 : 0],
+    );
+
+    return int.tryParse(result.first['c']?.toString() ?? '0') ?? 0;
+  }
+
+  /// Applies "Show Subfolders" to every system in one pass, for the global
+  /// toggle in Settings > General.
+  ///
+  /// Systems the user has never opened the settings dialog for have no
+  /// [user_system_settings] row at all, so the stamp has to create one before
+  /// it can update it. The inserted row names only `subfolder_view`: every
+  /// other column falls back to its table default, which is exactly what the
+  /// absent row already read as, so this adds no behaviour of its own.
+  ///
+  /// Virtual systems are skipped ([SystemFolderNames.subfolderViewExcluded]).
+  /// The game list never reads the flag for them, so writing one would only be
+  /// a value waiting to be believed by some later change.
+  static Future<void> setSubfolderViewForAllSystems(bool enabled) async {
+    final db = await instance.database;
+    final value = enabled ? 1 : 0;
+    final now = DateTime.now().toIso8601String();
+    final (filter, args) = _nonVirtualSystemsFilter;
+
+    await db.transaction((txn) async {
+      await txn.rawInsert(
+        'INSERT INTO user_system_settings '
+        '(app_system_id, subfolder_view, updated_at) '
+        'SELECT s.id, ?, ? FROM app_systems s '
+        'WHERE $filter AND NOT EXISTS ('
+        'SELECT 1 FROM user_system_settings ss WHERE ss.app_system_id = s.id)',
+        [value, now, ...args],
+      );
+      await txn.rawUpdate(
+        'UPDATE user_system_settings SET subfolder_view = ?, updated_at = ? '
+        'WHERE app_system_id IN '
+        '(SELECT s.id FROM app_systems s WHERE $filter)',
+        [value, now, ...args],
+      );
+    });
+
+    // The cached models carry the old per-system flag, and the settings dialog
+    // reads them.
+    _cachedSystems = null;
   }
 
   /// Retrieves the complete configuration for a system.

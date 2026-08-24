@@ -79,10 +79,7 @@ extension _DataLoading on _SystemGamesListState {
       final sysId = widget.system.id;
       final folderName = widget.system.folderName;
       if (sysId != null &&
-          folderName != 'music' &&
-          folderName != 'all' &&
-          folderName != SystemFolderNames.favorites &&
-          folderName != 'android') {
+          !SystemFolderNames.subfolderViewExcluded.contains(folderName)) {
         final settings = await SystemRepository.getSystemSettings(sysId);
         subfolderView = (settings['subfolder_view'] ?? 0) == 1;
       }

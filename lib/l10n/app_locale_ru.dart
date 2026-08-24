@@ -64,6 +64,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.hideRecentCard: 'Карточка недавних игр',
   AppLocale.hideRecentCardSubtitle:
       'Показать карточку недавних игр в сетке систем',
+  AppLocale.recentCardSize: 'Размер карточки',
+  AppLocale.recentCardSizeSubtitle:
+      'Размер карточки недавних игр в сетке систем',
+  AppLocale.recentCardSizeDefault: 'По умолчанию',
+  AppLocale.recentCardSize2x1: 'Компактно',
   AppLocale.themesSubtitle: 'Персонализируйте внешний вид вашей NeoStation',
   AppLocale.systemTheme: 'Системная',
   AppLocale.importTheme: 'Импорт темы',
@@ -97,6 +102,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.subfolderView: 'Показывать подпапки',
   AppLocale.subfolderViewSubtitle:
       'Группировать ROM в подпапках в виде просматриваемых папок, а не смешивать их с играми',
+  AppLocale.subfolderViewAll: 'Показывать подпапки во всех системах',
+  AppLocale.subfolderViewAllSubtitle:
+      'Применить настройку «Показывать подпапки» сразу ко всем системам',
+  AppLocale.subfolderViewAllOverridesNotice:
+      '{count} систем(ы) имели собственную настройку «Показывать подпапки». Теперь все системы следуют этому переключателю; каждую из них по-прежнему можно изменить в её настройках.',
   AppLocale.subfolderViewEnabled: 'Подпапки показаны как папки',
   AppLocale.subfolderViewDisabled: 'Подпапки смешаны с играми',
   AppLocale.errorScanningSystem: 'Ошибка при сканировании системы: {error}',
