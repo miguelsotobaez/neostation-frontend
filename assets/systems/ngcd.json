@@ -134,7 +134,7 @@
     },
     {
       "name": "RetroArch32 Geolith",
-      "unique_id": "neogeo.ra32.geolith",
+      "unique_id": "ngcd.ra32.geolith",
       "description": "Supported extensions: neo.",
       "is_retroachievements_compatible": false,
       "platforms": {
@@ -145,7 +145,7 @@
     },
     {
       "name": "RetroArch64 Geolith",
-      "unique_id": "neogeo.ra64.geolith",
+      "unique_id": "ngcd.ra64.geolith",
       "description": "Supported extensions: neo.",
       "is_retroachievements_compatible": false,
       "platforms": {
