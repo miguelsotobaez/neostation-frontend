@@ -53,13 +53,19 @@ class ScreenshotAccessibilityService : AccessibilityService() {
          * Starts watching [displayId] for the dismissal of [packageName] (a
          * dock-launched app). When the display returns to its launcher/home
          * *after the app has actually appeared*, [onClosed] is invoked once.
-         * No-op if the service isn't connected.
+         *
+         * Returns false, arming nothing, when the watch cannot work: the service
+         * isn't connected (user hasn't granted it), or the OS can't report
+         * per-display windows (pre-R). Arming anyway would leave the caller
+         * waiting for events that never come.
          */
-        fun startWatch(packageName: String, displayId: Int, onClosed: () -> Unit) {
+        fun startWatch(packageName: String, displayId: Int, onClosed: () -> Unit): Boolean {
+            if (instance == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
             watchedPackage = packageName
             watchedDisplayId = displayId
             watchedAppSeen = false
             onWatchedAppClosed = onClosed
+            return true
         }
 
         /** Cancels any in-progress app-close watch. */

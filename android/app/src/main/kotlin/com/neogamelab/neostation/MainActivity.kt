@@ -245,6 +245,11 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
 
     override fun onDestroy() {
         super.onDestroy()
+        // The watch callback and the watchdog both capture this activity; a
+        // stale one would try to restore a presentation that died with it.
+        ScreenshotAccessibilityService.stopWatch()
+        dockLaunchWatchdog?.let { dockLaunchHandler.removeCallbacks(it) }
+        dockLaunchWatchdog = null
         displayListener?.let {
             val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
             dm.unregisterDisplayListener(it)
@@ -1163,10 +1168,14 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     presentationHiddenForApp = true
                 }
             }
-            ScreenshotAccessibilityService.startWatch(packageName, displayId) {
+            // Without the watch (service not granted, or pre-R) there is nothing
+            // to tell us the app closed and the watchdog would just drop the
+            // panel onto a running app after its timeout, so arm neither:
+            // onResume then restores, as it did before the watch existed.
+            val watching = ScreenshotAccessibilityService.startWatch(packageName, displayId) {
                 Handler(Looper.getMainLooper()).post { restoreSecondaryAfterApp() }
             }
-            armDockLaunchWatchdog()
+            if (watching) armDockLaunchWatchdog()
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "Hiding secondary for app failed: ${e.message}")
         }
