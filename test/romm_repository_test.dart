@@ -3,30 +3,31 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/repositories/romm_repository.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
+import 'package:neostation/services/credential_store.dart';
 
 import 'database_test_helper.dart';
+import 'fake_credential_backends.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   final dbHelper = DatabaseTestHelper();
   late dynamic db;
+  late MemoryBackend secureStore;
 
   setUp(() async {
+    // The secrets live in the credential store, not the database. Without a
+    // working fake here every backend throws, writes fall back to the process
+    // -wide session map, and a credential written by one test is read back by
+    // the next one even though its database is fresh.
+    secureStore = MemoryBackend();
+    CredentialStore.debugUseBackends(
+      secure: secureStore,
+      file: MemoryBackend(),
+    );
     db = await dbHelper.setUp();
-    // RomM tables (migrations v91/v92) aren't part of the minimal schema.
-    await db.execute('''
-      CREATE TABLE user_romm_config (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        server_url TEXT,
-        username TEXT,
-        password TEXT,
-        api_key TEXT,
-        access_token TEXT,
-        refresh_token TEXT,
-        token_expires INTEGER,
-        last_verified TEXT,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    ''');
+    // user_romm_config comes from the shared helper (production DDL).
+    // app_romm_rom_map (migration v92) isn't part of the minimal schema.
     await db.execute('''
       CREATE TABLE app_romm_rom_map (
         romname TEXT NOT NULL,
@@ -40,6 +41,7 @@ void main() {
   });
 
   tearDown(() async {
+    CredentialStore.debugReset();
     await dbHelper.tearDown();
   });
 
@@ -67,15 +69,19 @@ void main() {
       expect(config['token_expires'], isNull);
     });
 
-    test('password is stored base64-encoded, not in plaintext', () async {
+    test('the password is not kept in the database at all', () async {
       await RommRepository.saveConfig(
         serverUrl: 'https://romm.local',
         username: 'testuser',
         password: 's3cret',
       );
       final row = (await db.query('user_romm_config')).first;
-      expect(row['password'], base64Encode(utf8.encode('s3cret')));
+      // It used to be base64 in this column, which is encoding rather than
+      // encryption: anyone who opened data.sqlite read it straight out.
+      expect(row['password'], '');
       expect(row['password'], isNot('s3cret'));
+      expect(row['password'], isNot(base64Encode(utf8.encode('s3cret'))));
+      expect(secureStore.values['romm_password'], 's3cret');
     });
 
     test(
@@ -109,14 +115,18 @@ void main() {
       expect(config['password'], '');
     });
 
-    test('the API key is stored base64-encoded, not in plaintext', () async {
+    test('the API key is not kept in the database at all', () async {
       await RommRepository.saveConfig(
         serverUrl: 'https://romm.local',
         apiKey: 'rmm_deadbeef',
       );
       final row = (await db.query('user_romm_config')).first;
-      expect(row['api_key'], base64Encode(utf8.encode('rmm_deadbeef')));
+      // A Client API Token never expires and has no refresh flow, so it is the
+      // most valuable of these secrets to keep out of the database.
+      expect(row['api_key'], '');
       expect(row['api_key'], isNot('rmm_deadbeef'));
+      expect(row['api_key'], isNot(base64Encode(utf8.encode('rmm_deadbeef'))));
+      expect(secureStore.values['romm_api_key'], 'rmm_deadbeef');
     });
 
     test('switching to a password clears the stored API key', () async {

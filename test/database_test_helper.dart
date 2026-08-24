@@ -327,5 +327,9 @@ class DatabaseTestHelper {
 
     await db.execute(SqliteMigrations.createAppNeoSyncStateTableSql);
     await db.execute(SqliteMigrations.createAppNeoSyncStateIndexSql);
+
+    // The production DDL rather than a copy, so the singleton CHECK and the
+    // nullable secret columns behave exactly as they do on a device.
+    await db.execute(SqliteMigrations.createUserRommConfigTableSql);
   }
 }
