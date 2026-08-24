@@ -18,6 +18,7 @@ import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/repositories/config_repository.dart';
+import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
@@ -372,6 +373,13 @@ void main() async {
 
   final neoSyncAdapter = NeoSyncAdapter(neoSyncProvider);
   SyncManager.instance.register(neoSyncAdapter);
+
+  // Nothing reads ScreenScraper credentials on launch, so a legacy base64
+  // password would sit in the database until the user next scraped. Sweep it
+  // into the credential store instead. Unawaited: it is a no-op after the first
+  // run and must not hold up startup. RomM needs no equivalent because
+  // RommProvider.initialize() below reads its config on every launch.
+  unawaited(ScraperRepository.migrateLegacyPasswordToCredentialStore());
 
   // Build the RomM browse provider before runApp so the RomM save-sync provider
   // can share its authenticated connection, and so SyncManager can register it.

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../data/datasources/sqlite_service.dart';
 import '../models/rom_fingerprint.dart';
+import '../services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 
 class MetadataTransferResult {
@@ -111,7 +112,15 @@ class ScraperRepository {
 
   // ── Credentials ───────────────────────────────────────────────────────────
 
-  /// Persists encrypted ScreenScraper credentials and user tier information.
+  /// Credential store key for the ScreenScraper password. Stable: changing it
+  /// strands existing logins.
+  static const String _passwordKey = 'screenscraper_password';
+
+  /// Persists ScreenScraper credentials and user tier information.
+  ///
+  /// The password goes to [CredentialStore]; everything else, including all the
+  /// non-secret tier data, stays in `user_screenscraper_credentials`. The
+  /// `password` column is only written when nothing could store the secret.
   static Future<bool> saveCredentials(
     String username,
     String password, [
@@ -120,12 +129,12 @@ class ScraperRepository {
   ]) async {
     try {
       final db = await SqliteService.getDatabase();
-      final encryptedPassword = base64Encode(utf8.encode(password));
+      final passwordColumn = await _storeSecret(password);
 
       final dataToSave = <String, dynamic>{
         'id': 1,
         'username': username,
-        'password': encryptedPassword,
+        'password': passwordColumn,
       };
 
       if (userInfo != null) {
@@ -176,8 +185,7 @@ class ScraperRepository {
 
       if (result.isNotEmpty) {
         final row = result.first;
-        final encryptedPassword = row['password'].toString();
-        final password = utf8.decode(base64Decode(encryptedPassword));
+        final password = await _readSecret(row['password']);
 
         return {
           'username': row['username'].toString(),
@@ -220,8 +228,12 @@ class ScraperRepository {
     }
   }
 
-  /// Deletes saved credentials from the local database.
+  /// Deletes saved credentials from the local database and the credential
+  /// store. The store is cleared first and unconditionally, so a failure to
+  /// delete the row cannot leave an orphaned password in the keychain.
   static Future<bool> clearCredentials() async {
+    await CredentialStore.delete(_passwordKey);
+
     try {
       final db = await SqliteService.getDatabase();
       await db.delete('user_screenscraper_credentials');
@@ -229,6 +241,134 @@ class ScraperRepository {
     } catch (e) {
       _log.e('Error clearing scraper credentials: $e');
       return false;
+    }
+  }
+
+  /// Moves a legacy base64 password out of the database at startup.
+  ///
+  /// Unlike RomM, nothing reads ScreenScraper credentials on launch, so a user
+  /// who set the scraper up once and never scraped again would keep their
+  /// password in `data.sqlite` indefinitely. This sweep is the only thing that
+  /// reaches them. It is a no-op once the column is empty, so it costs one
+  /// query per launch after the first.
+  ///
+  /// Best effort by design: it must never throw into app startup, and it
+  /// deliberately does nothing when there is no legacy value to move.
+  static Future<void> migrateLegacyPasswordToCredentialStore() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final result = await db.query(
+        'user_screenscraper_credentials',
+        columns: ['password'],
+        limit: 1,
+      );
+      if (result.isEmpty) return;
+
+      final legacy = _decodeSecret(result.first['password']);
+      if (legacy.isEmpty) return;
+
+      final outcome = await CredentialStore.write(_passwordKey, legacy);
+      if (outcome == CredentialWriteOutcome.sessionOnly) {
+        _log.w(
+          'ScreenScraper: the password could not be persisted; '
+          'leaving it in the database',
+        );
+        return;
+      }
+
+      await _blankPasswordColumn();
+      _log.i(
+        'ScreenScraper: moved the password out of the database into the '
+        'credential store',
+      );
+    } catch (e) {
+      _log.e('Error migrating the ScreenScraper password: $e');
+    }
+  }
+
+  /// Persists [value] and returns what the `password` column should hold:
+  /// empty once the credential store has it, or the base64 fallback when
+  /// nothing could be persisted.
+  static Future<String> _storeSecret(String value) async {
+    if (value.isEmpty) {
+      await CredentialStore.delete(_passwordKey);
+      return '';
+    }
+
+    final outcome = await CredentialStore.write(_passwordKey, value);
+    if (outcome == CredentialWriteOutcome.sessionOnly) {
+      _log.w(
+        'ScreenScraper: the password could not be persisted; '
+        'keeping it in the database',
+      );
+      return base64Encode(utf8.encode(value));
+    }
+    return '';
+  }
+
+  /// Returns the password, preferring [CredentialStore] and falling back to the
+  /// legacy base64 [column], writing through and emptying the column only once
+  /// the store confirms a persistent write.
+  ///
+  /// Any read failure means "could not look", never "no password": the column
+  /// is used as-is and left untouched.
+  static Future<String> _readSecret(Object? column) async {
+    try {
+      final stored = await CredentialStore.read(_passwordKey);
+      if (stored != null && stored.isNotEmpty) return stored;
+    } catch (e) {
+      _log.w('ScreenScraper: credential store unreadable: $e');
+      return _decodeSecret(column);
+    }
+
+    final legacy = _decodeSecret(column);
+    if (legacy.isEmpty) return '';
+
+    final outcome = await CredentialStore.write(_passwordKey, legacy);
+    if (outcome == CredentialWriteOutcome.sessionOnly) {
+      _log.w(
+        'ScreenScraper: the password could not be persisted; '
+        'leaving it in the database',
+      );
+      return legacy;
+    }
+
+    await _blankPasswordColumn();
+    _log.i(
+      'ScreenScraper: moved the password out of the database into the '
+      'credential store',
+    );
+    return legacy;
+  }
+
+  /// Empties the legacy `password` column once the value lives in the
+  /// credential store. Best effort: a failure only delays the cleanup to the
+  /// next read.
+  static Future<void> _blankPasswordColumn() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      await db.update(
+        'user_screenscraper_credentials',
+        {'password': ''},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+    } catch (e) {
+      _log.e('Error clearing the ScreenScraper password column: $e');
+    }
+  }
+
+  /// Decodes a legacy base64 secret, tolerating a null/absent column and any
+  /// value that isn't valid base64 (both read back as "not set"). The old read
+  /// path decoded unguarded, so a null column threw and was reported as having
+  /// no credentials at all.
+  static String _decodeSecret(Object? stored) {
+    final encoded = stored?.toString();
+    if (encoded == null || encoded.isEmpty || encoded == 'null') return '';
+    try {
+      return utf8.decode(base64Decode(encoded));
+    } catch (_) {
+      return '';
     }
   }
 
