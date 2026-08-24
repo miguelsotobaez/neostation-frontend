@@ -56,7 +56,7 @@
     },
     {
       "name": "RetroArch64 Play!",
-      "default_core": true,
+      "default_core": false,
       "unique_id": "ps2.ra64.play",
       "description": "Play! core for RetroArch 64.",
       "is_retroachievements_compatible": false,
@@ -68,7 +68,7 @@
     },
     {
       "name": "RetroArch32 PCEE2",
-      "default_core": true,
+      "default_core": false,
       "unique_id": "ps2.ra32.play",
       "description": "Play! core for RetroArch 32.",
       "is_retroachievements_compatible": false,
@@ -80,7 +80,7 @@
     },
     {
       "name": "RetroArch32 PCEE2",
-      "default_core": true,
+      "default_core": false,
       "unique_id": "ps2.ra32.pcee2",
       "description": "Play! core for RetroArch 32.",
       "is_retroachievements_compatible": false,
@@ -92,7 +92,7 @@
     },
     {
       "name": "RetroArch64 PCEE2",
-      "default_core": true,
+      "default_core": false,
       "unique_id": "ps2.ra64.pcee2",
       "description": "Play! core for RetroArch 64.",
       "is_retroachievements_compatible": false,
