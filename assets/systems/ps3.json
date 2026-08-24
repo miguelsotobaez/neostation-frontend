@@ -42,13 +42,26 @@
     },
     {
       "name": "Standalone ARMSX3",
-      "unique_id": "ps3.com.armsx3",
+      "default_standalone": true,
+      "unique_id": "ps3.armsx3.",
       "description": "Supported extensions: iso.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "android": {
           "launch_arguments": "-n com.armsx3/com.armsx2.Main -a android.intent.action.VIEW -e path \"{file.path}\""
-        }
+         }
+      }
+    },
+    {
+      "name": "Standalone EMUCOREC",
+      "default_standalone": true,
+      "unique_id": "ps3.emucorec.",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.sbro.emucorec/.core.ps3.Emulator -e gamePath \"{file.path}\""
+         }
       }
     },
     {
