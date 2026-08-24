@@ -42,13 +42,23 @@ class ScreenshotAccessibilityService : AccessibilityService() {
         private var onWatchedAppClosed: (() -> Unit)? = null
 
         /**
+         * Whether the watched app has been seen on top of the watched display
+         * since the watch started. Until it has, "the display shows its home
+         * screen" means the app hasn't drawn yet, not that it was closed.
+         */
+        @Volatile
+        private var watchedAppSeen = false
+
+        /**
          * Starts watching [displayId] for the dismissal of [packageName] (a
-         * dock-launched app). When the display returns to its launcher/home,
-         * [onClosed] is invoked once. No-op if the service isn't connected.
+         * dock-launched app). When the display returns to its launcher/home
+         * *after the app has actually appeared*, [onClosed] is invoked once.
+         * No-op if the service isn't connected.
          */
         fun startWatch(packageName: String, displayId: Int, onClosed: () -> Unit) {
             watchedPackage = packageName
             watchedDisplayId = displayId
+            watchedAppSeen = false
             onWatchedAppClosed = onClosed
         }
 
@@ -56,8 +66,21 @@ class ScreenshotAccessibilityService : AccessibilityService() {
         fun stopWatch() {
             watchedPackage = null
             watchedDisplayId = -1
+            watchedAppSeen = false
             onWatchedAppClosed = null
         }
+
+        /** Whether a dock-app close watch is currently armed. */
+        val isWatching: Boolean
+            get() = watchedPackage != null
+
+        /**
+         * Whether the watch has seen the launched app take the display. False
+         * while a launch is still in flight — the caller uses it to decide
+         * whether a launch silently failed and the panel should come back.
+         */
+        val hasSeenWatchedApp: Boolean
+            get() = watchedAppSeen
 
         /**
          * Performs a system screenshot via the global action. Returns false when
@@ -93,14 +116,23 @@ class ScreenshotAccessibilityService : AccessibilityService() {
         if (displayId < 0) return
         try {
             val top = topAppPackageOnDisplay(displayId) ?: return
-            // Restore only when the display has gone back to its home/launcher
-            // (the back-out case), not when a transient dialog appears over the
-            // app.
-            if (top != watched && isHomePackage(top)) {
-                val cb = onWatchedAppClosed
-                stopWatch()
-                cb?.invoke()
+            // Phase 1: wait for the app to actually take the display. Hiding the
+            // Now Playing panel is itself a window change, and the window it
+            // uncovers is the display's own launcher — which looks exactly like
+            // the back-out case below. Restoring on that would drop the panel
+            // straight back on top of the app we just launched (it flashes and
+            // is gone). Anything that is not the home screen means the launch
+            // landed: the app itself, its splash, or a permission dialog.
+            if (top == watched || !isHomePackage(top)) {
+                watchedAppSeen = true
+                return
             }
+            if (!watchedAppSeen) return
+            // Phase 2: the app was up and the display is back at its
+            // home/launcher, so the user dismissed it. Restore the panel.
+            val cb = onWatchedAppClosed
+            stopWatch()
+            cb?.invoke()
         } catch (e: Exception) {
             // Window introspection is best-effort; ignore transient failures.
         }

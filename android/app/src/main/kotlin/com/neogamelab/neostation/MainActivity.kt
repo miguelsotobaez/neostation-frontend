@@ -39,6 +39,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     // this (in px) before encoding so we don't ship/decode full-res drawables.
     private val ICON_TARGET_DP = 56f
     private val LAUNCHER_CHANNEL = "com.neogamelab.neostation/launcher"
+    // How long a dock-launched app gets to reach the bottom display before the
+    // Now Playing panel comes back. Generous: a cold app start on this hardware
+    // can take seconds, and coming back early is the bug this guards against.
+    private val DOCK_LAUNCH_TIMEOUT_MS = 10_000L
     var keyListener: ((KeyEvent) -> Boolean)? = null
     var motionListener: ((MotionEvent) -> Boolean)? = null
     // A launched game still owns the foreground: set when Flutter starts a
@@ -62,8 +66,13 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     // freeze while the device sleeps instead of counting phantom play time.
     private var screenStateReceiver: android.content.BroadcastReceiver? = null
     // True while the Now Playing presentation is hidden to reveal a dock-launched
-    // app on the secondary display; restored when NeoStation resumes.
+    // app on the secondary display; restored when that app is dismissed.
     private var presentationHiddenForApp = false
+    // Brings the panel back if a dock launch never puts its app on the bottom
+    // display (a silently failed launch), so the panel can't stay hidden. One
+    // handler instance: removeCallbacks only matches the handler that posted.
+    private val dockLaunchHandler = Handler(Looper.getMainLooper())
+    private var dockLaunchWatchdog: Runnable? = null
 
     // Usar directorio por defecto para cores; no verificar existencia por permisos
     private fun getDefaultLibretroDirectory(retroArchPackage: String): String {
@@ -904,8 +913,14 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
     override fun onResume() {
         super.onResume()
 
-        // Bring back the Now Playing panel if it was hidden for a dock-launched app.
-        restoreSecondaryAfterApp()
+        // Bring back the Now Playing panel if it was hidden for a dock-launched
+        // app. Only when no watch is armed: a dock app lives on the *other*
+        // display, so this activity resuming says nothing about whether it was
+        // closed — restoring here would drop the panel on top of an app the user
+        // is still using. While the watch runs, it owns the restore.
+        if (!ScreenshotAccessibilityService.isWatching) {
+            restoreSecondaryAfterApp()
+        }
 
         if (isGameActive) {
             // Calcular tiempo transcurrido desde el lanzamiento (si tenemos timestamp)
@@ -1151,14 +1166,38 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             ScreenshotAccessibilityService.startWatch(packageName, displayId) {
                 Handler(Looper.getMainLooper()).post { restoreSecondaryAfterApp() }
             }
+            armDockLaunchWatchdog()
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "Hiding secondary for app failed: ${e.message}")
         }
     }
 
+    /**
+     * Safety net for a dock launch that never reaches the bottom display: the
+     * watch only restores the panel once it has seen the app take the display,
+     * so an app that never appears (a launch the system dropped) would otherwise
+     * leave the bottom screen showing the device's own launcher for good.
+     */
+    private fun armDockLaunchWatchdog() {
+        dockLaunchWatchdog?.let { dockLaunchHandler.removeCallbacks(it) }
+        val watchdog = Runnable {
+            dockLaunchWatchdog = null
+            if (presentationHiddenForApp && !ScreenshotAccessibilityService.hasSeenWatchedApp) {
+                android.util.Log.w("MainActivity", "Dock launch never reached the bottom display; restoring the panel")
+                restoreSecondaryAfterApp()
+            }
+        }
+        dockLaunchWatchdog = watchdog
+        dockLaunchHandler.postDelayed(watchdog, DOCK_LAUNCH_TIMEOUT_MS)
+    }
+
     /** Restores the Now Playing presentation hidden by a dock launch. */
     private fun restoreSecondaryAfterApp() {
         ScreenshotAccessibilityService.stopWatch()
+        dockLaunchWatchdog?.let {
+            dockLaunchHandler.removeCallbacks(it)
+            dockLaunchWatchdog = null
+        }
         if (!presentationHiddenForApp) return
         presentationHiddenForApp = false
         try {
