@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 147;
+  static const int _databaseVersion = 149;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;

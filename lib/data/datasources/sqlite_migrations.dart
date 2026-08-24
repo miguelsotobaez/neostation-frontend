@@ -525,6 +525,10 @@ class SqliteMigrations {
       case 147:
         await _migrateToVersion147(db);
         break;
+      // 148 is claimed by another branch that is not merged yet.
+      case 149:
+        await _migrateToVersion149(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6526,6 +6530,80 @@ class SqliteMigrations {
       _log.i('Migration v147 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v147: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v149: clears the per-system flags that the systems owning no ROM
+  /// folder of their own can no longer set.
+  ///
+  /// 'all' and 'favorites' aggregate games belonging to other systems and
+  /// 'android' lists installed apps, so none of them offers "Recursive Scan"
+  /// any more; 'music' owns a folder but is browsed as a playlist, so it never
+  /// offered the subfolder view either. Earlier builds did show those switches,
+  /// and a flipped switch left a row behind that nothing reads — except the
+  /// scan's `hasFolderWhenNonRecursive` branch, which only runs when
+  /// `recursive_scan = 0` and would keep a system alive off a same-named folder
+  /// on disk.
+  ///
+  /// Both columns are reset to their schema defaults (`subfolder_view` 0,
+  /// `recursive_scan` 1) rather than deleting the row, which also carries the
+  /// naming settings the user did choose.
+  ///
+  /// Guarded on `PRAGMA table_info` (the columns arrived in different versions)
+  /// and written as plain UPDATEs over the current value, so re-running it is a
+  /// no-op. The lists are the literal contents of
+  /// `SystemFolderNames.recursiveScanExcluded` / `subfolderViewExcluded`: a
+  /// migration records the schema as it was at this version and must not follow
+  /// a constant that later versions may extend.
+  static Future<void> _migrateToVersion149(Database db) async {
+    _log.i('Migration v149: clearing dead per-system flags on virtual systems');
+    try {
+      final tables = db
+          .select("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((r) => r['name'].toString())
+          .toSet();
+      if (!tables.contains('user_system_settings') ||
+          !tables.contains('app_systems')) {
+        _log.i('v149: tables absent, nothing to do');
+        return;
+      }
+
+      final columns = db
+          .select('PRAGMA table_info(user_system_settings)')
+          .map((c) => c['name'].toString())
+          .toSet();
+
+      if (columns.contains('subfolder_view')) {
+        db.execute(
+          'UPDATE user_system_settings SET subfolder_view = 0 '
+          'WHERE subfolder_view != 0 AND app_system_id IN ('
+          '  SELECT id FROM app_systems '
+          "  WHERE folder_name IN ('all', 'favorites', 'android', 'music')"
+          ')',
+        );
+        _log.i('v149: subfolder_view cleared on ${db.updatedRows} row(s)');
+      } else {
+        _log.i('v149: no subfolder_view column, nothing to clear');
+      }
+
+      if (columns.contains('recursive_scan')) {
+        db.execute(
+          'UPDATE user_system_settings SET recursive_scan = 1 '
+          'WHERE recursive_scan != 1 AND app_system_id IN ('
+          '  SELECT id FROM app_systems '
+          "  WHERE folder_name IN ('all', 'favorites', 'android')"
+          ')',
+        );
+        _log.i('v149: recursive_scan reset on ${db.updatedRows} row(s)');
+      } else {
+        _log.i('v149: no recursive_scan column, nothing to reset');
+      }
+
+      _log.i('Migration v149 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v149: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
