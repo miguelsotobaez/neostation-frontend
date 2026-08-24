@@ -1,0 +1,61 @@
+  {
+  "system": {
+    "id": "Sega Model3",
+    "multidisc": false,
+    "name": "Sega Model3.",
+    "short_name": "SM3",
+    "details": {
+      "manufacturer": "",
+      "release_date": "1996-02-21",
+      "description": "Multiple Arcade Machine Emulator preserving vintage arcade hardware.",
+      "type": "virtual"
+    },
+    "ids": {
+      "screenscraper": 75,
+      "retroachievements": 27
+    },
+    "folders": [
+      "Sega Model3",
+      "SM3.",
+      "sm3"
+    ],
+    "colors": [
+      "#07a0c3",
+      "#f0f3bd"
+    ],
+    "extensions": [
+      "7z",
+      "chd",
+      "cmd",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+        "name": "Standalone Super3",
+      "unique_id": "model3.com.izzy2lost.super3",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.izzy2lost.super3/.MainActivity -d \"{file.uri}\""
+         }
+      }
+    }
+  ],
+   "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}
