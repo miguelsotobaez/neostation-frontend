@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/utils/rom_tree.dart';
 
@@ -110,6 +111,50 @@ void main() {
           '/mnt/sd/roms/nes',
         ]),
         'Translations',
+      );
+    });
+  });
+
+  group('SystemFolderNames.subfolderViewExcluded', () {
+    test('covers every system with no browsable ROM tree of its own', () {
+      expect(
+        SystemFolderNames.subfolderViewExcluded,
+        containsAll([
+          SystemFolderNames.all,
+          SystemFolderNames.favorites,
+          SystemFolderNames.music,
+          SystemFolderNames.android,
+        ]),
+      );
+    });
+
+    test('is a superset of the systems that offer no recursive scan', () {
+      // The settings dialog stacks "Show Subfolders" directly under "Recursive
+      // Scan" and indexes both by position, so a system may never drop the
+      // recursive row while keeping the subfolder one.
+      expect(
+        SystemFolderNames.subfolderViewExcluded,
+        containsAll(SystemFolderNames.recursiveScanExcluded),
+      );
+    });
+  });
+
+  group('SystemFolderNames.recursiveScanExcluded', () {
+    test('covers the systems that own no ROM folder to walk', () {
+      expect(
+        SystemFolderNames.recursiveScanExcluded,
+        containsAll([
+          SystemFolderNames.all,
+          SystemFolderNames.favorites,
+          SystemFolderNames.android,
+        ]),
+      );
+    });
+
+    test('keeps music, whose folder can nest', () {
+      expect(
+        SystemFolderNames.recursiveScanExcluded,
+        isNot(contains(SystemFolderNames.music)),
       );
     });
   });

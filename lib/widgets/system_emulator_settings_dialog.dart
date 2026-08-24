@@ -77,8 +77,9 @@ class _SystemEmulatorSettingsDialogState
   late ScrollController _hiddenScrollController;
   // Emulators tab: 0 = default/core action, 1 = executable picker.
   int _emulatorActionIndex = 0;
-  // 0: Prefer filename, 1: Hide ext, 2: (), 3: [], 4: Recursive?,
-  // 5: Show subfolders
+  // 0: Prefer filename, 1: Hide ext, 2: (), 3: [], 4: Recursive (only when
+  // [_offersRecursiveScan]), 5: Show subfolders (only when
+  // [_offersSubfolderView]).
   late int _totalGeneralItems;
   late List<GlobalKey> _generalItemKeys;
   late List<GlobalKey> _appearanceItemKeys;
@@ -114,9 +115,7 @@ class _SystemEmulatorSettingsDialogState
     // Initialize local system state
     _system = widget.system;
     _totalGeneralItems =
-        (_system.folderName == 'all' || _system.folderName == 'android')
-        ? 4
-        : 6;
+        4 + (_offersRecursiveScan ? 1 : 0) + (_offersSubfolderView ? 1 : 0);
 
     _generalScrollController = ScrollController();
     _hiddenScrollController = ScrollController();
@@ -327,6 +326,22 @@ class _SystemEmulatorSettingsDialogState
       );
     }
   }
+
+  // ── General tab rows ──────────────────────────────────────────────────────
+
+  /// Whether this system offers the "Recursive Scan" row — see
+  /// [SystemFolderNames.recursiveScanExcluded] for the systems that don't.
+  bool get _offersRecursiveScan =>
+      !SystemFolderNames.recursiveScanExcluded.contains(_system.folderName);
+
+  /// Whether this system offers the "Show Subfolders" row.
+  ///
+  /// The games list resolves the flag through the same
+  /// [SystemFolderNames.subfolderViewExcluded] set, so offering the switch on
+  /// an excluded system (the virtual aggregates, the music library, the
+  /// installed-apps grid) would only ever write a value nothing reads.
+  bool get _offersSubfolderView =>
+      !SystemFolderNames.subfolderViewExcluded.contains(_system.folderName);
 
   // ── Hidden games ──────────────────────────────────────────────────────────
 

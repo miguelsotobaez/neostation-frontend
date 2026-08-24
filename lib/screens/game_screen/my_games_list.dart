@@ -928,103 +928,109 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 16.r),
 
-            // Configuration Component: Recursive Library Scanning.
+            // Configuration Component: Recursive Library Scanning. Hidden for
+            // the systems that own no ROM folder to walk — there the switch
+            // would kick off a scan for a folder of that name and file
+            // whatever it found under a system meant to hold nothing.
             StatefulBuilder(
               builder: (context, setStateBuilder) {
                 return Column(
                   children: [
-                    Container(
-                      margin: EdgeInsets.only(bottom: 12.r),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12.r,
-                        vertical: 8.r,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12.r),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.05),
+                    if (!SystemFolderNames.recursiveScanExcluded.contains(
+                      widget.system.folderName,
+                    ))
+                      Container(
+                        margin: EdgeInsets.only(bottom: 12.r),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.r,
+                          vertical: 8.r,
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Symbols.folder_shared_rounded,
-                            color: Colors.white.withValues(alpha: 0.7),
-                            size: 16.r,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.05),
                           ),
-                          SizedBox(width: 8.r),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppLocale.recursiveScan.getString(context),
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12.r,
-                                  fontWeight: FontWeight.w500,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Symbols.folder_shared_rounded,
+                              color: Colors.white.withValues(alpha: 0.7),
+                              size: 16.r,
+                            ),
+                            SizedBox(width: 8.r),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppLocale.recursiveScan.getString(context),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.r,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                AppLocale.recursiveScanSubtitle.getString(
-                                  context,
-                                ),
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                  fontSize: 10.r,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(width: 16.r),
-                          Switch(
-                            value: currentScanValue,
-                            activeThumbColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                            onChanged: (value) async {
-                              final oldSystem = widget.system;
-                              setStateBuilder(() {
-                                currentScanValue = value;
-                              });
-
-                              try {
-                                await SystemRepository.setRecursiveScan(
-                                  oldSystem.id!,
-                                  value,
-                                );
-
-                                if (!context.mounted) return;
-                                final configProvider = context
-                                    .read<SqliteConfigProvider>();
-
-                                await configProvider.scanSystems();
-                                if (!context.mounted) return;
-
-                                await Provider.of<SqliteDatabaseProvider>(
-                                  context,
-                                  listen: false,
-                                ).loadDatabase();
-                                if (!context.mounted) return;
-
-                                await _loadGames();
-                              } catch (e) {
-                                _log.e('Error toggling recursive scan: $e');
-                                if (!context.mounted) return;
-                                AppNotification.showNotification(
-                                  context,
-                                  AppLocale.failedToSaveSetting.getString(
+                                Text(
+                                  AppLocale.recursiveScanSubtitle.getString(
                                     context,
                                   ),
-                                  type: NotificationType.error,
-                                );
-                              }
-                            },
-                          ),
-                        ],
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    fontSize: 10.r,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(width: 16.r),
+                            Switch(
+                              value: currentScanValue,
+                              activeThumbColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              onChanged: (value) async {
+                                final oldSystem = widget.system;
+                                setStateBuilder(() {
+                                  currentScanValue = value;
+                                });
+
+                                try {
+                                  await SystemRepository.setRecursiveScan(
+                                    oldSystem.id!,
+                                    value,
+                                  );
+
+                                  if (!context.mounted) return;
+                                  final configProvider = context
+                                      .read<SqliteConfigProvider>();
+
+                                  await configProvider.scanSystems();
+                                  if (!context.mounted) return;
+
+                                  await Provider.of<SqliteDatabaseProvider>(
+                                    context,
+                                    listen: false,
+                                  ).loadDatabase();
+                                  if (!context.mounted) return;
+
+                                  await _loadGames();
+                                } catch (e) {
+                                  _log.e('Error toggling recursive scan: $e');
+                                  if (!context.mounted) return;
+                                  AppNotification.showNotification(
+                                    context,
+                                    AppLocale.failedToSaveSetting.getString(
+                                      context,
+                                    ),
+                                    type: NotificationType.error,
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
 
                     // Real-time Scan Progress Feedback.
                     Consumer<SqliteConfigProvider>(
