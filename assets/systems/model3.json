@@ -11,11 +11,7 @@
       "type": "arcade"
     },
     "ids": {
-      "screenscraper": 55,
-     },
-    "ra_hash": {
-      "algo": "arcade",
-      "mode": "hash_only"
+      "screenscraper": 55
     },
     "folders": [
       "Sega Model3",
