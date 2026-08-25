@@ -67,14 +67,14 @@
       }
     },
     {
-      "name": "RetroArch32 PCEE2",
+      "name": "RetroArch32 Play",
       "default_core": false,
       "unique_id": "ps2.ra32.play",
       "description": "Play! core for RetroArch 32.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "android": {
-          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"pcee2\""
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"play\""
         }
       }
     },
