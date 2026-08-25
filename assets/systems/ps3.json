@@ -43,7 +43,7 @@
     {
       "name": "Standalone ARMSX3",
       "default_standalone": false,
-      "unique_id": "ps3.armsx3.",
+      "unique_id": "ps3.com.armsx3",
       "description": "Supported extensions: iso.",
       "is_retroachievements_compatible": false,
       "platforms": {
@@ -55,7 +55,7 @@
     {
       "name": "Standalone EMUCOREC",
       "default_standalone": false,
-      "unique_id": "ps3.emucorec.",
+      "unique_id": "ps3.com.sbro.emucorec",
       "description": "Supported extensions: iso.",
       "is_retroachievements_compatible": false,
       "platforms": {
