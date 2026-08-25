@@ -1,17 +1,17 @@
-  {
+{
   "system": {
-    "id": "Sega Model3",
+    "id": "model3",
     "multidisc": false,
     "name": "Sega Model3.",
     "short_name": "SM3",
     "details": {
-      "manufacturer": "",
+      "manufacturer": "Sega",
       "release_date": "1996-02-21",
       "description": "Multiple Arcade Machine Emulator preserving vintage arcade hardware.",
-      "type": "virtual"
+      "type": "arcade"
     },
     "ids": {
-      "screenscraper": 75,
+      "screenscraper": 55,
       "retroachievements": 27
      },
     "ra_hash": {
@@ -20,17 +20,14 @@
     },
     "folders": [
       "Sega Model3",
-      "SM3.",
+      "SM3",
       "sm3"
     ],
     "colors": [
       "#07a0c3",
       "#f0f3bd"
     ],
-    "extensions": [
-      "7z",
-      "chd",
-      "cmd",
+    "extensions": 
       "zip"
     ]
   },
