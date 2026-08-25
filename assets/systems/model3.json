@@ -16,8 +16,8 @@
     "folders": [
     "model3",
     "Sega Model3",
-      "SM3",
-      "sm3"
+    "SM3",
+    "sm3"
     ],
     "colors": [
       "#07a0c3",
@@ -29,7 +29,30 @@
   },
   "emulators": [
     {
-        "name": "Standalone Super3",
+       "name": "RetroArch64 Supermodel",
+       "default_core": true,
+       "unique_id": "sega.ra64.supermodel",
+       "description": "Supported extensions: zip.",
+       "is_retroachievements_compatible": false,
+       "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Supermodel",
+      "unique_id": "sega.ra32.supermodel",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Super3",
       "unique_id": "model3.com.izzy2lost.super3",
       "description": "Supported extensions: zip.",
       "is_retroachievements_compatible": false,
