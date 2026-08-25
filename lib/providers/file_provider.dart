@@ -82,7 +82,9 @@ class FileProvider extends ChangeNotifier {
   };
 
   /// Image extensions ES-DE writes into `downloaded_media`.
-  static const List<String> _esdeMediaExtensions = ['png', 'jpg'];
+  static const List<String> _esdeMediaExtensions = ['png', 'webp', 'jpg'];
+  /// video extensions ES-DE writes into `downloaded_media`.
+  static const List<String> _esdeVideoExtensions = ['mp4', 'webm',  'mkv', 'avi', 'wmv', 'mov'];
 
   // Getters
   String? get userDataPath => _userDataPath;
@@ -535,24 +537,65 @@ class FileProvider extends ChangeNotifier {
     return candidates;
   }
 
-  /// Resolves the read-time fallback path for a preview video inside the user's
-  /// ES-DE `downloaded_media` tree, or null if ES-DE is not configured for this
-  /// system. Does NOT check existence.
-  String? getEsdeVideoPath(String systemFolderName, String romName) {
-    if (_esdeRoot == null) return null;
+  /// Candidate read-time fallback paths for a video asset inside the user's
+  /// ES-DE `downloaded_media` tree, most-preferred first, or empty if ES-DE is
+  /// not configured for this system. Does NOT check existence —
+  /// the caller stats them in order.
+  ///
+  /// Candidates cover every video extension ES-DE writes. When the import recorded
+  /// a media subfolder for this ROM the subfolder is tried first, then the
+  /// category root: ES-DE can list one ROM filename in several subfolders and
+  /// only one of them is recorded, so the root is where the video often actually sits.
+  List<String> getEsdeVideoCandidates(
+    String systemFolderName,
+    String romName,
+  ) {
+    if (_esdeRoot == null) return const [];
     final esdeDir = _esdeSystemDirs[systemFolderName];
-    if (esdeDir == null) return null;
+    if (esdeDir == null) return const [];
     final baseName = _stripRomExtension(romName, systemFolderName);
     final subdir =
         _esdeMediaSubdirs[_esdeSubdirKey(systemFolderName, baseName)];
-    return path.joinAll([
-      _esdeRoot!,
-      'downloaded_media',
-      esdeDir,
-      'videos',
+    final subdirs = <String>[
       if (subdir != null && subdir.isNotEmpty) subdir,
-      '$baseName.mp4',
-    ]);
+      '',
+    ];
+
+    final candidates = <String>[];
+    for (final sub in subdirs) {
+      for (final extension in _esdeVideoExtensions) {
+        candidates.add(
+          path.joinAll([
+            _esdeRoot!,
+            'downloaded_media',
+            esdeDir,
+            'videos',
+            if (sub.isNotEmpty) sub,
+            '$baseName.$extension',
+          ]),
+        );
+      }
+    }
+    return candidates;
+  }
+
+  /// Resolves the read-time fallback path for a preview video inside the user's
+  /// ES-DE `downloaded_media` tree, or null if ES-DE is not configured for this
+  /// system. Does NOT check existence.
+  ///
+  /// This is a convenience method that returns the first candidate path (with mp4
+  /// extension) or null. For full extension support, use [getEsdeVideoCandidates].
+  String? getEsdeVideoPath(String systemFolderName, String romName) {
+    final candidates = getEsdeVideoCandidates(systemFolderName, romName);
+    if (candidates.isEmpty) return null;
+    // Return the first candidate (mp4 extension without subdir) for backward compatibility
+    // The full list with all extensions is available via getEsdeVideoCandidates
+    for (final candidate in candidates) {
+      if (candidate.endsWith('.mp4')) {
+        return candidate;
+      }
+    }
+    return candidates.first;
   }
 
   /// Resets the internal state of the provider.

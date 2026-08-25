@@ -489,14 +489,17 @@ class GameModel {
     if (fileProvider != null && fileProvider.isInitialized) {
       final master = fileProvider.getVideoPath(systemFolderName, romname);
       // ES-DE read-time fallback video (cheap in-memory lookup, no I/O).
-      final esde = fileProvider.getEsdeVideoPath(systemFolderName, romname);
+      final esdeCandidates = fileProvider.getEsdeVideoCandidates(systemFolderName, romname);
       // No ES-DE fallback for this system: return the master path without any
       // filesystem stat — getVideoPath is called on the scroll hot path and
       // there is nothing to fall back to anyway.
-      if (esde == null) return master;
+      if (esdeCandidates.isEmpty) return master;
       // Prefer the master video; only fall back to ES-DE when it's missing.
       if (File(master).existsSync()) return master;
-      if (File(esde).existsSync()) return esde;
+      // Check each ES-DE candidate in order and return the first that exists
+      for (final esdeCandidate in esdeCandidates) {
+        if (File(esdeCandidate).existsSync()) return esdeCandidate;
+      }
       return master;
     }
     final baseName = _stripRomExtension(romname);

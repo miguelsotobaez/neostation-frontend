@@ -183,7 +183,7 @@ void main() {
       'lib/models/game_model.dart',
     };
 
-    const esdeApis = ['getEsdeMediaCandidates(', 'getEsdeVideoPath('];
+    const esdeApis = ['getEsdeMediaCandidates(', 'getEsdeVideoCandidates(', 'getEsdeVideoPath('];
 
     test('only the read resolvers consume ES-DE path helpers', () {
       final offenders = <String>[];
