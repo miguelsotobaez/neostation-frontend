@@ -82,7 +82,7 @@
       "name": "RetroArch64 PCEE2",
       "default_core": false,
       "unique_id": "ps2.ra64.pcee2",
-      "description": "Play! core for RetroArch 64.",
+      "description": "PCEE2 core for RetroArch 64.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "android": {
