@@ -1048,14 +1048,14 @@ class _RADashboardHubState extends State<RADashboardHub> {
     ThemeData theme, {
     Color? background,
     Color? borderColor,
-    double borderWidth = 1,
+    double? borderWidth,
   }) {
     return BoxDecoration(
       color: background ?? theme.cardColor.withValues(alpha: 0.25),
       borderRadius: BorderRadius.circular(12.r),
       border: Border.all(
         color: borderColor ?? theme.colorScheme.primary.withValues(alpha: 0.15),
-        width: borderWidth,
+        width: borderWidth ?? 1.r,
       ),
     );
   }
