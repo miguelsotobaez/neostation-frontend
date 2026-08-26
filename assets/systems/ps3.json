@@ -48,7 +48,7 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.armsx3/com.armsx2.Main -a android.intent.action.VIEW -e path \"{file.path}\""
-         }
+        }
       }
     },
     {
@@ -59,7 +59,7 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.sbro.emucorec/.core.ps3.Emulator -e gamePath \"{file.path}\""
-         }
+        }
       }
     },
     {

@@ -2,7 +2,7 @@
   "system": {
     "id": "model3",
     "multidisc": false,
-    "name": "Sega Model 3.",
+    "name": "Sega Model 3",
     "short_name": "SM3",
     "details": {
       "manufacturer": "Sega",
@@ -33,7 +33,7 @@
     {
       "name": "RetroArch64 Supermodel",
       "default_core": true,
-      "unique_id": "sega.ra64.supermodel",
+      "unique_id": "model3.ra64.supermodel",
       "description": "Supported extensions: zip, chd, 7z.",
       "is_retroachievements_compatible": false,
       "platforms": {
@@ -44,7 +44,8 @@
     },
     {
       "name": "RetroArch32 Supermodel",
-      "unique_id": "sega.ra32.supermodel",
+      "default_core": true,
+      "unique_id": "model3.ra32.supermodel",
       "description": "Supported extensions: zip, chd, 7z.",
       "is_retroachievements_compatible": false,
       "platforms": {
@@ -66,7 +67,8 @@
     },
     {
       "name": "RetroArch Supermodel",
-      "unique_id": "sega.ra.supermodel",
+      "default_core": true,
+      "unique_id": "model3.ra.supermodel",
       "description": "Supported extensions: zip, chd, 7z.",
       "is_retroachievements_compatible": false,
       "platforms": {
@@ -85,7 +87,7 @@
         },
         "macos": {
           "executable": "RetroArch.App",
-          "args": "-L supermodel_libretro.dylib \"{file.path}\"" 
+          "args": "-L supermodel_libretro.dylib \"{file.path}\""
         }
       }
     }
