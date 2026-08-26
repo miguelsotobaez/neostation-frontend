@@ -24,7 +24,9 @@
       "#f0f3bd"
     ],
     "extensions": [
-      "zip"
+      "zip",
+      "chd",
+      "7z"
     ]
   },
   "emulators": [
@@ -32,7 +34,7 @@
        "name": "RetroArch64 Supermodel",
        "default_core": true,
        "unique_id": "sega.ra64.supermodel",
-       "description": "Supported extensions: zip.",
+       "description": "Supported extensions: zip, chd, 7z.",
        "is_retroachievements_compatible": false,
        "platforms": {
         "android": {
@@ -43,7 +45,7 @@
     {
       "name": "RetroArch32 Supermodel",
       "unique_id": "sega.ra32.supermodel",
-      "description": "Supported extensions: zip.",
+      "description": "Supported extensions: zip, chd, 7z.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "android": {
