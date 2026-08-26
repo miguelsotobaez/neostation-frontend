@@ -31,12 +31,12 @@
   },
   "emulators": [
     {
-       "name": "RetroArch64 Supermodel",
-       "default_core": true,
-       "unique_id": "sega.ra64.supermodel",
-       "description": "Supported extensions: zip, chd, 7z.",
-       "is_retroachievements_compatible": false,
-       "platforms": {
+      "name": "RetroArch64 Supermodel",
+      "default_core": true,
+      "unique_id": "sega.ra64.supermodel",
+      "description": "Supported extensions: zip, chd, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
         "android": {
           "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
         }
