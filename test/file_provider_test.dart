@@ -66,8 +66,10 @@ void main() {
       expect(candidates, [
         '/esde/downloaded_media/snes/covers/sonic.png',
         '/esde/downloaded_media/snes/covers/sonic.jpg',
+        '/esde/downloaded_media/snes/covers/sonic.webp',
         '/esde/downloaded_media/snes/3dboxes/sonic.png',
         '/esde/downloaded_media/snes/3dboxes/sonic.jpg',
+        '/esde/downloaded_media/snes/3dboxes/sonic.webp',
       ]);
     });
 
@@ -87,8 +89,10 @@ void main() {
         expect(candidates, [
           '/esde/downloaded_media/snes/marquees/Hacks/sonic.png',
           '/esde/downloaded_media/snes/marquees/Hacks/sonic.jpg',
+          '/esde/downloaded_media/snes/marquees/Hacks/sonic.webp',
           '/esde/downloaded_media/snes/marquees/sonic.png',
           '/esde/downloaded_media/snes/marquees/sonic.jpg',
+          '/esde/downloaded_media/snes/marquees/sonic.webp',
         ]);
       },
     );
@@ -125,8 +129,10 @@ void main() {
         [
           '/esde/downloaded_media/snes/screenshots/sonic.png',
           '/esde/downloaded_media/snes/screenshots/sonic.jpg',
+          '/esde/downloaded_media/snes/screenshots/sonic.webp',
           '/esde/downloaded_media/snes/titlescreens/sonic.png',
           '/esde/downloaded_media/snes/titlescreens/sonic.jpg',
+          '/esde/downloaded_media/snes/titlescreens/sonic.webp',
         ],
       );
     });
@@ -135,6 +141,7 @@ void main() {
       expect(provider.getEsdeMediaCandidates('snes', 'fanarts', 'sonic.smc'), [
         '/esde/downloaded_media/snes/fanart/sonic.png',
         '/esde/downloaded_media/snes/fanart/sonic.jpg',
+        '/esde/downloaded_media/snes/fanart/sonic.webp',
       ]);
     });
   });

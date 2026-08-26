@@ -488,8 +488,11 @@ class GameModel {
   String getVideoPath(String systemFolderName, [FileProvider? fileProvider]) {
     if (fileProvider != null && fileProvider.isInitialized) {
       final master = fileProvider.getVideoPath(systemFolderName, romname);
-      // ES-DE read-time fallback video (cheap in-memory lookup, no I/O).
-      final esdeCandidates = fileProvider.getEsdeVideoCandidates(systemFolderName, romname);
+      // ES-DE read-time fallback video. Checks existence of each candidate.
+      final esdeCandidates = fileProvider.getEsdeVideoCandidates(
+        systemFolderName,
+        romname,
+      );
       // No ES-DE fallback for this system: return the master path without any
       // filesystem stat — getVideoPath is called on the scroll hot path and
       // there is nothing to fall back to anyway.
