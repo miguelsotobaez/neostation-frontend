@@ -153,6 +153,31 @@
           "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"geolith\""
         }
       }
+    },
+    {
+      "name": "RetroArch Geolith",
+      "unique_id": "neogeo.ra.geolith",
+      "description": "Supported extensions: neo.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"geolith\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L geolith_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L geolith_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L geolith_libretro.dylib \"{file.path}\""
+        }
+      }
     }
   ],
   "neosync": {
