@@ -157,7 +157,7 @@
     {
       "name": "RetroArch Geolith",
       "unique_id": "neogeo.ra.geolith",
-      "description": "Supported extensions: neo.",
+      "description": "Supported extensions: chd, cue.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "android": {
