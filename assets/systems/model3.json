@@ -2,7 +2,7 @@
   "system": {
     "id": "model3",
     "multidisc": false,
-    "name": "Sega Model3.",
+    "name": "Sega Model 3.",
     "short_name": "SM3",
     "details": {
       "manufacturer": "Sega",
@@ -15,7 +15,7 @@
     },
     "folders": [
     "model3",
-    "Sega Model3",
+    "Sega Model 3",
     "SM3",
     "sm3"
     ],
