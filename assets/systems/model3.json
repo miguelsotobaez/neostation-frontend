@@ -63,6 +63,31 @@
           "launch_arguments": "-n com.izzy2lost.super3/.MainActivity -d \"{file.uri}\""
          }
       }
+    },
+    {
+      "name": "RetroArch Supermodel",
+      "unique_id": "sega.ra.supermodel",
+      "description": "Supported extensions: zip, chd, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L supermodel_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L supermodel_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L supermodel_libretro.dylib \"{file.path}\"" 
+        }
+      }
     }
   ],
    "neosync": {
