@@ -67,7 +67,7 @@
       }
     },
     {
-      "name": "RetroArch32 Play",
+      "name": "RetroArch32 Play!",
       "default_core": true,
       "unique_id": "ps2.ra32.play",
       "description": "Play! core for RetroArch 32.",
