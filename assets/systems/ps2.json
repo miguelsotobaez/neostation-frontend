@@ -75,8 +75,8 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"play\""
-         }
-       }
+        }
+      }
     },
     {
       "name": "RetroArch64 PCEE2",
