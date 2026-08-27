@@ -307,8 +307,7 @@ class HeaderState extends State<Header> {
               return Stack(
                 alignment: Alignment.center,
                 children: [
-                  if (widget.selectedTabIndex == AppTabs.systems ||
-                      widget.selectedTabIndex == AppTabs.collections)
+                  if (widget.selectedTabIndex == AppTabs.systems)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Row(

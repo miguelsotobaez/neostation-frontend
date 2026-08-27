@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -29,7 +31,7 @@ class CollectionOptionsDropdown extends StatefulWidget {
     VoidCallback? onCollectionUpdated,
     VoidCallback? onCollectionDeleted,
   }) async {
-    Offset offset = Offset(1920.r / 2 - 120.r, 1080.r / 2 - 100.r);
+    Offset? offset;
     if (anchorKey?.currentContext != null) {
       final RenderBox? renderBox =
           anchorKey!.currentContext?.findRenderObject() as RenderBox?;
@@ -154,7 +156,7 @@ class _OptionItem {
 
 class _CollectionOptionsOverlay extends StatefulWidget {
   final CollectionModel collection;
-  final Offset offset;
+  final Offset? offset;
   final double width;
 
   const _CollectionOptionsOverlay({
@@ -264,12 +266,22 @@ class _CollectionOptionsOverlayState extends State<_CollectionOptionsOverlay> {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
     final items = _getItems(context);
+    final viewport = MediaQuery.sizeOf(context);
+    final estimatedHeight = 260.r;
+    final desiredOffset =
+        widget.offset ??
+        Offset(
+          (viewport.width - widget.width) / 2,
+          (viewport.height - estimatedHeight) / 2,
+        );
+    final maxTop = math.max(20.r, viewport.height - estimatedHeight - 20.r);
+    final maxLeft = math.max(10.r, viewport.width - widget.width - 10.r);
 
     return Stack(
       children: [
         Positioned(
-          top: widget.offset.dy.clamp(20.r, 1080.r - 260.r),
-          left: widget.offset.dx.clamp(10.r, 1920.r - widget.width - 10.r),
+          top: desiredOffset.dy.clamp(20.r, maxTop),
+          left: desiredOffset.dx.clamp(10.r, maxLeft),
           width: widget.width,
           child: Material(
             color: Colors.transparent,

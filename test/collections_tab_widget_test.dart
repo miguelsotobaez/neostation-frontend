@@ -70,6 +70,60 @@ void main() {
     expect(find.text(AppLocale.en[AppLocale.createCollection]!), findsWidgets);
   });
 
+  testWidgets('collection list exposes one working manage action', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final collectionProvider = CollectionProvider();
+    await collectionProvider.createCollection(name: 'Arcade Hits');
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: collectionProvider),
+          ChangeNotifierProvider(create: (_) => SqliteConfigProvider()),
+          ChangeNotifierProvider(create: (_) => SqliteDatabaseProvider()),
+          ChangeNotifierProvider(create: (_) => NeoAssetsProvider()),
+        ],
+        child: ScreenUtilInit(
+          designSize: const Size(640, 480),
+          builder: (context, child) => MaterialApp(
+            localizationsDelegates:
+                FlutterLocalization.instance.localizationsDelegates,
+            supportedLocales: FlutterLocalization.instance.supportedLocales,
+            home: const Scaffold(body: CollectionsTab()),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text(AppLocale.en[AppLocale.manage]!), findsOneWidget);
+    expect(find.text(AppLocale.en[AppLocale.edit]!), findsNothing);
+    expect(find.text(AppLocale.en[AppLocale.editCollection]!), findsNothing);
+
+    await tester.tap(find.text(AppLocale.en[AppLocale.manage]!));
+    await tester.pumpAndSettle();
+
+    final editAction = find.text(AppLocale.en[AppLocale.editCollection]!);
+    expect(editAction, findsOneWidget);
+    expect(
+      tester.getRect(editAction).overlaps(const Rect.fromLTWH(0, 0, 640, 480)),
+      isTrue,
+    );
+
+    await tester.tap(editAction);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Arcade Hits'), findsWidgets);
+    expect(find.text(AppLocale.en[AppLocale.collectionName]!), findsOneWidget);
+  });
+
   testWidgets('CollectionAddGamesDialog renders search and filter chips', (
     tester,
   ) async {

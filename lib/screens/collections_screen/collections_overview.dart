@@ -163,6 +163,11 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
                       _showOptionsFor(collections[safeIndex]);
                     }
                   },
+                  onXPressed: () {
+                    if (safeIndex < collections.length) {
+                      _showOptionsFor(collections[safeIndex]);
+                    }
+                  },
                   onYPressed: () {
                     if (safeIndex < collections.length) {
                       _showOptionsFor(collections[safeIndex]);
@@ -184,9 +189,7 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
                 SfxService().playEnterSound();
                 _showOptionsFor(collections[safeIndex]);
               },
-              onExtra: () => _showOptionsFor(collections[safeIndex]),
-              extraLabel: AppLocale.editCollection.getString(context),
-              extraIconPath: 'assets/images/gamepad/Xbox_Y_button.png',
+              settingsLabel: AppLocale.manage.getString(context),
             ),
           ],
         );
