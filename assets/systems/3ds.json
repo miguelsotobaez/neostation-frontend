@@ -113,6 +113,28 @@
       }
     },
     {
+      "name": "RetroArch Azahar",
+      "unique_id": "3ds.ra.azahar",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf, z3dsx, zcci, zcxi.",
+      "platforms": {
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L azahar_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L azahar_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L azahar_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
       "name": "RetroArch64 Citra",
       "default_core": true,
       "unique_id": "3ds.ra64.citra",
@@ -143,6 +165,17 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"citra_canary\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Azahar",
+      "unique_id": "3ds.ra64.azahar",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: 3ds, 3dsx, app, axf, cci, cxi, elf, z3dsx, zcci, zcxi.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"azahar_libretro.so\""
         }
       }
     },

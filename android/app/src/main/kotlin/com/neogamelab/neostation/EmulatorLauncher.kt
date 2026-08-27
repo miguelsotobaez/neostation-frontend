@@ -143,13 +143,20 @@ object EmulatorLauncher {
                     val finalValue = value.toString()
 
                     // RetroArch-specific: LIBRETRO core path construction uses the package name
-                    // to locate the correct cores directory. CONFIGFILE default is set below.
+                    // to locate the correct cores directory. A bare core name uses RetroArch's
+                    // current Android suffix; an explicitly named core file is preserved for
+                    // cores that retain the legacy `_libretro.so` filename (e.g. Azahar).
                     if (packageName.startsWith("com.retroarch") && key == "LIBRETRO" && !finalValue.startsWith("/")) {
                         val libretroDir = getDefaultLibretroDirectory(context, packageName)
-                        val base = finalValue
-                            .removeSuffix("_libretro_android.so")
-                            .removeSuffix("_libretro.so")
-                        intent.putExtra(key, "$libretroDir${base}_libretro_android.so")
+                        val coreFilename = if (
+                            finalValue.endsWith("_libretro_android.so") ||
+                                finalValue.endsWith("_libretro.so")
+                        ) {
+                            finalValue
+                        } else {
+                            "${finalValue}_libretro_android.so"
+                        }
+                        intent.putExtra(key, "$libretroDir$coreFilename")
                         continue
                     }
 
