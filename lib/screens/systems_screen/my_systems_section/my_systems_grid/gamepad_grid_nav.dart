@@ -45,6 +45,7 @@ extension _GamepadGridNav on _SystemCardGridViewState {
           HeaderSortDropdown.globalKey.currentState?.showDropdown();
         }
       },
+      onFavorite: () => widget.onYPressed?.call(),
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,

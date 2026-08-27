@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/collection_model.dart';
 import 'package:neostation/models/my_systems.dart';
@@ -9,13 +10,13 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/responsive.dart';
 import 'package:neostation/screens/systems_screen/my_systems_section/my_systems_grid.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/widgets/collection_options_dialog.dart';
 import 'package:neostation/widgets/systems_grid_footer.dart';
 import 'package:provider/provider.dart';
 
 import 'create_edit_collection_dialog.dart';
-import '../../widgets/collection_options_dialog.dart';
 
-/// Overview grid displaying all user collections using the identical
+/// Overview grid displaying all collections using the identical
 /// [SystemCardGridView] and [SystemsGridFooter] platform UI components.
 class CollectionsOverview extends StatefulWidget {
   final ValueChanged<CollectionModel> onSelectCollection;
@@ -77,27 +78,57 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
         final theme = Theme.of(context);
         final primaryColor = theme.colorScheme.primary;
 
-        // If collections exist, only show user collections.
-        // If 0 collections exist, show the single create collection card.
-        final List<SystemInfo> systemCards = collections.isEmpty
-            ? [
-                SystemInfo(
-                  title: AppLocale.createCollection.getString(context),
-                  shortName: AppLocale.createCollection.getString(context),
-                  numOfRoms: 0,
-                  color: primaryColor,
-                  color1:
-                      '#${primaryColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
-                  color2: '#1A1A2E',
-                  folderName: 'create_collection',
-                  primaryFolderName: 'create_collection',
-                  hideLogo: false,
-                  isGame: false,
-                ),
-              ]
-            : collections
-                  .map((col) => SystemInfo.fromSystemModel(col.toSystemModel()))
-                  .toList();
+        if (collections.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32.r),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Symbols.collections_bookmark_rounded,
+                    size: 64.r,
+                    color: primaryColor.withValues(alpha: 0.5),
+                  ),
+                  SizedBox(height: 16.r),
+                  Text(
+                    AppLocale.noCollectionsTitle.getString(context),
+                    style: TextStyle(
+                      fontSize: 18.r,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: 8.r),
+                  Text(
+                    AppLocale.noCollectionsSubtitle.getString(context),
+                    style: TextStyle(
+                      fontSize: 13.r,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 24.r),
+                  ElevatedButton.icon(
+                    onPressed: _openCreateDialog,
+                    icon: const Icon(Symbols.add_rounded),
+                    label: Text(AppLocale.createCollection.getString(context)),
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 24.r,
+                        vertical: 12.r,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final List<SystemInfo> systemCards = collections
+            .map((col) => SystemInfo.fromSystemModel(col.toSystemModel()))
+            .toList();
 
         final safeIndex = _selectedIndex.clamp(0, systemCards.length - 1);
         final currentSystem = systemCards[safeIndex];
@@ -124,46 +155,41 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
                   },
                   systems: systemCards,
                   onEnterPressed: () {
-                    if (collections.isNotEmpty &&
-                        safeIndex < collections.length) {
+                    if (safeIndex < collections.length) {
                       final col = collections[safeIndex];
                       SfxService().playEnterSound();
                       widget.onSelectCollection(col);
-                    } else {
-                      _openCreateDialog();
                     }
                   },
                   onEscapePressed: () {
-                    if (collections.isNotEmpty &&
-                        safeIndex < collections.length) {
+                    if (safeIndex < collections.length) {
                       _showOptionsFor(collections[safeIndex]);
                     }
                   },
-                  onXPressed: _openCreateDialog,
+                  onYPressed: () {
+                    if (safeIndex < collections.length) {
+                      _showOptionsFor(collections[safeIndex]);
+                    }
+                  },
                 ),
               ),
             ),
             SystemsGridFooter(
               system: currentSystem,
               onEnter: () {
-                if (collections.isNotEmpty && safeIndex < collections.length) {
+                if (safeIndex < collections.length) {
                   final col = collections[safeIndex];
                   SfxService().playEnterSound();
                   widget.onSelectCollection(col);
-                } else {
-                  _openCreateDialog();
                 }
               },
-              onSettings:
-                  collections.isNotEmpty && safeIndex < collections.length
-                  ? () {
-                      SfxService().playEnterSound();
-                      _showOptionsFor(collections[safeIndex]);
-                    }
-                  : null,
-              onExtra: _openCreateDialog,
-              extraLabel:
-                  '${AppLocale.createCollection.getString(context)} [X]',
+              onSettings: () {
+                SfxService().playEnterSound();
+                _showOptionsFor(collections[safeIndex]);
+              },
+              onExtra: () => _showOptionsFor(collections[safeIndex]),
+              extraLabel: AppLocale.editCollection.getString(context),
+              extraIconPath: 'assets/images/gamepad/Xbox_Y_button.png',
             ),
           ],
         );

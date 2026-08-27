@@ -20,6 +20,7 @@ enum CollectionAction { addGames, editDetails, delete }
 /// allowing users to manage games, edit details, or delete a collection.
 class CollectionOptionsDropdown extends StatefulWidget {
   const CollectionOptionsDropdown({super.key});
+
   static Future<void> show({
     required BuildContext context,
     required CollectionModel collection,
@@ -38,7 +39,7 @@ class CollectionOptionsDropdown extends StatefulWidget {
       }
     }
 
-    await showGeneralDialog(
+    final action = await showGeneralDialog<CollectionAction>(
       context: context,
       barrierDismissible: true,
       barrierLabel: "Collection Options Dropdown",
@@ -50,12 +51,69 @@ class CollectionOptionsDropdown extends StatefulWidget {
             collection: collection,
             offset: offset,
             width: 240.r,
-            onCollectionUpdated: onCollectionUpdated,
-            onCollectionDeleted: onCollectionDeleted,
           ),
         );
       },
     );
+
+    if (action == null || !context.mounted) return;
+
+    final provider = context.read<CollectionProvider>();
+
+    switch (action) {
+      case CollectionAction.addGames:
+        final existingGames = await CollectionRepository.getGamesForCollection(
+          collection.id,
+        );
+        final existingPaths = existingGames.map((g) => g.romPath).toSet();
+        if (!context.mounted) return;
+        await CollectionAddGamesDialog.show(
+          context: context,
+          collectionName: collection.name,
+          initialSelectedRomPaths: existingPaths,
+          onSave: (newPaths) async {
+            await provider.setGamesForCollection(
+              collection.id,
+              newPaths.toList(),
+            );
+            await provider.loadCollections();
+            onCollectionUpdated?.call();
+          },
+        );
+        break;
+
+      case CollectionAction.editDetails:
+        if (!context.mounted) return;
+        CreateEditCollectionDialog.show(
+          context: context,
+          collection: collection,
+          onSave: (res) async {
+            await provider.updateCollection(
+              collection.id,
+              name: res.name,
+              description: res.description,
+            );
+            await provider.loadCollections();
+            onCollectionUpdated?.call();
+          },
+        );
+        break;
+
+      case CollectionAction.delete:
+        if (!context.mounted) return;
+        final confirmed = await ConfirmActionDialog.show(
+          context,
+          title: AppLocale.deleteCollection.getString(context),
+          body: AppLocale.deleteCollectionConfirm.getString(context),
+          confirmLabel: 'Delete',
+          icon: Symbols.delete_forever_rounded,
+        );
+        if (confirmed && context.mounted) {
+          await provider.deleteCollection(collection.id);
+          onCollectionDeleted?.call();
+        }
+        break;
+    }
   }
 
   @override
@@ -90,15 +148,11 @@ class _CollectionOptionsOverlay extends StatefulWidget {
   final CollectionModel collection;
   final Offset offset;
   final double width;
-  final VoidCallback? onCollectionUpdated;
-  final VoidCallback? onCollectionDeleted;
 
   const _CollectionOptionsOverlay({
     required this.collection,
     required this.offset,
     required this.width,
-    this.onCollectionUpdated,
-    this.onCollectionDeleted,
   });
 
   @override
@@ -175,65 +229,12 @@ class _CollectionOptionsOverlayState extends State<_CollectionOptionsOverlay> {
     });
   }
 
-  Future<void> _handleSelection() async {
+  void _handleSelection() {
     final items = _getItems(context);
     if (_selectedIndex < 0 || _selectedIndex >= items.length) return;
 
     final item = items[_selectedIndex];
-    final provider = context.read<CollectionProvider>();
-    final col = widget.collection;
-
-    Navigator.of(context).pop();
-
-    switch (item.action) {
-      case CollectionAction.addGames:
-        final existingGames = await CollectionRepository.getGamesForCollection(
-          col.id,
-        );
-        final existingPaths = existingGames.map((g) => g.romPath).toSet();
-        if (!mounted) return;
-        await CollectionAddGamesDialog.show(
-          context: context,
-          collectionName: col.name,
-          initialSelectedRomPaths: existingPaths,
-          onSave: (newPaths) async {
-            await provider.setGamesForCollection(col.id, newPaths.toList());
-            await provider.loadCollections();
-            widget.onCollectionUpdated?.call();
-          },
-        );
-        break;
-
-      case CollectionAction.editDetails:
-        CreateEditCollectionDialog.show(
-          context: context,
-          collection: col,
-          onSave: (res) async {
-            await provider.updateCollection(
-              col.id,
-              name: res.name,
-              description: res.description,
-            );
-            await provider.loadCollections();
-            widget.onCollectionUpdated?.call();
-          },
-        );
-        break;
-
-      case CollectionAction.delete:
-        final confirmed = await ConfirmActionDialog.show(
-          context,
-          title: AppLocale.deleteCollection.getString(context),
-          body: AppLocale.deleteCollectionConfirm.getString(context),
-          confirmLabel: 'Delete',
-          icon: Symbols.delete_forever_rounded,
-        );
-        if (confirmed && mounted) {
-          await provider.deleteCollection(col.id);
-          widget.onCollectionDeleted?.call();
-        }
-        break;
-    }
+    Navigator.of(context).pop(item.action);
   }
 
   @override

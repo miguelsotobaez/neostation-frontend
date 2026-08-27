@@ -553,6 +553,7 @@ class SystemCardGridView extends StatefulWidget {
     this.onEnterPressed,
     this.onEscapePressed,
     this.onXPressed,
+    this.onYPressed,
     this.layerName = 'my_systems_list',
     this.systems = const [],
     this.recentCardSize = RecentCardSizes.defaultSize,
@@ -575,6 +576,7 @@ class SystemCardGridView extends StatefulWidget {
   final VoidCallback? onEnterPressed;
   final VoidCallback? onEscapePressed;
   final VoidCallback? onXPressed;
+  final VoidCallback? onYPressed;
   final String layerName;
   final List<dynamic> systems;
 

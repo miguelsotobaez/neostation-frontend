@@ -33,9 +33,6 @@ class GameActionButtons extends StatelessWidget {
   /// Select + A — scrape the highlighted game. Optional (list view only).
   final VoidCallback? onScrape;
 
-  /// Callback to manage/edit the active collection (when browsing a collection).
-  final VoidCallback? onManageCollection;
-
   const GameActionButtons({
     super.key,
     required this.system,
@@ -47,7 +44,6 @@ class GameActionButtons extends StatelessWidget {
     required this.onSettings,
     this.onRandom,
     this.onScrape,
-    this.onManageCollection,
   });
 
   /// Whether the Select (View) chord layer has any shortcuts to reveal.
@@ -166,17 +162,6 @@ class GameActionButtons extends StatelessWidget {
         sound: GameActionButtonSound.nav,
         onTap: selectedGame != null ? onSettings : null,
       ),
-      if (onManageCollection != null) ...[
-        SizedBox(height: 6.r),
-        GameActionButton(
-          iconPath: 'assets/images/gamepad/Xbox_X_button.png',
-          symbol: Symbols.edit_note_rounded,
-          color: scheme.tertiaryFixed,
-          foregroundColor: scheme.onTertiaryFixed,
-          sound: GameActionButtonSound.nav,
-          onTap: onManageCollection,
-        ),
-      ],
       // Compact NeoSync status indicator — always the last option.
       // The icon renders nothing (SizedBox.shrink) when sync is unavailable
       // for this system, so its top spacing lives inside the widget to avoid

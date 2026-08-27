@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -66,24 +65,6 @@ class _CreateEditCollectionDialogState
     _nameFocus.addListener(_onNameFocusChanged);
     _descriptionFocus.addListener(_onDescriptionFocusChanged);
 
-    _nameFocus.onKeyEvent = (node, event) {
-      if (event is KeyDownEvent &&
-          event.logicalKey == LogicalKeyboardKey.escape) {
-        _handleBack();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
-
-    _descriptionFocus.onKeyEvent = (node, event) {
-      if (event is KeyDownEvent &&
-          event.logicalKey == LogicalKeyboardKey.escape) {
-        _handleBack();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
-
     _setupGamepad();
   }
 
@@ -98,11 +79,6 @@ class _CreateEditCollectionDialogState
         _focusRegion != _DialogFocusRegion.descriptionField) {
       setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
     }
-  }
-
-  void _handleBack() {
-    SfxService().playBackSound();
-    Navigator.of(context).pop();
   }
 
   void _setupGamepad() {
@@ -149,12 +125,16 @@ class _CreateEditCollectionDialogState
       onSelectItem: () {
         if (_focusRegion == _DialogFocusRegion.buttons &&
             _focusedButtonIndex == 0) {
-          _handleBack();
+          SfxService().playBackSound();
+          Navigator.of(context).pop();
         } else {
           _submit();
         }
       },
-      onBack: _handleBack,
+      onBack: () {
+        SfxService().playBackSound();
+        Navigator.of(context).pop();
+      },
     );
     _gamepadNav.initialize();
 
@@ -206,185 +186,170 @@ class _CreateEditCollectionDialogState
     final isDescFocused = _focusRegion == _DialogFocusRegion.descriptionField;
     final isButtonsFocused = _focusRegion == _DialogFocusRegion.buttons;
 
-    return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _handleBack},
-      child: Dialog(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.r),
-          side: BorderSide(
-            color: theme.dividerColor.withValues(alpha: 0.2),
-            width: 1.r,
-          ),
+    return Dialog(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.r),
+        side: BorderSide(
+          color: theme.dividerColor.withValues(alpha: 0.2),
+          width: 1.r,
         ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 460.w),
-          child: Padding(
-            padding: EdgeInsets.all(24.r),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _isEditing
-                          ? Symbols.edit_rounded
-                          : Symbols.add_circle_rounded,
-                      color: primaryColor,
-                      size: 24.r,
-                    ),
-                    SizedBox(width: 10.w),
-                    Expanded(
-                      child: Text(
-                        _isEditing
-                            ? AppLocale.editCollection.getString(context)
-                            : AppLocale.createCollection.getString(context),
-                        style: TextStyle(
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
-                          color: theme.textTheme.titleLarge?.color,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Symbols.close_rounded),
-                      iconSize: 20.r,
-                      splashRadius: 18.r,
-                      onPressed: _handleBack,
-                      tooltip: 'Close [B]',
-                    ),
-                  ],
-                ),
-                SizedBox(height: 16.h),
-                Text(
-                  AppLocale.collectionName.getString(context),
-                  style: TextStyle(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isNameFocused
-                        ? primaryColor
-                        : theme.textTheme.bodyMedium?.color,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 460.w),
+        child: Padding(
+          padding: EdgeInsets.all(24.r),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _isEditing
+                        ? Symbols.edit_rounded
+                        : Symbols.add_circle_rounded,
+                    color: primaryColor,
+                    size: 24.r,
                   ),
-                ),
-                SizedBox(height: 6.h),
-                TextField(
-                  controller: _nameController,
-                  focusNode: _nameFocus,
-                  autofocus: true,
-                  style: TextStyle(fontSize: 14.sp),
-                  decoration: InputDecoration(
-                    hintText: AppLocale.collectionNameHint.getString(context),
-                    hintStyle: TextStyle(
-                      fontSize: 13.sp,
-                      color: theme.hintColor,
-                    ),
-                    filled: true,
-                    fillColor: theme.cardColor.withValues(alpha: 0.5),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14.w,
-                      vertical: 12.h,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide(
-                        color: theme.dividerColor.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide(
-                        color: isNameFocused
-                            ? primaryColor
-                            : theme.dividerColor.withValues(alpha: 0.2),
-                        width: isNameFocused ? 2.r : 1.r,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide(color: primaryColor, width: 2.r),
+                  SizedBox(width: 10.w),
+                  Text(
+                    _isEditing
+                        ? AppLocale.editCollection.getString(context)
+                        : AppLocale.createCollection.getString(context),
+                    style: TextStyle(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.bold,
+                      color: theme.textTheme.titleLarge?.color,
                     ),
                   ),
-                  onSubmitted: (_) {
-                    _descriptionFocus.requestFocus();
-                    setState(
-                      () => _focusRegion = _DialogFocusRegion.descriptionField,
-                    );
-                  },
+                ],
+              ),
+              SizedBox(height: 20.h),
+              Text(
+                AppLocale.collectionName.getString(context),
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w600,
+                  color: isNameFocused
+                      ? primaryColor
+                      : theme.textTheme.bodyMedium?.color,
                 ),
-                SizedBox(height: 16.h),
-                Text(
-                  AppLocale.collectionDescription.getString(context),
-                  style: TextStyle(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDescFocused
-                        ? primaryColor
-                        : theme.textTheme.bodyMedium?.color,
+              ),
+              SizedBox(height: 6.h),
+              TextField(
+                controller: _nameController,
+                focusNode: _nameFocus,
+                autofocus: true,
+                style: TextStyle(fontSize: 14.sp),
+                decoration: InputDecoration(
+                  hintText: AppLocale.collectionNameHint.getString(context),
+                  hintStyle: TextStyle(fontSize: 13.sp, color: theme.hintColor),
+                  filled: true,
+                  fillColor: theme.cardColor.withValues(alpha: 0.5),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 14.w,
+                    vertical: 12.h,
                   ),
-                ),
-                SizedBox(height: 6.h),
-                TextField(
-                  controller: _descriptionController,
-                  focusNode: _descriptionFocus,
-                  style: TextStyle(fontSize: 14.sp),
-                  decoration: InputDecoration(
-                    hintText: 'Optional description...',
-                    hintStyle: TextStyle(
-                      fontSize: 13.sp,
-                      color: theme.hintColor,
-                    ),
-                    filled: true,
-                    fillColor: theme.cardColor.withValues(alpha: 0.5),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14.w,
-                      vertical: 12.h,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide(
-                        color: theme.dividerColor.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide(
-                        color: isDescFocused
-                            ? primaryColor
-                            : theme.dividerColor.withValues(alpha: 0.2),
-                        width: isDescFocused ? 2.r : 1.r,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide(color: primaryColor, width: 2.r),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(
+                      color: theme.dividerColor.withValues(alpha: 0.2),
                     ),
                   ),
-                  onSubmitted: (_) => _submit(),
-                ),
-                SizedBox(height: 24.h),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _buildButton(
-                      context: context,
-                      label: 'Cancel [B]',
-                      isFocused: isButtonsFocused && _focusedButtonIndex == 0,
-                      isPrimary: false,
-                      onTap: _handleBack,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(
+                      color: isNameFocused
+                          ? primaryColor
+                          : theme.dividerColor.withValues(alpha: 0.2),
+                      width: isNameFocused ? 2.r : 1.r,
                     ),
-                    SizedBox(width: 12.w),
-                    _buildButton(
-                      context: context,
-                      label: 'Save [A]',
-                      isFocused: isButtonsFocused && _focusedButtonIndex == 1,
-                      isPrimary: true,
-                      onTap: _submit,
-                    ),
-                  ],
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(color: primaryColor, width: 2.r),
+                  ),
                 ),
-              ],
-            ),
+                onSubmitted: (_) {
+                  _descriptionFocus.requestFocus();
+                  setState(
+                    () => _focusRegion = _DialogFocusRegion.descriptionField,
+                  );
+                },
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                AppLocale.collectionDescription.getString(context),
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w600,
+                  color: isDescFocused
+                      ? primaryColor
+                      : theme.textTheme.bodyMedium?.color,
+                ),
+              ),
+              SizedBox(height: 6.h),
+              TextField(
+                controller: _descriptionController,
+                focusNode: _descriptionFocus,
+                style: TextStyle(fontSize: 14.sp),
+                decoration: InputDecoration(
+                  hintText: 'Optional description...',
+                  hintStyle: TextStyle(fontSize: 13.sp, color: theme.hintColor),
+                  filled: true,
+                  fillColor: theme.cardColor.withValues(alpha: 0.5),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 14.w,
+                    vertical: 12.h,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(
+                      color: theme.dividerColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(
+                      color: isDescFocused
+                          ? primaryColor
+                          : theme.dividerColor.withValues(alpha: 0.2),
+                      width: isDescFocused ? 2.r : 1.r,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(color: primaryColor, width: 2.r),
+                  ),
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
+              SizedBox(height: 24.h),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _buildButton(
+                    context: context,
+                    label: 'Cancel [B]',
+                    isFocused: isButtonsFocused && _focusedButtonIndex == 0,
+                    isPrimary: false,
+                    onTap: () {
+                      SfxService().playBackSound();
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                  SizedBox(width: 12.w),
+                  _buildButton(
+                    context: context,
+                    label: 'Save [A]',
+                    isFocused: isButtonsFocused && _focusedButtonIndex == 1,
+                    isPrimary: true,
+                    onTap: _submit,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
