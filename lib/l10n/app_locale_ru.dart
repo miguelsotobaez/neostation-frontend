@@ -252,6 +252,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.collectionDeleted: 'Коллекция удалена',
   AppLocale.searchGames: 'Поиск игр...',
   AppLocale.selectGames: 'Выбрать игры',
+  AppLocale.selection: 'Выбор',
+  AppLocale.selectedGames: 'Выбранные',
+  AppLocale.unselectedGames: 'Не выбранные',
   AppLocale.noGamesFound: 'Игры не найдены',
 
   AppLocale.configureDirectories: 'Директории',

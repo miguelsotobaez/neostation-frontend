@@ -214,6 +214,9 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.collectionDeleted: 'コレクションを削除しました',
   AppLocale.searchGames: 'ゲームを検索...',
   AppLocale.selectGames: 'ゲームを選択',
+  AppLocale.selection: '選択状態',
+  AppLocale.selectedGames: '選択済み',
+  AppLocale.unselectedGames: '未選択',
   AppLocale.noGamesFound: 'ゲームが見つかりません',
 
   AppLocale.configureDirectories: 'ディレクトリの設定',

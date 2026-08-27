@@ -251,6 +251,9 @@ mixin AppLocale {
   static const String collectionDeleted = 'collection_deleted';
   static const String searchGames = 'search_games';
   static const String selectGames = 'select_games';
+  static const String selection = 'selection';
+  static const String selectedGames = 'selected_games';
+  static const String unselectedGames = 'unselected_games';
   static const String noGamesFound = 'no_games_found';
 
   // ---------------------------------------------------------------------------

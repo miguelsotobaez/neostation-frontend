@@ -1,19 +1,26 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
+import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/widgets/core_footer.dart';
+import 'package:neostation/widgets/search_filter_controls.dart';
 
 /// Which band currently holds gamepad focus.
-enum _FocusBand { search, filters, results }
+enum _FocusBand { search, systemFilter, selectionFilter, results, filterMenu }
+
+enum _MembershipFilter { all, selected, unselected }
+
+enum _FilterMenuKind { system, membership }
 
 /// Full-screen dialog to search, filter by system, and toggle inclusion of games
 /// in a collection. Structured with standard focus bands matching SearchScreen.
@@ -55,10 +62,8 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  final ScrollController _chipScrollController = ScrollController();
+  final ScrollController _filterScrollController = ScrollController();
   late final GamepadNavigation _gamepadNav;
-
-  final Map<int, GlobalKey> _chipKeys = {};
 
   List<GameModel> _allGames = [];
   List<SystemModel> _systems = [];
@@ -66,11 +71,33 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
 
   String _searchQuery = '';
   String? _selectedSystemId; // null = all systems
+  _MembershipFilter _membershipFilter = _MembershipFilter.all;
   bool _isLoading = true;
 
   _FocusBand _focusBand = _FocusBand.results;
-  int _focusedFilterIndex = 0;
   int _focusedGameIndex = 0;
+  int _filterMenuIndex = 0;
+  String? _filterMenuOriginalSystemId;
+  _MembershipFilter _filterMenuOriginalMembership = _MembershipFilter.all;
+  _FilterMenuKind _filterMenuKind = _FilterMenuKind.system;
+
+  String get _selectedSystemLabel {
+    if (_selectedSystemId == null) {
+      return AppLocale.allSystems.getString(context);
+    }
+    final matches = _systems.where(
+      (system) => system.folderName == _selectedSystemId,
+    );
+    return matches.isEmpty ? _selectedSystemId! : matches.first.realName;
+  }
+
+  String get _membershipFilterLabel => switch (_membershipFilter) {
+    _MembershipFilter.all => AppLocale.filterAny.getString(context),
+    _MembershipFilter.selected => AppLocale.selectedGames.getString(context),
+    _MembershipFilter.unselected => AppLocale.unselectedGames.getString(
+      context,
+    ),
+  };
 
   List<GameModel> get _filteredGames {
     return _allGames.where((game) {
@@ -86,6 +113,13 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
           return false;
         }
       }
+      final selected = _selectedRomPaths.contains(game.romPath);
+      if (_membershipFilter == _MembershipFilter.selected && !selected) {
+        return false;
+      }
+      if (_membershipFilter == _MembershipFilter.unselected && selected) {
+        return false;
+      }
       return true;
     }).toList();
   }
@@ -94,13 +128,21 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
   void initState() {
     super.initState();
     _selectedRomPaths = Set<String>.from(widget.initialSelectedRomPaths);
+    _searchFocusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape) {
+        _handleBack();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
     _loadData();
     _setupGamepad();
   }
 
   Future<void> _loadData() async {
     try {
-      final dbGames = await SqliteService.getAllGames();
+      final dbGames = await GameRepository.getAllGames();
       final systems = await SystemRepository.getAllSystems();
 
       if (!mounted) return;
@@ -128,13 +170,17 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
       onSelectItem: _handleSelect,
       onBack: _handleBack,
       onXButton: _handleXButton,
-      onPreviousTab: _handlePageUp,
-      onNextTab: _handlePageDown,
+      onFavorite: _finishAndSave,
+      onLeftBumper: () => _cycleSystemFilter(-1),
+      onRightBumper: () => _cycleSystemFilter(1),
+      onPreviousTab: () => _cycleSystemFilter(-1),
+      onNextTab: () => _cycleSystemFilter(1),
       isTextFieldFocused: () => _searchFocusNode.hasFocus,
     );
-    _gamepadNav.initialize();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _gamepadNav.initialize();
       GamepadNavigationManager.pushLayer(
         'collection_add_games_dialog',
         onActivate: () => _gamepadNav.activate(),
@@ -151,42 +197,45 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _scrollController.dispose();
-    _chipScrollController.dispose();
+    _filterScrollController.dispose();
     super.dispose();
   }
 
   void _handleNavigateUp() {
+    if (_focusBand == _FocusBand.filterMenu) {
+      _moveFilterMenu(-1);
+      return;
+    }
     if (_focusBand == _FocusBand.results) {
       if (_focusedGameIndex > 0) {
         SfxService().playNavSound();
         setState(() => _focusedGameIndex--);
         _scrollToFocusedGame();
       } else {
-        // Move up to filter chips
         SfxService().playNavSound();
-        setState(() => _focusBand = _FocusBand.filters);
-        _scrollChipIntoView();
+        setState(() => _focusBand = _FocusBand.systemFilter);
       }
-    } else if (_focusBand == _FocusBand.filters) {
-      // Move up to search bar
+    } else if (_focusBand == _FocusBand.systemFilter ||
+        _focusBand == _FocusBand.selectionFilter) {
       SfxService().playNavSound();
       setState(() => _focusBand = _FocusBand.search);
     }
   }
 
   void _handleNavigateDown() {
+    if (_focusBand == _FocusBand.filterMenu) {
+      _moveFilterMenu(1);
+      return;
+    }
     if (_focusBand == _FocusBand.search) {
       SfxService().playNavSound();
       _searchFocusNode.unfocus();
-      setState(() => _focusBand = _FocusBand.filters);
-      _scrollChipIntoView();
-    } else if (_focusBand == _FocusBand.filters) {
+      setState(() => _focusBand = _FocusBand.systemFilter);
+    } else if (_focusBand == _FocusBand.systemFilter ||
+        _focusBand == _FocusBand.selectionFilter) {
       if (_filteredGames.isNotEmpty) {
         SfxService().playNavSound();
-        setState(() {
-          _focusBand = _FocusBand.results;
-          _focusedGameIndex = 0;
-        });
+        setState(() => _focusBand = _FocusBand.results);
         _scrollToFocusedGame();
       }
     } else if (_focusBand == _FocusBand.results) {
@@ -200,25 +249,18 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
   }
 
   void _handleNavigateLeft() {
-    if (_focusBand == _FocusBand.filters) {
-      if (_focusedFilterIndex > 0) {
-        SfxService().playNavSound();
-        setState(() => _focusedFilterIndex--);
-        _scrollChipIntoView();
-      }
+    if (_focusBand == _FocusBand.selectionFilter) {
+      SfxService().playNavSound();
+      setState(() => _focusBand = _FocusBand.systemFilter);
     } else if (_focusBand == _FocusBand.results) {
       _handlePageUp();
     }
   }
 
   void _handleNavigateRight() {
-    final totalChips = _systems.length + 1; // +1 for All Systems
-    if (_focusBand == _FocusBand.filters) {
-      if (_focusedFilterIndex < totalChips - 1) {
-        SfxService().playNavSound();
-        setState(() => _focusedFilterIndex++);
-        _scrollChipIntoView();
-      }
+    if (_focusBand == _FocusBand.systemFilter) {
+      SfxService().playNavSound();
+      setState(() => _focusBand = _FocusBand.selectionFilter);
     } else if (_focusBand == _FocusBand.results) {
       _handlePageDown();
     }
@@ -248,25 +290,98 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
   }
 
   void _handleSelect() {
-    if (_focusBand == _FocusBand.search) {
-      _searchFocusNode.requestFocus();
-    } else if (_focusBand == _FocusBand.filters) {
-      SfxService().playEnterSound();
-      if (_focusedFilterIndex == 0) {
-        setState(() {
-          _selectedSystemId = null;
-          _focusedGameIndex = 0;
-        });
-      } else {
-        final sys = _systems[_focusedFilterIndex - 1];
-        setState(() {
-          _selectedSystemId = sys.folderName;
-          _focusedGameIndex = 0;
-        });
-      }
-    } else if (_focusBand == _FocusBand.results) {
-      _toggleFocusedGame();
+    switch (_focusBand) {
+      case _FocusBand.search:
+        _searchFocusNode.requestFocus();
+      case _FocusBand.systemFilter:
+        _openFilterMenu(_FilterMenuKind.system);
+      case _FocusBand.selectionFilter:
+        _openFilterMenu(_FilterMenuKind.membership);
+      case _FocusBand.results:
+        _toggleFocusedGame();
+      case _FocusBand.filterMenu:
+        _closeFilterMenu(commit: true);
     }
+  }
+
+  List<String?> get _systemFilterValues => [
+    null,
+    ..._systems.map((system) => system.folderName),
+  ];
+
+  void _openFilterMenu(_FilterMenuKind kind) {
+    setState(() {
+      _filterMenuKind = kind;
+      _filterMenuOriginalSystemId = _selectedSystemId;
+      _filterMenuOriginalMembership = _membershipFilter;
+      _filterMenuIndex = kind == _FilterMenuKind.system
+          ? _systemFilterValues.indexOf(_selectedSystemId)
+          : _membershipFilter.index;
+      _focusBand = _FocusBand.filterMenu;
+    });
+    _scrollFilterMenuIntoView();
+    SfxService().playNavSound();
+  }
+
+  void _moveFilterMenu(int delta) {
+    final count = _filterMenuKind == _FilterMenuKind.system
+        ? _systemFilterValues.length
+        : _MembershipFilter.values.length;
+    if (count == 0) return;
+    setState(() {
+      _filterMenuIndex = (_filterMenuIndex + delta + count) % count;
+      if (_filterMenuKind == _FilterMenuKind.system) {
+        _selectedSystemId = _systemFilterValues[_filterMenuIndex];
+      } else {
+        _membershipFilter = _MembershipFilter.values[_filterMenuIndex];
+      }
+      _focusedGameIndex = 0;
+    });
+    _scrollFilterMenuIntoView();
+    SfxService().playNavSound();
+  }
+
+  void _closeFilterMenu({required bool commit}) {
+    setState(() {
+      if (!commit) {
+        _selectedSystemId = _filterMenuOriginalSystemId;
+        _membershipFilter = _filterMenuOriginalMembership;
+      }
+      _focusedGameIndex = 0;
+      _focusBand = _filterMenuKind == _FilterMenuKind.system
+          ? _FocusBand.systemFilter
+          : _FocusBand.selectionFilter;
+    });
+  }
+
+  void _scrollFilterMenuIntoView() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_filterScrollController.hasClients) return;
+      const extent = 44.0;
+      final position = _filterScrollController.position;
+      final target =
+          (_filterMenuIndex * extent.r) -
+          (position.viewportDimension - extent.r) / 2;
+      _filterScrollController.animateTo(
+        target.clamp(0.0, position.maxScrollExtent),
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _cycleSystemFilter(int direction) {
+    final values = _systemFilterValues;
+    if (values.length < 2) return;
+    final current = values.indexOf(_selectedSystemId);
+    final next = (current + direction + values.length) % values.length;
+    SfxService().playNavSound();
+    setState(() {
+      _selectedSystemId = values[next];
+      _focusedGameIndex = 0;
+      if (_filteredGames.isEmpty) _focusBand = _FocusBand.search;
+    });
+    _scrollToFocusedGame();
   }
 
   void _handleXButton() {
@@ -320,19 +435,6 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
     }
   }
 
-  void _scrollChipIntoView() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final chipContext = _chipKeys[_focusedFilterIndex]?.currentContext;
-      if (chipContext == null) return;
-      Scrollable.ensureVisible(
-        chipContext,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-      );
-    });
-  }
-
   void _finishAndSave() {
     SfxService().playEnterSound();
     widget.onSave(_selectedRomPaths);
@@ -344,7 +446,12 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
       _searchFocusNode.unfocus();
       return;
     }
-    _finishAndSave();
+    if (_focusBand == _FocusBand.filterMenu) {
+      _closeFilterMenu(commit: false);
+      return;
+    }
+    SfxService().playBackSound();
+    Navigator.of(context).pop();
   }
 
   @override
@@ -356,413 +463,488 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
     return Dialog.fullscreen(
       backgroundColor: theme.scaffoldBackgroundColor,
       child: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // Top App Bar
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
-              decoration: BoxDecoration(
-                color: theme.cardColor.withValues(alpha: 0.6),
-                border: Border(
-                  bottom: BorderSide(
-                    color: theme.dividerColor.withValues(alpha: 0.2),
+            Column(
+              children: [
+                // Top App Bar
+                Container(
+                  padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 8.h),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor.withValues(alpha: 0.6),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.dividerColor.withValues(alpha: 0.2),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Symbols.arrow_back_rounded),
-                    onPressed: _finishAndSave,
-                  ),
-                  SizedBox(width: 8.w),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        AppLocale.addGames.getString(context),
-                        style: TextStyle(
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        widget.collectionName,
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          color: primaryColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 14.w,
-                      vertical: 6.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20.r),
-                      border: Border.all(
-                        color: primaryColor.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Text(
-                      '${_selectedRomPaths.length} selected',
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.bold,
+                      Icon(
+                        Symbols.playlist_add_rounded,
                         color: primaryColor,
+                        size: 24.r,
                       ),
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 10.h,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10.r),
-                      ),
-                    ),
-                    icon: const Icon(Symbols.check_rounded),
-                    label: const Text('Done [B]'),
-                    onPressed: _finishAndSave,
-                  ),
-                ],
-              ),
-            ),
-
-            // Search Bar & System Filters Row
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-              child: Column(
-                children: [
-                  // Search Input
-                  TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    textInputAction: TextInputAction.done,
-                    style: TextStyle(fontSize: 14.sp),
-                    decoration: InputDecoration(
-                      hintText: AppLocale.searchGames.getString(context),
-                      prefixIcon: const Icon(Symbols.search_rounded),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Symbols.close_rounded),
-                              onPressed: () {
-                                setState(() {
-                                  _searchController.clear();
-                                  _searchQuery = '';
-                                  _focusedGameIndex = 0;
-                                });
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: theme.cardColor.withValues(alpha: 0.4),
-                      contentPadding: EdgeInsets.symmetric(vertical: 10.h),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.r),
-                        borderSide: BorderSide(
-                          color: (_focusBand == _FocusBand.search)
-                              ? primaryColor
-                              : theme.dividerColor.withValues(alpha: 0.2),
-                          width: (_focusBand == _FocusBand.search) ? 2.r : 1.r,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.r),
-                        borderSide: BorderSide(
-                          color: (_focusBand == _FocusBand.search)
-                              ? primaryColor
-                              : theme.dividerColor.withValues(alpha: 0.2),
-                          width: (_focusBand == _FocusBand.search) ? 2.r : 1.r,
-                        ),
-                      ),
-                    ),
-                    onChanged: (val) {
-                      setState(() {
-                        _searchQuery = val.trim();
-                        _focusedGameIndex = 0;
-                      });
-                    },
-                    onSubmitted: (_) => _searchFocusNode.unfocus(),
-                  ),
-                  SizedBox(height: 10.h),
-
-                  // System Filter Chips Horizontal Scroll
-                  SizedBox(
-                    height: 36.h,
-                    child: ListView(
-                      controller: _chipScrollController,
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        KeyedSubtree(
-                          key: _chipKeys.putIfAbsent(0, () => GlobalKey()),
-                          child: _buildFilterChip(
-                            label: AppLocale.allSystems.getString(context),
-                            isSelected: _selectedSystemId == null,
-                            isFocused:
-                                _focusBand == _FocusBand.filters &&
-                                _focusedFilterIndex == 0,
-                            onTap: () {
-                              SfxService().playNavSound();
-                              setState(() {
-                                _selectedSystemId = null;
-                                _focusedFilterIndex = 0;
-                                _focusedGameIndex = 0;
-                              });
-                            },
-                          ),
-                        ),
-                        ..._systems.asMap().entries.map((entry) {
-                          final idx = entry.key + 1;
-                          final sys = entry.value;
-                          return KeyedSubtree(
-                            key: _chipKeys.putIfAbsent(idx, () => GlobalKey()),
-                            child: _buildFilterChip(
-                              label: sys.realName,
-                              isSelected: _selectedSystemId == sys.folderName,
-                              isFocused:
-                                  _focusBand == _FocusBand.filters &&
-                                  _focusedFilterIndex == idx,
-                              onTap: () {
-                                SfxService().playNavSound();
-                                setState(() {
-                                  _selectedSystemId = sys.folderName;
-                                  _focusedFilterIndex = idx;
-                                  _focusedGameIndex = 0;
-                                });
-                              },
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Game List
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                      SizedBox(width: 10.w),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Symbols.search_off_rounded,
-                            size: 48.r,
-                            color: theme.hintColor,
-                          ),
-                          SizedBox(height: 12.h),
                           Text(
-                            AppLocale.noGamesFound.getString(context),
+                            AppLocale.addGames.getString(context),
                             style: TextStyle(
-                              fontSize: 16.sp,
-                              color: theme.hintColor,
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            widget.collectionName,
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              color: primaryColor,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      itemCount: filtered.length,
-                      itemExtent: 64.h,
-                      itemBuilder: (context, index) {
-                        final game = filtered[index];
-                        final romPath = game.romPath ?? '';
-                        final isSelected = _selectedRomPaths.contains(romPath);
-                        final isFocused =
-                            _focusBand == _FocusBand.results &&
-                            index == _focusedGameIndex;
+                      const Spacer(),
+                      Text(
+                        '${_selectedRomPaths.length} ${AppLocale.selected.getString(context).toLowerCase()}',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-                        return MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _focusBand = _FocusBand.results;
-                                _focusedGameIndex = index;
-                              });
-                              _toggleFocusedGame();
-                            },
-                            child: Container(
-                              margin: EdgeInsets.symmetric(
-                                horizontal: 16.w,
-                                vertical: 3.h,
+                // Search Bar & System Filters Row
+                Padding(
+                  padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 8.h),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        textInputAction: TextInputAction.done,
+                        style: TextStyle(fontSize: 14.sp),
+                        decoration: InputDecoration(
+                          hintText: AppLocale.searchGames.getString(context),
+                          prefixIcon: const Icon(Symbols.search_rounded),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Symbols.close_rounded),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      _searchQuery = '';
+                                      _focusedGameIndex = 0;
+                                    });
+                                  },
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: theme.cardColor.withValues(alpha: 0.4),
+                          contentPadding: EdgeInsets.symmetric(vertical: 10.h),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.r),
+                            borderSide: BorderSide(
+                              color: (_focusBand == _FocusBand.search)
+                                  ? primaryColor
+                                  : theme.dividerColor.withValues(alpha: 0.2),
+                              width: (_focusBand == _FocusBand.search)
+                                  ? 2.r
+                                  : 1.r,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.r),
+                            borderSide: BorderSide(
+                              color: (_focusBand == _FocusBand.search)
+                                  ? primaryColor
+                                  : theme.dividerColor.withValues(alpha: 0.2),
+                              width: (_focusBand == _FocusBand.search)
+                                  ? 2.r
+                                  : 1.r,
+                            ),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            _focusBand = _FocusBand.search;
+                            _searchQuery = val.trim();
+                            _focusedGameIndex = 0;
+                          });
+                        },
+                        onSubmitted: (_) => _searchFocusNode.unfocus(),
+                      ),
+                      SizedBox(height: 6.h),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            SearchFilterChip(
+                              label: AppLocale.systems.getString(context),
+                              value: _selectedSystemLabel,
+                              isFocused: _focusBand == _FocusBand.systemFilter,
+                              isActive: _selectedSystemId != null,
+                              onTap: () {
+                                _searchFocusNode.unfocus();
+                                setState(
+                                  () => _focusBand = _FocusBand.systemFilter,
+                                );
+                                _openFilterMenu(_FilterMenuKind.system);
+                              },
+                            ),
+                            SearchFilterChip(
+                              label: AppLocale.selection.getString(context),
+                              value: _membershipFilterLabel,
+                              isFocused:
+                                  _focusBand == _FocusBand.selectionFilter,
+                              isActive:
+                                  _membershipFilter != _MembershipFilter.all,
+                              onTap: () {
+                                _searchFocusNode.unfocus();
+                                setState(
+                                  () => _focusBand = _FocusBand.selectionFilter,
+                                );
+                                _openFilterMenu(_FilterMenuKind.membership);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Game List
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : filtered.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Symbols.search_off_rounded,
+                                size: 48.r,
+                                color: theme.hintColor,
                               ),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 14.w,
-                                vertical: 8.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isFocused
-                                    ? primaryColor.withValues(alpha: 0.18)
-                                    : (isSelected
-                                          ? primaryColor.withValues(alpha: 0.08)
-                                          : theme.cardColor.withValues(
-                                              alpha: 0.3,
-                                            )),
-                                borderRadius: BorderRadius.circular(10.r),
-                                border: Border.all(
-                                  color: isFocused
-                                      ? primaryColor
-                                      : (isSelected
-                                            ? primaryColor.withValues(
-                                                alpha: 0.4,
-                                              )
-                                            : Colors.transparent),
-                                  width: isFocused ? 2.r : 1.r,
+                              SizedBox(height: 12.h),
+                              Text(
+                                AppLocale.noGamesFound.getString(context),
+                                style: TextStyle(
+                                  fontSize: 16.sp,
+                                  color: theme.hintColor,
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Checkbox(
-                                    value: isSelected,
-                                    activeColor: primaryColor,
-                                    onChanged: (_) {
-                                      setState(() {
-                                        _focusBand = _FocusBand.results;
-                                        _focusedGameIndex = index;
-                                      });
-                                      _toggleFocusedGame();
-                                    },
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          itemCount: filtered.length,
+                          itemExtent: 64.h,
+                          itemBuilder: (context, index) {
+                            final game = filtered[index];
+                            final romPath = game.romPath ?? '';
+                            final isSelected = _selectedRomPaths.contains(
+                              romPath,
+                            );
+                            final isFocused =
+                                _focusBand == _FocusBand.results &&
+                                index == _focusedGameIndex;
+
+                            return MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _focusBand = _FocusBand.results;
+                                    _focusedGameIndex = index;
+                                  });
+                                  _toggleFocusedGame();
+                                },
+                                child: Container(
+                                  margin: EdgeInsets.symmetric(
+                                    horizontal: 16.w,
+                                    vertical: 3.h,
                                   ),
-                                  SizedBox(width: 8.w),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          game.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 14.sp,
-                                            fontWeight: isSelected || isFocused
-                                                ? FontWeight.bold
-                                                : FontWeight.normal,
-                                            color: isFocused
-                                                ? primaryColor
-                                                : theme
-                                                      .textTheme
-                                                      .bodyLarge
-                                                      ?.color,
-                                          ),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 14.w,
+                                    vertical: 8.h,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isFocused
+                                        ? primaryColor.withValues(alpha: 0.18)
+                                        : (isSelected
+                                              ? primaryColor.withValues(
+                                                  alpha: 0.08,
+                                                )
+                                              : theme.cardColor.withValues(
+                                                  alpha: 0.3,
+                                                )),
+                                    borderRadius: BorderRadius.circular(10.r),
+                                    border: Border.all(
+                                      color: isFocused
+                                          ? primaryColor
+                                          : (isSelected
+                                                ? primaryColor.withValues(
+                                                    alpha: 0.4,
+                                                  )
+                                                : Colors.transparent),
+                                      width: isFocused ? 2.r : 1.r,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Checkbox(
+                                        value: isSelected,
+                                        activeColor: primaryColor,
+                                        onChanged: (_) {
+                                          setState(() {
+                                            _focusBand = _FocusBand.results;
+                                            _focusedGameIndex = index;
+                                          });
+                                          _toggleFocusedGame();
+                                        },
+                                      ),
+                                      SizedBox(width: 8.w),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              game.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 14.sp,
+                                                fontWeight:
+                                                    isSelected || isFocused
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                                color: isFocused
+                                                    ? primaryColor
+                                                    : theme
+                                                          .textTheme
+                                                          .bodyLarge
+                                                          ?.color,
+                                              ),
+                                            ),
+                                            if (game.developer.isNotEmpty)
+                                              Text(
+                                                game.developer,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11.sp,
+                                                  color: theme.hintColor,
+                                                ),
+                                              ),
+                                          ],
                                         ),
-                                        if (game.developer.isNotEmpty)
-                                          Text(
-                                            game.developer,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (game.systemRealName != null &&
+                                          game.systemRealName!.isNotEmpty)
+                                        Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 8.w,
+                                            vertical: 3.h,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: theme.cardColor.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              6.r,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            game.systemRealName!,
                                             style: TextStyle(
                                               fontSize: 11.sp,
                                               color: theme.hintColor,
                                             ),
                                           ),
-                                      ],
-                                    ),
+                                        ),
+                                    ],
                                   ),
-                                  if (game.systemRealName != null &&
-                                      game.systemRealName!.isNotEmpty)
-                                    Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8.w,
-                                        vertical: 3.h,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: theme.cardColor.withValues(
-                                          alpha: 0.8,
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          6.r,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        game.systemRealName!,
-                                        style: TextStyle(
-                                          fontSize: 11.sp,
-                                          color: theme.hintColor,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        ),
+                ),
+                _AddGamesFooter(
+                  collectionName: widget.collectionName,
+                  selectedCount: _selectedRomPaths.length,
+                  onCancel: _handleBack,
+                  onSave: _finishAndSave,
+                ),
+              ],
             ),
+            if (_focusBand == _FocusBand.filterMenu)
+              Positioned.fill(child: _buildFilterMenu(theme)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFilterChip({
-    required String label,
-    required bool isSelected,
-    required bool isFocused,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+  Widget _buildFilterMenu(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final values = _filterMenuKind == _FilterMenuKind.system
+        ? _systemFilterValues
+        : _MembershipFilter.values;
+    final labels = _filterMenuKind == _FilterMenuKind.system
+        ? <String>[
+            AppLocale.allSystems.getString(context),
+            ..._systems.map((system) => system.realName),
+          ]
+        : <String>[
+            AppLocale.filterAny.getString(context),
+            AppLocale.selectedGames.getString(context),
+            AppLocale.unselectedGames.getString(context),
+          ];
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          margin: EdgeInsets.only(right: 8.w),
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? primaryColor
-                : (isFocused
-                      ? primaryColor.withValues(alpha: 0.2)
-                      : theme.cardColor.withValues(alpha: 0.5)),
-            borderRadius: BorderRadius.circular(16.r),
-            border: Border.all(
-              color: isFocused
-                  ? (isSelected ? Colors.white : primaryColor)
-                  : (isSelected
-                        ? primaryColor
-                        : theme.dividerColor.withValues(alpha: 0.3)),
-              width: isFocused ? 2.r : 1.r,
-            ),
+    return GestureDetector(
+      onTap: () => _closeFilterMenu(commit: false),
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.6),
+        child: CustomSingleChildLayout(
+          delegate: SearchFilterMenuLayout(
+            topInset: 12.r,
+            bottomInset: kCoreFooterHeight.r + 12.r,
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12.sp,
-              fontWeight: isSelected || isFocused
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-              color: isSelected
-                  ? Colors.white
-                  : (isFocused
-                        ? primaryColor
-                        : theme.textTheme.bodyMedium?.color),
+          child: GestureDetector(
+            onTap: () {},
+            child: Container(
+              width: 320.r,
+              padding: EdgeInsets.all(12.r),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(16.r),
+                border: Border.all(
+                  color: scheme.primary.withValues(alpha: 0.4),
+                  width: 1.r,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(left: 4.r, bottom: 8.r),
+                    child: Text(
+                      (_filterMenuKind == _FilterMenuKind.system
+                              ? AppLocale.systems
+                              : AppLocale.selection)
+                          .getString(context),
+                      style: TextStyle(
+                        fontSize: 15.r,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      controller: _filterScrollController,
+                      shrinkWrap: true,
+                      itemExtent: 44.r,
+                      itemCount: labels.length,
+                      itemBuilder: (context, index) => SearchFilterMenuOption(
+                        label: labels[index],
+                        isSelected: index == _filterMenuIndex,
+                        onTap: () {
+                          setState(() {
+                            _filterMenuIndex = index;
+                            if (_filterMenuKind == _FilterMenuKind.system) {
+                              _selectedSystemId = values[index] as String?;
+                            } else {
+                              _membershipFilter =
+                                  values[index] as _MembershipFilter;
+                            }
+                          });
+                          _closeFilterMenu(commit: true);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _AddGamesFooter extends CoreFooter {
+  const _AddGamesFooter({
+    required this.collectionName,
+    required this.selectedCount,
+    required this.onCancel,
+    required this.onSave,
+  });
+
+  final String collectionName;
+  final int selectedCount;
+  final VoidCallback onCancel;
+  final VoidCallback onSave;
+
+  @override
+  bool get centerControls => false;
+
+  @override
+  bool get showVersion => false;
+
+  @override
+  Widget? buildLeftContent(BuildContext context) => Text(
+    '$collectionName · $selectedCount ${AppLocale.selected.getString(context).toLowerCase()}',
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      color: Theme.of(context).colorScheme.onSurface,
+      fontSize: 12.r,
+      fontWeight: FontWeight.w600,
+    ),
+  );
+
+  @override
+  List<Widget> buildControls(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      GamepadControl(
+        label: AppLocale.cancel.getString(context),
+        iconPath: 'assets/images/gamepad/Xbox_B_button.png',
+        onTap: onCancel,
+        textColor: scheme.onSurface,
+        backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
+      ),
+      SizedBox(width: 8.r),
+      GamepadControl(
+        label: AppLocale.select.getString(context),
+        iconPath: 'assets/images/gamepad/Xbox_A_button.png',
+        textColor: scheme.onTertiaryFixed,
+        backgroundColor: scheme.tertiaryFixed,
+      ),
+      SizedBox(width: 8.r),
+      GamepadControl(
+        label: AppLocale.save.getString(context),
+        iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
+        onTap: onSave,
+        textColor: scheme.onTertiary,
+        backgroundColor: scheme.tertiary,
+      ),
+    ];
   }
 }

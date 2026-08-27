@@ -248,6 +248,9 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.collectionDeleted: 'Collection deleted',
   AppLocale.searchGames: 'Search games...',
   AppLocale.selectGames: 'Select Games',
+  AppLocale.selection: 'Selection',
+  AppLocale.selectedGames: 'Selected',
+  AppLocale.unselectedGames: 'Unselected',
   AppLocale.noGamesFound: 'No games found',
 
   AppLocale.configureDirectories: 'Directories',

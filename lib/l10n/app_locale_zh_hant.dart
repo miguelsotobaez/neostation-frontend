@@ -210,6 +210,9 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.collectionDeleted: '收藏集已刪除',
   AppLocale.searchGames: '搜尋遊戲...',
   AppLocale.selectGames: '選取遊戲',
+  AppLocale.selection: '選取狀態',
+  AppLocale.selectedGames: '已選取',
+  AppLocale.unselectedGames: '未選取',
   AppLocale.noGamesFound: '未找到遊戲',
 
   AppLocale.configureDirectories: '目錄設定',

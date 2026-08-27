@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -30,6 +29,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/game_launch_utils.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/search_filter_controls.dart';
 import 'package:neostation/screens/game_screen/my_games_list.dart';
 import 'package:neostation/screens/app_screen.dart';
 
@@ -1687,12 +1687,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
   /// A single filter chip showing "Label: value"; tapping opens its picker.
   Widget _buildFilterChip(ThemeData theme, String key, bool isFocused) {
-    final scheme = theme.colorScheme;
     final label = _filterLabel(key);
     final value = _filterValueLabel(key);
     final active = _isFilterActive(key);
 
-    return GestureDetector(
+    return SearchFilterChip(
+      label: label,
+      value: value,
+      isFocused: isFocused,
+      isActive: active,
       onTap: () {
         setState(() {
           _nameFocus.unfocus();
@@ -1701,59 +1704,6 @@ class _SearchScreenState extends State<SearchScreen> {
         });
         _openFilterMenu(key);
       },
-      child: Container(
-        margin: EdgeInsets.only(right: 8.r),
-        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
-        decoration: BoxDecoration(
-          color: isFocused
-              ? scheme.primary.withValues(alpha: 0.18)
-              : (active
-                    ? scheme.primary.withValues(alpha: 0.10)
-                    : scheme.surface.withValues(alpha: 0.5)),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: isFocused
-                ? scheme.primary
-                : (active
-                      ? scheme.primary.withValues(alpha: 0.5)
-                      : Colors.transparent),
-            width: 2.r,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$label: ',
-              style: TextStyle(
-                fontSize: 13.r,
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 140.r),
-              child: Text(
-                value,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13.r,
-                  fontWeight: FontWeight.w700,
-                  color: (active || isFocused)
-                      ? scheme.primary
-                      : scheme.onSurface,
-                ),
-              ),
-            ),
-            SizedBox(width: 4.r),
-            Icon(
-              Symbols.expand_more_rounded,
-              size: 16.r,
-              color: scheme.onSurface.withValues(alpha: isFocused ? 0.9 : 0.4),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1827,7 +1777,7 @@ class _SearchScreenState extends State<SearchScreen> {
         child: ColoredBox(
           color: Colors.black.withValues(alpha: 0.6),
           child: CustomSingleChildLayout(
-            delegate: _FilterMenuLayout(
+            delegate: SearchFilterMenuLayout(
               // The header's own 46.r (see header.dart) plus a 12.r gap — not
               // the 64.r top spacer the tab *content* starts after, which
               // reserved space the header never occupied.
@@ -1894,41 +1844,11 @@ class _SearchScreenState extends State<SearchScreen> {
     int index,
     int selected,
   ) {
-    final scheme = theme.colorScheme;
     final isSelected = index == selected;
-    return GestureDetector(
+    return SearchFilterMenuOption(
+      label: label,
+      isSelected: isSelected,
       onTap: () => _applyMenuIndex(key, index),
-      child: Container(
-        margin: EdgeInsets.symmetric(vertical: 2.r),
-        padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? scheme.primary.withValues(alpha: 0.18)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10.r),
-          border: Border.all(
-            color: isSelected ? scheme.primary : Colors.transparent,
-            width: 2.r,
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13.r,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? scheme.primary : scheme.onSurface,
-                ),
-              ),
-            ),
-            if (isSelected)
-              Icon(Symbols.check_rounded, size: 16.r, color: scheme.primary),
-          ],
-        ),
-      ),
     );
   }
 
@@ -2483,35 +2403,3 @@ class _SearchScreenState extends State<SearchScreen> {
 /// only until centring would push it under the header; past that it stays
 /// pinned at [topInset] and takes the whole run down to [bottomInset]. Short
 /// lists still sit optically centred, long ones use the screen.
-class _FilterMenuLayout extends SingleChildLayoutDelegate {
-  const _FilterMenuLayout({required this.topInset, required this.bottomInset});
-
-  /// Space kept clear at the top, for the global header the overlay covers.
-  final double topInset;
-
-  /// Space kept clear at the bottom, so the menu never meets the screen edge.
-  final double bottomInset;
-
-  @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      constraints.loosen().copyWith(
-        maxHeight: math.max(
-          0.0,
-          constraints.maxHeight - topInset - bottomInset,
-        ),
-      );
-
-  @override
-  Offset getPositionForChild(Size size, Size childSize) {
-    final centred = (size.height - childSize.height) / 2;
-    return Offset(
-      (size.width - childSize.width) / 2,
-      math.max(centred, topInset),
-    );
-  }
-
-  @override
-  bool shouldRelayout(_FilterMenuLayout oldDelegate) =>
-      oldDelegate.topInset != topInset ||
-      oldDelegate.bottomInset != bottomInset;
-}

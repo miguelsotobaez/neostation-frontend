@@ -260,6 +260,9 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.collectionDeleted: 'Collection supprimée',
   AppLocale.searchGames: 'Rechercher des jeux...',
   AppLocale.selectGames: 'Sélectionner des jeux',
+  AppLocale.selection: 'Sélection',
+  AppLocale.selectedGames: 'Sélectionnés',
+  AppLocale.unselectedGames: 'Non sélectionnés',
   AppLocale.noGamesFound: 'Aucun jeu trouvé',
 
   AppLocale.configureDirectories: 'Configurer les Répertoires',

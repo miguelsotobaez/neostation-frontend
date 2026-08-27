@@ -212,6 +212,9 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.collectionDeleted: '컬렉션이 삭제되었습니다',
   AppLocale.searchGames: '게임 검색...',
   AppLocale.selectGames: '게임 선택',
+  AppLocale.selection: '선택 상태',
+  AppLocale.selectedGames: '선택됨',
+  AppLocale.unselectedGames: '선택 안 됨',
   AppLocale.noGamesFound: '게임을 찾을 수 없습니다',
 
   AppLocale.configureDirectories: '폴더',

@@ -246,6 +246,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.collectionDeleted: 'Koleksi dihapus',
   AppLocale.searchGames: 'Cari game...',
   AppLocale.selectGames: 'Pilih Game',
+  AppLocale.selection: 'Pilihan',
+  AppLocale.selectedGames: 'Dipilih',
+  AppLocale.unselectedGames: 'Tidak dipilih',
   AppLocale.noGamesFound: 'Game tidak ditemukan',
 
   AppLocale.configureDirectories: 'Konfigurasi Direktori',

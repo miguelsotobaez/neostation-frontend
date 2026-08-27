@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/collection_provider.dart';
 import 'package:neostation/screens/collections_screen/collections_tab.dart';
@@ -15,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/widgets/game_collections_dropdown.dart';
+import 'package:neostation/widgets/search_filter_controls.dart';
 
 import 'database_test_helper.dart';
 
@@ -124,14 +126,30 @@ void main() {
     expect(find.text(AppLocale.en[AppLocale.collectionName]!), findsOneWidget);
   });
 
-  testWidgets('CollectionAddGamesDialog renders search and filter chips', (
+  testWidgets('CollectionAddGamesDialog renders search, system filter and footer', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(640, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final db = await SqliteService.getDatabase();
+    await db.execute(
+      "INSERT INTO app_systems (id, real_name, folder_name) VALUES ('snes', 'Super Nintendo', 'snes')",
+    );
+    for (var i = 0; i < 20; i++) {
+      await db.rawInsert(
+        'INSERT INTO user_roms (filename, rom_path, app_system_id, title_name) VALUES (?, ?, ?, ?)',
+        ['game_$i.smc', '/roms/snes/game_$i.smc', 'snes', 'Game $i'],
+      );
+    }
+
     Set<String>? savedPaths;
 
     await tester.pumpWidget(
       ScreenUtilInit(
-        designSize: const Size(1920, 1080),
+        designSize: const Size(640, 480),
         builder: (context, child) => MaterialApp(
           localizationsDelegates:
               FlutterLocalization.instance.localizationsDelegates,
@@ -163,12 +181,64 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('RPG Favorites'), findsOneWidget);
-    expect(find.text('1 selected'), findsOneWidget);
-    expect(find.text(AppLocale.en[AppLocale.allSystems]!), findsOneWidget);
-    expect(find.text('Done [B]'), findsOneWidget);
+    expect(find.textContaining('1 selected'), findsWidgets);
+    expect(
+      find.textContaining(AppLocale.en[AppLocale.allSystems]!),
+      findsOneWidget,
+    );
+    expect(find.text(AppLocale.en[AppLocale.cancel]!), findsOneWidget);
+    expect(find.text(AppLocale.en[AppLocale.save]!), findsOneWidget);
+    expect(
+      find.textContaining(AppLocale.en[AppLocale.selection]!),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
 
-    // Tap Done
-    await tester.tap(find.text('Done [B]'));
+    await tester.tap(find.text(AppLocale.en[AppLocale.filterAny]!));
+    await tester.pumpAndSettle();
+    final selectedOption = find.descendant(
+      of: find.byType(SearchFilterMenuOption),
+      matching: find.text(AppLocale.en[AppLocale.selectedGames]!),
+    );
+    expect(selectedOption, findsOneWidget);
+    await tester.tap(selectedOption);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Super Nintendo'), findsNothing);
+
+    await tester.tap(find.text(AppLocale.en[AppLocale.selectedGames]!));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SearchFilterMenuOption),
+        matching: find.text(AppLocale.en[AppLocale.filterAny]!),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining(AppLocale.en[AppLocale.allSystems]!));
+    await tester.pumpAndSettle();
+    final systemOption = find.descendant(
+      of: find.byType(SearchFilterMenuOption),
+      matching: find.text('Super Nintendo'),
+    );
+    expect(systemOption, findsOneWidget);
+    await tester.tap(systemOption);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(SearchFilterChip),
+        matching: find.text('Super Nintendo'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byType(CollectionAddGamesDialog), findsOneWidget);
+
+    await tester.tap(find.text(AppLocale.en[AppLocale.save]!));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 

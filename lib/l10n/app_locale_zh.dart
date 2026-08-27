@@ -210,6 +210,9 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.collectionDeleted: '收藏集已删除',
   AppLocale.searchGames: '搜索游戏...',
   AppLocale.selectGames: '选择游戏',
+  AppLocale.selection: '选择状态',
+  AppLocale.selectedGames: '已选择',
+  AppLocale.unselectedGames: '未选择',
   AppLocale.noGamesFound: '未找到游戏',
 
   AppLocale.configureDirectories: '目录设置',
