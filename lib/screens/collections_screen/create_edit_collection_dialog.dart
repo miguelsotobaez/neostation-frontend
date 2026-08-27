@@ -79,6 +79,10 @@ class _CreateEditCollectionDialogState
   }
 
   void _handleBack() {
+    if (_nameFocus.hasFocus) {
+      _nameFocus.unfocus();
+      return;
+    }
     SfxService().playBackSound();
     Navigator.of(context).pop();
   }
@@ -221,6 +225,7 @@ class _CreateEditCollectionDialogState
                 controller: _nameController,
                 focusNode: _nameFocus,
                 autofocus: true,
+                textInputAction: TextInputAction.done,
                 style: TextStyle(fontSize: 14.sp),
                 decoration: InputDecoration(
                   hintText: AppLocale.collectionNameHint.getString(context),

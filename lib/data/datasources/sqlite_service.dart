@@ -2672,28 +2672,91 @@ class SqliteService {
   /// Deletes all ROM records associated with a specific directory prefix.
   static Future<int> deleteRomsByFolderPath(String folderPath) async {
     final db = await instance.database;
-
-    // Remove ROM entries where the path starts with the specified folder.
-    // Handles both SAF URI separators (/) and Windows path separators (\).
-    return await db.delete(
-      'user_roms',
-      where: 'rom_path LIKE ? OR rom_path LIKE ? OR rom_path = ?',
-      whereArgs: ['$folderPath/%', '$folderPath\\%', folderPath],
-    );
+    return db.transaction((txn) async {
+      final where = 'rom_path LIKE ? OR rom_path LIKE ? OR rom_path = ?';
+      final args = ['$folderPath/%', '$folderPath\\%', folderPath];
+      final rows = await txn.query(
+        'user_roms',
+        columns: ['rom_path'],
+        where: where,
+        whereArgs: args,
+      );
+      await deleteCollectionMembershipsForPaths(
+        txn,
+        rows.map((row) => row['rom_path'].toString()).toList(),
+      );
+      return txn.delete('user_roms', where: where, whereArgs: args);
+    });
   }
 
   /// Permanently deletes a single game and its metadata from the database.
   static Future<void> deleteGame(String appSystemId, String filename) async {
     final db = await instance.database;
-    await db.delete(
-      'user_screenscraper_metadata',
-      where: 'app_system_id = ? AND filename = ?',
-      whereArgs: [appSystemId, filename],
+    await db.transaction((txn) async {
+      final args = [appSystemId, filename];
+      final rows = await txn.query(
+        'user_roms',
+        columns: ['rom_path'],
+        where: 'app_system_id = ? AND filename = ?',
+        whereArgs: args,
+      );
+      await deleteCollectionMembershipsForPaths(
+        txn,
+        rows.map((row) => row['rom_path'].toString()).toList(),
+      );
+      await txn.delete(
+        'user_screenscraper_metadata',
+        where: 'app_system_id = ? AND filename = ?',
+        whereArgs: args,
+      );
+      await txn.delete(
+        'user_roms',
+        where: 'app_system_id = ? AND filename = ?',
+        whereArgs: args,
+      );
+    });
+  }
+
+  /// Removes collection memberships for ROM paths being deleted.
+  static Future<void> deleteCollectionMembershipsForPaths(
+    DatabaseExecutorAdapter executor,
+    List<String> romPaths,
+  ) async {
+    if (romPaths.isEmpty) return;
+    const batchSize = 100;
+    for (var i = 0; i < romPaths.length; i += batchSize) {
+      final paths = romPaths.sublist(
+        i,
+        (i + batchSize).clamp(0, romPaths.length),
+      );
+      final placeholders = List.filled(paths.length, '?').join(',');
+      await executor.rawDelete(
+        'DELETE FROM user_collection_roms WHERE rom_path IN ($placeholders)',
+        paths,
+      );
+    }
+  }
+
+  /// Moves all memberships from an obsolete ROM path to its surviving path.
+  static Future<void> transferCollectionMemberships(
+    DatabaseExecutorAdapter executor,
+    String oldPath,
+    String newPath,
+  ) async {
+    await executor.rawInsert(
+      '''
+      INSERT OR IGNORE INTO user_collection_roms
+        (collection_id, rom_path, display_order, added_at)
+      SELECT collection_id, ?, display_order, added_at
+      FROM user_collection_roms
+      WHERE rom_path = ? COLLATE NOCASE
+      ''',
+      [newPath, oldPath],
     );
-    await db.delete(
-      'user_roms',
-      where: 'app_system_id = ? AND filename = ?',
-      whereArgs: [appSystemId, filename],
+    await executor.delete(
+      'user_collection_roms',
+      where: 'rom_path = ? COLLATE NOCASE',
+      whereArgs: [oldPath],
     );
   }
 
@@ -5061,6 +5124,8 @@ class SqliteService {
   static Future<void> clearUserData() async {
     final db = await instance.database;
     await db.transaction((txn) async {
+      await txn.delete('user_collection_roms');
+      await txn.delete('user_collections');
       await txn.delete('user_config');
       await txn.delete('user_roms');
       await txn.delete('user_emulator_config');
@@ -5615,10 +5680,10 @@ class SqliteService {
         c.id, c.name, c.icon, c.color,
         c.custom_background_path, c.custom_logo_path,
         c.created_at, c.updated_at,
-        COUNT(DISTINCT ucr.rom_path) as game_count
+        COUNT(DISTINCT ur.rom_path) as game_count
       FROM user_collections c
       LEFT JOIN user_collection_roms ucr ON c.id = ucr.collection_id
-      LEFT JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+      LEFT JOIN user_roms ur ON ucr.rom_path = ur.rom_path AND ur.is_hidden = 0
       GROUP BY c.id
       ORDER BY LOWER(c.name) ASC
     ''');
@@ -5631,7 +5696,7 @@ class SqliteService {
         SELECT ucr.rom_path
         FROM user_collection_roms ucr
         JOIN user_roms ur ON ucr.rom_path = ur.rom_path
-        WHERE ucr.collection_id = ?
+        WHERE ucr.collection_id = ? AND ur.is_hidden = 0
         ORDER BY ucr.display_order ASC, ucr.id ASC
         LIMIT 4
       ''',
@@ -5658,10 +5723,10 @@ class SqliteService {
         c.id, c.name, c.icon, c.color,
         c.custom_background_path, c.custom_logo_path,
         c.created_at, c.updated_at,
-        COUNT(DISTINCT ucr.rom_path) as game_count
+        COUNT(DISTINCT ur.rom_path) as game_count
       FROM user_collections c
       LEFT JOIN user_collection_roms ucr ON c.id = ucr.collection_id
-      LEFT JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+      LEFT JOIN user_roms ur ON ucr.rom_path = ur.rom_path AND ur.is_hidden = 0
       WHERE c.id = ?
       GROUP BY c.id
       LIMIT 1
@@ -5677,7 +5742,7 @@ class SqliteService {
       SELECT ucr.rom_path
       FROM user_collection_roms ucr
       JOIN user_roms ur ON ucr.rom_path = ur.rom_path
-      WHERE ucr.collection_id = ?
+      WHERE ucr.collection_id = ? AND ur.is_hidden = 0
       ORDER BY ucr.display_order ASC, ucr.id ASC
       LIMIT 4
     ''',
@@ -5723,7 +5788,7 @@ class SqliteService {
       JOIN user_roms ur ON ucr.rom_path = ur.rom_path
       JOIN app_systems s ON ur.app_system_id = s.id
       LEFT JOIN user_screenscraper_metadata usm ON ur.app_system_id = usm.app_system_id AND ur.filename = usm.filename
-      WHERE ucr.collection_id = ?
+      WHERE ucr.collection_id = ? AND ur.is_hidden = 0
       ORDER BY ucr.display_order ASC, LOWER(game_display_name) ASC
     ''',
       [collectionId],

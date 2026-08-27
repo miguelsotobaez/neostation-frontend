@@ -12,6 +12,7 @@ class DatabaseTestHelper {
   Future<DatabaseAdapter> setUp() async {
     SharedPreferences.setMockInitialValues({});
     _db = sqlite.sqlite3.openInMemory();
+    _db.execute('PRAGMA foreign_keys = ON');
     _adapter = DatabaseAdapter(_db);
     SqliteService.setTestingDatabase(_adapter);
     await createMinimalSchema(_adapter);
@@ -67,7 +68,7 @@ class DatabaseTestHelper {
     await db.execute('''
       CREATE TABLE user_roms (
         filename TEXT,
-        rom_path TEXT PRIMARY KEY,
+        rom_path TEXT PRIMARY KEY COLLATE NOCASE,
         title_name TEXT,
         title_id TEXT,
         description TEXT,
@@ -325,6 +326,9 @@ class DatabaseTestHelper {
         UNIQUE(app_system_id, filename)
       )
     ''');
+
+    await db.execute('CREATE TABLE user_retroarch_cores (id INTEGER)');
+    await db.execute('CREATE TABLE user_retroarch_paths (id INTEGER)');
 
     await db.execute(SqliteMigrations.createAppNeoSyncStateTableSql);
     await db.execute(SqliteMigrations.createAppNeoSyncStateIndexSql);

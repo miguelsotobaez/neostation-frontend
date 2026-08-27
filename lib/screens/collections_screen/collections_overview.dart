@@ -8,8 +8,11 @@ import 'package:neostation/models/my_systems.dart';
 import 'package:neostation/providers/collection_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/responsive.dart';
+import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/screens/systems_screen/my_systems_section/my_systems_grid.dart';
+import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/collection_options_dialog.dart';
 import 'package:neostation/widgets/systems_grid_footer.dart';
 import 'package:provider/provider.dart';
@@ -72,55 +75,8 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
         }
 
         final collections = collectionProvider.collections;
-        final theme = Theme.of(context);
-        final primaryColor = theme.colorScheme.primary;
-
         if (collections.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32.r),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Symbols.collections_bookmark_rounded,
-                    size: 64.r,
-                    color: primaryColor.withValues(alpha: 0.5),
-                  ),
-                  SizedBox(height: 16.r),
-                  Text(
-                    AppLocale.noCollectionsTitle.getString(context),
-                    style: TextStyle(
-                      fontSize: 18.r,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: 8.r),
-                  Text(
-                    AppLocale.noCollectionsSubtitle.getString(context),
-                    style: TextStyle(
-                      fontSize: 13.r,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 24.r),
-                  ElevatedButton.icon(
-                    onPressed: _openCreateDialog,
-                    icon: const Icon(Symbols.add_rounded),
-                    label: Text(AppLocale.createCollection.getString(context)),
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 24.r,
-                        vertical: 12.r,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return _EmptyCollectionsView(onCreate: _openCreateDialog);
         }
 
         final List<SystemInfo> systemCards = collections
@@ -194,6 +150,96 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
           ],
         );
       },
+    );
+  }
+}
+
+class _EmptyCollectionsView extends StatefulWidget {
+  const _EmptyCollectionsView({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  State<_EmptyCollectionsView> createState() => _EmptyCollectionsViewState();
+}
+
+class _EmptyCollectionsViewState extends State<_EmptyCollectionsView> {
+  late final GamepadNavigation _gamepadNav;
+
+  @override
+  void initState() {
+    super.initState();
+    _gamepadNav = GamepadNavigation(
+      onSelectItem: widget.onCreate,
+      onXButton: widget.onCreate,
+      onPreviousTab: AppNavigation.previousTab,
+      onNextTab: AppNavigation.nextTab,
+      onLeftBumper: AppNavigation.previousTab,
+      onRightBumper: AppNavigation.nextTab,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _gamepadNav.initialize();
+      GamepadNavigationManager.pushLayer(
+        'collections_empty',
+        onActivate: _gamepadNav.activate,
+        onDeactivate: _gamepadNav.deactivate,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    GamepadNavigationManager.popLayer('collections_empty');
+    _gamepadNav.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 32.r),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Symbols.collections_bookmark_rounded,
+              size: 64.r,
+              color: primaryColor.withValues(alpha: 0.5),
+            ),
+            SizedBox(height: 16.r),
+            Text(
+              AppLocale.noCollectionsTitle.getString(context),
+              style: TextStyle(
+                fontSize: 18.r,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            SizedBox(height: 8.r),
+            Text(
+              AppLocale.noCollectionsSubtitle.getString(context),
+              style: TextStyle(
+                fontSize: 13.r,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.r),
+            ElevatedButton.icon(
+              onPressed: widget.onCreate,
+              icon: const Icon(Symbols.add_rounded),
+              label: Text(AppLocale.createCollection.getString(context)),
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24.r, vertical: 12.r),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

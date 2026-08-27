@@ -855,14 +855,41 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// specialized view for systems with zero detected media files.
   /// includes controls for recursive scanning and directory management.
-  Widget _buildEmptyState() {
-    if (widget.system.folderName.startsWith('collection_') ||
-        (widget.system.id != null &&
-            widget.system.id!.startsWith('collection_'))) {
-      final colIdStr = (widget.system.id ?? widget.system.folderName)
-          .replaceFirst('collection_', '');
-      final collectionId = int.tryParse(colIdStr);
+  bool get _isCollectionSystem =>
+      widget.system.folderName.startsWith('collection_') ||
+      (widget.system.id?.startsWith('collection_') ?? false);
 
+  int? get _collectionId => int.tryParse(
+    (widget.system.id ?? widget.system.folderName).replaceFirst(
+      'collection_',
+      '',
+    ),
+  );
+
+  Future<void> _openCollectionAddGames() async {
+    final collectionId = _collectionId;
+    if (!_isCollectionSystem || collectionId == null) return;
+    final existingGames = await CollectionRepository.getGamesForCollection(
+      collectionId,
+    );
+    final existingPaths = existingGames.map((g) => g.romPath).toSet();
+    if (!mounted) return;
+    await CollectionAddGamesDialog.show(
+      context: context,
+      collectionName: widget.system.realName,
+      initialSelectedRomPaths: existingPaths,
+      onSave: (newPaths) async {
+        await CollectionRepository.setGamesForCollection(
+          collectionId,
+          newPaths.toList(),
+        );
+        if (mounted) _loadGames();
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    if (_isCollectionSystem) {
       return Center(
         child: Container(
           constraints: BoxConstraints(maxWidth: 500.r),
@@ -916,32 +943,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
               ),
               SizedBox(height: 24.r),
               ElevatedButton.icon(
-                onPressed: () async {
-                  if (collectionId != null) {
-                    final existingGames =
-                        await CollectionRepository.getGamesForCollection(
-                          collectionId,
-                        );
-                    final existingPaths = existingGames
-                        .map((g) => g.romPath)
-                        .toSet();
-                    if (!mounted) return;
-                    await CollectionAddGamesDialog.show(
-                      context: context,
-                      collectionName: widget.system.realName,
-                      initialSelectedRomPaths: existingPaths,
-                      onSave: (newPaths) async {
-                        await CollectionRepository.setGamesForCollection(
-                          collectionId,
-                          newPaths.toList(),
-                        );
-                        if (mounted) {
-                          _loadGames();
-                        }
-                      },
-                    );
-                  }
-                },
+                onPressed: _openCollectionAddGames,
                 icon: const Icon(Symbols.add_rounded),
                 label: Text(AppLocale.addGames.getString(context)),
                 style: ElevatedButton.styleFrom(

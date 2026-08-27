@@ -56,9 +56,21 @@ extension _GamepadNav on _SystemGamesListState {
       onNavigateRight: _navigateRight, // Page Down (10 items).
       onLetterJump: _letterJump, // Held D-pad up/down → alphabet skipping.
       accelerateRepeats: true, // Text-only rows keep up with a ramping repeat.
-      onSelectItem: _selectCurrentGame,
+      onSelectItem: () {
+        if (_games.isEmpty && _isCollectionSystem) {
+          _openCollectionAddGames();
+          return;
+        }
+        _selectCurrentGame();
+      },
       onBack: _goBack,
-      onFavorite: _handleFavoriteAction, // Button Y.
+      onFavorite: () {
+        if (_games.isEmpty && _isCollectionSystem) {
+          _openCollectionAddGames();
+          return;
+        }
+        _handleFavoriteAction();
+      }, // Button Y.
       onXButton:
           _handleXButton, // Button X - View mode picker (music: shuffle).
       onSettings: _openGameSettingsDialog, // Button Start.

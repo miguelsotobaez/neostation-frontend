@@ -812,6 +812,7 @@ class SqliteDatabaseService {
                 : romsToDelete.length,
           );
           final placeholders = List.filled(paths.length, '?').join(',');
+          await SqliteService.deleteCollectionMembershipsForPaths(txn, paths);
           await txn.rawDelete(
             'DELETE FROM user_roms WHERE rom_path IN ($placeholders)',
             paths,
@@ -908,6 +909,11 @@ class SqliteDatabaseService {
     final db = await SqliteService.getDatabase();
     await db.transaction((txn) async {
       for (final entry in renames.entries) {
+        await SqliteService.transferCollectionMemberships(
+          txn,
+          entry.key,
+          entry.value,
+        );
         await txn.rawUpdate(
           "UPDATE user_roms SET rom_path = ?, updated_at = datetime('now') "
           'WHERE rom_path = ?',
@@ -925,6 +931,12 @@ class SqliteDatabaseService {
           [entry.value],
         );
         if (duplicateRows.isEmpty || survivorRows.isEmpty) continue;
+
+        await SqliteService.transferCollectionMemberships(
+          txn,
+          entry.key,
+          entry.value,
+        );
 
         final d = duplicateRows.first;
         final s = survivorRows.first;

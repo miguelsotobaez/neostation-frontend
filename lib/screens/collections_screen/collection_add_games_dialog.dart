@@ -126,7 +126,7 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
       onNavigateLeft: _handleNavigateLeft,
       onNavigateRight: _handleNavigateRight,
       onSelectItem: _handleSelect,
-      onBack: _finishAndSave,
+      onBack: _handleBack,
       onXButton: _handleXButton,
       onPreviousTab: _handlePageUp,
       onNextTab: _handlePageDown,
@@ -339,6 +339,14 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
     Navigator.of(context).pop();
   }
 
+  void _handleBack() {
+    if (_searchFocusNode.hasFocus) {
+      _searchFocusNode.unfocus();
+      return;
+    }
+    _finishAndSave();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -440,6 +448,7 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
                   TextField(
                     controller: _searchController,
                     focusNode: _searchFocusNode,
+                    textInputAction: TextInputAction.done,
                     style: TextStyle(fontSize: 14.sp),
                     decoration: InputDecoration(
                       hintText: AppLocale.searchGames.getString(context),
@@ -484,6 +493,7 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
                         _focusedGameIndex = 0;
                       });
                     },
+                    onSubmitted: (_) => _searchFocusNode.unfocus(),
                   ),
                   SizedBox(height: 10.h),
 

@@ -194,7 +194,7 @@ class _CollectionOptionsOverlayState extends State<_CollectionOptionsOverlay> {
       ),
       _OptionItem(
         action: CollectionAction.editArtwork,
-        label: AppLocale.systemImages.getString(context),
+        label: AppLocale.collectionImages.getString(context),
         icon: Symbols.palette_rounded,
         color: primaryColor,
       ),

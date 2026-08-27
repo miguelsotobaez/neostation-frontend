@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/data/datasources/sqlite_database_service.dart';
+import 'package:neostation/repositories/collection_repository.dart';
 import 'package:neostation/models/system_model.dart';
 
 import 'database_test_helper.dart';
@@ -174,6 +175,12 @@ void main() {
         "VALUES ('gc', '18 Wheeler.rvz', ?, 1, 900, 77)",
         [aliasPath],
       );
+      final collectionId = await CollectionRepository.createCollection(
+        name: 'Racing',
+      );
+      await CollectionRepository.addGamesToCollection(collectionId, [
+        aliasPath,
+      ]);
 
       await SqliteDatabaseService.scanSystemRoms(gcSystem, [root.path]);
 
@@ -183,6 +190,10 @@ void main() {
       expect(rows.single['is_favorite'], 1);
       expect(rows.single['play_time'], 900);
       expect(rows.single['id_ra'], 77);
+      final collectionGames = await CollectionRepository.getGamesForCollection(
+        collectionId,
+      );
+      expect(collectionGames.single.romPath, '${root.path}/gc/18 Wheeler.rvz');
     });
 
     test('still removes rows whose file is genuinely gone', () async {

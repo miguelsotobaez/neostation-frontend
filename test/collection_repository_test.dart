@@ -171,5 +171,70 @@ void main() {
         expect(ids.contains(col2), isFalse);
       },
     );
+
+    test('counts and covers include only visible live ROMs', () async {
+      final id = await CollectionRepository.createCollection(name: 'Visible');
+      await CollectionRepository.addGamesToCollection(id, [
+        '/roms/snes/mario_world.smc',
+        '/roms/nes/mario_bros3.nes',
+        '/roms/snes/zelda.smc',
+      ]);
+      await db.update(
+        'user_roms',
+        {'is_hidden': 1},
+        where: 'rom_path = ?',
+        whereArgs: ['/roms/nes/mario_bros3.nes'],
+      );
+      await db.delete(
+        'user_roms',
+        where: 'rom_path = ?',
+        whereArgs: ['/roms/snes/zelda.smc'],
+      );
+
+      final collection = await CollectionRepository.getCollection(id);
+      final games = await CollectionRepository.getGamesForCollection(id);
+
+      expect(collection!.romCount, 1);
+      expect(collection.coverRomPaths, ['/roms/snes/mario_world.smc']);
+      expect(games.map((game) => game.romPath), ['/roms/snes/mario_world.smc']);
+    });
+
+    test('ROM deletion removes collection memberships', () async {
+      final id = await CollectionRepository.createCollection(name: 'Cleanup');
+      await CollectionRepository.addGamesToCollection(id, [
+        '/roms/snes/mario_world.smc',
+        '/roms/nes/mario_bros3.nes',
+      ]);
+
+      await SqliteService.deleteGame('snes', 'mario_world.smc');
+
+      expect(
+        await CollectionRepository.isGameInCollection(
+          id,
+          '/roms/snes/mario_world.smc',
+        ),
+        isFalse,
+      );
+      expect(
+        await CollectionRepository.isGameInCollection(
+          id,
+          '/roms/nes/mario_bros3.nes',
+        ),
+        isTrue,
+      );
+    });
+
+    test('clearUserData removes collections and memberships', () async {
+      final id = await CollectionRepository.createCollection(name: 'Reset');
+      await CollectionRepository.addGamesToCollection(id, [
+        '/roms/snes/mario_world.smc',
+      ]);
+
+      await SqliteService.clearUserData();
+
+      expect(await CollectionRepository.getCollections(), isEmpty);
+      final mappings = await db.rawQuery('SELECT * FROM user_collection_roms');
+      expect(mappings, isEmpty);
+    });
   });
 }
