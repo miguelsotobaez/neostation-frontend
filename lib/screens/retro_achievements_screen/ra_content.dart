@@ -3,6 +3,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:provider/provider.dart';
 import '../../providers/retro_achievements_provider.dart';
+import '../../providers/file_provider.dart';
+import '../../providers/sqlite_config_provider.dart';
 import '../../repositories/retro_achievements_repository.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/custom_notification.dart';
@@ -15,6 +17,9 @@ import '../app_screen.dart' show AppNavigation;
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import '../../utils/login_form_selection.dart';
+import '../../models/retro_achievements_dashboard_models.dart';
+import '../../models/system_model.dart';
+import '../game_screen/my_games_list.dart';
 import 'ra_dashboard.dart';
 
 class RAContent extends StatefulWidget {
@@ -33,13 +38,18 @@ class _RAContentState extends State<RAContent>
   final ScrollController _dashboardScrollController = ScrollController();
 
   /// Connected dashboard: whether the cursor is parked on the header's logout
-  /// button. Nothing is selected at rest — Right parks on it, Left releases it,
-  /// and Up/Down stay dedicated to scrolling the dashboard.
+  /// button. Nothing is selected at rest — Right parks on it, and Left steps
+  /// back along the axis onto the week card.
   bool _logoutSelected = false;
 
-  /// Set while Right is scrolling the header back into view, so the scroll
-  /// listener doesn't read that movement as the user leaving the button.
-  bool _scrollingToLogout = false;
+  /// The dashboard's one actionable content card. It is only selectable when
+  /// the weekly game has a matching ROM in the user's library.
+  bool _weekCardSelected = false;
+
+  /// Set while a selection is scrolling the header back into view, so the
+  /// scroll listener doesn't read that movement as the user leaving the
+  /// selection it just made.
+  bool _scrollingToHeader = false;
 
   /// Matches the ScreenScraper login's password field, which the RA card sits
   /// next to: an API key is as worth hiding as a password, and as easy to
@@ -59,7 +69,7 @@ class _RAContentState extends State<RAContent>
   void initState() {
     super.initState();
     attachFocusSelectionListeners();
-    _dashboardScrollController.addListener(_releaseLogoutOnScroll);
+    _dashboardScrollController.addListener(_releaseSelectionOnScroll);
     _initControllerNavigation();
     _prefillUsername();
   }
@@ -100,7 +110,14 @@ class _RAContentState extends State<RAContent>
   void _selectCurrent() {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (raProvider.isConnected) {
-      if (_logoutSelected) _requestDisconnect();
+      if (_logoutSelected) {
+        _requestDisconnect();
+        return;
+      }
+      if (_weekCardSelected) {
+        final owned = raProvider.ownedWeekGame;
+        if (owned != null) _openOwnedWeekGame(owned);
+      }
       return;
     }
     if (focusSelectedField()) return;
@@ -117,14 +134,24 @@ class _RAContentState extends State<RAContent>
     return true;
   }
 
-  /// Releases the logout parking when the dashboard scrolls off the top by any
-  /// means, so a touch scroll can't leave the button armed behind the content.
-  void _releaseLogoutOnScroll() {
-    if (_scrollingToLogout) return;
-    if (!_logoutSelected || !_dashboardScrollController.hasClients) return;
+  bool _setWeekCardSelected(bool selected) {
+    if (!mounted || _weekCardSelected == selected) return false;
+    setState(() => _weekCardSelected = selected);
+    return true;
+  }
+
+  /// Releases the header selection when the dashboard scrolls off the top by
+  /// any means, so a touch or wheel scroll can't leave the logout button or the
+  /// week card armed behind the content — both live in the header area, and a
+  /// selection the user can no longer see still answers A.
+  void _releaseSelectionOnScroll() {
+    if (_scrollingToHeader) return;
+    if (!_logoutSelected && !_weekCardSelected) return;
+    if (!_dashboardScrollController.hasClients) return;
     final position = _dashboardScrollController.position;
     if (position.pixels > position.minScrollExtent + 1) {
       _setLogoutSelected(false);
+      _setWeekCardSelected(false);
     }
   }
 
@@ -141,6 +168,7 @@ class _RAContentState extends State<RAContent>
     if (!mounted) return;
     resetSelection();
     _setLogoutSelected(false);
+    _setWeekCardSelected(false);
     AppNotification.showNotification(
       context,
       AppLocale.disconnectedRA.getString(context),
@@ -218,14 +246,37 @@ class _RAContentState extends State<RAContent>
     if (!context.read<RetroAchievementsProvider>().isConnected) {
       return moveSelection(-1);
     }
-    return _scrollDashboard(-160.r);
+    final released = _setWeekCardSelected(false);
+    return _scrollDashboard(-160.r) || released;
   }
 
+  /// Down steps onto the dashboard's one actionable card before it starts
+  /// scrolling, so the card is reachable without knowing to press Left.
+  ///
+  /// Only from the top, and only at rest: selecting a card that has already
+  /// scrolled out of view would leave the highlight invisible, which is the
+  /// same trap [_scrollHeaderIntoView] exists to keep the logout button out of.
+  /// Once the card is selected — or the cursor is parked on logout — Down goes
+  /// back to being a plain scroll.
   bool _handleNavigateDown() {
-    if (!context.read<RetroAchievementsProvider>().isConnected) {
-      return moveSelection(1);
+    final raProvider = context.read<RetroAchievementsProvider>();
+    if (!raProvider.isConnected) return moveSelection(1);
+    if (!_logoutSelected &&
+        !_weekCardSelected &&
+        raProvider.ownedWeekGame != null &&
+        _dashboardAtTop) {
+      return _setWeekCardSelected(true);
     }
-    return _scrollDashboard(160.r);
+    final released = _setWeekCardSelected(false);
+    return _scrollDashboard(160.r) || released;
+  }
+
+  /// Whether the dashboard is scrolled to the top, within the same one-pixel
+  /// tolerance [_releaseSelectionOnScroll] and [_scrollHeaderIntoView] use.
+  bool get _dashboardAtTop {
+    if (!_dashboardScrollController.hasClients) return true;
+    final position = _dashboardScrollController.position;
+    return position.pixels <= position.minScrollExtent + 1;
   }
 
   /// Right parks the cursor on the header's logout button.
@@ -236,27 +287,75 @@ class _RAContentState extends State<RAContent>
   bool _handleNavigateRight() {
     if (!context.read<RetroAchievementsProvider>().isConnected) return false;
     if (_logoutSelected) return false;
+    _setWeekCardSelected(false);
     _scrollHeaderIntoView();
     return _setLogoutSelected(true);
   }
 
+  /// Left is the mirror of Right along the same axis: it steps from the logout
+  /// button straight onto the week card rather than dropping the selection in
+  /// between. Releasing to nothing is only the fallback for when the card is
+  /// not actionable, so the axis never costs a dead press.
   bool _handleNavigateLeft() {
-    if (!context.read<RetroAchievementsProvider>().isConnected) return false;
-    return _setLogoutSelected(false);
+    final raProvider = context.read<RetroAchievementsProvider>();
+    if (!raProvider.isConnected) return false;
+    final released = _logoutSelected ? _setLogoutSelected(false) : false;
+    if (raProvider.ownedWeekGame == null) return released;
+    _scrollHeaderIntoView();
+    return _setWeekCardSelected(true) || released;
+  }
+
+  Future<void> _openOwnedWeekGame(OwnedWeekGameResolution owned) async {
+    final configProvider = context.read<SqliteConfigProvider>();
+    final fileProvider = context.read<FileProvider>();
+    final system = _resolveSystem(configProvider.detectedSystems, owned);
+    if (system == null) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.raCouldNotResolveLocalSystem.getString(context),
+        type: NotificationType.error,
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SystemGamesList(
+          system: system,
+          fileProvider: fileProvider,
+          initialRomPath: owned.game.romPath,
+        ),
+      ),
+    );
+  }
+
+  SystemModel? _resolveSystem(
+    List<SystemModel> systems,
+    OwnedWeekGameResolution owned,
+  ) {
+    final folder = owned.game.systemFolderName;
+    if (folder == null || folder.isEmpty) return null;
+    for (final system in systems) {
+      if (system.folderName == folder || system.primaryFolderName == folder) {
+        return system;
+      }
+    }
+    return null;
   }
 
   void _scrollHeaderIntoView() {
     if (!_dashboardScrollController.hasClients) return;
     final position = _dashboardScrollController.position;
     if (position.pixels <= position.minScrollExtent + 1) return;
-    _scrollingToLogout = true;
+    _scrollingToHeader = true;
     _dashboardScrollController
         .animateTo(
           position.minScrollExtent,
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
         )
-        .whenComplete(() => _scrollingToLogout = false);
+        .whenComplete(() => _scrollingToHeader = false);
   }
 
   bool _scrollDashboard(double delta) {
@@ -333,7 +432,10 @@ class _RAContentState extends State<RAContent>
                 child: RADashboardHub(
                   scrollController: _dashboardScrollController,
                   logoutSelected: _logoutSelected,
+                  weekCardSelected:
+                      _weekCardSelected && raProvider.ownedWeekGame != null,
                   onDisconnectRequested: _requestDisconnect,
+                  onOwnedWeekGameSelected: _openOwnedWeekGame,
                 ),
               ),
             ),

@@ -52,6 +52,17 @@
       }
     },
     {
+      "name": "Standalone EMUCOREC",
+      "unique_id": "ps3.com.sbro.emucorec",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.sbro.emucorec/.core.ps3.Emulator -e gamePath \"{file.path}\""
+        }
+      }
+    },
+    {
       "name": "Standalone RPCS3",
       "unique_id": "ps3.rpcs3",
       "description": "Supported extensions: iso.",

@@ -1,0 +1,126 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/retro_achievements_dashboard_models.dart';
+import 'package:neostation/models/retro_achievements_gotw.dart';
+import 'package:neostation/models/retro_achievements_user.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:neostation/screens/retro_achievements_screen/ra_dashboard.dart';
+
+class _DashboardProvider extends RetroAchievementsProvider {
+  _DashboardProvider(this._owned);
+
+  final OwnedWeekGameResolution _owned;
+
+  @override
+  RetroAchievementsUser? get user => RetroAchievementsUser(
+    user: 'Player',
+    ulid: '',
+    userPic: '',
+    memberSince: '',
+    richPresenceMsg: '',
+    lastGameId: 0,
+    contribCount: 0,
+    contribYield: 0,
+    totalPoints: 0,
+    totalCasualPoints: 0,
+    totalTruePoints: 0,
+    permissions: 0,
+    untracked: 0,
+    id: 1,
+    userWallActive: false,
+    motto: '',
+  );
+
+  @override
+  RetroAchievementsGOTW? get gotw => RetroAchievementsGOTW(
+    achievement: Achievement(
+      id: 1,
+      title: 'Finish the level',
+      description: 'Reach the goal.',
+      points: 5,
+      trueRatio: 0,
+      type: '',
+      author: '',
+      badgeName: '',
+      badgeUrl: '',
+      dateCreated: '',
+      dateModified: '',
+    ),
+    console: Console(id: 1, title: 'NES'),
+    game: Game(id: 42, title: 'Local game'),
+    startAt: '',
+    totalPlayers: 0,
+    unlocks: const [],
+    unlocksCount: 0,
+    unlocksHardcoreCount: 0,
+  );
+
+  @override
+  OwnedWeekGameResolution? get ownedWeekGame => _owned;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await FlutterLocalization.instance.ensureInitialized();
+    FlutterLocalization.instance.init(
+      mapLocales: [MapLocale('en', AppLocale.en)],
+      initLanguageCode: 'en',
+    );
+  });
+
+  testWidgets('selected owned weekly card opens its local game', (
+    tester,
+  ) async {
+    final owned = OwnedWeekGameResolution(
+      raGameId: 42,
+      game: DatabaseGameModel(
+        filename: 'local.nes',
+        romPath: '/roms/local.nes',
+      ),
+    );
+    OwnedWeekGameResolution? opened;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<RetroAchievementsProvider>.value(
+        value: _DashboardProvider(owned),
+        child: ScreenUtilInit(
+          designSize: const Size(1280, 720),
+          builder: (context, _) => MaterialApp(
+            localizationsDelegates:
+                FlutterLocalization.instance.localizationsDelegates,
+            supportedLocales: FlutterLocalization.instance.supportedLocales,
+            home: Scaffold(
+              body: RADashboardHub(
+                logoutSelected: false,
+                weekCardSelected: true,
+                onDisconnectRequested: () {},
+                onOwnedWeekGameSelected: (game) => opened = game,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final selectedCard = find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.selected == true,
+    );
+    expect(selectedCard, findsOneWidget);
+
+    await tester.tap(
+      find.descendant(of: selectedCard, matching: find.byType(InkWell)),
+    );
+    expect(opened, same(owned));
+  });
+}

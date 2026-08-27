@@ -9,23 +9,22 @@ import 'package:provider/provider.dart';
 import '../../l10n/app_locale.dart';
 import '../../models/retro_achievements_dashboard_models.dart';
 import '../../models/retro_achievements_user_awards.dart';
-import '../../providers/file_provider.dart';
 import '../../providers/retro_achievements_provider.dart';
-import '../../providers/sqlite_config_provider.dart';
-import '../../screens/game_screen/my_games_list.dart';
-import '../../widgets/custom_notification.dart';
-import '../../models/system_model.dart';
 
 class RADashboardHub extends StatefulWidget {
   final ScrollController? scrollController;
   final bool logoutSelected;
+  final bool weekCardSelected;
   final VoidCallback onDisconnectRequested;
+  final ValueChanged<OwnedWeekGameResolution> onOwnedWeekGameSelected;
 
   const RADashboardHub({
     super.key,
     this.scrollController,
     required this.logoutSelected,
+    required this.weekCardSelected,
     required this.onDisconnectRequested,
+    required this.onOwnedWeekGameSelected,
   });
 
   @override
@@ -342,200 +341,213 @@ class _RADashboardHubState extends State<RADashboardHub> {
         ? theme.colorScheme.secondary
         : theme.colorScheme.primary;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(12.r),
-      onTap: owned == null ? null : () => _openOwnedWeekGame(context, owned),
-      child: Container(
-        padding: EdgeInsets.all(14.r),
-        decoration: _cardDecoration(
-          theme,
-          borderColor: accent.withValues(
-            alpha: earned
-                ? 0.55
-                : owned != null
-                ? 0.35
-                : 0.15,
-          ),
-          background: theme.cardColor.withValues(
-            alpha: earned
-                ? 0.40
-                : owned != null
-                ? 0.34
-                : 0.25,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Symbols.emoji_events_rounded, size: 18.r, color: accent),
-                SizedBox(width: 8.r),
-                Expanded(
-                  child: Text(
-                    AppLocale.aotw.getString(context),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontSize: 11.r,
-                      fontWeight: FontWeight.bold,
-                      color: accent,
-                    ),
+    final selectable = owned != null;
+    final selected = selectable && widget.weekCardSelected;
+
+    return Semantics(
+      button: selectable,
+      selected: selected,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12.r),
+        onTap: owned == null
+            ? null
+            : () => widget.onOwnedWeekGameSelected(owned),
+        child: Container(
+          padding: EdgeInsets.all(14.r),
+          decoration: _cardDecoration(
+            theme,
+            borderColor: selected
+                ? theme.colorScheme.primary
+                : accent.withValues(
+                    alpha: earned
+                        ? 0.55
+                        : owned != null
+                        ? 0.35
+                        : 0.15,
                   ),
-                ),
-                if (earned)
-                  _buildPill(
-                    context,
-                    icon: Symbols.verified_rounded,
-                    label: AppLocale.raEarned.getString(context),
-                    color: accent,
-                  )
-                else if (owned != null)
-                  _buildPill(
-                    context,
-                    icon: Symbols.check_circle_rounded,
-                    label: AppLocale.raOwned.getString(context),
-                    color: accent,
-                  ),
-              ],
+            borderWidth: selected ? 2.r : 1.r,
+            background: theme.cardColor.withValues(
+              alpha: earned
+                  ? 0.40
+                  : owned != null
+                  ? 0.34
+                  : 0.25,
             ),
-            SizedBox(height: 12.r),
-            if (raProvider.gotwLoading && gotw == null)
-              _buildLoadingState(context, minHeight: 138.r)
-            else if (gotw == null)
-              _buildSectionMessage(
-                context,
-                raProvider.gotwError ??
-                    AppLocale.couldNotLoadAOTW.getString(context),
-                isError: true,
-                onRetry: raProvider.fetchGOTW,
-                minHeight: 138.r,
-              )
-            else
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10.r),
-                    child: SizedBox(
-                      width: 72.r,
-                      height: 72.r,
-                      child: Image.network(
-                        _raMediaUrl(gotw.achievement.badgeUrl),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: theme.colorScheme.surface,
-                          child: Icon(
-                            Symbols.emoji_events_rounded,
-                            color: accent,
-                            size: 30.r,
-                          ),
-                        ),
+                  Icon(Symbols.emoji_events_rounded, size: 18.r, color: accent),
+                  SizedBox(width: 8.r),
+                  Expanded(
+                    child: Text(
+                      AppLocale.aotw.getString(context),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontSize: 11.r,
+                        fontWeight: FontWeight.bold,
+                        color: accent,
                       ),
                     ),
                   ),
-                  SizedBox(width: 12.r),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          gotw.game.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13.r,
-                          ),
+                  if (earned)
+                    _buildPill(
+                      context,
+                      icon: Symbols.verified_rounded,
+                      label: AppLocale.raEarned.getString(context),
+                      color: accent,
+                    )
+                  else if (owned != null)
+                    _buildPill(
+                      context,
+                      icon: Symbols.check_circle_rounded,
+                      label: AppLocale.raOwned.getString(context),
+                      color: accent,
+                    ),
+                ],
+              ),
+              SizedBox(height: 12.r),
+              if (raProvider.gotwLoading && gotw == null)
+                _buildLoadingState(context, minHeight: 138.r)
+              else if (gotw == null)
+                _buildSectionMessage(
+                  context,
+                  raProvider.gotwError ??
+                      AppLocale.couldNotLoadAOTW.getString(context),
+                  isError: true,
+                  onRetry: raProvider.fetchGOTW,
+                  minHeight: 138.r,
+                )
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10.r),
+                      child: SizedBox(
+                        width: 72.r,
+                        height: 72.r,
+                        child: Image.network(
+                          _raMediaUrl(gotw.achievement.badgeUrl),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: theme.colorScheme.surface,
+                                child: Icon(
+                                  Symbols.emoji_events_rounded,
+                                  color: accent,
+                                  size: 30.r,
+                                ),
+                              ),
                         ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          gotw.console.title,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.7,
+                      ),
+                    ),
+                    SizedBox(width: 12.r),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            gotw.game.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.r,
                             ),
-                            fontSize: 9.r,
                           ),
-                        ),
-                        SizedBox(height: 8.r),
-                        Text(
-                          gotw.achievement.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11.r,
-                          ),
-                        ),
-                        SizedBox(height: 4.r),
-                        Text(
-                          gotw.achievement.description,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontSize: 9.r,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.78,
+                          SizedBox(height: 4.r),
+                          Text(
+                            gotw.console.title,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
+                              fontSize: 9.r,
                             ),
                           ),
-                        ),
-                      ],
+                          SizedBox(height: 8.r),
+                          Text(
+                            gotw.achievement.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.r,
+                            ),
+                          ),
+                          SizedBox(height: 4.r),
+                          Text(
+                            gotw.achievement.description,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontSize: 9.r,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.78,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              if (gotw != null) ...[
+                SizedBox(height: 12.r),
+                Wrap(
+                  spacing: 8.r,
+                  runSpacing: 8.r,
+                  children: [
+                    _buildPill(
+                      context,
+                      icon: Symbols.stars_rounded,
+                      label:
+                          '${gotw.achievement.points} ${AppLocale.raPointsAbbrev.getString(context)}',
+                      color: accent,
+                    ),
+                    _buildPill(
+                      context,
+                      icon: Symbols.groups_rounded,
+                      label:
+                          '${gotw.totalPlayers} ${AppLocale.players.getString(context)}',
+                      color: accent,
+                    ),
+                    _buildPill(
+                      context,
+                      icon: Symbols.trophy_rounded,
+                      label:
+                          '${gotw.unlocksCount} ${AppLocale.unlocks.getString(context)}',
+                      color: accent,
+                    ),
+                  ],
+                ),
+                if (earned) ...[
+                  SizedBox(height: 10.r),
+                  Text(
+                    AppLocale.raAlreadyEarned.getString(context),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 8.r,
+                      color: accent.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ] else if (owned != null) ...[
+                  SizedBox(height: 10.r),
+                  Text(
+                    AppLocale.raTapToOpenLocalGame.getString(context),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 8.r,
+                      color: accent.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
-              ),
-            if (gotw != null) ...[
-              SizedBox(height: 12.r),
-              Wrap(
-                spacing: 8.r,
-                runSpacing: 8.r,
-                children: [
-                  _buildPill(
-                    context,
-                    icon: Symbols.stars_rounded,
-                    label:
-                        '${gotw.achievement.points} ${AppLocale.raPointsAbbrev.getString(context)}',
-                    color: accent,
-                  ),
-                  _buildPill(
-                    context,
-                    icon: Symbols.groups_rounded,
-                    label:
-                        '${gotw.totalPlayers} ${AppLocale.players.getString(context)}',
-                    color: accent,
-                  ),
-                  _buildPill(
-                    context,
-                    icon: Symbols.trophy_rounded,
-                    label:
-                        '${gotw.unlocksCount} ${AppLocale.unlocks.getString(context)}',
-                    color: accent,
-                  ),
-                ],
-              ),
-              if (earned) ...[
-                SizedBox(height: 10.r),
-                Text(
-                  AppLocale.raAlreadyEarned.getString(context),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontSize: 8.r,
-                    color: accent.withValues(alpha: 0.92),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ] else if (owned != null) ...[
-                SizedBox(height: 10.r),
-                Text(
-                  AppLocale.raTapToOpenLocalGame.getString(context),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontSize: 8.r,
-                    color: accent.withValues(alpha: 0.92),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1036,13 +1048,14 @@ class _RADashboardHubState extends State<RADashboardHub> {
     ThemeData theme, {
     Color? background,
     Color? borderColor,
+    double? borderWidth,
   }) {
     return BoxDecoration(
       color: background ?? theme.cardColor.withValues(alpha: 0.25),
       borderRadius: BorderRadius.circular(12.r),
       border: Border.all(
         color: borderColor ?? theme.colorScheme.primary.withValues(alpha: 0.15),
-        width: 1.r,
+        width: borderWidth ?? 1.r,
       ),
     );
   }
@@ -1059,48 +1072,5 @@ class _RADashboardHubState extends State<RADashboardHub> {
     final local = parsed.toLocal();
     String two(int v) => v.toString().padLeft(2, '0');
     return '${local.year}-${two(local.month)}-${two(local.day)}';
-  }
-
-  Future<void> _openOwnedWeekGame(
-    BuildContext context,
-    OwnedWeekGameResolution owned,
-  ) async {
-    final configProvider = context.read<SqliteConfigProvider>();
-    final fileProvider = context.read<FileProvider>();
-    final system = _resolveSystem(configProvider.detectedSystems, owned);
-    if (system == null) {
-      AppNotification.showNotification(
-        context,
-        AppLocale.raCouldNotResolveLocalSystem.getString(context),
-        type: NotificationType.error,
-      );
-      return;
-    }
-
-    if (!context.mounted) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SystemGamesList(
-          system: system,
-          fileProvider: fileProvider,
-          initialRomPath: owned.game.romPath,
-        ),
-      ),
-    );
-  }
-
-  SystemModel? _resolveSystem(
-    List<SystemModel> systems,
-    OwnedWeekGameResolution owned,
-  ) {
-    final folder = owned.game.systemFolderName;
-    if (folder == null || folder.isEmpty) return null;
-    for (final system in systems) {
-      if (system.folderName == folder || system.primaryFolderName == folder) {
-        return system;
-      }
-    }
-    return null;
   }
 }

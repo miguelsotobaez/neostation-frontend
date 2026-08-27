@@ -1,0 +1,110 @@
+{
+  "system": {
+    "id": "model3",
+    "multidisc": false,
+    "name": "Sega Model 3",
+    "short_name": "SM3",
+    "details": {
+      "manufacturer": "Sega",
+      "release_date": "1996-02-21",
+      "description": "Sega Model 3 Arcade Machine.",
+      "type": "arcade"
+    },
+    "ids": {
+      "screenscraper": 55
+    },
+    "folders": [
+      "model3",
+      "Sega Model 3",
+      "SM3",
+      "sm3"
+    ],
+    "colors": [
+      "#07a0c3",
+      "#f0f3bd"
+    ],
+    "extensions": [
+      "zip",
+      "chd",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Supermodel",
+      "default_core": true,
+      "unique_id": "model3.ra64.supermodel",
+      "description": "Supported extensions: zip, chd, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Supermodel",
+      "default_core": true,
+      "unique_id": "model3.ra32.supermodel",
+      "description": "Supported extensions: zip, chd, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Super3",
+      "unique_id": "model3.com.izzy2lost.super3",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.izzy2lost.super3/.MainActivity -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Supermodel",
+      "default_core": true,
+      "unique_id": "model3.ra.supermodel",
+      "description": "Supported extensions: zip, chd, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"supermodel\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L supermodel_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L supermodel_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L supermodel_libretro.dylib \"{file.path}\""
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

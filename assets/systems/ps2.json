@@ -79,6 +79,18 @@
       }
     },
     {
+      "name": "RetroArch64 PCEE2",
+      "default_core": false,
+      "unique_id": "ps2.ra64.pcee2",
+      "description": "PCEE2 core for RetroArch 64.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"pcee2\""
+        }
+      }
+    },
+    {
       "name": "RetroArch PCSX2",
       "unique_id": "ps2.ra.pcsx2",
       "description": "PCSX2 core for RetroArch.",
