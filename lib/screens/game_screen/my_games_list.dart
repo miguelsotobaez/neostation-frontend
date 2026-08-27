@@ -24,6 +24,7 @@ import '../../repositories/system_repository.dart';
 import '../../repositories/game_repository.dart';
 import '../../repositories/collection_repository.dart';
 import '../collections_screen/collection_add_games_dialog.dart';
+import '../../widgets/collection_options_dialog.dart';
 import '../../services/screenscraper_service.dart';
 import '../../services/secondary_achievements_controller.dart';
 import '../../services/game_legend_visibility.dart';
@@ -537,6 +538,38 @@ class _SystemGamesListState extends State<SystemGamesList> {
         onGameDeleted: _handleGameDeleted,
         onGameHidden: _handleGameHidden,
       ),
+    );
+  }
+
+  bool get _isCollection =>
+      widget.system.folderName.startsWith('collection_') ||
+      (widget.system.id != null && widget.system.id!.startsWith('collection_'));
+
+  /// Opens the collection management options (Add/Remove games, Edit name/details, Delete)
+  /// when browsing a custom collection.
+  Future<void> _openManageCollectionDialog() async {
+    final colIdStr = (widget.system.id ?? widget.system.folderName)
+        .replaceFirst('collection_', '');
+    final collectionId = int.tryParse(colIdStr);
+    if (collectionId == null) return;
+
+    final collection = await CollectionRepository.getCollection(collectionId);
+    if (collection == null || !mounted) return;
+
+    CollectionOptionsDropdown.show(
+      context: context,
+      collection: collection,
+      onCollectionUpdated: () {
+        if (mounted) {
+          _loadGames();
+          setState(() {});
+        }
+      },
+      onCollectionDeleted: () {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      },
     );
   }
 
@@ -1491,6 +1524,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                     onSettings: _openGameSettingsDialog,
                     onRandom: _showRandomGameDialog,
                     onScrape: () => _scrapeAction?.call(),
+                    onManageCollection: _isCollection
+                        ? _openManageCollectionDialog
+                        : null,
                   );
                 },
               ),
