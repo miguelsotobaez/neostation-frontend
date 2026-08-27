@@ -9,6 +9,53 @@ part of '../my_games_list.dart';
 /// the host [rebuild] bridge (`State.setState` is `@protected` and can't be
 /// invoked from an extension).
 extension _FavoritesReorder on _SystemGamesListState {
+  /// Main entry point for the Favorite (Y) action.
+  ///
+  /// If collections feature is enabled (!hideTabCollections), shows the
+  /// Favorite & Collections popup dropdown. If collections feature is disabled,
+  /// directly toggles the favorite status.
+  Future<void> _handleFavoriteAction([GlobalKey? anchorKey]) async {
+    if (_selectedGame == null) return;
+    if (_isFolderEntry(_selectedGame)) return;
+
+    final config = context.read<SqliteConfigProvider>().config;
+    if (config.hideTabCollections || widget.system.folderName == 'music') {
+      await _toggleFavorite();
+      return;
+    }
+
+    await GameCollectionsDropdown.show(
+      context: context,
+      game: _selectedGame!,
+      anchorKey: anchorKey,
+      onFavoriteToggled: () async {
+        final configProvider = context.read<SqliteConfigProvider>();
+        await configProvider.refreshDetectedSystems();
+        rebuild(() {
+          final gameIndex = _games.indexWhere(
+            (g) => g.romname == _selectedGame!.romname,
+          );
+          if (gameIndex != -1) {
+            final currentFavorite = _games[gameIndex].isFavorite ?? false;
+            _games[gameIndex] = _games[gameIndex].copyWith(
+              isFavorite: !currentFavorite,
+            );
+            _selectedGame = _games[gameIndex];
+          }
+        });
+        _reorderGamesListKeepingVisualPosition();
+      },
+      onCollectionsUpdated: () async {
+        if (widget.system.isVirtual &&
+            (widget.system.folderName.startsWith('collection_') ||
+                (widget.system.id != null &&
+                    widget.system.id!.startsWith('collection_')))) {
+          await _loadGames();
+        }
+      },
+    );
+  }
+
   /// Toggles the 'favorite' status for the selected game and re-sorts the list.
   Future<void> _toggleFavorite() async {
     if (_selectedGame == null) return;

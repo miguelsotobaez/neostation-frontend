@@ -39,7 +39,11 @@ extension _GamepadGridNav on _SystemCardGridViewState {
       onSelectItem: () => widget.onEnterPressed?.call(),
       onSettings: () => widget.onEscapePressed?.call(),
       onXButton: () {
-        HeaderSortDropdown.globalKey.currentState?.showDropdown();
+        if (widget.onXPressed != null) {
+          widget.onXPressed!.call();
+        } else {
+          HeaderSortDropdown.globalKey.currentState?.showDropdown();
+        }
       },
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
@@ -50,7 +54,7 @@ extension _GamepadGridNav on _SystemCardGridViewState {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gamepadNav.initialize();
       GamepadNavigationManager.pushLayer(
-        'my_systems_list',
+        widget.layerName,
         onActivate: () => _gamepadNav.activate(),
         onDeactivate: () => _gamepadNav.deactivate(),
       );
@@ -58,7 +62,7 @@ extension _GamepadGridNav on _SystemCardGridViewState {
   }
 
   void _cleanupGamepad() {
-    GamepadNavigationManager.popLayer('my_systems_list');
+    GamepadNavigationManager.popLayer(widget.layerName);
     _gamepadNav.dispose();
   }
 

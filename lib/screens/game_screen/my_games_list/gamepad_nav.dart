@@ -58,7 +58,7 @@ extension _GamepadNav on _SystemGamesListState {
       accelerateRepeats: true, // Text-only rows keep up with a ramping repeat.
       onSelectItem: _selectCurrentGame,
       onBack: _goBack,
-      onFavorite: _toggleFavorite, // Button Y.
+      onFavorite: _handleFavoriteAction, // Button Y.
       onXButton:
           _handleXButton, // Button X - View mode picker (music: shuffle).
       onSettings: _openGameSettingsDialog, // Button Start.

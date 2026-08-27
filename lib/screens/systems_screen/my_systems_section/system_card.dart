@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/models/my_systems.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/services/music_player_service.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -281,7 +282,28 @@ class _SystemCardState extends State<SystemCard> {
                             aspectRatio: 1,
                             child: Stack(
                               key: _contentStackKey,
-                              children: [_buildSystemBackground()],
+                              children: [
+                                _buildSystemBackground(),
+                                if (widget.info.folderName?.startsWith(
+                                          'collection_',
+                                        ) ==
+                                        true ||
+                                    widget.info.folderName ==
+                                        'create_collection')
+                                  Center(
+                                    child: Icon(
+                                      widget.info.folderName ==
+                                              'create_collection'
+                                          ? Symbols.add_rounded
+                                          : Symbols
+                                                .collections_bookmark_rounded,
+                                      size: 48.r,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.85,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           _buildSystemFooter(context),
@@ -579,6 +601,29 @@ class _SystemCardState extends State<SystemCard> {
   /// The footer expands to fill the remaining space below the square artwork,
   /// and the logo is auto-sized to fit while keeping its aspect ratio.
   Widget _buildSystemFooter(BuildContext context) {
+    if (widget.info.folderName == 'create_collection' ||
+        widget.info.folderName?.startsWith('collection_') == true) {
+      return Expanded(
+        child: Container(
+          alignment: Alignment.center,
+          padding: EdgeInsets.only(
+            top: 1.r,
+            bottom: 1.r,
+            left: 4.r,
+            right: 4.r,
+          ),
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: SystemLogoFallback(
+              title: widget.info.title,
+              shortName: widget.info.shortName,
+              height: 128.r,
+            ),
+          ),
+        ),
+      );
+    }
+
     final assetLogoPath = _resolveSystemLogoPath();
 
     return Expanded(

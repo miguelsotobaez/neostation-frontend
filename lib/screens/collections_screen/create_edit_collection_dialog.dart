@@ -8,6 +8,8 @@ import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 
+enum _DialogFocusRegion { nameField, descriptionField, buttons }
+
 /// Dialog allowing users to create a new collection or rename/edit an existing one.
 class CreateEditCollectionDialog extends StatefulWidget {
   final CollectionModel? collection;
@@ -43,6 +45,8 @@ class _CreateEditCollectionDialogState
   late final TextEditingController _descriptionController;
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _descriptionFocus = FocusNode();
+
+  _DialogFocusRegion _focusRegion = _DialogFocusRegion.nameField;
   int _focusedButtonIndex = 1; // 0 = Cancel, 1 = Save
   late final GamepadNavigation _gamepadNav;
 
@@ -58,26 +62,75 @@ class _CreateEditCollectionDialogState
       text: widget.collection?.description ?? '',
     );
 
+    _nameFocus.addListener(_onNameFocusChanged);
+    _descriptionFocus.addListener(_onDescriptionFocusChanged);
+
+    _setupGamepad();
+  }
+
+  void _onNameFocusChanged() {
+    if (_nameFocus.hasFocus && _focusRegion != _DialogFocusRegion.nameField) {
+      setState(() => _focusRegion = _DialogFocusRegion.nameField);
+    }
+  }
+
+  void _onDescriptionFocusChanged() {
+    if (_descriptionFocus.hasFocus &&
+        _focusRegion != _DialogFocusRegion.descriptionField) {
+      setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
+    }
+  }
+
+  void _setupGamepad() {
     _gamepadNav = GamepadNavigation(
-      onNavigateLeft: () {
-        if (_focusedButtonIndex > 0) {
+      onNavigateUp: () {
+        if (_focusRegion == _DialogFocusRegion.buttons) {
+          _descriptionFocus.requestFocus();
+          setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
           SfxService().playNavSound();
+        } else if (_focusRegion == _DialogFocusRegion.descriptionField) {
+          _descriptionFocus.unfocus();
+          _nameFocus.requestFocus();
+          setState(() => _focusRegion = _DialogFocusRegion.nameField);
+          SfxService().playNavSound();
+        }
+      },
+      onNavigateDown: () {
+        if (_focusRegion == _DialogFocusRegion.nameField) {
+          _nameFocus.unfocus();
+          _descriptionFocus.requestFocus();
+          setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
+          SfxService().playNavSound();
+        } else if (_focusRegion == _DialogFocusRegion.descriptionField) {
+          _descriptionFocus.unfocus();
+          _nameFocus.unfocus();
+          setState(() => _focusRegion = _DialogFocusRegion.buttons);
+          SfxService().playNavSound();
+        }
+      },
+      onNavigateLeft: () {
+        if (_focusRegion == _DialogFocusRegion.buttons &&
+            _focusedButtonIndex > 0) {
           setState(() => _focusedButtonIndex = 0);
+          SfxService().playNavSound();
         }
       },
       onNavigateRight: () {
-        if (_focusedButtonIndex < 1) {
-          SfxService().playNavSound();
+        if (_focusRegion == _DialogFocusRegion.buttons &&
+            _focusedButtonIndex < 1) {
           setState(() => _focusedButtonIndex = 1);
+          SfxService().playNavSound();
         }
       },
-      onNavigateUp: () {
-        _nameFocus.requestFocus();
+      onSelectItem: () {
+        if (_focusRegion == _DialogFocusRegion.buttons &&
+            _focusedButtonIndex == 0) {
+          SfxService().playBackSound();
+          Navigator.of(context).pop();
+        } else {
+          _submit();
+        }
       },
-      onNavigateDown: () {
-        _descriptionFocus.requestFocus();
-      },
-      onSelectItem: _submit,
       onBack: () {
         SfxService().playBackSound();
         Navigator.of(context).pop();
@@ -99,6 +152,8 @@ class _CreateEditCollectionDialogState
   void dispose() {
     _gamepadNav.dispose();
     GamepadNavigationManager.popLayer('create_edit_collection_dialog');
+    _nameFocus.removeListener(_onNameFocusChanged);
+    _descriptionFocus.removeListener(_onDescriptionFocusChanged);
     _nameController.dispose();
     _descriptionController.dispose();
     _nameFocus.dispose();
@@ -108,7 +163,11 @@ class _CreateEditCollectionDialogState
 
   void _submit() {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      _nameFocus.requestFocus();
+      setState(() => _focusRegion = _DialogFocusRegion.nameField);
+      return;
+    }
 
     SfxService().playEnterSound();
     widget.onSave((
@@ -122,6 +181,10 @@ class _CreateEditCollectionDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
+
+    final isNameFocused = _focusRegion == _DialogFocusRegion.nameField;
+    final isDescFocused = _focusRegion == _DialogFocusRegion.descriptionField;
+    final isButtonsFocused = _focusRegion == _DialogFocusRegion.buttons;
 
     return Dialog(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -168,7 +231,9 @@ class _CreateEditCollectionDialogState
                 style: TextStyle(
                   fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
-                  color: primaryColor,
+                  color: isNameFocused
+                      ? primaryColor
+                      : theme.textTheme.bodyMedium?.color,
                 ),
               ),
               SizedBox(height: 6.h),
@@ -192,12 +257,26 @@ class _CreateEditCollectionDialogState
                       color: theme.dividerColor.withValues(alpha: 0.2),
                     ),
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(
+                      color: isNameFocused
+                          ? primaryColor
+                          : theme.dividerColor.withValues(alpha: 0.2),
+                      width: isNameFocused ? 2.r : 1.r,
+                    ),
+                  ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.r),
                     borderSide: BorderSide(color: primaryColor, width: 2.r),
                   ),
                 ),
-                onSubmitted: (_) => _submit(),
+                onSubmitted: (_) {
+                  _descriptionFocus.requestFocus();
+                  setState(
+                    () => _focusRegion = _DialogFocusRegion.descriptionField,
+                  );
+                },
               ),
               SizedBox(height: 16.h),
               Text(
@@ -205,7 +284,9 @@ class _CreateEditCollectionDialogState
                 style: TextStyle(
                   fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
-                  color: primaryColor,
+                  color: isDescFocused
+                      ? primaryColor
+                      : theme.textTheme.bodyMedium?.color,
                 ),
               ),
               SizedBox(height: 6.h),
@@ -228,6 +309,15 @@ class _CreateEditCollectionDialogState
                       color: theme.dividerColor.withValues(alpha: 0.2),
                     ),
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                    borderSide: BorderSide(
+                      color: isDescFocused
+                          ? primaryColor
+                          : theme.dividerColor.withValues(alpha: 0.2),
+                      width: isDescFocused ? 2.r : 1.r,
+                    ),
+                  ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.r),
                     borderSide: BorderSide(color: primaryColor, width: 2.r),
@@ -241,8 +331,8 @@ class _CreateEditCollectionDialogState
                 children: [
                   _buildButton(
                     context: context,
-                    label: 'Cancel',
-                    isFocused: _focusedButtonIndex == 0,
+                    label: 'Cancel [B]',
+                    isFocused: isButtonsFocused && _focusedButtonIndex == 0,
                     isPrimary: false,
                     onTap: () {
                       SfxService().playBackSound();
@@ -252,8 +342,8 @@ class _CreateEditCollectionDialogState
                   SizedBox(width: 12.w),
                   _buildButton(
                     context: context,
-                    label: 'Save',
-                    isFocused: _focusedButtonIndex == 1,
+                    label: 'Save [A]',
+                    isFocused: isButtonsFocused && _focusedButtonIndex == 1,
                     isPrimary: true,
                     onTap: _submit,
                   ),
@@ -300,6 +390,15 @@ class _CreateEditCollectionDialogState
                         : theme.dividerColor.withValues(alpha: 0.3)),
               width: isFocused ? 2.r : 1.r,
             ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: 0.4),
+                      blurRadius: 8.r,
+                      spreadRadius: 1.r,
+                    ),
+                  ]
+                : null,
           ),
           child: Text(
             label,

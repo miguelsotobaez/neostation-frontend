@@ -204,10 +204,7 @@ class CollectionProvider extends ChangeNotifier {
     List<String> romPaths,
   ) async {
     try {
-      await CollectionRepository.setGamesForCollection(
-        collectionId,
-        romPaths,
-      );
+      await CollectionRepository.setGamesForCollection(collectionId, romPaths);
       if (_activeCollection?.id == collectionId) {
         await loadActiveCollectionGames();
       }

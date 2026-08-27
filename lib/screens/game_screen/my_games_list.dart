@@ -48,6 +48,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../providers/system_background_provider.dart';
 import '../../models/secondary_display_state.dart';
 import '../../widgets/game_view_mode_dropdown.dart';
+import '../../widgets/game_collections_dropdown.dart';
 import '../../widgets/game_action_buttons.dart';
 import '../../widgets/legend_edge_reshow_zone.dart';
 import '../../widgets/letter_indicator.dart';
@@ -1317,7 +1318,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       },
       onBack: _goBack,
       onPlay: _selectCurrentGame,
-      onFavorite: _toggleFavorite,
+      onFavorite: _handleFavoriteAction,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
       onScrape: _scrapeSelectedGame,
@@ -1349,7 +1350,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       },
       onBack: _goBack,
       onPlay: _selectCurrentGame,
-      onFavorite: _toggleFavorite,
+      onFavorite: _handleFavoriteAction,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
       onScrape: _scrapeSelectedGame,
@@ -1482,7 +1483,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                     selectedGame: _selectedGame,
                     syncProvider: syncManager.active,
                     onBack: _goBack,
-                    onFavorite: _toggleFavorite,
+                    onFavorite: _handleFavoriteAction,
                     onViewMode: () => GameViewModeDropdown
                         .globalKey
                         .currentState

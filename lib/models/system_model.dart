@@ -209,7 +209,10 @@ class SystemModel {
   ///
   /// Derives the name from the [iconImage] path (e.g., 'ps1' from '.../ps1-icon.png').
   String get primaryFolderName {
-    if (folderName == 'all' || folderName == 'all-background') {
+    if (folderName == 'all' ||
+        folderName == 'all-background' ||
+        folderName.startsWith('collection_') ||
+        folderName == 'create_collection') {
       return folderName;
     }
 
