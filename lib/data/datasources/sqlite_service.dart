@@ -5534,7 +5534,6 @@ class SqliteService {
   /// Creates a new user collection and returns its generated ID.
   static Future<int> createCollection({
     required String name,
-    String? description,
     String? icon,
     String? color,
   }) async {
@@ -5542,7 +5541,6 @@ class SqliteService {
     final now = DateTime.now().toIso8601String();
     return await db.insert('user_collections', {
       'name': name.trim(),
-      'description': description?.trim() ?? '',
       'icon': icon ?? '',
       'color': color ?? '',
       'created_at': now,
@@ -5554,7 +5552,6 @@ class SqliteService {
   static Future<void> updateCollection(
     int id, {
     required String name,
-    String? description,
     String? icon,
     String? color,
   }) async {
@@ -5563,7 +5560,6 @@ class SqliteService {
       'name': name.trim(),
       'updated_at': DateTime.now().toIso8601String(),
     };
-    if (description != null) updates['description'] = description.trim();
     if (icon != null) updates['icon'] = icon;
     if (color != null) updates['color'] = color;
     await db.update(
@@ -5571,6 +5567,30 @@ class SqliteService {
       updates,
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  /// Sets custom background and/or logo images for a collection.
+  static Future<void> setCollectionCustomImages(
+    int collectionId, {
+    String? backgroundPath,
+    String? logoPath,
+  }) async {
+    final db = await instance.database;
+    final updates = <String, Object?>{
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (backgroundPath != null) {
+      updates['custom_background_path'] = backgroundPath;
+    }
+    if (logoPath != null) {
+      updates['custom_logo_path'] = logoPath;
+    }
+    await db.update(
+      'user_collections',
+      updates,
+      where: 'id = ?',
+      whereArgs: [collectionId],
     );
   }
 
@@ -5592,7 +5612,9 @@ class SqliteService {
     final db = await instance.database;
     final collectionsData = await db.rawQuery('''
       SELECT
-        c.id, c.name, c.description, c.icon, c.color, c.created_at, c.updated_at,
+        c.id, c.name, c.icon, c.color,
+        c.custom_background_path, c.custom_logo_path,
+        c.created_at, c.updated_at,
         COUNT(DISTINCT ucr.rom_path) as game_count
       FROM user_collections c
       LEFT JOIN user_collection_roms ucr ON c.id = ucr.collection_id
@@ -5633,7 +5655,9 @@ class SqliteService {
     final results = await db.rawQuery(
       '''
       SELECT
-        c.id, c.name, c.description, c.icon, c.color, c.created_at, c.updated_at,
+        c.id, c.name, c.icon, c.color,
+        c.custom_background_path, c.custom_logo_path,
+        c.created_at, c.updated_at,
         COUNT(DISTINCT ucr.rom_path) as game_count
       FROM user_collections c
       LEFT JOIN user_collection_roms ucr ON c.id = ucr.collection_id

@@ -43,9 +43,10 @@ class SqliteMigrations {
     CREATE TABLE IF NOT EXISTS user_collections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      description TEXT,
       icon TEXT,
       color TEXT,
+      custom_background_path TEXT,
+      custom_logo_path TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -6669,6 +6670,21 @@ class SqliteMigrations {
 
       db.execute(createUserCollectionsTableSql);
       db.execute(createUserCollectionRomsTableSql);
+
+      final collectionColumns = db
+          .select('PRAGMA table_info(user_collections)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!collectionColumns.contains('custom_background_path')) {
+        db.execute(
+          'ALTER TABLE user_collections ADD COLUMN custom_background_path TEXT',
+        );
+      }
+      if (!collectionColumns.contains('custom_logo_path')) {
+        db.execute(
+          'ALTER TABLE user_collections ADD COLUMN custom_logo_path TEXT',
+        );
+      }
 
       db.execute(
         'CREATE INDEX IF NOT EXISTS idx_user_collection_roms_collection_id ON user_collection_roms(collection_id);',

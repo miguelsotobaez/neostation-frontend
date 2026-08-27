@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -8,12 +9,12 @@ import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 
-enum _DialogFocusRegion { nameField, descriptionField, buttons }
+enum _DialogFocusRegion { nameField, buttons }
 
 /// Dialog allowing users to create a new collection or rename/edit an existing one.
 class CreateEditCollectionDialog extends StatefulWidget {
   final CollectionModel? collection;
-  final ValueChanged<({String name, String? description})> onSave;
+  final ValueChanged<String> onSave;
 
   const CreateEditCollectionDialog({
     super.key,
@@ -24,7 +25,7 @@ class CreateEditCollectionDialog extends StatefulWidget {
   static Future<void> show({
     required BuildContext context,
     CollectionModel? collection,
-    required ValueChanged<({String name, String? description})> onSave,
+    required ValueChanged<String> onSave,
   }) {
     return showDialog<void>(
       context: context,
@@ -42,9 +43,7 @@ class CreateEditCollectionDialog extends StatefulWidget {
 class _CreateEditCollectionDialogState
     extends State<CreateEditCollectionDialog> {
   late final TextEditingController _nameController;
-  late final TextEditingController _descriptionController;
   final FocusNode _nameFocus = FocusNode();
-  final FocusNode _descriptionFocus = FocusNode();
 
   _DialogFocusRegion _focusRegion = _DialogFocusRegion.nameField;
   int _focusedButtonIndex = 1; // 0 = Cancel, 1 = Save
@@ -58,12 +57,17 @@ class _CreateEditCollectionDialogState
     _nameController = TextEditingController(
       text: widget.collection?.name ?? '',
     );
-    _descriptionController = TextEditingController(
-      text: widget.collection?.description ?? '',
-    );
 
     _nameFocus.addListener(_onNameFocusChanged);
-    _descriptionFocus.addListener(_onDescriptionFocusChanged);
+
+    _nameFocus.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape) {
+        _handleBack();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
 
     _setupGamepad();
   }
@@ -74,22 +78,15 @@ class _CreateEditCollectionDialogState
     }
   }
 
-  void _onDescriptionFocusChanged() {
-    if (_descriptionFocus.hasFocus &&
-        _focusRegion != _DialogFocusRegion.descriptionField) {
-      setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
-    }
+  void _handleBack() {
+    SfxService().playBackSound();
+    Navigator.of(context).pop();
   }
 
   void _setupGamepad() {
     _gamepadNav = GamepadNavigation(
       onNavigateUp: () {
         if (_focusRegion == _DialogFocusRegion.buttons) {
-          _descriptionFocus.requestFocus();
-          setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
-          SfxService().playNavSound();
-        } else if (_focusRegion == _DialogFocusRegion.descriptionField) {
-          _descriptionFocus.unfocus();
           _nameFocus.requestFocus();
           setState(() => _focusRegion = _DialogFocusRegion.nameField);
           SfxService().playNavSound();
@@ -97,12 +94,6 @@ class _CreateEditCollectionDialogState
       },
       onNavigateDown: () {
         if (_focusRegion == _DialogFocusRegion.nameField) {
-          _nameFocus.unfocus();
-          _descriptionFocus.requestFocus();
-          setState(() => _focusRegion = _DialogFocusRegion.descriptionField);
-          SfxService().playNavSound();
-        } else if (_focusRegion == _DialogFocusRegion.descriptionField) {
-          _descriptionFocus.unfocus();
           _nameFocus.unfocus();
           setState(() => _focusRegion = _DialogFocusRegion.buttons);
           SfxService().playNavSound();
@@ -125,16 +116,12 @@ class _CreateEditCollectionDialogState
       onSelectItem: () {
         if (_focusRegion == _DialogFocusRegion.buttons &&
             _focusedButtonIndex == 0) {
-          SfxService().playBackSound();
-          Navigator.of(context).pop();
+          _handleBack();
         } else {
           _submit();
         }
       },
-      onBack: () {
-        SfxService().playBackSound();
-        Navigator.of(context).pop();
-      },
+      onBack: _handleBack,
     );
     _gamepadNav.initialize();
 
@@ -153,11 +140,8 @@ class _CreateEditCollectionDialogState
     _gamepadNav.dispose();
     GamepadNavigationManager.popLayer('create_edit_collection_dialog');
     _nameFocus.removeListener(_onNameFocusChanged);
-    _descriptionFocus.removeListener(_onDescriptionFocusChanged);
     _nameController.dispose();
-    _descriptionController.dispose();
     _nameFocus.dispose();
-    _descriptionFocus.dispose();
     super.dispose();
   }
 
@@ -170,10 +154,7 @@ class _CreateEditCollectionDialogState
     }
 
     SfxService().playEnterSound();
-    widget.onSave((
-      name: name,
-      description: _descriptionController.text.trim(),
-    ));
+    widget.onSave(name);
     Navigator.of(context).pop();
   }
 
@@ -183,7 +164,6 @@ class _CreateEditCollectionDialogState
     final primaryColor = theme.colorScheme.primary;
 
     final isNameFocused = _focusRegion == _DialogFocusRegion.nameField;
-    final isDescFocused = _focusRegion == _DialogFocusRegion.descriptionField;
     final isButtonsFocused = _focusRegion == _DialogFocusRegion.buttons;
 
     return Dialog(
@@ -196,7 +176,7 @@ class _CreateEditCollectionDialogState
         ),
       ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 460.w),
+        constraints: BoxConstraints(maxWidth: 440.w),
         child: Padding(
           padding: EdgeInsets.all(24.r),
           child: Column(
@@ -271,144 +251,73 @@ class _CreateEditCollectionDialogState
                     borderSide: BorderSide(color: primaryColor, width: 2.r),
                   ),
                 ),
-                onSubmitted: (_) {
-                  _descriptionFocus.requestFocus();
-                  setState(
-                    () => _focusRegion = _DialogFocusRegion.descriptionField,
-                  );
-                },
-              ),
-              SizedBox(height: 16.h),
-              Text(
-                AppLocale.collectionDescription.getString(context),
-                style: TextStyle(
-                  fontSize: 13.sp,
-                  fontWeight: FontWeight.w600,
-                  color: isDescFocused
-                      ? primaryColor
-                      : theme.textTheme.bodyMedium?.color,
-                ),
-              ),
-              SizedBox(height: 6.h),
-              TextField(
-                controller: _descriptionController,
-                focusNode: _descriptionFocus,
-                style: TextStyle(fontSize: 14.sp),
-                decoration: InputDecoration(
-                  hintText: 'Optional description...',
-                  hintStyle: TextStyle(fontSize: 13.sp, color: theme.hintColor),
-                  filled: true,
-                  fillColor: theme.cardColor.withValues(alpha: 0.5),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 14.w,
-                    vertical: 12.h,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                    borderSide: BorderSide(
-                      color: theme.dividerColor.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                    borderSide: BorderSide(
-                      color: isDescFocused
-                          ? primaryColor
-                          : theme.dividerColor.withValues(alpha: 0.2),
-                      width: isDescFocused ? 2.r : 1.r,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                    borderSide: BorderSide(color: primaryColor, width: 2.r),
-                  ),
-                ),
                 onSubmitted: (_) => _submit(),
               ),
               SizedBox(height: 24.h),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _buildButton(
-                    context: context,
-                    label: 'Cancel [B]',
-                    isFocused: isButtonsFocused && _focusedButtonIndex == 0,
-                    isPrimary: false,
-                    onTap: () {
-                      SfxService().playBackSound();
-                      Navigator.of(context).pop();
-                    },
+                  OutlinedButton(
+                    onPressed: _handleBack,
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 18.w,
+                        vertical: 12.h,
+                      ),
+                      side: BorderSide(
+                        color: isButtonsFocused && _focusedButtonIndex == 0
+                            ? primaryColor
+                            : theme.dividerColor.withValues(alpha: 0.3),
+                        width: isButtonsFocused && _focusedButtonIndex == 0
+                            ? 2.r
+                            : 1.r,
+                      ),
+                      backgroundColor:
+                          isButtonsFocused && _focusedButtonIndex == 0
+                          ? primaryColor.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10.r),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel [B]',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        color: isButtonsFocused && _focusedButtonIndex == 0
+                            ? primaryColor
+                            : theme.textTheme.bodyMedium?.color,
+                      ),
+                    ),
                   ),
                   SizedBox(width: 12.w),
-                  _buildButton(
-                    context: context,
-                    label: 'Save [A]',
-                    isFocused: isButtonsFocused && _focusedButtonIndex == 1,
-                    isPrimary: true,
-                    onTap: _submit,
+                  ElevatedButton(
+                    onPressed: _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: theme.colorScheme.onPrimary,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 22.w,
+                        vertical: 12.h,
+                      ),
+                      side: isButtonsFocused && _focusedButtonIndex == 1
+                          ? BorderSide(color: Colors.white, width: 2.r)
+                          : BorderSide.none,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10.r),
+                      ),
+                    ),
+                    child: Text(
+                      _isEditing ? 'Save [A]' : 'Create [A]',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildButton({
-    required BuildContext context,
-    required String label,
-    required bool isFocused,
-    required bool isPrimary,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 10.h),
-          decoration: BoxDecoration(
-            color: isPrimary
-                ? (isFocused
-                      ? primaryColor
-                      : primaryColor.withValues(alpha: 0.8))
-                : (isFocused
-                      ? theme.cardColor.withValues(alpha: 0.8)
-                      : theme.cardColor.withValues(alpha: 0.4)),
-            borderRadius: BorderRadius.circular(10.r),
-            border: Border.all(
-              color: isFocused
-                  ? Colors.white
-                  : (isPrimary
-                        ? primaryColor
-                        : theme.dividerColor.withValues(alpha: 0.3)),
-              width: isFocused ? 2.r : 1.r,
-            ),
-            boxShadow: isFocused
-                ? [
-                    BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.4),
-                      blurRadius: 8.r,
-                      spreadRadius: 1.r,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13.sp,
-              fontWeight: FontWeight.bold,
-              color: isPrimary
-                  ? Colors.white
-                  : theme.textTheme.bodyMedium?.color,
-            ),
           ),
         ),
       ),

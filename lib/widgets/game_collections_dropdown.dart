@@ -286,12 +286,9 @@ class _GameCollectionsOverlayState extends State<GameCollectionsOverlay> {
         Navigator.of(context).pop();
         CreateEditCollectionDialog.show(
           context: context,
-          onSave: (result) async {
+          onSave: (newName) async {
             final provider = context.read<CollectionProvider>();
-            final created = await provider.createCollection(
-              name: result.name,
-              description: result.description,
-            );
+            final created = await provider.createCollection(name: newName);
             if (created != null && widget.game.romPath != null) {
               await CollectionRepository.addGamesToCollection(created.id, [
                 widget.game.romPath!,

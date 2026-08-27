@@ -7,6 +7,7 @@ import 'package:neostation/models/collection_model.dart';
 import 'package:neostation/providers/collection_provider.dart';
 import 'package:neostation/repositories/collection_repository.dart';
 import 'package:neostation/screens/collections_screen/collection_add_games_dialog.dart';
+import 'package:neostation/screens/collections_screen/collection_artwork_dialog.dart';
 import 'package:neostation/screens/collections_screen/create_edit_collection_dialog.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -14,10 +15,10 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:provider/provider.dart';
 
-enum CollectionAction { addGames, editDetails, delete }
+enum CollectionAction { addGames, editDetails, editArtwork, delete }
 
 /// Styled dropdown menu matching [GameViewModeDropdown] and [GameCollectionsDropdown]
-/// allowing users to manage games, edit details, or delete a collection.
+/// allowing users to manage games, edit details, customize artwork, or delete a collection.
 class CollectionOptionsDropdown extends StatefulWidget {
   const CollectionOptionsDropdown({super.key});
 
@@ -87,13 +88,20 @@ class CollectionOptionsDropdown extends StatefulWidget {
         CreateEditCollectionDialog.show(
           context: context,
           collection: collection,
-          onSave: (res) async {
-            await provider.updateCollection(
-              collection.id,
-              name: res.name,
-              description: res.description,
-            );
+          onSave: (newName) async {
+            await provider.updateCollection(collection.id, name: newName);
             await provider.loadCollections();
+            onCollectionUpdated?.call();
+          },
+        );
+        break;
+
+      case CollectionAction.editArtwork:
+        if (!context.mounted) return;
+        await CollectionArtworkDialog.show(
+          context: context,
+          collection: collection,
+          onUpdated: () {
             onCollectionUpdated?.call();
           },
         );
@@ -180,6 +188,12 @@ class _CollectionOptionsOverlayState extends State<_CollectionOptionsOverlay> {
         action: CollectionAction.editDetails,
         label: AppLocale.editCollection.getString(context),
         icon: Symbols.edit_rounded,
+        color: primaryColor,
+      ),
+      _OptionItem(
+        action: CollectionAction.editArtwork,
+        label: AppLocale.systemImages.getString(context),
+        icon: Symbols.palette_rounded,
         color: primaryColor,
       ),
       _OptionItem(

@@ -17,13 +17,11 @@ class CollectionRepository {
   /// Creates a new collection and returns its ID.
   static Future<int> createCollection({
     required String name,
-    String? description,
     String? icon,
     String? color,
   }) async {
     return await SqliteService.createCollection(
       name: name,
-      description: description,
       icon: icon,
       color: color,
     );
@@ -33,16 +31,27 @@ class CollectionRepository {
   static Future<void> updateCollection(
     int id, {
     required String name,
-    String? description,
     String? icon,
     String? color,
   }) async {
     await SqliteService.updateCollection(
       id,
       name: name,
-      description: description,
       icon: icon,
       color: color,
+    );
+  }
+
+  /// Sets custom background and/or logo images for a collection.
+  static Future<void> setCustomImages(
+    int collectionId, {
+    String? backgroundPath,
+    String? logoPath,
+  }) async {
+    await SqliteService.setCollectionCustomImages(
+      collectionId,
+      backgroundPath: backgroundPath,
+      logoPath: logoPath,
     );
   }
 

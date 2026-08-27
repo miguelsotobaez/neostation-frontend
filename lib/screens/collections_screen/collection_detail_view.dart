@@ -262,12 +262,8 @@ class _CollectionDetailViewState extends State<CollectionDetailView> {
     CreateEditCollectionDialog.show(
       context: context,
       collection: widget.collection,
-      onSave: (result) async {
-        await provider.updateCollection(
-          widget.collection.id,
-          name: result.name,
-          description: result.description,
-        );
+      onSave: (newName) async {
+        await provider.updateCollection(widget.collection.id, name: newName);
       },
     );
   }
@@ -363,17 +359,6 @@ class _CollectionDetailViewState extends State<CollectionDetailView> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (widget.collection.description != null &&
-                            widget.collection.description!.isNotEmpty)
-                          Text(
-                            widget.collection.description!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              color: theme.hintColor,
-                            ),
-                          ),
                       ],
                     ),
                   ),

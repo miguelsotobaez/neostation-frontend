@@ -10,14 +10,20 @@ class CollectionModel {
   /// Human-readable title of the collection.
   final String name;
 
-  /// Optional description or subtitle.
-  final String? description;
-
   /// Optional icon asset or symbol identifier.
   final String? icon;
 
   /// Optional accent color hex string (e.g. '#FF5722').
   final String? color;
+
+  /// Optional custom background wallpaper image path.
+  final String? customBackgroundPath;
+
+  /// Optional custom logo/wheel image path.
+  final String? customLogoPath;
+
+  /// Image cache-busting version counter.
+  final int imageVersion;
 
   /// Total number of active ROMs in this collection.
   final int romCount;
@@ -34,9 +40,11 @@ class CollectionModel {
   const CollectionModel({
     required this.id,
     required this.name,
-    this.description,
     this.icon,
     this.color,
+    this.customBackgroundPath,
+    this.customLogoPath,
+    this.imageVersion = 0,
     this.romCount = 0,
     this.coverRomPaths = const [],
     this.createdAt,
@@ -63,9 +71,11 @@ class CollectionModel {
     return CollectionModel(
       id: (map['id'] as num?)?.toInt() ?? 0,
       name: (map['name'] ?? '').toString(),
-      description: map['description']?.toString(),
       icon: map['icon']?.toString(),
       color: map['color']?.toString(),
+      customBackgroundPath: map['custom_background_path']?.toString(),
+      customLogoPath: map['custom_logo_path']?.toString(),
+      imageVersion: (map['image_version'] as num?)?.toInt() ?? 0,
       romCount: (map['game_count'] ?? map['rom_count'] as num?)?.toInt() ?? 0,
       coverRomPaths: parseCoverRomPaths(
         map['cover_rom_paths'] ?? map['coverRomPaths'],
@@ -84,9 +94,10 @@ class CollectionModel {
     return {
       'id': id == 0 ? null : id,
       'name': name,
-      'description': description ?? '',
       'icon': icon ?? '',
       'color': color ?? '',
+      'custom_background_path': customBackgroundPath ?? '',
+      'custom_logo_path': customLogoPath ?? '',
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
@@ -96,9 +107,11 @@ class CollectionModel {
   CollectionModel copyWith({
     int? id,
     String? name,
-    String? description,
     String? icon,
     String? color,
+    String? customBackgroundPath,
+    String? customLogoPath,
+    int? imageVersion,
     int? romCount,
     List<String>? coverRomPaths,
     DateTime? createdAt,
@@ -107,9 +120,11 @@ class CollectionModel {
     return CollectionModel(
       id: id ?? this.id,
       name: name ?? this.name,
-      description: description ?? this.description,
       icon: icon ?? this.icon,
       color: color ?? this.color,
+      customBackgroundPath: customBackgroundPath ?? this.customBackgroundPath,
+      customLogoPath: customLogoPath ?? this.customLogoPath,
+      imageVersion: imageVersion ?? this.imageVersion,
       romCount: romCount ?? this.romCount,
       coverRomPaths: coverRomPaths ?? this.coverRomPaths,
       createdAt: createdAt ?? this.createdAt,
@@ -119,14 +134,19 @@ class CollectionModel {
 
   /// Converts this collection to a virtual [SystemModel] for browsing in [SystemGamesList].
   SystemModel toSystemModel() {
+    final hasCustomLogo = customLogoPath != null && customLogoPath!.isNotEmpty;
     return SystemModel(
       id: 'collection_$id',
       folderName: 'collection_$id',
       realName: name,
-      description: description,
-      iconImage: icon != null && icon!.isNotEmpty
-          ? icon!
-          : '/images/icons/folder-bulk.png',
+      iconImage: hasCustomLogo
+          ? customLogoPath!
+          : (icon != null && icon!.isNotEmpty
+                ? icon!
+                : '/images/icons/folder-bulk.png'),
+      customLogoPath: customLogoPath,
+      customBackgroundPath: customBackgroundPath,
+      imageVersion: imageVersion,
       color: color != null && color!.isNotEmpty ? color! : '#ff006a',
       romCount: romCount,
       isVirtual: true,
@@ -141,8 +161,17 @@ class CollectionModel {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name &&
-          romCount == other.romCount;
+          romCount == other.romCount &&
+          customBackgroundPath == other.customBackgroundPath &&
+          customLogoPath == other.customLogoPath &&
+          imageVersion == other.imageVersion;
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ romCount.hashCode;
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      romCount.hashCode ^
+      (customBackgroundPath?.hashCode ?? 0) ^
+      (customLogoPath?.hashCode ?? 0) ^
+      imageVersion.hashCode;
 }

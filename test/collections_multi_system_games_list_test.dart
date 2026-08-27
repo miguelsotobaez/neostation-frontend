@@ -43,7 +43,7 @@ void main() {
     testWidgets('trims whitespace and rejects empty name input', (
       tester,
     ) async {
-      ({String name, String? description})? savedResult;
+      String? savedResult;
 
       await tester.pumpWidget(
         ScreenUtilInit(
@@ -76,8 +76,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Enter only spaces into the name field
-      await tester.enterText(find.byType(TextField).first, '   ');
-      await tester.tap(find.text('Save [A]'));
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.tap(find.text('Create [A]'));
       await tester.pumpAndSettle();
 
       // Dialog should still be open and result must NOT be submitted
@@ -85,135 +85,168 @@ void main() {
       expect(find.byType(CreateEditCollectionDialog), findsOneWidget);
 
       // Now enter valid name with surrounding whitespace
-      await tester.enterText(find.byType(TextField).first, '  RPG Favorites  ');
-      await tester.enterText(find.byType(TextField).last, '  Best RPGs ever  ');
-      await tester.tap(find.text('Save [A]'));
+      await tester.enterText(find.byType(TextField), '  RPG Favorites  ');
+      await tester.tap(find.text('Create [A]'));
       await tester.pumpAndSettle();
 
       expect(savedResult, isNotNull);
-      expect(savedResult!.name, equals('RPG Favorites'));
-      expect(savedResult!.description, equals('Best RPGs ever'));
+      expect(savedResult, equals('RPG Favorites'));
       expect(find.byType(CreateEditCollectionDialog), findsNothing);
     });
   });
 
   group('CollectionOptionsDropdown actions', () {
-    testWidgets('renders collection options and handles selection', (
-      tester,
-    ) async {
-      final collection = CollectionModel(
-        id: 42,
-        name: 'Speedrun Hits',
-        description: 'Games to speedrun',
-        romCount: 5,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+    testWidgets(
+      'renders collection options including artwork and handles selection',
+      (tester) async {
+        final collection = CollectionModel(
+          id: 42,
+          name: 'Speedrun Hits',
+          romCount: 5,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
 
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider(create: (_) => CollectionProvider()),
-          ],
-          child: ScreenUtilInit(
-            designSize: const Size(1920, 1080),
-            builder: (context, child) => MaterialApp(
-              localizationsDelegates:
-                  FlutterLocalization.instance.localizationsDelegates,
-              supportedLocales: FlutterLocalization.instance.supportedLocales,
-              home: Scaffold(
-                body: Builder(
-                  builder: (ctx) => ElevatedButton(
-                    onPressed: () {
-                      CollectionOptionsDropdown.show(
-                        context: ctx,
-                        collection: collection,
-                      );
-                    },
-                    child: const Text('Options'),
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider(create: (_) => CollectionProvider()),
+            ],
+            child: ScreenUtilInit(
+              designSize: const Size(1920, 1080),
+              builder: (context, child) => MaterialApp(
+                localizationsDelegates:
+                    FlutterLocalization.instance.localizationsDelegates,
+                supportedLocales: FlutterLocalization.instance.supportedLocales,
+                home: Scaffold(
+                  body: Builder(
+                    builder: (ctx) => ElevatedButton(
+                      onPressed: () {
+                        CollectionOptionsDropdown.show(
+                          context: ctx,
+                          collection: collection,
+                        );
+                      },
+                      child: const Text('Options'),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Options'));
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Options'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Speedrun Hits'), findsOneWidget);
-      expect(find.text('5 games'), findsOneWidget);
-      expect(find.text(AppLocale.en[AppLocale.addGames]!), findsOneWidget);
-      expect(
-        find.text(AppLocale.en[AppLocale.editCollection]!),
-        findsOneWidget,
-      );
-      expect(
-        find.text(AppLocale.en[AppLocale.deleteCollection]!),
-        findsOneWidget,
-      );
-    });
+        expect(find.text('Speedrun Hits'), findsOneWidget);
+        expect(find.text('5 games'), findsOneWidget);
+        expect(find.text(AppLocale.en[AppLocale.addGames]!), findsOneWidget);
+        expect(
+          find.text(AppLocale.en[AppLocale.editCollection]!),
+          findsOneWidget,
+        );
+        expect(
+          find.text(AppLocale.en[AppLocale.systemImages]!),
+          findsOneWidget,
+        );
+        expect(
+          find.text(AppLocale.en[AppLocale.deleteCollection]!),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('Multi-System Collection Domain & System Mapping', () {
-    test('creates multi-system collection and queries cross-system ROMs', () async {
-      await db.execute(
-        "INSERT INTO app_systems (id, real_name, folder_name) VALUES ('snes', 'Super Nintendo', 'snes')",
-      );
-      await db.execute(
-        "INSERT INTO app_systems (id, real_name, folder_name) VALUES ('ps1', 'Sony PlayStation', 'ps1')",
-      );
-      await db.execute(
-        "INSERT INTO user_roms (filename, rom_path, app_system_id, title_name) "
-        "VALUES ('mario.sfc', '/roms/snes/mario.sfc', 'snes', 'Super Mario World')",
-      );
-      await db.execute(
-        "INSERT INTO user_roms (filename, rom_path, app_system_id, title_name) "
-        "VALUES ('crash.chd', '/roms/ps1/crash.chd', 'ps1', 'Crash Bandicoot')",
-      );
-      await db.execute(
-        "INSERT INTO user_screenscraper_metadata (app_system_id, filename, real_name) "
-        "VALUES ('snes', 'mario.sfc', 'Super Mario World')",
-      );
-      await db.execute(
-        "INSERT INTO user_screenscraper_metadata (app_system_id, filename, real_name) "
-        "VALUES ('ps1', 'crash.chd', 'Crash Bandicoot')",
-      );
+    test(
+      'creates multi-system collection and queries cross-system ROMs and custom artwork',
+      () async {
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name) VALUES ('snes', 'Super Nintendo', 'snes')",
+        );
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name) VALUES ('ps1', 'Sony PlayStation', 'ps1')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, title_name) "
+          "VALUES ('mario.sfc', '/roms/snes/mario.sfc', 'snes', 'Super Mario World')",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id, title_name) "
+          "VALUES ('crash.chd', '/roms/ps1/crash.chd', 'ps1', 'Crash Bandicoot')",
+        );
+        await db.execute(
+          "INSERT INTO user_screenscraper_metadata (app_system_id, filename, real_name) "
+          "VALUES ('snes', 'mario.sfc', 'Super Mario World')",
+        );
+        await db.execute(
+          "INSERT INTO user_screenscraper_metadata (app_system_id, filename, real_name) "
+          "VALUES ('ps1', 'crash.chd', 'Crash Bandicoot')",
+        );
 
-      final collectionId = await CollectionRepository.createCollection(
-        name: 'Multi-System Platformers',
-        description: 'Great platformers across consoles',
-      );
+        final collectionId = await CollectionRepository.createCollection(
+          name: 'Multi-System Platformers',
+        );
 
-      await CollectionRepository.addGamesToCollection(collectionId, [
-        '/roms/snes/mario.sfc',
-        '/roms/ps1/crash.chd',
-      ]);
+        await CollectionRepository.addGamesToCollection(collectionId, [
+          '/roms/snes/mario.sfc',
+          '/roms/ps1/crash.chd',
+        ]);
 
-      final collection = await CollectionRepository.getCollection(collectionId);
-      expect(collection, isNotNull);
-      expect(collection!.romCount, equals(2));
+        // Set custom images for collection
+        await CollectionRepository.setCustomImages(
+          collectionId,
+          backgroundPath: '/media/collections/platformers_bg.jpg',
+          logoPath: '/media/collections/platformers_logo.png',
+        );
 
-      // Test toSystemModel conversion
-      final systemModel = collection.toSystemModel();
-      expect(systemModel.id, equals('collection_$collectionId'));
-      expect(systemModel.folderName, equals('collection_$collectionId'));
-      expect(systemModel.realName, equals('Multi-System Platformers'));
-      expect(systemModel.isMultiSystem, isTrue);
+        final collection = await CollectionRepository.getCollection(
+          collectionId,
+        );
+        expect(collection, isNotNull);
+        expect(collection!.romCount, equals(2));
+        expect(
+          collection.customBackgroundPath,
+          equals('/media/collections/platformers_bg.jpg'),
+        );
+        expect(
+          collection.customLogoPath,
+          equals('/media/collections/platformers_logo.png'),
+        );
 
-      // Verify ROMs loaded for this collection
-      final games = await CollectionRepository.getGamesForCollection(
-        collectionId,
-      );
-      expect(games.length, equals(2));
-      final names = games.map((g) => g.realName ?? g.filename).toSet();
-      expect(names, containsAll(['Super Mario World', 'Crash Bandicoot']));
-      final systems = games
-          .map((g) => g.systemFolderName ?? g.appSystemId)
-          .toSet();
-      expect(systems, containsAll(['snes', 'ps1']));
-    });
+        // Test toSystemModel conversion
+        final systemModel = collection.toSystemModel();
+        expect(systemModel.id, equals('collection_$collectionId'));
+        expect(systemModel.folderName, equals('collection_$collectionId'));
+        expect(systemModel.realName, equals('Multi-System Platformers'));
+        expect(systemModel.isMultiSystem, isTrue);
+        expect(
+          systemModel.customBackgroundPath,
+          equals('/media/collections/platformers_bg.jpg'),
+        );
+        expect(
+          systemModel.customLogoPath,
+          equals('/media/collections/platformers_logo.png'),
+        );
+        expect(
+          systemModel.iconImage,
+          equals('/media/collections/platformers_logo.png'),
+        );
+
+        // Verify ROMs loaded for this collection
+        final games = await CollectionRepository.getGamesForCollection(
+          collectionId,
+        );
+        expect(games.length, equals(2));
+        final names = games.map((g) => g.realName ?? g.filename).toSet();
+        expect(names, containsAll(['Super Mario World', 'Crash Bandicoot']));
+        final systems = games
+            .map((g) => g.systemFolderName ?? g.appSystemId)
+            .toSet();
+        expect(systems, containsAll(['snes', 'ps1']));
+      },
+    );
   });
 }

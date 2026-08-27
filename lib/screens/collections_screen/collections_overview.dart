@@ -34,11 +34,8 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
     final provider = context.read<CollectionProvider>();
     CreateEditCollectionDialog.show(
       context: context,
-      onSave: (result) async {
-        final created = await provider.createCollection(
-          name: result.name,
-          description: result.description,
-        );
+      onSave: (newName) async {
+        final created = await provider.createCollection(name: newName);
         if (created != null && mounted) {
           setState(() => _selectedIndex = provider.collections.length - 1);
         }

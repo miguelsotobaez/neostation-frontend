@@ -172,20 +172,6 @@ class CollectionCard extends StatelessWidget {
                                 : theme.textTheme.bodyLarge?.color,
                           ),
                         ),
-                        if (col.description != null &&
-                            col.description!.isNotEmpty) ...[
-                          SizedBox(height: 4.h),
-                          Text(
-                            col.description!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              color: theme.textTheme.bodyMedium?.color
-                                  ?.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),

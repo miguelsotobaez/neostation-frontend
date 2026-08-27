@@ -51,14 +51,12 @@ class CollectionProvider extends ChangeNotifier {
   /// Creates a new collection and reloads the collection list.
   Future<CollectionModel?> createCollection({
     required String name,
-    String? description,
     String? icon,
     String? color,
   }) async {
     try {
       final id = await CollectionRepository.createCollection(
         name: name,
-        description: description,
         icon: icon,
         color: color,
       );
@@ -77,7 +75,6 @@ class CollectionProvider extends ChangeNotifier {
   Future<void> updateCollection(
     int id, {
     required String name,
-    String? description,
     String? icon,
     String? color,
   }) async {
@@ -85,7 +82,6 @@ class CollectionProvider extends ChangeNotifier {
       await CollectionRepository.updateCollection(
         id,
         name: name,
-        description: description,
         icon: icon,
         color: color,
       );
@@ -99,6 +95,26 @@ class CollectionProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e, stack) {
       _log.e('Error updating collection $id: $e\n$stack');
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  /// Sets custom background and/or logo images for a collection.
+  Future<void> setCustomImages(
+    int id, {
+    String? backgroundPath,
+    String? logoPath,
+  }) async {
+    try {
+      await CollectionRepository.setCustomImages(
+        id,
+        backgroundPath: backgroundPath,
+        logoPath: logoPath,
+      );
+      await loadCollections(notify: true);
+    } catch (e, stack) {
+      _log.e('Error setting custom images for collection $id: $e\n$stack');
       _errorMessage = e.toString();
       notifyListeners();
     }
