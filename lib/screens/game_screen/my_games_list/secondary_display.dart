@@ -135,9 +135,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     }
 
     final systemFolderName =
-        (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
-            game.systemFolderName != null
+        widget.system.isMultiSystem && game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;
 
@@ -343,9 +341,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
   }
 
   void _updateBackground(GameModel game) {
-    if (!mounted ||
-        widget.system.folderName == 'all' ||
-        widget.system.folderName == SystemFolderNames.favorites) {
+    if (!mounted || widget.system.isMultiSystem) {
       return;
     }
 
@@ -369,10 +365,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
       imageProvider = FileImage(File(imagePath));
     } else {
       // Hardware-specific fallback if no game-specific art is resolved.
-      final sysId =
-          (widget.system.folderName == 'all' ||
-                  widget.system.folderName == SystemFolderNames.favorites) &&
-              game.systemFolderName != null
+      final sysId = widget.system.isMultiSystem && game.systemFolderName != null
           ? game.systemFolderName!
           : widget.system.id;
       final path =
@@ -522,9 +515,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
   /// Resolves the absolute filesystem path for the targeted game video.
   String _getVideoPath(GameModel game) {
     final systemFolderName =
-        (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
-            game.systemFolderName != null
+        widget.system.isMultiSystem && game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;
 

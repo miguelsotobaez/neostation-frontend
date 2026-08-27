@@ -214,6 +214,40 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.showSearchTab: 'Show Search tab',
   AppLocale.showSearchTabSubtitle:
       'Display the Search tab in the navigation bar',
+  AppLocale.showCollectionsTab: 'Show Collections tab',
+  AppLocale.showCollectionsTabSubtitle:
+      'Display the Collections tab in the navigation bar',
+
+  // Collections
+  AppLocale.collections: 'Collections',
+  AppLocale.createCollection: 'Create Collection',
+  AppLocale.editCollection: 'Edit Collection',
+  AppLocale.renameCollection: 'Rename Collection',
+  AppLocale.deleteCollection: 'Delete Collection',
+  AppLocale.deleteCollectionConfirm:
+      'Are you sure you want to delete this collection? Games will not be removed from your library.',
+  AppLocale.collectionName: 'Collection Name',
+  AppLocale.collectionNameHint: 'Enter collection name...',
+  AppLocale.collectionDescription: 'Description',
+  AppLocale.noCollectionsTitle: 'No Collections Yet',
+  AppLocale.noCollectionsSubtitle:
+      'Create collections to group and organize your favorite games across systems.',
+  AppLocale.emptyCollectionTitle: 'No Games in Collection',
+  AppLocale.emptyCollectionSubtitle:
+      'Add games to this collection from your library.',
+  AppLocale.addGames: 'Add Games',
+  AppLocale.manageGames: 'Manage Games',
+  AppLocale.removeFromCollection: 'Remove from Collection',
+  AppLocale.removeFromCollectionConfirm:
+      'Remove this game from the collection?',
+  AppLocale.gamesCountSingle: '{count} game',
+  AppLocale.gamesCountPlural: '{count} games',
+  AppLocale.collectionCreated: 'Collection created',
+  AppLocale.collectionUpdated: 'Collection updated',
+  AppLocale.collectionDeleted: 'Collection deleted',
+  AppLocale.searchGames: 'Search games...',
+  AppLocale.selectGames: 'Select Games',
+  AppLocale.noGamesFound: 'No games found',
 
   AppLocale.configureDirectories: 'Directories',
   AppLocale.configureRomsFolder: 'Configure ROMs folder',

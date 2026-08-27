@@ -228,6 +228,14 @@ class SystemModel {
     return folderName;
   }
 
+  /// Whether this system represents a multi-system or virtual view
+  /// ('all', 'favorites', or a custom user collection).
+  bool get isMultiSystem =>
+      folderName == 'all' ||
+      folderName == 'favorites' ||
+      folderName.startsWith('collection_') ||
+      (id != null && id!.startsWith('collection_'));
+
   /// Creates a [SystemModel] from a JSON-compatible map.
   factory SystemModel.fromJson(Map<String, dynamic> json) {
     final foldersList =

@@ -24,7 +24,6 @@ import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
-import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/services/retro_achievements_helper.dart';
@@ -278,9 +277,7 @@ class _GamesGridState extends State<GamesGrid> {
       bytes[offset + 3];
 
   String _folderForGame(GameModel game) {
-    if ((widget.system.folderName == SystemFolderNames.all ||
-            widget.system.folderName == SystemFolderNames.favorites) &&
-        game.systemFolderName != null) {
+    if (widget.system.isMultiSystem && game.systemFolderName != null) {
       return game.systemFolderName!;
     }
     return widget.system.primaryFolderName;
@@ -901,9 +898,7 @@ class _GamesGridState extends State<GamesGrid> {
     });
   }
 
-  bool get _isAllMode =>
-      widget.system.folderName == SystemFolderNames.all ||
-      widget.system.folderName == SystemFolderNames.favorites;
+  bool get _isAllMode => widget.system.isMultiSystem;
 
   SystemModel _effectiveSystemFor(GameModel game) {
     final systemFolderName = game.systemFolderName;

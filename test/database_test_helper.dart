@@ -147,6 +147,7 @@ class DatabaseTestHelper {
         hide_tab_scraper INTEGER DEFAULT 0,
         hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
+        hide_tab_collections INTEGER DEFAULT 0,
         game_grid_columns TEXT DEFAULT 'M',
         game_carousel_card_style TEXT DEFAULT 'fanart',
         dock_apps TEXT,
@@ -331,5 +332,7 @@ class DatabaseTestHelper {
     // The production DDL rather than a copy, so the singleton CHECK and the
     // nullable secret columns behave exactly as they do on a device.
     await db.execute(SqliteMigrations.createUserRommConfigTableSql);
+    await db.execute(SqliteMigrations.createUserCollectionsTableSql);
+    await db.execute(SqliteMigrations.createUserCollectionRomsTableSql);
   }
 }

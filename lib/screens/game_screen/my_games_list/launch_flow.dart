@@ -50,9 +50,7 @@ extension _LaunchFlow on _SystemGamesListState {
   /// Resolves the effective system folder name for a game, accounting for the
   /// aggregate "all"/favorites views where each game carries its own system.
   String _resolveSystemFolderName(GameModel game) {
-    return (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
-            game.systemFolderName != null
+    return widget.system.isMultiSystem && game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;
   }
@@ -173,8 +171,7 @@ extension _LaunchFlow on _SystemGamesListState {
     // Resolve targeted hardware system for the launch.
     SystemModel systemToLaunch = widget.system;
 
-    if ((widget.system.folderName == 'all' ||
-            widget.system.folderName == SystemFolderNames.favorites) &&
+    if (widget.system.isMultiSystem &&
         _selectedGame!.systemFolderName != null) {
       final availableSystems = context
           .read<SqliteConfigProvider>()

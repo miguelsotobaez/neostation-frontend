@@ -22,6 +22,8 @@ import '../../utils/game_launch_utils.dart';
 import '../../services/music_player_service.dart';
 import '../../repositories/system_repository.dart';
 import '../../repositories/game_repository.dart';
+import '../../repositories/collection_repository.dart';
+import '../collections_screen/collection_add_games_dialog.dart';
 import '../../services/screenscraper_service.dart';
 import '../../services/secondary_achievements_controller.dart';
 import '../../services/game_legend_visibility.dart';
@@ -529,9 +531,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         system: widget.system,
         fileProvider: _fileProvider,
         syncProvider: context.read<SyncManager>().active,
-        isAllMode:
-            widget.system.folderName == SystemFolderNames.all ||
-            widget.system.folderName == SystemFolderNames.favorites,
+        isAllMode: widget.system.isMultiSystem,
         onGameUpdated: _handleGameUpdated,
         onGameDeleted: _handleGameDeleted,
         onGameHidden: _handleGameHidden,
@@ -855,6 +855,107 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// specialized view for systems with zero detected media files.
   /// includes controls for recursive scanning and directory management.
   Widget _buildEmptyState() {
+    if (widget.system.folderName.startsWith('collection_') ||
+        (widget.system.id != null &&
+            widget.system.id!.startsWith('collection_'))) {
+      final colIdStr = (widget.system.id ?? widget.system.folderName)
+          .replaceFirst('collection_', '');
+      final collectionId = int.tryParse(colIdStr);
+
+      return Center(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 500.r),
+          padding: EdgeInsets.symmetric(horizontal: 32.r, vertical: 28.r),
+          margin: EdgeInsets.all(32.r),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1.r,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Symbols.collections_bookmark_rounded,
+                size: 64.r,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              SizedBox(height: 16.r),
+              Text(
+                AppLocale.emptyCollectionTitle.getString(context),
+                style: TextStyle(
+                  fontSize: 18.r,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8.r),
+              Text(
+                AppLocale.emptyCollectionSubtitle.getString(context),
+                style: TextStyle(
+                  fontSize: 13.r,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 24.r),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  if (collectionId != null) {
+                    final existingGames =
+                        await CollectionRepository.getGamesForCollection(
+                          collectionId,
+                        );
+                    final existingPaths = existingGames
+                        .map((g) => g.romPath)
+                        .toSet();
+                    if (!mounted) return;
+                    await CollectionAddGamesDialog.show(
+                      context: context,
+                      collectionName: widget.system.realName,
+                      initialSelectedRomPaths: existingPaths,
+                      onSave: (newPaths) async {
+                        await CollectionRepository.setGamesForCollection(
+                          collectionId,
+                          newPaths.toList(),
+                        );
+                        if (mounted) {
+                          _loadGames();
+                        }
+                      },
+                    );
+                  }
+                },
+                icon: const Icon(Symbols.add_rounded),
+                label: Text(AppLocale.addGames.getString(context)),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 24.r,
+                    vertical: 12.r,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     bool currentScanValue = widget.system.recursiveScan;
 
     return Center(
@@ -1487,9 +1588,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   systemColor: widget.system.colorAsColor,
                   onGameSelected: _selectGame,
                   onGameConfirmed: _selectCurrentGame,
-                  isAllMode:
-                      widget.system.folderName == 'all' ||
-                      widget.system.folderName == SystemFolderNames.favorites,
+                  isAllMode: widget.system.isMultiSystem,
                   isNavigatingFast: _isNavigatingFast,
                   onGamepadReactivated: _reactivateGamepadNavigation,
                   folderCount: _folderCount,
@@ -1725,9 +1824,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         showVideo: _showVideo,
         videoController: _videoController,
         isVideoLoading: _isVideoLoading,
-        isAllMode:
-            widget.system.folderName == 'all' ||
-            widget.system.folderName == SystemFolderNames.favorites,
+        isAllMode: widget.system.isMultiSystem,
         retroAchievementsProvider: _retroAchievementsProvider,
         syncProvider: syncManager.active!,
         localizedDescription: _localizedDescription,
@@ -1929,9 +2026,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Pause any preview playback to avoid resource contention during scraping.
     _resetVideoState();
 
-    final isAllMode =
-        widget.system.folderName == SystemFolderNames.all ||
-        widget.system.folderName == SystemFolderNames.favorites;
+    final isAllMode = widget.system.isMultiSystem;
     final targetSystemFolder = isAllMode && game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;

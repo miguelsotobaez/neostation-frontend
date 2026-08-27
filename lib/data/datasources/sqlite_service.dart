@@ -13,6 +13,7 @@ import '../../models/emulator_model.dart';
 import '../../models/core_emulator_model.dart';
 // import '../models/neo_sync_models.dart'; // Removido si no se usa directamente aquí
 import '../../models/database_game_model.dart';
+import '../../models/collection_model.dart';
 import '../../constants/system_folder_names.dart';
 import '../../utils/cloud_path_builder.dart';
 import '../../utils/semaphore.dart';
@@ -459,7 +460,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 149;
+  static const int _databaseVersion = 150;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1898,6 +1899,7 @@ class SqliteService {
         hide_tab_scraper INTEGER DEFAULT 0,
         hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
+        hide_tab_collections INTEGER DEFAULT 0,
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         -- Generation stamp of the bundled RA seed asset that is currently
@@ -2093,6 +2095,8 @@ class SqliteService {
       SqliteMigrations.createAppRommRomMapTableSql,
       SqliteMigrations.createAppRommPlaySessionsTableSql,
       SqliteMigrations.createAppRommPlaytimeStateTableSql,
+      SqliteMigrations.createUserCollectionsTableSql,
+      SqliteMigrations.createUserCollectionRomsTableSql,
     ];
 
     for (final sql in tables) {
@@ -2168,6 +2172,9 @@ class SqliteService {
       SqliteMigrations.createAppRommRomMapIndexSql,
       // 8. Index for app_romm_play_sessions (RomM playtime outbox)
       SqliteMigrations.createAppRommPlaySessionsIndexSql,
+      // 9. Indexes for user_collection_roms (Collections)
+      SqliteMigrations.createUserCollectionRomsCollectionIdIndexSql,
+      SqliteMigrations.createUserCollectionRomsRomPathIndexSql,
     ];
 
     for (final sql in indexes) {
@@ -2720,6 +2727,7 @@ class SqliteService {
     int? hideTabScraper,
     int? hideTabRomm,
     int? hideTabSearch,
+    int? hideTabCollections,
     String? activeSyncProvider,
     String? systemsVersion,
     String? raSeedStamp,
@@ -2824,6 +2832,9 @@ class SqliteService {
     }
     if (hideTabSearch != null) {
       updates['hide_tab_search'] = hideTabSearch;
+    }
+    if (hideTabCollections != null) {
+      updates['hide_tab_collections'] = hideTabCollections;
     }
     if (activeSyncProvider != null) {
       updates['active_sync_provider'] = activeSyncProvider;
@@ -5514,5 +5525,301 @@ class SqliteService {
       _log.e('Error finding systems for emulator slug $neosyncSlug: $e');
       return const [];
     }
+  }
+
+  // ===========================================================================
+  // Collections Operations
+  // ===========================================================================
+
+  /// Creates a new user collection and returns its generated ID.
+  static Future<int> createCollection({
+    required String name,
+    String? description,
+    String? icon,
+    String? color,
+  }) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.insert('user_collections', {
+      'name': name.trim(),
+      'description': description?.trim() ?? '',
+      'icon': icon ?? '',
+      'color': color ?? '',
+      'created_at': now,
+      'updated_at': now,
+    });
+  }
+
+  /// Updates an existing user collection's metadata.
+  static Future<void> updateCollection(
+    int id, {
+    required String name,
+    String? description,
+    String? icon,
+    String? color,
+  }) async {
+    final db = await instance.database;
+    final updates = <String, Object?>{
+      'name': name.trim(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (description != null) updates['description'] = description.trim();
+    if (icon != null) updates['icon'] = icon;
+    if (color != null) updates['color'] = color;
+    await db.update(
+      'user_collections',
+      updates,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Deletes a collection and its ROM associations.
+  static Future<void> deleteCollection(int id) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'user_collection_roms',
+        where: 'collection_id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete('user_collections', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  /// Retrieves all collections with their respective game counts and top 4 cover ROM paths.
+  static Future<List<CollectionModel>> getCollections() async {
+    final db = await instance.database;
+    final collectionsData = await db.rawQuery('''
+      SELECT
+        c.id, c.name, c.description, c.icon, c.color, c.created_at, c.updated_at,
+        COUNT(DISTINCT ucr.rom_path) as game_count
+      FROM user_collections c
+      LEFT JOIN user_collection_roms ucr ON c.id = ucr.collection_id
+      LEFT JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+      GROUP BY c.id
+      ORDER BY LOWER(c.name) ASC
+    ''');
+
+    final collections = <CollectionModel>[];
+    for (final row in collectionsData) {
+      final id = (row['id'] as num?)?.toInt() ?? 0;
+      final coversData = await db.rawQuery(
+        '''
+        SELECT ucr.rom_path
+        FROM user_collection_roms ucr
+        JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+        WHERE ucr.collection_id = ?
+        ORDER BY ucr.display_order ASC, ucr.id ASC
+        LIMIT 4
+      ''',
+        [id],
+      );
+      final coverPaths = coversData
+          .map((r) => r['rom_path']?.toString() ?? '')
+          .where((p) => p.isNotEmpty)
+          .toList();
+
+      collections.add(
+        CollectionModel.fromMap({...row, 'cover_rom_paths': coverPaths}),
+      );
+    }
+    return collections;
+  }
+
+  /// Retrieves a single collection by ID.
+  static Future<CollectionModel?> getCollection(int id) async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        c.id, c.name, c.description, c.icon, c.color, c.created_at, c.updated_at,
+        COUNT(DISTINCT ucr.rom_path) as game_count
+      FROM user_collections c
+      LEFT JOIN user_collection_roms ucr ON c.id = ucr.collection_id
+      LEFT JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+      WHERE c.id = ?
+      GROUP BY c.id
+      LIMIT 1
+    ''',
+      [id],
+    );
+
+    if (results.isEmpty) return null;
+    final row = results.first;
+
+    final coversData = await db.rawQuery(
+      '''
+      SELECT ucr.rom_path
+      FROM user_collection_roms ucr
+      JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+      WHERE ucr.collection_id = ?
+      ORDER BY ucr.display_order ASC, ucr.id ASC
+      LIMIT 4
+    ''',
+      [id],
+    );
+    final coverPaths = coversData
+        .map((r) => r['rom_path']?.toString() ?? '')
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    return CollectionModel.fromMap({...row, 'cover_rom_paths': coverPaths});
+  }
+
+  /// Retrieves all games belonging to a specific collection.
+  static Future<List<DatabaseGameModel>> getGamesForCollection(
+    int collectionId,
+  ) async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
+        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.app_emulator_unique_id as emulator_name,
+        s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
+        s.short_name as system_short_name,
+        COALESCE(usm.real_name, CASE WHEN s.folder_name IN ('android') THEN ur.title_name END, ur.filename) as game_display_name,
+        usm.real_name as ss_real_name,
+        COALESCE(usm.description_en, CASE WHEN s.folder_name IN ('android') THEN ur.description END) as description,
+        usm.description_en, usm.description_es, usm.description_fr, usm.description_de, usm.description_it, usm.description_pt,
+        usm.rating,
+        COALESCE(usm.release_date, CASE WHEN s.folder_name IN ('android') THEN ur.year END) as year,
+        COALESCE(usm.developer, CASE WHEN s.folder_name IN ('android') THEN ur.developer END) as developer,
+        COALESCE(usm.publisher, CASE WHEN s.folder_name IN ('android') THEN ur.publisher END) as publisher,
+        COALESCE(usm.genre, CASE WHEN s.folder_name IN ('android') THEN ur.genre END) as genre,
+        COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END) as players,
+        ur.box2d_aspect_ratio,
+        ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        (SELECT ral.num_achievements FROM app_ra_game_list ral
+          WHERE ral.game_id = ur.id_ra LIMIT 1) as ra_num_achievements,
+        usm.is_fully_scraped
+      FROM user_collection_roms ucr
+      JOIN user_roms ur ON ucr.rom_path = ur.rom_path
+      JOIN app_systems s ON ur.app_system_id = s.id
+      LEFT JOIN user_screenscraper_metadata usm ON ur.app_system_id = usm.app_system_id AND ur.filename = usm.filename
+      WHERE ucr.collection_id = ?
+      ORDER BY ucr.display_order ASC, LOWER(game_display_name) ASC
+    ''',
+      [collectionId],
+    );
+
+    return results.map((row) => DatabaseGameModel.fromJson(row)).toList();
+  }
+
+  /// Adds games to a collection.
+  static Future<void> addGamesToCollection(
+    int collectionId,
+    List<String> romPaths,
+  ) async {
+    if (romPaths.isEmpty) return;
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
+      for (final path in romPaths) {
+        await txn.rawInsert(
+          '''
+          INSERT OR IGNORE INTO user_collection_roms (collection_id, rom_path, display_order, added_at)
+          VALUES (?, ?, 0, ?)
+        ''',
+          [collectionId, path, now],
+        );
+      }
+      await txn.update(
+        'user_collections',
+        {'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [collectionId],
+      );
+    });
+  }
+
+  /// Removes games from a collection.
+  static Future<void> removeGamesFromCollection(
+    int collectionId,
+    List<String> romPaths,
+  ) async {
+    if (romPaths.isEmpty) return;
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      for (final path in romPaths) {
+        await txn.delete(
+          'user_collection_roms',
+          where: 'collection_id = ? AND rom_path = ? COLLATE NOCASE',
+          whereArgs: [collectionId, path],
+        );
+      }
+      await txn.update(
+        'user_collections',
+        {'updated_at': DateTime.now().toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [collectionId],
+      );
+    });
+  }
+
+  /// Sets the exact list of games for a collection.
+  static Future<void> setGamesForCollection(
+    int collectionId,
+    List<String> romPaths,
+  ) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'user_collection_roms',
+        where: 'collection_id = ?',
+        whereArgs: [collectionId],
+      );
+      final now = DateTime.now().toIso8601String();
+      for (var i = 0; i < romPaths.length; i++) {
+        await txn.rawInsert(
+          '''
+          INSERT OR IGNORE INTO user_collection_roms (collection_id, rom_path, display_order, added_at)
+          VALUES (?, ?, ?, ?)
+        ''',
+          [collectionId, romPaths[i], i, now],
+        );
+      }
+      await txn.update(
+        'user_collections',
+        {'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [collectionId],
+      );
+    });
+  }
+
+  /// Checks if a game is in a specific collection.
+  static Future<bool> isGameInCollection(
+    int collectionId,
+    String romPath,
+  ) async {
+    final db = await instance.database;
+    final result = await db.rawQuery(
+      '''
+      SELECT 1 FROM user_collection_roms
+      WHERE collection_id = ? AND rom_path = ? COLLATE NOCASE
+      LIMIT 1
+    ''',
+      [collectionId, romPath],
+    );
+    return result.isNotEmpty;
+  }
+
+  /// Retrieves collection IDs that contain the given game.
+  static Future<List<int>> getCollectionIdsForGame(String romPath) async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT collection_id FROM user_collection_roms
+      WHERE rom_path = ? COLLATE NOCASE
+    ''',
+      [romPath],
+    );
+    return results
+        .map((r) => (r['collection_id'] as num?)?.toInt() ?? 0)
+        .where((id) => id > 0)
+        .toList();
   }
 }

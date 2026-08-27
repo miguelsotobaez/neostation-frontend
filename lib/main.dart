@@ -7,6 +7,7 @@ import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
+import 'package:neostation/providers/collection_provider.dart';
 import 'package:neostation/screens/main_screen.dart';
 import 'package:neostation/services/neosync/auth_service.dart';
 import 'package:neostation/services/neosync/neo_sync_service.dart';
@@ -941,6 +942,7 @@ class _MyAppState extends State<MyApp> {
           create: (context) => RetroAchievementsProvider()..initialize(),
         ),
         ChangeNotifierProvider.value(value: widget.rommProvider),
+        ChangeNotifierProvider(create: (context) => CollectionProvider()),
         ChangeNotifierProvider(create: (context) => SystemBackgroundProvider()),
         ChangeNotifierProvider(
           // Eager: the theme manifest is a network fetch, and during first-run

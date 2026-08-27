@@ -38,6 +38,42 @@ class SqliteMigrations {
     );
   ''';
 
+  /// CREATE for the user collections table (v150).
+  static const String createUserCollectionsTableSql = '''
+    CREATE TABLE IF NOT EXISTS user_collections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      icon TEXT,
+      color TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  ''';
+
+  /// CREATE for the user collection ROMs junction table (v150).
+  static const String createUserCollectionRomsTableSql = '''
+    CREATE TABLE IF NOT EXISTS user_collection_roms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      collection_id INTEGER NOT NULL,
+      rom_path TEXT NOT NULL COLLATE NOCASE,
+      display_order INTEGER DEFAULT 0,
+      added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (collection_id) REFERENCES user_collections(id) ON DELETE CASCADE,
+      UNIQUE(collection_id, rom_path)
+    );
+  ''';
+
+  /// Index for collection_id on user_collection_roms (v150).
+  static const String createUserCollectionRomsCollectionIdIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_user_collection_roms_collection_id ON user_collection_roms(collection_id);
+  ''';
+
+  /// Index for rom_path on user_collection_roms (v150).
+  static const String createUserCollectionRomsRomPathIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_user_collection_roms_rom_path ON user_collection_roms(rom_path);
+  ''';
+
   /// CREATE for the local-game → RomM rom_id save-sync map (v111).
   static const String createAppRommRomMapTableSql = '''
     CREATE TABLE IF NOT EXISTS app_romm_rom_map (
@@ -528,6 +564,9 @@ class SqliteMigrations {
       // 148 is claimed by another branch that is not merged yet.
       case 149:
         await _migrateToVersion149(db);
+        break;
+      case 150:
+        await _migrateToVersion150(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -6604,6 +6643,43 @@ class SqliteMigrations {
       _log.i('Migration v149 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v149: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v150: Adds user collections support.
+  ///
+  /// - Adds `hide_tab_collections` INTEGER DEFAULT 0 to `user_config`
+  /// - Creates `user_collections` table
+  /// - Creates `user_collection_roms` table with unique constraint and indexes
+  static Future<void> _migrateToVersion150(Database db) async {
+    _log.i('Migration v150: Adding user collections tables and configuration');
+    try {
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!configColumns.contains('hide_tab_collections')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN hide_tab_collections INTEGER DEFAULT 0',
+        );
+        _log.i('v150: Added hide_tab_collections column to user_config');
+      }
+
+      db.execute(createUserCollectionsTableSql);
+      db.execute(createUserCollectionRomsTableSql);
+
+      db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_user_collection_roms_collection_id ON user_collection_roms(collection_id);',
+      );
+      db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_user_collection_roms_rom_path ON user_collection_roms(rom_path);',
+      );
+
+      _log.i('Migration v150 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v150: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

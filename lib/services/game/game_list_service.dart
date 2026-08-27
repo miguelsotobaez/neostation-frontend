@@ -5,6 +5,7 @@ import '../../models/database_game_model.dart';
 import '../../models/system_model.dart';
 import '../../repositories/game_repository.dart';
 import '../../repositories/system_repository.dart';
+import '../../repositories/collection_repository.dart';
 import '../../constants/system_folder_names.dart';
 
 /// Loads game lists/details and resolves their display names.
@@ -126,6 +127,85 @@ class GameListService {
     try {
       if (system.folderName == SystemFolderNames.favorites) {
         return await _loadFavoriteGames();
+      }
+
+      if (system.folderName.startsWith('collection_') ||
+          (system.id != null && system.id!.startsWith('collection_'))) {
+        final colIdStr = (system.id ?? system.folderName).replaceFirst(
+          'collection_',
+          '',
+        );
+        final collectionId = int.tryParse(colIdStr);
+        if (collectionId != null) {
+          final databaseGames =
+              (await CollectionRepository.getGamesForCollection(
+                collectionId,
+              )).where((dbGame) => !dbGame.isHidden).toList();
+
+          final systemIds = databaseGames
+              .map((g) => g.appSystemId)
+              .whereType<String>()
+              .toSet();
+
+          final settingsBySystem = <String, Map<String, dynamic>>{};
+          final extensionsBySystem = <String, Set<String>>{};
+          for (final sid in systemIds) {
+            settingsBySystem[sid] = await SystemRepository.getSystemSettings(
+              sid,
+            );
+            final exts = await SystemRepository.getExtensionsForSystem(sid);
+            extensionsBySystem[sid] = exts.map((e) => e.toLowerCase()).toSet();
+          }
+
+          return databaseGames.map((dbGame) {
+            final sid = dbGame.appSystemId ?? '';
+            final settings = settingsBySystem[sid] ?? {};
+            final preferFileName = (settings['prefer_file_name'] ?? 0) == 1;
+            final hideExtension = (settings['hide_extension'] ?? 1) == 1;
+            final hideParentheses = (settings['hide_parentheses'] ?? 1) == 1;
+            final hideBrackets = (settings['hide_brackets'] ?? 1) == 1;
+            final extSet = extensionsBySystem[sid] ?? {};
+
+            final resolved = _resolveListDisplayName(
+              dbGame: dbGame,
+              preferFileName: preferFileName,
+              hideExtension: hideExtension,
+              hideParentheses: hideParentheses,
+              hideBrackets: hideBrackets,
+              validExtensionsSet: extSet,
+            );
+
+            return GameModel(
+              romname: dbGame.filename,
+              realname: dbGame.realName ?? dbGame.filename,
+              name: resolved.name,
+              showRomFileNameSubtitle: resolved.showRomFileNameSubtitle,
+              descriptions: dbGame.descriptions,
+              year: dbGame.year ?? '',
+              developer: dbGame.developer ?? '',
+              publisher: dbGame.publisher ?? '',
+              genre: dbGame.genre ?? '',
+              players: dbGame.players ?? '',
+              rating: dbGame.rating ?? 0.0,
+              isFavorite: dbGame.isFavorite,
+              lastPlayed: dbGame.lastPlayed,
+              playTime: dbGame.playTime,
+              romPath: dbGame.romPath,
+              emulatorName: dbGame.emulatorName,
+              coreName: dbGame.coreName,
+              raHash: dbGame.raHash,
+              idRa: dbGame.idRa,
+              systemRaId: dbGame.systemRaId,
+              raNumAchievements: dbGame.raNumAchievements,
+              systemId: dbGame.appSystemId,
+              systemFolderName: dbGame.systemFolderName,
+              systemRealName: dbGame.systemRealName,
+              cloudSyncEnabled: dbGame.cloudSyncEnabled,
+              titleId: dbGame.titleId,
+              titleName: dbGame.titleName,
+            );
+          }).toList();
+        }
       }
 
       if (system.folderName == 'all') {

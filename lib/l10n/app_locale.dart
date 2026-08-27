@@ -218,6 +218,39 @@ mixin AppLocale {
   static const String showRommTabSubtitle = 'show_romm_tab_subtitle';
   static const String showSearchTab = 'show_search_tab';
   static const String showSearchTabSubtitle = 'show_search_tab_subtitle';
+  static const String showCollectionsTab = 'show_collections_tab';
+  static const String showCollectionsTabSubtitle =
+      'show_collections_tab_subtitle';
+
+  // ---------------------------------------------------------------------------
+  // Collections
+  // ---------------------------------------------------------------------------
+  static const String collections = 'collections';
+  static const String createCollection = 'create_collection';
+  static const String editCollection = 'edit_collection';
+  static const String renameCollection = 'rename_collection';
+  static const String deleteCollection = 'delete_collection';
+  static const String deleteCollectionConfirm = 'delete_collection_confirm';
+  static const String collectionName = 'collection_name';
+  static const String collectionNameHint = 'collection_name_hint';
+  static const String collectionDescription = 'collection_description';
+  static const String noCollectionsTitle = 'no_collections_title';
+  static const String noCollectionsSubtitle = 'no_collections_subtitle';
+  static const String emptyCollectionTitle = 'empty_collection_title';
+  static const String emptyCollectionSubtitle = 'empty_collection_subtitle';
+  static const String addGames = 'add_games';
+  static const String manageGames = 'manage_games';
+  static const String removeFromCollection = 'remove_from_collection';
+  static const String removeFromCollectionConfirm =
+      'remove_from_collection_confirm';
+  static const String gamesCountSingle = 'games_count_single';
+  static const String gamesCountPlural = 'games_count_plural';
+  static const String collectionCreated = 'collection_created';
+  static const String collectionUpdated = 'collection_updated';
+  static const String collectionDeleted = 'collection_deleted';
+  static const String searchGames = 'search_games';
+  static const String selectGames = 'select_games';
+  static const String noGamesFound = 'no_games_found';
 
   // ---------------------------------------------------------------------------
   // Directories

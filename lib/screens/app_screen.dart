@@ -23,6 +23,7 @@ import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
 import 'neo_sync_screen/login_screen/neo_sync_content.dart';
 import 'romm_screen/romm_tab.dart';
+import 'package:neostation/screens/collections_screen/collections_tab.dart';
 import '../widgets/scraper_content.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
@@ -43,21 +44,21 @@ class AppScreen extends StatefulWidget {
 
 /// Top-level navigation tab order.
 ///
-/// The header renders tabs in this order and [AppScreenState] delegates input
-/// per tab, so both must agree — these constants are the single definition of
-/// that order. Inserting a tab shifts every later index, which is why the
-/// delegation logic below is written against these names rather than literals.
+/// Order MUST agree with [NavTab] in `utils/nav_tabs.dart`, where the
+/// corresponding enum value drives the tab's spec (asset, label, hidden
+/// predicate).
 abstract final class AppTabs {
   static const int systems = 0;
   static const int search = 1;
-  static const int sync = 2;
-  static const int achievements = 3;
-  static const int scraper = 4;
-  static const int romm = 5;
-  static const int settings = 6;
+  static const int collections = 2;
+  static const int sync = 3;
+  static const int achievements = 4;
+  static const int scraper = 5;
+  static const int romm = 6;
+  static const int settings = 7;
 
   /// Total number of tabs, used for wrap-around when cycling with the bumpers.
-  static const int count = 7;
+  static const int count = 8;
 }
 
 /// Bridge class providing static access to the main application navigation state.
@@ -616,6 +617,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         case AppTabs.search:
           tabName = 'Search';
           break;
+        case AppTabs.collections:
+          tabName = 'Collections';
+          break;
         case AppTabs.sync:
           tabName = 'Sync';
           break;
@@ -773,6 +777,13 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
           _gamepadNav.deactivate();
         });
         return const SearchScreen();
+      case AppTabs.collections:
+        // Collections tab manages its own gamepad navigation layer,
+        // so hand off focus like search/sync/romm do.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _gamepadNav.deactivate();
+        });
+        return const CollectionsTab();
       case AppTabs.sync:
         // NeoSync tab manages its own focus lifecycle due to complex login flows.
         WidgetsBinding.instance.addPostFrameCallback((_) {

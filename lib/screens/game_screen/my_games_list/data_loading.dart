@@ -16,9 +16,8 @@ extension _DataLoading on _SystemGamesListState {
     try {
       String? systemId;
 
-      // In 'Global Library' mode, resolve the game's native hardware system ID.
-      if ((widget.system.folderName == 'all' ||
-              widget.system.folderName == SystemFolderNames.favorites) &&
+      // In 'Global Library' / Collection mode, resolve the game's native hardware system ID.
+      if (widget.system.isMultiSystem &&
           _selectedGame!.systemFolderName != null) {
         final originalSystem = await SystemRepository.getSystemByFolderName(
           _selectedGame!.systemFolderName!,

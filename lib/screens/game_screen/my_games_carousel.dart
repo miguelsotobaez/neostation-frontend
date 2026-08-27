@@ -23,7 +23,6 @@ import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
-import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/services/retro_achievements_helper.dart';
@@ -537,9 +536,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (mounted) setState(() {});
   }
 
-  bool get _isAllMode =>
-      widget.system.folderName == SystemFolderNames.all ||
-      widget.system.folderName == SystemFolderNames.favorites;
+  bool get _isAllMode => widget.system.isMultiSystem;
 
   SystemModel _effectiveSystemFor(GameModel game) {
     final systemFolderName = game.systemFolderName;
@@ -748,9 +745,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   }
 
   String _folderForGame(GameModel game) {
-    if ((widget.system.folderName == SystemFolderNames.all ||
-            widget.system.folderName == SystemFolderNames.favorites) &&
-        game.systemFolderName != null) {
+    if (widget.system.isMultiSystem && game.systemFolderName != null) {
       return game.systemFolderName!;
     }
     return widget.system.primaryFolderName;
