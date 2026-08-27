@@ -188,6 +188,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.collections: '收藏集',
   AppLocale.createCollection: '建立收藏集',
   AppLocale.editCollection: '編輯收藏集',
+  AppLocale.collectionImages: '收藏集圖片',
   AppLocale.renameCollection: '重新命名收藏集',
   AppLocale.deleteCollection: '刪除收藏集',
   AppLocale.deleteCollectionConfirm: '確定要刪除此收藏集嗎？遊戲不會從您的遊戲庫中刪除。',

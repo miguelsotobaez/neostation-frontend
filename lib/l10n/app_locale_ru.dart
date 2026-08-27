@@ -227,6 +227,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.collections: 'Коллекции',
   AppLocale.createCollection: 'Создать коллекцию',
   AppLocale.editCollection: 'Редактировать коллекцию',
+  AppLocale.collectionImages: 'Изображения коллекции',
   AppLocale.renameCollection: 'Переименовать коллекцию',
   AppLocale.deleteCollection: 'Удалить коллекцию',
   AppLocale.deleteCollectionConfirm:

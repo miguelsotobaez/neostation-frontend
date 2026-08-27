@@ -231,6 +231,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.collections: 'Colecciones',
   AppLocale.createCollection: 'Crear colección',
   AppLocale.editCollection: 'Editar colección',
+  AppLocale.collectionImages: 'Imágenes de la colección',
   AppLocale.renameCollection: 'Renombrar colección',
   AppLocale.deleteCollection: 'Eliminar colección',
   AppLocale.deleteCollectionConfirm:

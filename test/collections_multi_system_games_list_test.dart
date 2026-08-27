@@ -148,7 +148,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text(AppLocale.en[AppLocale.systemImages]!),
+          find.text(AppLocale.en[AppLocale.collectionImages]!),
           findsOneWidget,
         );
         expect(

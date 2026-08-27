@@ -191,6 +191,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.collections: 'コレクション',
   AppLocale.createCollection: 'コレクションを作成',
   AppLocale.editCollection: 'コレクションを編集',
+  AppLocale.collectionImages: 'コレクション画像',
   AppLocale.renameCollection: 'コレクション名を変更',
   AppLocale.deleteCollection: 'コレクションを削除',
   AppLocale.deleteCollectionConfirm:

@@ -190,6 +190,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.collections: '컬렉션',
   AppLocale.createCollection: '컬렉션 생성',
   AppLocale.editCollection: '컬렉션 편집',
+  AppLocale.collectionImages: '컬렉션 이미지',
   AppLocale.renameCollection: '컬렉션 이름 변경',
   AppLocale.deleteCollection: '컬렉션 삭제',
   AppLocale.deleteCollectionConfirm: '이 컬렉션을 삭제하시겠습니까? 라이브러리에서 게임이 삭제되지는 않습니다.',

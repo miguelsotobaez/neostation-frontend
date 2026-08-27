@@ -228,6 +228,7 @@ mixin AppLocale {
   static const String collections = 'collections';
   static const String createCollection = 'create_collection';
   static const String editCollection = 'edit_collection';
+  static const String collectionImages = 'collection_images';
   static const String renameCollection = 'rename_collection';
   static const String deleteCollection = 'delete_collection';
   static const String deleteCollectionConfirm = 'delete_collection_confirm';

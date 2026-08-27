@@ -221,6 +221,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.collections: 'Koleksi',
   AppLocale.createCollection: 'Buat Koleksi',
   AppLocale.editCollection: 'Edit Koleksi',
+  AppLocale.collectionImages: 'Gambar Koleksi',
   AppLocale.renameCollection: 'Ganti Nama Koleksi',
   AppLocale.deleteCollection: 'Hapus Koleksi',
   AppLocale.deleteCollectionConfirm:
