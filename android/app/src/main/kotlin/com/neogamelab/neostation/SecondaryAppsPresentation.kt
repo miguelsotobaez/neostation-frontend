@@ -61,12 +61,26 @@ class SecondaryAppsPresentation(
      * key handling of its own, so it never needs key focus: FLAG_NOT_FOCUSABLE
      * keeps touch working while leaving every key event, and the focused
      * display, with the main activity on top.
+     *
+     * FLAG_ALT_FOCUSABLE_IM rides along because FLAG_NOT_FOCUSABLE on its own
+     * also declares "this window does not interact with the input method", and
+     * such a window is layered *above* the IME window on its display. Dual-screen
+     * handhelds can pin the keyboard to the bottom screen (on the AYN Thor,
+     * Settings.System `ime_show_on_second`), and there the IME window is created
+     * on this display while the edit field stays on the main one — so our
+     * full-screen panel simply covered it and typing anywhere in NeoStation
+     * showed no keyboard at all. Adding the flag inverts only that IME
+     * relationship ("behind/away from the IME") and leaves key focus where it
+     * is: still not focusable, so this window can never become the IME target.
      */
     private fun hardenAgainstDismissal() {
         setCancelable(false)
         setCanceledOnTouchOutside(false)
         try {
-            window?.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            window?.addFlags(
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+            )
         } catch (e: Exception) {
             Log.w(TAG, "Could not make secondary window non-focusable: ${e.message}")
         }
