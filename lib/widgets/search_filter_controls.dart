@@ -13,6 +13,7 @@ class SearchFilterChip extends StatelessWidget {
     required this.isFocused,
     required this.isActive,
     required this.onTap,
+    this.maxValueWidth,
   });
 
   final String label;
@@ -20,6 +21,7 @@ class SearchFilterChip extends StatelessWidget {
   final bool isFocused;
   final bool isActive;
   final VoidCallback onTap;
+  final double? maxValueWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +59,7 @@ class SearchFilterChip extends StatelessWidget {
               ),
             ),
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 140.r),
+              constraints: BoxConstraints(maxWidth: maxValueWidth ?? 140.r),
               child: Text(
                 value,
                 overflow: TextOverflow.ellipsis,

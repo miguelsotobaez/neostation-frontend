@@ -63,6 +63,7 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
   final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final ScrollController _filterScrollController = ScrollController();
+  final Map<String, GlobalKey> _gameRowKeys = {};
   late final GamepadNavigation _gamepadNav;
 
   List<GameModel> _allGames = [];
@@ -410,29 +411,29 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
       } else {
         _selectedRomPaths.add(romPath);
       }
+      final lastIndex = _filteredGames.length - 1;
+      _focusedGameIndex = lastIndex < 0
+          ? 0
+          : _focusedGameIndex.clamp(0, lastIndex);
     });
+    _scrollToFocusedGame();
   }
 
   void _scrollToFocusedGame() {
-    if (!_scrollController.hasClients) return;
-    const itemHeight = 64.0;
-    final targetOffset = _focusedGameIndex * itemHeight;
-    final currentOffset = _scrollController.offset;
-    final viewportHeight = _scrollController.position.viewportDimension;
-
-    if (targetOffset < currentOffset) {
-      _scrollController.animateTo(
-        targetOffset,
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _filteredGames.isEmpty) return;
+      final index = _focusedGameIndex.clamp(0, _filteredGames.length - 1);
+      final game = _filteredGames[index];
+      final rowContext =
+          _gameRowKeys[game.romPath ?? game.romname]?.currentContext;
+      if (rowContext == null) return;
+      Scrollable.ensureVisible(
+        rowContext,
+        alignment: 0.5,
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
       );
-    } else if (targetOffset + itemHeight > currentOffset + viewportHeight) {
-      _scrollController.animateTo(
-        targetOffset + itemHeight - viewportHeight,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-      );
-    }
+    });
   }
 
   void _finishAndSave() {
@@ -522,98 +523,93 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
                 // Search Bar & System Filters Row
                 Padding(
                   padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 8.h),
-                  child: Column(
+                  child: Row(
                     children: [
-                      TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        textInputAction: TextInputAction.done,
-                        style: TextStyle(fontSize: 14.sp),
-                        decoration: InputDecoration(
-                          hintText: AppLocale.searchGames.getString(context),
-                          prefixIcon: const Icon(Symbols.search_rounded),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Symbols.close_rounded),
-                                  onPressed: () {
-                                    setState(() {
-                                      _searchController.clear();
-                                      _searchQuery = '';
-                                      _focusedGameIndex = 0;
-                                    });
-                                  },
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: theme.cardColor.withValues(alpha: 0.4),
-                          contentPadding: EdgeInsets.symmetric(vertical: 10.h),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.r),
-                            borderSide: BorderSide(
-                              color: (_focusBand == _FocusBand.search)
-                                  ? primaryColor
-                                  : theme.dividerColor.withValues(alpha: 0.2),
-                              width: (_focusBand == _FocusBand.search)
-                                  ? 2.r
-                                  : 1.r,
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          textInputAction: TextInputAction.done,
+                          style: TextStyle(fontSize: 14.sp),
+                          decoration: InputDecoration(
+                            hintText: AppLocale.searchGames.getString(context),
+                            prefixIcon: const Icon(Symbols.search_rounded),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Symbols.close_rounded),
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchController.clear();
+                                        _searchQuery = '';
+                                        _focusedGameIndex = 0;
+                                      });
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: theme.cardColor.withValues(alpha: 0.4),
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 10.h,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                              borderSide: BorderSide(
+                                color: (_focusBand == _FocusBand.search)
+                                    ? primaryColor
+                                    : theme.dividerColor.withValues(alpha: 0.2),
+                                width: (_focusBand == _FocusBand.search)
+                                    ? 2.r
+                                    : 1.r,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                              borderSide: BorderSide(
+                                color: (_focusBand == _FocusBand.search)
+                                    ? primaryColor
+                                    : theme.dividerColor.withValues(alpha: 0.2),
+                                width: (_focusBand == _FocusBand.search)
+                                    ? 2.r
+                                    : 1.r,
+                              ),
                             ),
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.r),
-                            borderSide: BorderSide(
-                              color: (_focusBand == _FocusBand.search)
-                                  ? primaryColor
-                                  : theme.dividerColor.withValues(alpha: 0.2),
-                              width: (_focusBand == _FocusBand.search)
-                                  ? 2.r
-                                  : 1.r,
-                            ),
-                          ),
+                          onChanged: (val) {
+                            setState(() {
+                              _focusBand = _FocusBand.search;
+                              _searchQuery = val.trim();
+                              _focusedGameIndex = 0;
+                            });
+                          },
+                          onSubmitted: (_) => _searchFocusNode.unfocus(),
                         ),
-                        onChanged: (val) {
-                          setState(() {
-                            _focusBand = _FocusBand.search;
-                            _searchQuery = val.trim();
-                            _focusedGameIndex = 0;
-                          });
-                        },
-                        onSubmitted: (_) => _searchFocusNode.unfocus(),
                       ),
-                      SizedBox(height: 6.h),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            SearchFilterChip(
-                              label: AppLocale.systems.getString(context),
-                              value: _selectedSystemLabel,
-                              isFocused: _focusBand == _FocusBand.systemFilter,
-                              isActive: _selectedSystemId != null,
-                              onTap: () {
-                                _searchFocusNode.unfocus();
-                                setState(
-                                  () => _focusBand = _FocusBand.systemFilter,
-                                );
-                                _openFilterMenu(_FilterMenuKind.system);
-                              },
-                            ),
-                            SearchFilterChip(
-                              label: AppLocale.selection.getString(context),
-                              value: _membershipFilterLabel,
-                              isFocused:
-                                  _focusBand == _FocusBand.selectionFilter,
-                              isActive:
-                                  _membershipFilter != _MembershipFilter.all,
-                              onTap: () {
-                                _searchFocusNode.unfocus();
-                                setState(
-                                  () => _focusBand = _FocusBand.selectionFilter,
-                                );
-                                _openFilterMenu(_FilterMenuKind.membership);
-                              },
-                            ),
-                          ],
-                        ),
+                      SizedBox(width: 6.w),
+                      SearchFilterChip(
+                        label: AppLocale.systems.getString(context),
+                        value: _selectedSystemLabel,
+                        maxValueWidth: 64.w,
+                        isFocused: _focusBand == _FocusBand.systemFilter,
+                        isActive: _selectedSystemId != null,
+                        onTap: () {
+                          _searchFocusNode.unfocus();
+                          setState(() => _focusBand = _FocusBand.systemFilter);
+                          _openFilterMenu(_FilterMenuKind.system);
+                        },
+                      ),
+                      SearchFilterChip(
+                        label: AppLocale.selection.getString(context),
+                        value: _membershipFilterLabel,
+                        maxValueWidth: 56.w,
+                        isFocused: _focusBand == _FocusBand.selectionFilter,
+                        isActive: _membershipFilter != _MembershipFilter.all,
+                        onTap: () {
+                          _searchFocusNode.unfocus();
+                          setState(
+                            () => _focusBand = _FocusBand.selectionFilter,
+                          );
+                          _openFilterMenu(_FilterMenuKind.membership);
+                        },
                       ),
                     ],
                   ),
@@ -658,7 +654,12 @@ class _CollectionAddGamesDialogState extends State<CollectionAddGamesDialog> {
                                 _focusBand == _FocusBand.results &&
                                 index == _focusedGameIndex;
 
+                            final rowKey = _gameRowKeys.putIfAbsent(
+                              romPath.isEmpty ? game.romname : romPath,
+                              GlobalKey.new,
+                            );
                             return MouseRegion(
+                              key: rowKey,
                               cursor: SystemMouseCursors.click,
                               child: GestureDetector(
                                 onTap: () {
