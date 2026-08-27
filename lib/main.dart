@@ -790,6 +790,14 @@ Future<void> subDisplay() async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint('--- [SECONDARY ENGINE] subDisplay signal received ---');
 
+  // This engine has its own VideoPlayerPlatform: main()'s registerWith() ran in
+  // the other isolate and never reached here, so without this the preview video
+  // falls back to the platform default (ExoPlayer on Android) while the main
+  // display plays through libmdk. ES-DE fallback videos can be .mkv/.avi/.wmv,
+  // none of which ExoPlayer decodes, so the same game would play up top and
+  // fail on the bottom screen.
+  registerWith();
+
   // The secondary display runs in its own engine/isolate, so it must set up
   // localization independently — otherwise AppLocale.getString() falls back to
   // raw keys here. Mirror the persisted-language init done in main().
