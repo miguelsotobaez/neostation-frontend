@@ -220,6 +220,40 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.showSearchTab: 'Suche-Tab anzeigen',
   AppLocale.showSearchTabSubtitle:
       'Zeigt den Suche-Tab in der Navigationsleiste an',
+  AppLocale.showCollectionsTab: 'Sammlungen-Tab anzeigen',
+  AppLocale.showCollectionsTabSubtitle:
+      'Zeigt den Sammlungen-Tab in der oberen Navigationsleiste an',
+
+  // Collections
+  AppLocale.collections: 'Sammlungen',
+  AppLocale.createCollection: 'Sammlung erstellen',
+  AppLocale.editCollection: 'Sammlung bearbeiten',
+  AppLocale.renameCollection: 'Sammlung umbenennen',
+  AppLocale.deleteCollection: 'Sammlung löschen',
+  AppLocale.deleteCollectionConfirm:
+      'Möchtest du diese Sammlung wirklich löschen? Spiele werden nicht aus deiner Bibliothek entfernt.',
+  AppLocale.collectionName: 'Name der Sammlung',
+  AppLocale.collectionNameHint: 'Sammlungsnamen eingeben...',
+  AppLocale.collectionDescription: 'Beschreibung',
+  AppLocale.noCollectionsTitle: 'Noch keine Sammlungen',
+  AppLocale.noCollectionsSubtitle:
+      'Erstelle Sammlungen, um deine Lieblingsspiele systemübergreifend zu organisieren.',
+  AppLocale.emptyCollectionTitle: 'Keine Spiele in der Sammlung',
+  AppLocale.emptyCollectionSubtitle:
+      'Füge dieser Sammlung Spiele aus deiner Bibliothek hinzu.',
+  AppLocale.addGames: 'Spiele hinzufügen',
+  AppLocale.manageGames: 'Spiele verwalten',
+  AppLocale.removeFromCollection: 'Aus Sammlung entfernen',
+  AppLocale.removeFromCollectionConfirm:
+      'Dieses Spiel aus der Sammlung entfernen?',
+  AppLocale.gamesCountSingle: '{count} Spiel',
+  AppLocale.gamesCountPlural: '{count} Spiele',
+  AppLocale.collectionCreated: 'Sammlung erstellt',
+  AppLocale.collectionUpdated: 'Sammlung aktualisiert',
+  AppLocale.collectionDeleted: 'Sammlung gelöscht',
+  AppLocale.searchGames: 'Spiele suchen...',
+  AppLocale.selectGames: 'Spiele auswählen',
+  AppLocale.noGamesFound: 'Keine Spiele gefunden',
 
   AppLocale.configureDirectories: 'Verzeichnisse konfigurieren',
   AppLocale.configureRomsFolder: 'ROM-Ordner konfigurieren',

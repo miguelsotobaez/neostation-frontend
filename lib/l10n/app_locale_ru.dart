@@ -219,6 +219,39 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.showSearchTab: 'Показывать вкладку поиска',
   AppLocale.showSearchTabSubtitle:
       'Отображает вкладку поиска на панели навигации',
+  AppLocale.showCollectionsTab: 'Показывать вкладку коллекций',
+  AppLocale.showCollectionsTabSubtitle:
+      'Отображать вкладку «Коллекции» на верхней панели навигации',
+
+  // Collections
+  AppLocale.collections: 'Коллекции',
+  AppLocale.createCollection: 'Создать коллекцию',
+  AppLocale.editCollection: 'Редактировать коллекцию',
+  AppLocale.renameCollection: 'Переименовать коллекцию',
+  AppLocale.deleteCollection: 'Удалить коллекцию',
+  AppLocale.deleteCollectionConfirm:
+      'Вы уверены, что хотите удалить эту коллекцию? Игры не будут удалены из вашей библиотеки.',
+  AppLocale.collectionName: 'Название коллекции',
+  AppLocale.collectionNameHint: 'Введите название коллекции...',
+  AppLocale.collectionDescription: 'Описание',
+  AppLocale.noCollectionsTitle: 'Пока нет коллекций',
+  AppLocale.noCollectionsSubtitle:
+      'Создавайте коллекции, чтобы группировать и упорядочивать любимые игры из разных систем.',
+  AppLocale.emptyCollectionTitle: 'В коллекции нет игр',
+  AppLocale.emptyCollectionSubtitle:
+      'Добавьте игры в эту коллекцию из вашей библиотеки.',
+  AppLocale.addGames: 'Добавить игры',
+  AppLocale.manageGames: 'Управление играми',
+  AppLocale.removeFromCollection: 'Удалить из коллекции',
+  AppLocale.removeFromCollectionConfirm: 'Удалить эту игру из коллекции?',
+  AppLocale.gamesCountSingle: '{count} игра',
+  AppLocale.gamesCountPlural: '{count} игр',
+  AppLocale.collectionCreated: 'Коллекция создана',
+  AppLocale.collectionUpdated: 'Коллекция обновлена',
+  AppLocale.collectionDeleted: 'Коллекция удалена',
+  AppLocale.searchGames: 'Поиск игр...',
+  AppLocale.selectGames: 'Выбрать игры',
+  AppLocale.noGamesFound: 'Игры не найдены',
 
   AppLocale.configureDirectories: 'Директории',
   AppLocale.configureRomsFolder: 'Настроить папку ROM',

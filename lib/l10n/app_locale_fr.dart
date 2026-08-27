@@ -227,6 +227,39 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.showSearchTab: 'Afficher l’onglet Rechercher',
   AppLocale.showSearchTabSubtitle:
       'Affiche l’onglet de recherche dans la barre de navigation',
+  AppLocale.showCollectionsTab: 'Afficher l’onglet Collections',
+  AppLocale.showCollectionsTabSubtitle:
+      'Affiche l’onglet Collections dans la barre de navigation supérieure',
+
+  // Collections
+  AppLocale.collections: 'Collections',
+  AppLocale.createCollection: 'Créer une collection',
+  AppLocale.editCollection: 'Modifier la collection',
+  AppLocale.renameCollection: 'Renommer la collection',
+  AppLocale.deleteCollection: 'Supprimer la collection',
+  AppLocale.deleteCollectionConfirm:
+      'Voulez-vous vraiment supprimer cette collection ? Les jeux ne seront pas retirés de votre bibliothèque.',
+  AppLocale.collectionName: 'Nom de la collection',
+  AppLocale.collectionNameHint: 'Entrez le nom de la collection...',
+  AppLocale.collectionDescription: 'Description',
+  AppLocale.noCollectionsTitle: 'Aucune collection pour l’instant',
+  AppLocale.noCollectionsSubtitle:
+      'Créez des collections pour regrouper et organiser vos jeux favoris entre systèmes.',
+  AppLocale.emptyCollectionTitle: 'Aucun jeu dans cette collection',
+  AppLocale.emptyCollectionSubtitle:
+      'Ajoutez des jeux à cette collection depuis votre bibliothèque.',
+  AppLocale.addGames: 'Ajouter des jeux',
+  AppLocale.manageGames: 'Gérer les jeux',
+  AppLocale.removeFromCollection: 'Retirer de la collection',
+  AppLocale.removeFromCollectionConfirm: 'Retirer ce jeu de la collection ?',
+  AppLocale.gamesCountSingle: '{count} jeu',
+  AppLocale.gamesCountPlural: '{count} jeux',
+  AppLocale.collectionCreated: 'Collection créée',
+  AppLocale.collectionUpdated: 'Collection mise à jour',
+  AppLocale.collectionDeleted: 'Collection supprimée',
+  AppLocale.searchGames: 'Rechercher des jeux...',
+  AppLocale.selectGames: 'Sélectionner des jeux',
+  AppLocale.noGamesFound: 'Aucun jeu trouvé',
 
   AppLocale.configureDirectories: 'Configurer les Répertoires',
   AppLocale.configureRomsFolder: 'Configurer le Dossier des ROMs',

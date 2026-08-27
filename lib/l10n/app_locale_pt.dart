@@ -219,6 +219,39 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.showSearchTab: 'Mostrar aba Pesquisar',
   AppLocale.showSearchTabSubtitle:
       'Exibe a aba de pesquisa na barra de navegação',
+  AppLocale.showCollectionsTab: 'Mostrar aba Coleções',
+  AppLocale.showCollectionsTabSubtitle:
+      'Exibir a aba Coleções na barra de navegação superior',
+
+  // Collections
+  AppLocale.collections: 'Coleções',
+  AppLocale.createCollection: 'Criar Coleção',
+  AppLocale.editCollection: 'Editar Coleção',
+  AppLocale.renameCollection: 'Renomear Coleção',
+  AppLocale.deleteCollection: 'Excluir Coleção',
+  AppLocale.deleteCollectionConfirm:
+      'Tem certeza de que deseja excluir esta coleção? Os jogos não serão removidos da sua biblioteca.',
+  AppLocale.collectionName: 'Nome da Coleção',
+  AppLocale.collectionNameHint: 'Digite o nome da coleção...',
+  AppLocale.collectionDescription: 'Descrição',
+  AppLocale.noCollectionsTitle: 'Nenhuma Coleção Ainda',
+  AppLocale.noCollectionsSubtitle:
+      'Crie coleções para agrupar e organizar seus jogos favoritos entre diferentes sistemas.',
+  AppLocale.emptyCollectionTitle: 'Nenhum Jogo na Coleção',
+  AppLocale.emptyCollectionSubtitle:
+      'Adicione jogos a esta coleção a partir da sua biblioteca.',
+  AppLocale.addGames: 'Adicionar Jogos',
+  AppLocale.manageGames: 'Gerenciar Jogos',
+  AppLocale.removeFromCollection: 'Remover da Coleção',
+  AppLocale.removeFromCollectionConfirm: 'Remover este jogo da coleção?',
+  AppLocale.gamesCountSingle: '{count} jogo',
+  AppLocale.gamesCountPlural: '{count} jogos',
+  AppLocale.collectionCreated: 'Coleção criada',
+  AppLocale.collectionUpdated: 'Coleção atualizada',
+  AppLocale.collectionDeleted: 'Coleção excluída',
+  AppLocale.searchGames: 'Buscar jogos...',
+  AppLocale.selectGames: 'Selecionar Jogos',
+  AppLocale.noGamesFound: 'Nenhum jogo encontrado',
 
   AppLocale.configureDirectories: 'Configurar Diretórios',
   AppLocale.configureRomsFolder: 'Configurar Pasta de ROMs',

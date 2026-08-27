@@ -221,6 +221,40 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.showSearchTab: 'Mostra scheda Cerca',
   AppLocale.showSearchTabSubtitle:
       'Mostra la scheda di ricerca nella barra di navigazione',
+  AppLocale.showCollectionsTab: 'Mostra scheda Collezioni',
+  AppLocale.showCollectionsTabSubtitle:
+      'Mostra la scheda Collezioni nella barra di navigazione superiore',
+
+  // Collections
+  AppLocale.collections: 'Collezioni',
+  AppLocale.createCollection: 'Crea collezione',
+  AppLocale.editCollection: 'Modifica collezione',
+  AppLocale.renameCollection: 'Rinomina collezione',
+  AppLocale.deleteCollection: 'Elimina collezione',
+  AppLocale.deleteCollectionConfirm:
+      'Sei sicuro di voler eliminare questa collezione? I giochi non verranno rimossi dalla tua libreria.',
+  AppLocale.collectionName: 'Nome della collezione',
+  AppLocale.collectionNameHint: 'Inserisci il nome della collezione...',
+  AppLocale.collectionDescription: 'Descrizione',
+  AppLocale.noCollectionsTitle: 'Nessuna collezione',
+  AppLocale.noCollectionsSubtitle:
+      'Crea collezioni per raggruppare e organizzare i tuoi giochi preferiti tra i vari sistemi.',
+  AppLocale.emptyCollectionTitle: 'Nessun gioco nella collezione',
+  AppLocale.emptyCollectionSubtitle:
+      'Aggiungi giochi a questa collezione dalla tua libreria.',
+  AppLocale.addGames: 'Aggiungi giochi',
+  AppLocale.manageGames: 'Gestisci giochi',
+  AppLocale.removeFromCollection: 'Rimuovi dalla collezione',
+  AppLocale.removeFromCollectionConfirm:
+      'Rimuovere questo gioco dalla collezione?',
+  AppLocale.gamesCountSingle: '{count} gioco',
+  AppLocale.gamesCountPlural: '{count} giochi',
+  AppLocale.collectionCreated: 'Collezione creata',
+  AppLocale.collectionUpdated: 'Collezione aggiornata',
+  AppLocale.collectionDeleted: 'Collezione eliminata',
+  AppLocale.searchGames: 'Cerca giochi...',
+  AppLocale.selectGames: 'Seleziona giochi',
+  AppLocale.noGamesFound: 'Nessun gioco trovato',
 
   AppLocale.configureDirectories: 'Configura Directory',
   AppLocale.configureRomsFolder: 'Configura Cartella ROM',

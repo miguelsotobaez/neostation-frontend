@@ -223,6 +223,40 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.showSearchTab: 'Mostrar pestaña Buscar',
   AppLocale.showSearchTabSubtitle:
       'Muestra la pestaña de búsqueda en la barra de navegación',
+  AppLocale.showCollectionsTab: 'Mostrar pestaña Colecciones',
+  AppLocale.showCollectionsTabSubtitle:
+      'Muestra la pestaña de Colecciones en la barra de navegación',
+
+  // Collections
+  AppLocale.collections: 'Colecciones',
+  AppLocale.createCollection: 'Crear colección',
+  AppLocale.editCollection: 'Editar colección',
+  AppLocale.renameCollection: 'Renombrar colección',
+  AppLocale.deleteCollection: 'Eliminar colección',
+  AppLocale.deleteCollectionConfirm:
+      '¿Estás seguro de que deseas eliminar esta colección? Los juegos no se eliminarán de tu biblioteca.',
+  AppLocale.collectionName: 'Nombre de la colección',
+  AppLocale.collectionNameHint: 'Introduce el nombre de la colección...',
+  AppLocale.collectionDescription: 'Descripción',
+  AppLocale.noCollectionsTitle: 'No hay colecciones',
+  AppLocale.noCollectionsSubtitle:
+      'Crea colecciones para agrupar y organizar tus juegos favoritos de varios sistemas.',
+  AppLocale.emptyCollectionTitle: 'No hay juegos en la colección',
+  AppLocale.emptyCollectionSubtitle:
+      'Añade juegos a esta colección desde tu biblioteca.',
+  AppLocale.addGames: 'Añadir juegos',
+  AppLocale.manageGames: 'Gestionar juegos',
+  AppLocale.removeFromCollection: 'Eliminar de la colección',
+  AppLocale.removeFromCollectionConfirm:
+      '¿Eliminar este juego de la colección?',
+  AppLocale.gamesCountSingle: '{count} juego',
+  AppLocale.gamesCountPlural: '{count} juegos',
+  AppLocale.collectionCreated: 'Colección creada',
+  AppLocale.collectionUpdated: 'Colección actualizada',
+  AppLocale.collectionDeleted: 'Colección eliminada',
+  AppLocale.searchGames: 'Buscar juegos...',
+  AppLocale.selectGames: 'Seleccionar juegos',
+  AppLocale.noGamesFound: 'No se encontraron juegos',
 
   AppLocale.configureDirectories: 'Directorios',
   AppLocale.configureRomsFolder: 'Configurar carpeta de ROMs',

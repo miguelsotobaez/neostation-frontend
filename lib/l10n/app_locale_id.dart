@@ -213,6 +213,39 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.showSearchTab: 'Tampilkan tab Cari',
   AppLocale.showSearchTabSubtitle:
       'Menampilkan tab pencarian di bilah navigasi',
+  AppLocale.showCollectionsTab: 'Tampilkan tab Koleksi',
+  AppLocale.showCollectionsTabSubtitle:
+      'Tampilkan tab Koleksi di bilah navigasi atas',
+
+  // Collections
+  AppLocale.collections: 'Koleksi',
+  AppLocale.createCollection: 'Buat Koleksi',
+  AppLocale.editCollection: 'Edit Koleksi',
+  AppLocale.renameCollection: 'Ganti Nama Koleksi',
+  AppLocale.deleteCollection: 'Hapus Koleksi',
+  AppLocale.deleteCollectionConfirm:
+      'Yakin ingin menghapus koleksi ini? Game tidak akan dihapus dari perpustakaan Anda.',
+  AppLocale.collectionName: 'Nama Koleksi',
+  AppLocale.collectionNameHint: 'Masukkan nama koleksi...',
+  AppLocale.collectionDescription: 'Deskripsi',
+  AppLocale.noCollectionsTitle: 'Belum Ada Koleksi',
+  AppLocale.noCollectionsSubtitle:
+      'Buat koleksi untuk mengelompokkan dan mengatur game favorit Anda antar sistem.',
+  AppLocale.emptyCollectionTitle: 'Tidak Ada Game dalam Koleksi',
+  AppLocale.emptyCollectionSubtitle:
+      'Tambahkan game ke koleksi ini dari perpustakaan Anda.',
+  AppLocale.addGames: 'Tambah Game',
+  AppLocale.manageGames: 'Kelola Game',
+  AppLocale.removeFromCollection: 'Hapus dari Koleksi',
+  AppLocale.removeFromCollectionConfirm: 'Hapus game ini dari koleksi?',
+  AppLocale.gamesCountSingle: '{count} game',
+  AppLocale.gamesCountPlural: '{count} game',
+  AppLocale.collectionCreated: 'Koleksi dibuat',
+  AppLocale.collectionUpdated: 'Koleksi diperbarui',
+  AppLocale.collectionDeleted: 'Koleksi dihapus',
+  AppLocale.searchGames: 'Cari game...',
+  AppLocale.selectGames: 'Pilih Game',
+  AppLocale.noGamesFound: 'Game tidak ditemukan',
 
   AppLocale.configureDirectories: 'Konfigurasi Direktori',
   AppLocale.configureRomsFolder: 'Konfigurasi Folder ROM',
