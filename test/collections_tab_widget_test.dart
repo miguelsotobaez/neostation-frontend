@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/widgets/game_collections_dropdown.dart';
 import 'package:neostation/widgets/search_filter_controls.dart';
+import 'package:neostation/widgets/native_carousel.dart';
 
 import 'database_test_helper.dart';
 
@@ -124,6 +125,40 @@ void main() {
 
     expect(find.text('Arcade Hits'), findsWidgets);
     expect(find.text(AppLocale.en[AppLocale.collectionName]!), findsOneWidget);
+  });
+
+  testWidgets('collection list follows the shared carousel view mode', (
+    tester,
+  ) async {
+    final collectionProvider = CollectionProvider();
+    await collectionProvider.createCollection(name: 'Arcade Hits');
+    final configProvider = SqliteConfigProvider();
+    await configProvider.updateSystemViewMode('carousel');
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: collectionProvider),
+          ChangeNotifierProvider.value(value: configProvider),
+          ChangeNotifierProvider(create: (_) => SqliteDatabaseProvider()),
+          ChangeNotifierProvider(create: (_) => NeoAssetsProvider()),
+        ],
+        child: ScreenUtilInit(
+          designSize: const Size(640, 480),
+          builder: (context, child) => MaterialApp(
+            localizationsDelegates:
+                FlutterLocalization.instance.localizationsDelegates,
+            supportedLocales: FlutterLocalization.instance.supportedLocales,
+            home: const Scaffold(body: CollectionsTab()),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NativeCarousel), findsOneWidget);
+    expect(find.text('Arcade Hits'), findsWidgets);
   });
 
   testWidgets('CollectionAddGamesDialog renders search, system filter and footer', (
