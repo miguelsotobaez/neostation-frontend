@@ -107,6 +107,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(AppLocale.en[AppLocale.manage]!), findsOneWidget);
+    expect(
+      find.text(AppLocale.en[AppLocale.createCollection]!),
+      findsOneWidget,
+    );
     expect(find.text(AppLocale.en[AppLocale.edit]!), findsNothing);
     expect(find.text(AppLocale.en[AppLocale.editCollection]!), findsNothing);
 
@@ -125,6 +129,45 @@ void main() {
 
     expect(find.text('Arcade Hits'), findsWidgets);
     expect(find.text(AppLocale.en[AppLocale.collectionName]!), findsOneWidget);
+  });
+
+  testWidgets('populated collection list can create another collection', (
+    tester,
+  ) async {
+    final collectionProvider = CollectionProvider();
+    await collectionProvider.createCollection(name: 'First');
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: collectionProvider),
+          ChangeNotifierProvider(create: (_) => SqliteConfigProvider()),
+          ChangeNotifierProvider(create: (_) => SqliteDatabaseProvider()),
+          ChangeNotifierProvider(create: (_) => NeoAssetsProvider()),
+        ],
+        child: ScreenUtilInit(
+          designSize: const Size(640, 480),
+          builder: (context, child) => MaterialApp(
+            localizationsDelegates:
+                FlutterLocalization.instance.localizationsDelegates,
+            supportedLocales: FlutterLocalization.instance.supportedLocales,
+            home: const Scaffold(body: CollectionsTab()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(AppLocale.en[AppLocale.createCollection]!));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Second');
+    await tester.tap(find.text('Create [A]'));
+    await tester.pumpAndSettle();
+
+    expect(
+      collectionProvider.collections.map((c) => c.name),
+      contains('Second'),
+    );
   });
 
   testWidgets('collection list follows the shared carousel view mode', (

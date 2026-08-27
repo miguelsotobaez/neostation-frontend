@@ -141,6 +141,7 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
             onSelected: selectIndex,
             onEnter: (index) => widget.onSelectCollection(collections[index]),
             onManage: (index) => _showOptionsFor(collections[index]),
+            onCreate: _openCreateDialog,
           );
         }
 
@@ -178,9 +179,7 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
                     }
                   },
                   onYPressed: () {
-                    if (safeIndex < collections.length) {
-                      _showOptionsFor(collections[safeIndex]);
-                    }
+                    _openCreateDialog();
                   },
                 ),
               ),
@@ -199,6 +198,9 @@ class _CollectionsOverviewState extends State<CollectionsOverview> {
                 _showOptionsFor(collections[safeIndex]);
               },
               settingsLabel: AppLocale.manage.getString(context),
+              onExtra: _openCreateDialog,
+              extraLabel: AppLocale.createCollection.getString(context),
+              extraIconPath: 'assets/images/gamepad/Xbox_Y_button.png',
             ),
           ],
         );
@@ -305,6 +307,7 @@ class _CollectionsCarousel extends StatefulWidget {
     required this.onSelected,
     required this.onEnter,
     required this.onManage,
+    required this.onCreate,
   });
 
   final List<CollectionModel> collections;
@@ -312,6 +315,7 @@ class _CollectionsCarousel extends StatefulWidget {
   final ValueChanged<int> onSelected;
   final ValueChanged<int> onEnter;
   final ValueChanged<int> onManage;
+  final VoidCallback onCreate;
 
   @override
   State<_CollectionsCarousel> createState() => _CollectionsCarouselState();
@@ -337,7 +341,7 @@ class _CollectionsCarouselState extends State<_CollectionsCarousel> {
       },
       onSelectItem: () => widget.onEnter(_currentIndex),
       onSettings: () => widget.onManage(_currentIndex),
-      onFavorite: () => widget.onManage(_currentIndex),
+      onFavorite: widget.onCreate,
       onXButton: () =>
           HeaderSortDropdown.globalKey.currentState?.showDropdown(),
       onPreviousTab: AppNavigation.previousTab,
@@ -422,6 +426,9 @@ class _CollectionsCarouselState extends State<_CollectionsCarousel> {
           onEnter: () => widget.onEnter(_currentIndex),
           onSettings: () => widget.onManage(_currentIndex),
           settingsLabel: AppLocale.manage.getString(context),
+          onExtra: widget.onCreate,
+          extraLabel: AppLocale.createCollection.getString(context),
+          extraIconPath: 'assets/images/gamepad/Xbox_Y_button.png',
         ),
       ],
     );
