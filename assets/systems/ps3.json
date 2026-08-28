@@ -70,7 +70,7 @@
       "platforms": {
         "windows": {
           "executable": "rpcs3.exe",
-          "args": "--no-gui bootPath{file.path}\""
+          "args": "--no-gui \"{file.path}\""
         },
         "linux": {
           "executable": "rpcs3",
