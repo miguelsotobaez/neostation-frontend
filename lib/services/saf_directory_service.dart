@@ -168,8 +168,13 @@ class SafDirectoryService {
   /// happens natively so only matching files cross the channel.
   ///
   /// Returns null when the fast path does not apply — a non-primary volume (SD
-  /// card, USB OTG), MANAGE_EXTERNAL_STORAGE not held, or an unreadable path.
+  /// card, USB OTG), MANAGE_EXTERNAL_STORAGE not held, an unreadable path, or a
+  /// directory that fails to list part-way through the walk.
   /// Callers must fall back to [listFiles]; null never means "no files".
+  ///
+  /// An empty (non-null) result is not proof of an empty directory either: it is
+  /// only as trustworthy as the storage mount the walk read through. Callers that
+  /// treat absence as deletion must confirm it against [listFiles].
   static Future<List<Map<String, dynamic>>?> fastWalkTree(
     String uri, {
     required bool recursive,

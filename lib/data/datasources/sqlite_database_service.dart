@@ -11,6 +11,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart';
 
 /// Summary report of a ROM scanning operation for a specific system.
 class ScanSummary {
@@ -1156,14 +1157,15 @@ class SqliteDatabaseService {
     // Fast path: walk the tree with direct filesystem I/O in one native call
     // instead of a DocumentsProvider query per directory. Returns null when it
     // cannot prove equivalence (non-primary volume, permission not held), in
-    // which case the SAF walk below runs unchanged.
+    // which case the SAF walk below runs unchanged — as it also does when the
+    // fast walk claims a directory is empty and the DocumentsProvider disagrees.
     final fastEntries = await SafDirectoryService.fastWalkTree(
       uri,
       recursive: recursive,
       extensions: validExtensions,
       ignoreHiddenFiles: ignoreHiddenFiles,
     );
-    if (fastEntries != null) {
+    if (fastEntries != null && fastEntries.isNotEmpty) {
       for (final item in fastEntries) {
         entries.add(
           RomEntry(
@@ -1173,12 +1175,48 @@ class SqliteDatabaseService {
           ),
         );
       }
-      final fastWalkNote = fastEntries.isEmpty ? ' (empty, non-null)' : '';
       _log.i(
         'SafScan[${path.basename(uri)}]: fast walk found ${entries.length} '
-        'entries$fastWalkNote',
+        'entries',
       );
       return entries;
+    }
+
+    // An empty result is the one answer the fast walk must not be taken at its
+    // word on. `File.listFiles()` returns null on an I/O or permission failure,
+    // and a storage mount that has not caught up with MANAGE_EXTERNAL_STORAGE
+    // makes that failure indistinguishable from an empty directory: the path
+    // still reports as a readable directory, it just lists nothing. The scan
+    // then reads "no files" as "every ROM for this system was deleted" and
+    // prunes the rows, taking favourites, play time and per-game settings with
+    // them. Ask the DocumentsProvider, which reads the tree by a wholly
+    // different route, before believing it.
+    //
+    // The extra query lands only where the fast path saved nothing: a directory
+    // that really is empty answers immediately, and one that turns out to hold
+    // files needed the query anyway.
+    if (fastEntries != null) {
+      final visibleChildren = visibleSafChildren(
+        await SafDirectoryService.listFiles(uri),
+        ignoreHiddenFiles: ignoreHiddenFiles,
+      );
+      if (visibleChildren.isEmpty) {
+        _log.i(
+          'SafScan[${path.basename(uri)}]: fast walk found 0 entries '
+          '(confirmed empty by the DocumentsProvider)',
+        );
+        return entries;
+      }
+      final directoryCount = visibleChildren
+          .where((child) => child['isDirectory'] == true)
+          .length;
+      _log.w(
+        'SafScan[${path.basename(uri)}]: fast walk found 0 entries but the '
+        'DocumentsProvider lists ${visibleChildren.length} child(ren) '
+        '($directoryCount directories) - distrusting the fast walk and '
+        're-walking with SAF',
+      );
+      // Falls through to the SAF walk below.
     }
 
     try {
@@ -1308,6 +1346,27 @@ class SqliteDatabaseService {
   static bool _isDotEntryName(String name) {
     final trimmed = name.trim();
     return trimmed.isNotEmpty && trimmed.startsWith('.');
+  }
+
+  /// The DocumentsProvider's view of a directory the fast walk called empty,
+  /// with the entries the scan ignores removed.
+  ///
+  /// Hidden entries are dropped so a folder holding nothing but a `.nomedia`
+  /// still reads as empty: it holds no ROMs either way, and treating it as a
+  /// contradiction would send every such folder down the slow walk for nothing.
+  /// Anything left is a file or directory the fast walk should have seen and
+  /// did not, which makes its answer unusable.
+  @visibleForTesting
+  static List<Map<String, dynamic>> visibleSafChildren(
+    List<Map<String, dynamic>> children, {
+    bool ignoreHiddenFiles = true,
+  }) {
+    return children
+        .where(
+          (child) =>
+              !_shouldSkipSafEntry(child, ignoreHiddenFiles: ignoreHiddenFiles),
+        )
+        .toList();
   }
 
   static bool _shouldSkipSafEntry(

@@ -1327,7 +1327,9 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
      *
      * Returns null — meaning "caller should use the SAF walk" — whenever the fast
      * path is not provably equivalent: non-primary volume (SD, USB OTG), permission
-     * not held, or the path not resolving to a readable directory.
+     * not held, the path not resolving to a readable directory, or any directory
+     * failing to list mid-walk. It never reports a directory it could not read as
+     * an empty one.
      */
     private fun fastWalkSafTree(
         uriString: String,
@@ -1395,7 +1397,23 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 while (stack.isNotEmpty()) {
                     val (dir, dirDocId) = stack.removeLast()
                     if (!visited.add(dir.canonicalPath)) continue
-                    val children = dir.listFiles() ?: continue
+                    // listFiles() returns null on an I/O or permission failure,
+                    // which at this level is indistinguishable from an empty
+                    // directory. Skipping it would report every file it holds as
+                    // deleted, so decline the whole walk instead and let the SAF
+                    // walk -- which reaches the tree through the
+                    // DocumentsProvider rather than direct I/O -- answer. This is
+                    // the contract the Dart side documents: null means "cannot
+                    // serve this", never "no files".
+                    val children = dir.listFiles()
+                    if (children == null) {
+                        android.util.Log.w(
+                            "MainActivity",
+                            "fastWalkSafTree: listFiles() failed for ${dir.path}, falling back"
+                        )
+                        runOnUiThread { result.success(null) }
+                        return@Thread
+                    }
                     // Sorted so the result order does not depend on filesystem order.
                     children.sortBy { it.name }
 
