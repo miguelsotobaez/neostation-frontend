@@ -49,6 +49,9 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.systemArtError: '시스템 아트를 불러올 수 없습니다',
   AppLocale.systemArtApplyTitle: '시스템 아트를 적용할까요?',
   AppLocale.systemArtApplyBody: '모든 시스템용 시스템 아트 팩을 다운로드합니다. 다소 시간이 걸릴 수 있습니다.',
+  AppLocale.systemArtRedownloadTitle: '시스템 아트를 다시 다운로드할까요?',
+  AppLocale.systemArtRedownloadBody:
+      '캐시된 팩을 삭제하고 다시 다운로드합니다. 일부 시스템 배경이 표시되지 않을 때 사용하세요.',
   AppLocale.systemArtDownloading: '시스템 아트 팩 다운로드 중...',
   AppLocale.about: '소개',
   AppLocale.exit: '종료',

@@ -52,6 +52,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.systemArtApplyTitle: 'Применить System Art?',
   AppLocale.systemArtApplyBody:
       'Пакет System Art будет загружен для всех систем. Это может занять некоторое время.',
+  AppLocale.systemArtRedownloadTitle: 'Загрузить System Art заново?',
+  AppLocale.systemArtRedownloadBody:
+      'Кэшированный пакет будет удалён и загружен заново. Используйте это, если отсутствуют некоторые фоны систем.',
   AppLocale.systemArtDownloading: 'Загрузка пакета System Art...',
   AppLocale.about: 'О программе',
   AppLocale.exit: 'Выход',

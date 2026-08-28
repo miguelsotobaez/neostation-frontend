@@ -72,6 +72,8 @@ mixin AppLocale {
   static const String systemArtError = 'system_art_error';
   static const String systemArtApplyTitle = 'system_art_apply_title';
   static const String systemArtApplyBody = 'system_art_apply_body';
+  static const String systemArtRedownloadTitle = 'system_art_redownload_title';
+  static const String systemArtRedownloadBody = 'system_art_redownload_body';
   static const String systemArtDownloading = 'system_art_downloading';
   static const String about = 'about';
   static const String exit = 'exit';

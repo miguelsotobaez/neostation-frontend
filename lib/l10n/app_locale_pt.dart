@@ -52,6 +52,9 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.systemArtApplyTitle: 'Aplicar System Art?',
   AppLocale.systemArtApplyBody:
       'O pacote de System Art será baixado para todos os sistemas. Isso pode levar alguns instantes.',
+  AppLocale.systemArtRedownloadTitle: 'Baixar System Art novamente?',
+  AppLocale.systemArtRedownloadBody:
+      'O pacote em cache será excluído e baixado novamente. Use esta opção se faltarem alguns fundos de sistemas.',
   AppLocale.systemArtDownloading: 'Baixando o pacote de System Art...',
   AppLocale.about: 'Sobre',
   AppLocale.exit: 'Sair',

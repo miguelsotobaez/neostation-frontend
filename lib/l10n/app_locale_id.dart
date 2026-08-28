@@ -52,6 +52,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemArtApplyTitle: 'Terapkan System Art?',
   AppLocale.systemArtApplyBody:
       'Paket System Art akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
+  AppLocale.systemArtRedownloadTitle: 'Unduh ulang System Art?',
+  AppLocale.systemArtRedownloadBody:
+      'Paket yang tersimpan akan dihapus dan diunduh ulang. Gunakan ini jika beberapa latar belakang sistem tidak muncul.',
   AppLocale.systemArtDownloading: 'Mengunduh paket System Art...',
   AppLocale.about: 'Tentang',
   AppLocale.exit: 'Keluar',

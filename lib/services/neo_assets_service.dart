@@ -1,16 +1,51 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'config_service.dart';
 import 'logger_service.dart';
 import '../utils/bounded_concurrency.dart';
 
+/// Assets are served from the repository's `dist/` tree, not the source tree:
+/// CI re-encodes every image there against an SSIMULACRA2 floor of 80, which
+/// is the same pack at ~40% of the bytes. It is a complete mirror (same folder
+/// layout, same filenames), rebuilt and committed by the single-writer
+/// `optimize-assets` workflow on every push that touches the source art — the
+/// same workflow that already generates the `systems` list in each
+/// `theme.json`, so this adds no new dependency on CI having run.
 const _baseRaw =
-    'https://raw.githubusercontent.com/misobadev/neostation-assets/main';
+    'https://raw.githubusercontent.com/misobadev/neostation-assets/main/dist';
 const _manifestUrl = '$_baseRaw/manifest.json';
 
 final _log = LoggerService.instance;
+
+/// Outcome of a single remote asset fetch.
+enum AssetFetchStatus {
+  /// The file is on disk (freshly downloaded or already cached).
+  cached,
+
+  /// The server answered 404: the asset genuinely is not published.
+  notFound,
+
+  /// The asset could not be reached (timeout, socket error, 429, 5xx). Says
+  /// nothing about whether it exists, so it must never be cached as absent.
+  failed,
+}
+
+/// The status of an asset fetch plus the local path when it succeeded.
+class AssetFetchResult {
+  final AssetFetchStatus status;
+  final String? path;
+
+  const AssetFetchResult(this.status, [this.path]);
+
+  /// Whether the asset is now available on disk.
+  bool get isCached => status == AssetFetchStatus.cached;
+
+  /// Whether the server positively reported the asset as absent.
+  bool get isNotFound => status == AssetFetchStatus.notFound;
+}
 
 /// Represents a plan for downloading or updating theme assets.
 class ThemeDownloadPlan {
@@ -198,6 +233,26 @@ class NeoAssetsService {
   static List<NeoAssetsTheme>? _cachedThemes;
   static String? _cachedThemeDir;
 
+  /// HTTP client for every remote fetch. Swappable so tests can drive the
+  /// 404-versus-transient-failure split without a network.
+  static http.Client _client = http.Client();
+
+  /// Points the service at a stub client and a scratch cache directory.
+  @visibleForTesting
+  static void debugConfigure({http.Client? client, String? cacheDir}) {
+    _client = client ?? http.Client();
+    _cachedThemeDir = cacheDir;
+    _cachedThemes = null;
+  }
+
+  /// Restores the real client and drops any test cache directory.
+  @visibleForTesting
+  static void debugReset() {
+    _client = http.Client();
+    _cachedThemeDir = null;
+    _cachedThemes = null;
+  }
+
   /// Fetches the global manifest of available themes.
   ///
   /// Tries the remote manifest first (caching it to disk on success), then
@@ -233,7 +288,7 @@ class NeoAssetsService {
   /// back to the on-disk copy.
   static Future<List<NeoAssetsTheme>?> _fetchRemoteThemes() async {
     try {
-      final response = await http.get(Uri.parse(_manifestUrl));
+      final response = await _client.get(Uri.parse(_manifestUrl));
       if (response.statusCode != 200) {
         _log.w(
           'Failed to fetch neostation-assets manifest: ${response.statusCode}',
@@ -376,25 +431,75 @@ class NeoAssetsService {
     return '$_baseRaw/themes/$themeFolder/theme.json';
   }
 
-  /// Downloads a remote asset to the local filesystem and returns the absolute path.
-  static Future<String?> downloadAndCacheAsset(
+  /// How long a single asset request may take before it is retried.
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
+  /// Attempts per asset before giving up. Theme packs are ~100 small files
+  /// pulled from a shared CDN, so the odd 429/timeout is routine.
+  static const int _maxFetchAttempts = 3;
+
+  /// Base backoff between attempts, multiplied by the attempt number.
+  static const Duration _retryBackoff = Duration(milliseconds: 500);
+
+  /// Downloads a remote asset to the local filesystem.
+  ///
+  /// Distinguishes a definitive HTTP 404 ([AssetFetchStatus.notFound]) from an
+  /// asset that could not be reached right now ([AssetFetchStatus.failed]:
+  /// timeout, socket error, 429, 5xx). Only a 404 proves the theme does not
+  /// ship the file, and only a 404 may be cached as a permanent negative
+  /// result — a flaky request must stay retryable, or one dropped connection
+  /// blanks a system's art for the life of the install.
+  ///
+  /// Bytes land in a sibling `.part` file that is renamed into place only once
+  /// the body is fully written, so an interrupted write can never leave a
+  /// truncated image that later reads as "already cached".
+  static Future<AssetFetchResult> fetchAndCacheAsset(
     String url,
     String localPath,
   ) async {
+    final file = File(localPath);
     try {
-      final file = File(localPath);
-      if (await file.exists()) return localPath;
-
-      await file.parent.create(recursive: true);
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode != 200) return null;
-
-      await file.writeAsBytes(response.bodyBytes);
-      return localPath;
+      if (await file.exists()) {
+        return AssetFetchResult(AssetFetchStatus.cached, localPath);
+      }
     } catch (e) {
-      _log.e('Error caching asset $url: $e');
-      return null;
+      _log.w('Error checking cached asset $localPath: $e');
     }
+
+    for (var attempt = 1; attempt <= _maxFetchAttempts; attempt++) {
+      try {
+        final response = await _client
+            .get(Uri.parse(url))
+            .timeout(_requestTimeout);
+
+        if (response.statusCode == 200) {
+          await file.parent.create(recursive: true);
+          final part = File('$localPath.part');
+          await part.writeAsBytes(response.bodyBytes, flush: true);
+          await part.rename(localPath);
+          return AssetFetchResult(AssetFetchStatus.cached, localPath);
+        }
+
+        if (response.statusCode == 404) {
+          return const AssetFetchResult(AssetFetchStatus.notFound);
+        }
+
+        _log.w(
+          'Asset fetch failed ($url): HTTP ${response.statusCode} '
+          '(attempt $attempt/$_maxFetchAttempts)',
+        );
+      } catch (e) {
+        _log.w(
+          'Asset fetch errored ($url): $e (attempt $attempt/$_maxFetchAttempts)',
+        );
+      }
+
+      if (attempt < _maxFetchAttempts) {
+        await Future.delayed(_retryBackoff * attempt);
+      }
+    }
+
+    return const AssetFetchResult(AssetFetchStatus.failed);
   }
 
   /// Returns the local directory used for theme asset caching.
@@ -492,7 +597,7 @@ class NeoAssetsService {
     String themeFolder,
   ) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse(getThemeMetadataUrl(themeFolder)),
       );
       if (response.statusCode != 200) {
@@ -512,13 +617,23 @@ class NeoAssetsService {
 
   /// Reads the version string from the locally cached theme metadata.
   static Future<String?> readLocalThemeVersion(String themeFolder) async {
+    final json = await readLocalThemeMetadata(themeFolder);
+    return json?['version']?.toString();
+  }
+
+  /// Reads the cached `theme.json` for a theme, or null when it is absent or
+  /// unreadable. Lets a plan fall back to the last known coverage list when
+  /// the remote metadata cannot be reached.
+  static Future<Map<String, dynamic>?> readLocalThemeMetadata(
+    String themeFolder,
+  ) async {
     try {
       final metadataPath = await themeMetadataCachePath(themeFolder);
       final file = File(metadataPath);
       if (!await file.exists()) return null;
       final json = jsonDecode(await file.readAsString());
       if (json is! Map<String, dynamic>) return null;
-      return json['version']?.toString();
+      return json;
     } catch (e) {
       _log.w('Error reading local theme metadata for "$themeFolder": $e');
       return null;
@@ -548,33 +663,18 @@ class NeoAssetsService {
   ) async {
     int missing = 0;
     for (final system in systemFolderNames) {
-      if (!await _backgroundResolvedOrKnownMissing(themeFolder, system)) {
+      if (!await _backgroundCached(themeFolder, system)) {
         missing++;
       }
     }
     return missing;
   }
 
-  /// Local path of the negative-cache marker for a system whose background is
-  /// not provided by the theme. Lives inside the theme's `backgrounds/` dir so
-  /// it is wiped by [clearThemeCache] on a version bump, re-enabling probing.
-  static Future<String> _backgroundMissingMarkerPath(
-    String themeFolder,
-    String systemFolderName,
-  ) async {
-    final dir = await _cacheDir();
-    return path.join(
-      dir,
-      themeFolder,
-      'backgrounds',
-      '$systemFolderName.missing',
-    );
-  }
-
-  /// True when a system's background is cached (.webp/.gif) OR is known to be
-  /// absent from the theme (a `.missing` marker exists). Prevents re-probing
-  /// systems the pack simply does not cover on every re-selection.
-  static Future<bool> _backgroundResolvedOrKnownMissing(
+  /// True when a system's background is already cached (`.webp` or `.gif`).
+  ///
+  /// Coverage itself is decided by the theme's declared `systems` list, so an
+  /// uncovered system is never probed and needs no negative-cache marker.
+  static Future<bool> _backgroundCached(
     String themeFolder,
     String systemFolderName,
   ) async {
@@ -584,46 +684,35 @@ class NeoAssetsService {
       systemFolderName,
       ext: 'gif',
     );
-    final marker = await _backgroundMissingMarkerPath(
-      themeFolder,
-      systemFolderName,
-    );
-    return await File(bgWebp).exists() ||
-        await File(bgGif).exists() ||
-        await File(marker).exists();
-  }
-
-  /// Records that a system's background is absent from the theme so it is not
-  /// re-downloaded on subsequent selections (cleared on version bump).
-  static Future<void> _writeMissingMarker(
-    String themeFolder,
-    String systemFolderName,
-  ) async {
-    try {
-      final marker = File(
-        await _backgroundMissingMarkerPath(themeFolder, systemFolderName),
-      );
-      await marker.parent.create(recursive: true);
-      await marker.writeAsString('');
-    } catch (e) {
-      _log.w(
-        'Error writing missing marker for "$themeFolder/$systemFolderName": $e',
-      );
-    }
+    return await File(bgWebp).exists() || await File(bgGif).exists();
   }
 
   /// Resolves which of the user's systems this theme actually covers.
   ///
-  /// When `theme.json` declares a `systems` list, returns the intersection with
-  /// the user's systems so uncovered systems are never probed (no 404s). When
-  /// the list is absent (older themes / offline metadata), returns all of the
-  /// user's systems and relies on the `.missing` negative-cache fallback.
+  /// The theme's declared `systems` list is authoritative: it is generated by
+  /// the same `optimize-assets` workflow that builds the `dist/` tree, so a
+  /// published pack always carries one. Returning the intersection means an
+  /// uncovered system is never probed, which is what makes the old `.missing`
+  /// negative cache unnecessary.
+  ///
+  /// [localMetadata] is the on-disk `theme.json`, used when the remote copy is
+  /// unreachable. If neither declares a list, coverage is empty rather than
+  /// "every system": blind-probing ~100 systems is what the negative cache
+  /// existed to prevent, and a visible "nothing to download" beats silently
+  /// re-probing on every selection.
   static List<String> _resolveCoveredSystems(
     Map<String, dynamic>? remoteMetadata,
+    Map<String, dynamic>? localMetadata,
     List<String> systemFolderNames,
   ) {
-    final declared = remoteMetadata?['systems'];
-    if (declared is! List) return systemFolderNames;
+    final declared = remoteMetadata?['systems'] ?? localMetadata?['systems'];
+    if (declared is! List) {
+      _log.w(
+        'Theme metadata declares no "systems" list; treating the pack as '
+        'covering nothing rather than probing every system',
+      );
+      return const [];
+    }
     final covered = declared.map((e) => e.toString()).toSet();
     return systemFolderNames.where(covered.contains).toList();
   }
@@ -633,12 +722,19 @@ class NeoAssetsService {
     String themeFolder,
     List<String> systemFolderNames,
   ) async {
+    // Shed `.missing` markers written by older builds. They could not tell a
+    // 404 from a dropped connection, so an unknown share of them are false
+    // negatives that would keep a system blank forever.
+    await deleteLegacyMissingMarkers();
+
     final remoteMetadata = await _fetchThemeMetadata(themeFolder);
-    final localVersion = await readLocalThemeVersion(themeFolder);
+    final localMetadata = await readLocalThemeMetadata(themeFolder);
+    final localVersion = localMetadata?['version']?.toString();
     final remoteVersion = remoteMetadata?['version']?.toString();
 
     final coveredSystems = _resolveCoveredSystems(
       remoteMetadata,
+      localMetadata,
       systemFolderNames,
     );
 
@@ -679,8 +775,13 @@ class NeoAssetsService {
   ) async {
     final webpPath = await backgroundCachePath(themeFolder, systemFolderName);
     final webpUrl = getBackgroundUrl(themeFolder, systemFolderName);
-    var result = await downloadAndCacheAsset(webpUrl, webpPath);
-    if (result != null) return result;
+    final webp = await fetchAndCacheAsset(webpUrl, webpPath);
+    if (webp.isCached) return webp.path;
+
+    // A transient webp failure says the server is unreachable, not that the
+    // system is uncovered — probing the legacy gif would only repeat the same
+    // failure (and, applied offline across ~100 systems, double the wait).
+    if (!webp.isNotFound) return _unresolved(themeFolder, systemFolderName);
 
     final gifPath = await backgroundCachePath(
       themeFolder,
@@ -688,12 +789,30 @@ class NeoAssetsService {
       ext: 'gif',
     );
     final gifUrl = getBackgroundUrl(themeFolder, systemFolderName, ext: 'gif');
-    result = await downloadAndCacheAsset(gifUrl, gifPath);
-    if (result != null) return result;
+    final gif = await fetchAndCacheAsset(gifUrl, gifPath);
+    if (gif.isCached) return gif.path;
+    if (!gif.isNotFound) return _unresolved(themeFolder, systemFolderName);
 
-    // Neither format exists remotely: record a negative-cache marker so this
-    // system is not re-probed on every re-selection of the theme.
-    await _writeMissingMarker(themeFolder, systemFolderName);
+    // Both formats answered 404 for a system the theme's `systems` list claims
+    // to cover: the metadata has drifted from the published files. Nothing to
+    // cache — the next plan re-reads the list and this corrects itself when
+    // the pack is rebuilt.
+    _log.w(
+      'Theme "$themeFolder" declares "$systemFolderName" but ships no '
+      'background for it (both .webp and .gif returned 404)',
+    );
+    return null;
+  }
+
+  /// Leaves a system unresolved after a transient failure. Deliberately writes
+  /// no marker: the next download plan must retry it, or one flaky request
+  /// during the initial ~100-file download blanks that system's art for good
+  /// (the marker is cleared only by a full theme-version redownload).
+  static String? _unresolved(String themeFolder, String systemFolderName) {
+    _log.w(
+      'Background "$themeFolder/$systemFolderName" unresolved after retries; '
+      'leaving it retryable for the next theme refresh',
+    );
     return null;
   }
 
@@ -704,7 +823,7 @@ class NeoAssetsService {
   ) async {
     final localPath = await logoCachePath(themeFolder, systemFolderName);
     final url = getLogoUrl(themeFolder, systemFolderName);
-    return downloadAndCacheAsset(url, localPath);
+    return (await fetchAndCacheAsset(url, localPath)).path;
   }
 
   /// Max background downloads in flight at once. Theme assets are small,
@@ -746,7 +865,7 @@ class NeoAssetsService {
     // Skip systems already cached or known to be absent from the theme.
     final pending = <String>[];
     for (final system in systemFolderNames) {
-      if (!await _backgroundResolvedOrKnownMissing(themeFolder, system)) {
+      if (!await _backgroundCached(themeFolder, system)) {
         pending.add(system);
       }
     }
@@ -760,6 +879,50 @@ class NeoAssetsService {
       (system) => getCachedBackground(themeFolder, system),
       onEach: () => onProgress?.call(++done, missingTotal),
     );
+  }
+
+  /// Sentinel recording that the one-time cleanup of legacy `.missing` markers
+  /// has already run for this install. Lives in the theme cache root, so
+  /// wiping the cache (which re-downloads everything anyway) resets it.
+  static Future<String> _markerCleanupSentinelPath() async {
+    final dir = await _cacheDir();
+    return path.join(dir, '.missing-markers-cleared');
+  }
+
+  /// Deletes every `.missing` marker left by older builds, once per install.
+  ///
+  /// The markers are no longer written or read: coverage now comes from the
+  /// theme's declared `systems` list, so an uncovered system is never probed
+  /// and needs no negative cache. Installs upgraded from an older build still
+  /// carry the files, and a stale marker used to make a system's background
+  /// read as "resolved" and stay permanently blank, so they are swept once.
+  ///
+  /// Called from [buildThemeDownloadPlan] rather than at startup: an install
+  /// that never opens System Art pays nothing.
+  static Future<void> deleteLegacyMissingMarkers() async {
+    try {
+      final sentinel = File(await _markerCleanupSentinelPath());
+      if (await sentinel.exists()) return;
+
+      final dir = Directory(await _cacheDir());
+      int cleared = 0;
+      if (await dir.exists()) {
+        await for (final entity in dir.list(recursive: true)) {
+          if (entity is File && entity.path.endsWith('.missing')) {
+            await entity.delete();
+            cleared++;
+          }
+        }
+      }
+
+      await sentinel.parent.create(recursive: true);
+      await sentinel.writeAsString('');
+      if (cleared > 0) {
+        _log.i('Cleared $cleared legacy .missing marker(s) (no longer used)');
+      }
+    } catch (e) {
+      _log.w('Error clearing legacy .missing markers: $e');
+    }
   }
 
   /// Deletes all cached assets for a specific theme folder.

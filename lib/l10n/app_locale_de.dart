@@ -52,6 +52,9 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.systemArtApplyTitle: 'System Art anwenden?',
   AppLocale.systemArtApplyBody:
       'Das System-Art-Paket wird für alle Systeme heruntergeladen. Dies kann einen Moment dauern.',
+  AppLocale.systemArtRedownloadTitle: 'System Art erneut herunterladen?',
+  AppLocale.systemArtRedownloadBody:
+      'Das zwischengespeicherte Paket wird gelöscht und erneut heruntergeladen. Verwende dies, wenn einige System-Hintergründe fehlen.',
   AppLocale.systemArtDownloading: 'System-Art-Paket wird heruntergeladen...',
   AppLocale.about: 'Über',
   AppLocale.exit: 'Beenden',

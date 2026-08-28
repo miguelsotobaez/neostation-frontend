@@ -136,11 +136,17 @@ class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
       targetName = themes[themeIndex].name;
     }
 
-    if (neoAssets.activeThemeFolder == targetFolder) return;
+    // Re-picking the pack that is already applied is the repair path: it wipes
+    // the cache and refetches, which is the only way to recover a background
+    // that failed to download when the pack was first applied. "None" has
+    // nothing to redownload, so it stays a no-op.
+    final isRedownload = neoAssets.activeThemeFolder == targetFolder;
+    if (isRedownload && targetFolder.isEmpty) return;
 
     final confirmed = await _showConfirmDialog(
       targetName,
       targetFolder.isEmpty,
+      isRedownload: isRedownload,
     );
     if (!confirmed) return;
     if (!mounted) return;
@@ -151,16 +157,27 @@ class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
       await neoAssets.clearTheme();
     } else {
       final systemFolders = _getSystemFolderNames();
-      await neoAssets.downloadAndApplyTheme(targetFolder, systemFolders);
+      await neoAssets.downloadAndApplyTheme(
+        targetFolder,
+        systemFolders,
+        forceRedownload: isRedownload,
+      );
     }
   }
 
-  Future<bool> _showConfirmDialog(String themeName, bool isNone) async {
+  Future<bool> _showConfirmDialog(
+    String themeName,
+    bool isNone, {
+    bool isRedownload = false,
+  }) async {
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) =>
-          _ThemeConfirmDialog(themeName: themeName, isNone: isNone),
+      builder: (ctx) => _ThemeConfirmDialog(
+        themeName: themeName,
+        isNone: isNone,
+        isRedownload: isRedownload,
+      ),
     );
     return result ?? false;
   }
@@ -530,7 +547,15 @@ class _ThemeConfirmDialog extends StatefulWidget {
   final String themeName;
   final bool isNone;
 
-  const _ThemeConfirmDialog({required this.themeName, required this.isNone});
+  /// The pack is already applied and the user is re-picking it to wipe the
+  /// cache and fetch it again — worded as a repair, not as applying a theme.
+  final bool isRedownload;
+
+  const _ThemeConfirmDialog({
+    required this.themeName,
+    required this.isNone,
+    this.isRedownload = false,
+  });
 
   @override
   State<_ThemeConfirmDialog> createState() => _ThemeConfirmDialogState();
@@ -585,7 +610,10 @@ class _ThemeConfirmDialogState extends State<_ThemeConfirmDialog> {
           Icon(Symbols.image_rounded, color: primary, size: 20.r),
           SizedBox(width: 8.r),
           Text(
-            AppLocale.systemArtApplyTitle.getString(context),
+            (widget.isRedownload
+                    ? AppLocale.systemArtRedownloadTitle
+                    : AppLocale.systemArtApplyTitle)
+                .getString(context),
             style: theme.textTheme.titleMedium?.copyWith(
               fontSize: 14.r,
               color: primary,
@@ -608,7 +636,10 @@ class _ThemeConfirmDialogState extends State<_ThemeConfirmDialog> {
           if (!widget.isNone) ...[
             SizedBox(height: 8.r),
             Text(
-              AppLocale.systemArtApplyBody.getString(context),
+              (widget.isRedownload
+                      ? AppLocale.systemArtRedownloadBody
+                      : AppLocale.systemArtApplyBody)
+                  .getString(context),
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontSize: 11.r,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -667,7 +698,8 @@ class _ThemeConfirmDialogState extends State<_ThemeConfirmDialog> {
               ),
               SizedBox(width: 4.r),
               Text(
-                AppLocale.apply.getString(context),
+                (widget.isRedownload ? AppLocale.download : AppLocale.apply)
+                    .getString(context),
                 style: TextStyle(fontSize: 12.r),
               ),
             ],

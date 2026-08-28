@@ -49,6 +49,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.systemArtError: '無法載入 System Art',
   AppLocale.systemArtApplyTitle: '套用 System Art？',
   AppLocale.systemArtApplyBody: '將為所有系統下載 System Art 包，這可能需要一些時間。',
+  AppLocale.systemArtRedownloadTitle: '重新下載 System Art？',
+  AppLocale.systemArtRedownloadBody: '將刪除已快取的包並重新下載。如果部分系統背景缺失，請使用此選項。',
   AppLocale.systemArtDownloading: '正在下載 System Art 包...',
   AppLocale.about: '關於',
   AppLocale.exit: '離開',

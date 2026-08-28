@@ -50,6 +50,9 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.systemArtApplyTitle: 'System Art を適用しますか？',
   AppLocale.systemArtApplyBody:
       'すべてのシステムの System Art パックがダウンロードされます。少し時間がかかる場合があります。',
+  AppLocale.systemArtRedownloadTitle: 'System Art を再ダウンロードしますか？',
+  AppLocale.systemArtRedownloadBody:
+      'キャッシュされたパックを削除して再度ダウンロードします。一部のシステム背景が表示されない場合に使用してください。',
   AppLocale.systemArtDownloading: 'System Art パックをダウンロード中...',
   AppLocale.about: 'NeoStationについて',
   AppLocale.exit: '終了',

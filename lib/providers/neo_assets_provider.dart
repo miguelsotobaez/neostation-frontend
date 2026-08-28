@@ -85,20 +85,39 @@ class NeoAssetsProvider extends ChangeNotifier {
   /// performs a batch download with real-time progress updates.
   Future<void> downloadAndApplyTheme(
     String themeFolder,
-    List<String> systemFolderNames,
-  ) async {
+    List<String> systemFolderNames, {
+    bool forceRedownload = false,
+  }) async {
     try {
       final plan = await NeoAssetsService.buildThemeDownloadPlan(
         themeFolder,
         systemFolderNames,
       );
 
-      if (plan.totalAssetsToDownload > 0) {
+      // A forced redownload wipes the cache before refetching, so only honour
+      // it once the theme metadata has actually come back: deleting art we
+      // then cannot re-fetch (offline, CDN down) would leave the user with
+      // none at all, which is worse than the missing background they asked us
+      // to repair.
+      final forced = forceRedownload && plan.remoteMetadata != null;
+      if (forceRedownload && !forced) {
+        _log.w(
+          'Skipping forced redownload of "$themeFolder": '
+          'theme metadata unreachable, keeping the cached art',
+        );
+      }
+
+      final clearFirst = forced || plan.forceRedownload;
+      final totalAssets = clearFirst
+          ? plan.systemsToDownload.length
+          : plan.totalAssetsToDownload;
+
+      if (totalAssets > 0) {
         _downloading = true;
         _downloadProgress = 0.0;
         notifyListeners();
 
-        if (plan.forceRedownload) {
+        if (clearFirst) {
           await NeoAssetsService.downloadAllThemeAssets(
             themeFolder,
             plan.systemsToDownload,
@@ -112,7 +131,7 @@ class NeoAssetsProvider extends ChangeNotifier {
           await NeoAssetsService.downloadMissingThemeAssets(
             themeFolder,
             plan.systemsToDownload,
-            missingTotal: plan.totalAssetsToDownload,
+            missingTotal: totalAssets,
             onProgress: (done, t) {
               _downloadProgress = t == 0 ? 1.0 : done / t;
               notifyListeners();
