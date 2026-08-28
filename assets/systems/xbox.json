@@ -3,10 +3,6 @@
     "id": "xbox",
     "multidisc": true,
     "name": "Xbox",
-    "neosync": {
-      "sync": false,
-      "sync_folder": null
-    },
     "short_name": "Xbox",
     "details": {
       "manufacturer": "Microsoft",
@@ -53,6 +49,23 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n com.rfandango.haku_x/.LauncherActivity -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone xemu",
+      "unique_id": "xbox.app.xemu-project.xemu",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: xiso, iso.",
+      "platforms": {
+        "windows": {
+          "executable": "xemu.exe",
+          "args": "-full-screen -dvd_path \"{file.path}\""
+        },
+        "linux": {
+          "executable": "xemu",
+          "emudeck_launcher": "xemu-emu.sh",
+          "args": "-full-screen -dvd_path \"{file.path}\""
         }
       }
     }

@@ -209,6 +209,18 @@
           "launch_arguments": "-n org.benjisc.android/org.kenjinx.android.MainActivity -a org.kenjinx.android.LAUNCH_GAME -e bootPath \"{file.path}\"\n"
         }
       }
+    },
+    {
+      "name": "Standalone Ryubing",
+      "unique_id": "switch.io.ryubing.ryujinx",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "Ryujinx.exe",
+          "args": "\"{file.path}\""
+        }
+      }
     }
   ],
   "neosync": {
