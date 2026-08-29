@@ -42,6 +42,17 @@
       }
     },
     {
+      "name": "Standalone Xenra",
+      "unique_id": "ali.xanite.green.xenra",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: xiso, iso.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n Ali.Xanite.green/Ali.Xanite.LauncherActivity -d \"{file.uri}\""
+        }
+      }
+    },
+    {
       "name": "Standalone hakuX",
       "unique_id": "xbox.com.rfandango.haku_x",
       "is_retroachievements_compatible": false,
