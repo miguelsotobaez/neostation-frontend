@@ -35,6 +35,13 @@ class _NotificationBellState extends State<NotificationBell>
   /// Inset of the dropdown from the right edge of the screen.
   static const double _dropdownRightInset = 8;
 
+  /// Half cycles the arrival pulse runs for. Six is three round trips.
+  static const int _pulseHalfCycles = 6;
+
+  /// Notification count at the last [_syncPulse], so the pulse fires on a
+  /// genuine arrival rather than on every progress update to an existing one.
+  int _lastCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -46,28 +53,45 @@ class _NotificationBellState extends State<NotificationBell>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // The pulse only runs while there is something to pulse about. Repeating
-    // unconditionally kept a ticker alive for the life of the app: the bell
-    // lives in the header on every screen, so a controller that never stops
-    // requested a frame every vsync forever, and the whole display re-rastered
-    // at 60 fps while the user sat still (~26% of a core in the raster thread).
+    // The pulse announces an arrival and then stops. The bell lives in the
+    // header on every screen, so anything that keeps this controller running
+    // requests a frame every vsync for as long as it runs. Mounting must not
+    // start it: only a notification arriving while mounted does.
     _notifications = GlobalNotificationService().notifier;
+    _lastCount = _notifications.value.length;
+    // Tween begin (1.0 = fully opaque) sits at controller value 0.
+    _pulseController.value = 0;
     _notifications.addListener(_syncPulse);
-    _syncPulse();
   }
 
-  /// Starts the pulse when notifications appear and stops it when the last one
-  /// goes away, parking the controller at its opaque end.
+  /// Pulses briefly when a notification arrives, then parks the controller at
+  /// its opaque end.
+  ///
+  /// The pulse must be bounded. Notifications never auto-dismiss (see
+  /// [GlobalNotificationService]), so pulsing for as long as the list is
+  /// non-empty is in practice pulsing forever: a single "ES-DE import
+  /// complete" notice — a success message no user has any reason to clear —
+  /// held the app at a frame every vsync for the rest of the session, which
+  /// measured 0.53 of a core and 17% of the GPU on a 3440x1440 240 Hz display.
+  /// The static badge and the filled bell icon already carry the "you have
+  /// notifications" signal on their own, so nothing is lost by stopping.
   void _syncPulse() {
-    final bool hasNotifications = _notifications.value.isNotEmpty;
-    if (hasNotifications) {
-      if (!_pulseController.isAnimating) {
-        _pulseController.repeat(reverse: true);
+    final int count = _notifications.value.length;
+    final int previous = _lastCount;
+    _lastCount = count;
+
+    if (count == 0) {
+      if (_pulseController.isAnimating) {
+        _pulseController.stop();
       }
-    } else if (_pulseController.isAnimating) {
-      _pulseController.stop();
-      // Tween begin (1.0 = fully opaque) sits at controller value 0.
       _pulseController.value = 0;
+      return;
+    }
+
+    if (count > previous) {
+      // Each iteration is a half cycle, so an even count both ends on a whole
+      // number of round trips and parks the controller back at 0 (opaque).
+      _pulseController.repeat(reverse: true, count: _pulseHalfCycles);
     }
   }
 

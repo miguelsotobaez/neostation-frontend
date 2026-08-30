@@ -13,8 +13,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// while the user sat still — measured at ~48% of a core on an idle AYN Thor,
 /// 26% of it in the raster thread alone.
 ///
+/// Making the pulse conditional on the list being non-empty only moved the
+/// problem, because notifications never auto-dismiss: an "ES-DE import
+/// complete" notice — a success message with no reason to ever clear it — held
+/// the app at a frame every vsync for the rest of the session, measured at 0.53
+/// of a core and 17% of the GPU on a 3440x1440 240 Hz Windows display. So the
+/// pulse is now an arrival cue that runs a fixed number of cycles and stops
+/// while the notification is still sitting there.
+///
 /// transientCallbackCount is the assertion that catches it: a running ticker
-/// registers exactly one, so "no notifications" must mean zero.
+/// registers exactly one, so an idle bell must mean zero.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -58,7 +66,7 @@ void main() {
     expect(tester.binding.transientCallbackCount, 0);
   });
 
-  testWidgets('pulses while a notification is active', (tester) async {
+  testWidgets('pulses when a notification arrives', (tester) async {
     await pumpBell(tester);
     await tester.pumpAndSettle();
 
@@ -68,10 +76,55 @@ void main() {
     expect(tester.binding.transientCallbackCount, greaterThan(0));
   });
 
+  testWidgets(
+    'the arrival pulse ends on its own while the notification stays',
+    (tester) async {
+      await pumpBell(tester);
+      await tester.pumpAndSettle();
+
+      GlobalNotificationService().show(id: 'test', message: 'hello');
+      await tester.pump();
+      expect(tester.binding.transientCallbackCount, greaterThan(0));
+
+      // The notification is never dismissed here — that is the whole point.
+      // pumpAndSettle returns rather than timing out only because the pulse is
+      // bounded, and the ticker has to be gone once it has.
+      await tester.pumpAndSettle();
+
+      expect(tester.binding.transientCallbackCount, 0);
+      expect(GlobalNotificationService().notifier.value, isNotEmpty);
+
+      // Parked opaque, not stranded at the faded end of the tween.
+      final FadeTransition fade = tester.widget(
+        find.descendant(
+          of: find.byType(NotificationBell),
+          matching: find.byType(FadeTransition),
+        ),
+      );
+      expect(fade.opacity.value, 1.0);
+    },
+  );
+
+  testWidgets('does not pulse for a notification that predates the mount', (
+    tester,
+  ) async {
+    GlobalNotificationService().show(id: 'test', message: 'hello');
+
+    await pumpBell(tester);
+    await tester.pumpAndSettle();
+
+    // The bell is rebuilt on every screen that mounts a header, so treating
+    // what is already in the tray as an arrival would re-pulse on every
+    // navigation.
+    expect(tester.binding.transientCallbackCount, 0);
+  });
+
   testWidgets('stops the pulse again when the last notification clears', (
     tester,
   ) async {
     await pumpBell(tester);
+    await tester.pumpAndSettle();
+
     GlobalNotificationService().show(id: 'test', message: 'hello');
     await tester.pump();
     expect(tester.binding.transientCallbackCount, greaterThan(0));
