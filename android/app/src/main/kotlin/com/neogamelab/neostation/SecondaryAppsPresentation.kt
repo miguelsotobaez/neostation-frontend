@@ -92,6 +92,9 @@ class SecondaryAppsPresentation(
         return super.dispatchKeyEvent(event)
     }
 
+    // Deprecated since API 33, but Dialog still routes BACK through it and the
+    // override must stay for the platforms that do.
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
         // Deliberately empty: BACK must never dismiss the bottom screen.
     }

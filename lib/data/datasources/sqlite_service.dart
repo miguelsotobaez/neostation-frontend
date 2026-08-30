@@ -1329,6 +1329,24 @@ class SqliteService {
   /// Pragma statements are wrapped individually so a filesystem error on one
   /// (e.g. an SD card that doesn't support WAL) doesn't block the entire DB.
   Future<void> _onConfigure(DatabaseAdapter db) async {
+    // Set before anything else: the pragmas below and first-run creation all
+    // write, and on dual-display devices a second Flutter engine writes to this
+    // same file concurrently. Without a busy timeout the loser of a race fails
+    // instantly with SQLITE_BUSY ("database is locked") instead of waiting for
+    // the other connection to commit.
+    //
+    // 15s rather than a token value because [_onCreate] holds the write lock
+    // for the whole of first-run seeding (122 systems, 2422 emulators). The
+    // worst case is the first cold boot after an install, where ART is still
+    // warming up: 5s was observed to expire there, and the timeout only ever
+    // caps how long a blocked writer waits, so a generous bound costs nothing
+    // on the uncontended path.
+    try {
+      await db.execute('PRAGMA busy_timeout = 15000;');
+    } catch (e) {
+      _log.w('Could not set PRAGMA busy_timeout = 15000: $e');
+    }
+
     try {
       await db.execute('PRAGMA foreign_keys = ON;');
     } catch (e) {
@@ -1701,19 +1719,33 @@ class SqliteService {
   }
 
   /// Creates initial database tables during first run.
+  ///
+  /// The schema, its seed data and the `user_version` stamp are committed as a
+  /// single transaction. Dual-display devices run a second Flutter engine
+  /// against this same database file (see `subDisplay()` in `lib/main.dart`),
+  /// and that engine opens the file while first-run creation is still in
+  /// flight. Committing the tables ahead of the stamp left a window in which it
+  /// observed "tables exist but user_version is 0", which [_initDatabaseCore]
+  /// reads as a legacy install and answers by replaying every migration from
+  /// v1 over an already-current schema. Migration v5 then throws on
+  /// `app_emulators.id`, a column migration v49 removes.
   Future<void> _onCreate(DatabaseAdapter db, int version) async {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // Create schema within an atomic transaction.
+      // Create schema, seed it and stamp its version atomically.
       await db.transaction((txn) async {
         await _createAppTables(txn);
         await _createUserTables(txn);
         await _createRetroArchTables(txn);
-      });
 
-      // Populate initial data.
-      await _insertInitialData(db);
+        // Populate initial data.
+        await _insertInitialData(db);
+
+        // Stamp the version alongside the schema it describes, so no other
+        // connection can read this database as an unversioned legacy install.
+        await txn.execute('PRAGMA user_version = $version;');
+      });
 
       // Initialize optimized indexes.
       await _createIndexes(db);
