@@ -3,7 +3,6 @@
 #include <windows.h>
 
 #include "flutter_window.h"
-#include "run_loop.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -18,8 +17,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  RunLoop run_loop;
-
   flutter::DartProject project(L"data");
 
   std::vector<std::string> command_line_arguments =
@@ -27,15 +24,23 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
-  FlutterWindow window(&run_loop, project);
-  Win32Window::Point origin(100, 100);    
-  Win32Window::Size size(1280, 720);    
+  FlutterWindow window(project);
+  Win32Window::Point origin(100, 100);
+  Win32Window::Size size(1280, 720);
   if (!window.CreateAndShow(L"NeoStation", origin, size)) {
     return EXIT_FAILURE;
-  }  
+  }
   window.SetQuitOnClose(true);
 
-  run_loop.Run();
+  // The engine schedules its own platform-thread work on a message-only
+  // window, so a plain blocking message loop is all the runner needs. The
+  // previous RunLoop polled the engine on a zero-length timeout and spun the
+  // main thread at 100% of a core for the life of the process.
+  ::MSG msg;
+  while (::GetMessage(&msg, nullptr, 0, 0)) {
+    ::TranslateMessage(&msg);
+    ::DispatchMessage(&msg);
+  }
 
   ::CoUninitialize();
   return EXIT_SUCCESS;
