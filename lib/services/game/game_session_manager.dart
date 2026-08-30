@@ -247,60 +247,83 @@ class GameSessionManager {
     _playtimeTimer = null;
   }
 
+  /// Whether a teardown is already in flight. See [endGameSession].
+  static bool _isEndingSession = false;
+
   /// Gracefully terminates the active game session and finalizes playtime tracking.
+  ///
+  /// Re-entrant by nature, and guarded accordingly: on desktop the exit
+  /// callback below is dispatched from the middle of this method and drives the
+  /// launch dialog's close synchronously, which calls straight back in here.
+  /// The nested call used to find `_isGameLaunched` still set — it is cleared at
+  /// the bottom — so it re-ran the whole teardown, recording the playtime and
+  /// the RomM session twice, and then read `_currentGame!` after its first
+  /// await, by which point the outer call had finished and nulled it. The
+  /// resulting null-check error surfaced nowhere (an unhandled async error does
+  /// not reach `FlutterError.onError`), so the launch dialog never received
+  /// `completeClose()` and sat on "Closing game" until the user dismissed it by
+  /// hand.
+  ///
+  /// The session state is therefore read once, up front, and every later step
+  /// works from those locals rather than from fields another call may clear.
   static Future<void> endGameSession() async {
-    if (!_isGameLaunched) return;
+    if (!_isGameLaunched || _isEndingSession) return;
+    _isEndingSession = true;
 
-    if (_gameLaunchTime != null &&
-        _lastPlaytimeSave != null &&
-        _currentGameSystem != null &&
-        _currentGame != null) {
-      final now = DateTime.now();
-      final elapsedSinceLastSave = now.difference(_lastPlaytimeSave!).inSeconds;
-      if (elapsedSinceLastSave > 0) {
-        await _savePlayTime(
-          _currentGameSystem!,
-          _currentGame!,
-          elapsedSinceLastSave,
-        );
+    try {
+      final system = _currentGameSystem;
+      final game = _currentGame;
+      final launchTime = _gameLaunchTime;
+      final lastPlaytimeSave = _lastPlaytimeSave;
+
+      if (launchTime != null &&
+          lastPlaytimeSave != null &&
+          system != null &&
+          game != null) {
+        final now = DateTime.now();
+        final elapsedSinceLastSave = now.difference(lastPlaytimeSave).inSeconds;
+        if (elapsedSinceLastSave > 0) {
+          await _savePlayTime(system, game, elapsedSinceLastSave);
+        }
+
+        // Report the session as a whole (not just the un-persisted tail) to the
+        // RomM outbox: RomM stores playtime as sessions, and the incremental
+        // 10s writes above are a local persistence detail.
+        if (game.romPath != null) {
+          await _recordRommPlaySession(
+            romname: game.romname,
+            systemFolder: game.systemFolderName ?? system.folderName,
+            romPath: game.romPath!,
+            start: launchTime,
+            end: now,
+          );
+        }
+        _syncSavesAfterClose(game);
       }
 
-      // Report the session as a whole (not just the un-persisted tail) to the
-      // RomM outbox: RomM stores playtime as sessions, and the incremental
-      // 10s writes above are a local persistence detail.
-      final game = _currentGame!;
-      if (game.romPath != null) {
-        await _recordRommPlaySession(
-          romname: game.romname,
-          systemFolder: game.systemFolderName ?? _currentGameSystem!.folderName,
-          romPath: game.romPath!,
-          start: _gameLaunchTime!,
-          end: now,
-        );
+      _stopPlaytimeTimer();
+
+      if (Platform.isAndroid) {
+        const platform = MethodChannel('com.neogamelab.neostation/game');
+        await platform.invokeMethod('setGamepadBlock', {'block': false});
+        GameSessionPersistence.clearGameSession();
+      } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        if (_onProcessExitCallback != null) {
+          _onProcessExitCallback!();
+        }
       }
-      _syncSavesAfterClose(game);
+
+      _isGameLaunched = false;
+      _gameLaunchTime = null;
+      _lastPlaytimeSave = null;
+      _launchedEmulatorExe = null;
+      _currentGameSystem = null;
+      _currentGame = null;
+
+      _notifySessionEnded();
+    } finally {
+      _isEndingSession = false;
     }
-
-    _stopPlaytimeTimer();
-
-    if (Platform.isAndroid) {
-      const platform = MethodChannel('com.neogamelab.neostation/game');
-      await platform.invokeMethod('setGamepadBlock', {'block': false});
-      GameSessionPersistence.clearGameSession();
-    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      if (_onProcessExitCallback != null) {
-        _onProcessExitCallback!();
-      }
-    }
-
-    _isGameLaunched = false;
-    _gameLaunchTime = null;
-    _lastPlaytimeSave = null;
-    _launchedEmulatorExe = null;
-    _currentGameSystem = null;
-    _currentGame = null;
-
-    _notifySessionEnded();
   }
 
   static Future<void> _savePlayTime(
