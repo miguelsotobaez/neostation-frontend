@@ -33,6 +33,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/utils/image_cache_budget.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -132,55 +133,57 @@ class ToggleFullscreenAction extends Action<ToggleFullscreenIntent> {
   }
 }
 
-/// Configures the Flutter [ImageCache] based on platform and available RAM.
+/// Physical RAM in whole gigabytes, or null when the platform will not say.
 ///
-/// Android: reads total memory via [DeviceInfoPlugin] and applies tiered limits.
-/// Desktop (Windows/macOS/Linux): applies generous defaults.
-Future<void> _configureImageCache() async {
+/// device_info_plus reports memory on Android, Windows and macOS but not on
+/// Linux, which is why that one reads procfs directly.
+Future<int?> _physicalRamGb() async {
   try {
     if (Platform.isAndroid) {
       final info = await DeviceInfoPlugin().androidInfo;
       LoggerService.instance.i(
         'Android device detected: ${info.model}, RAM: ${info.physicalRamSize} MB',
       );
-      final ramGb = info.physicalRamSize ~/ 1024;
-      LoggerService.instance.i(
-        'Configuring image cache for Android device with $ramGb GB RAM',
-      );
-      int maxBytes;
-      int maxSize;
-
-      if (ramGb <= 2) {
-        maxBytes = 40 * 1024 * 1024;
-        maxSize = 300;
-      } else if (ramGb <= 4) {
-        maxBytes = 80 * 1024 * 1024;
-        maxSize = 600;
-      } else if (ramGb <= 8) {
-        maxBytes = 200 * 1024 * 1024;
-        maxSize = 1000;
-      } else {
-        maxBytes = 400 * 1024 * 1024;
-        maxSize = 1500;
-      }
-
-      LoggerService.instance.i(
-        'Setting image cache limits: maxSize=$maxSize, maxBytes=${maxBytes ~/ (1024 * 1024)} MB',
-      );
-
-      PaintingBinding.instance.imageCache.maximumSize = maxSize;
-      PaintingBinding.instance.imageCache.maximumSizeBytes = maxBytes;
-    } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      PaintingBinding.instance.imageCache.maximumSize = 2000;
-      PaintingBinding.instance.imageCache.maximumSizeBytes = 400 * 1024 * 1024;
-    } else {
-      PaintingBinding.instance.imageCache.maximumSize = 1000;
-      PaintingBinding.instance.imageCache.maximumSizeBytes = 100 * 1024 * 1024;
+      return info.physicalRamSize ~/ 1024;
     }
-  } catch (_) {
-    PaintingBinding.instance.imageCache.maximumSize = 1000;
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 100 * 1024 * 1024;
+    if (Platform.isWindows) {
+      final info = await DeviceInfoPlugin().windowsInfo;
+      return info.systemMemoryInMegabytes ~/ 1024;
+    }
+    if (Platform.isMacOS) {
+      final info = await DeviceInfoPlugin().macOsInfo;
+      return info.memorySize ~/ (1024 * 1024 * 1024);
+    }
+    if (Platform.isLinux) {
+      final meminfo = File('/proc/meminfo');
+      if (!meminfo.existsSync()) return null;
+      for (final line in meminfo.readAsLinesSync()) {
+        if (!line.startsWith('MemTotal:')) continue;
+        final kb = int.tryParse(
+          RegExp(r'(\d+)').firstMatch(line)?.group(1) ?? '',
+        );
+        return kb == null ? null : kb ~/ (1024 * 1024);
+      }
+    }
+  } catch (e) {
+    LoggerService.instance.w('Could not read physical RAM: $e');
   }
+  return null;
+}
+
+/// Sizes the decoded-image cache for the machine this build is running on.
+Future<void> _configureImageCache() async {
+  final int? ramGb = await _physicalRamGb();
+  final budget = ImageCacheBudget.forRam(ramGb);
+
+  LoggerService.instance.i(
+    'Image cache: ${budget.maximumSizeMb} MB / ${budget.maximumSize} entries '
+    '(physical RAM: ${ramGb == null ? 'unknown' : '$ramGb GB'})',
+  );
+
+  PaintingBinding.instance.imageCache
+    ..maximumSize = budget.maximumSize
+    ..maximumSizeBytes = budget.maximumSizeBytes;
 }
 
 /// Global navigator key so overlay notifications can outlive the widget that
@@ -196,11 +199,13 @@ void main() async {
   runApp(const StartupLoadingApp());
   await WidgetsBinding.instance.endOfFrame;
 
-  await _configureImageCache();
-
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
+
+  // After log.init(): this used to run before it, so the budget it picked was
+  // never visible in app.log.
+  await _configureImageCache();
 
   // Resolve the user-data location before anything reads it, so the cold-boot
   // wait happens once (behind the loading screen) rather than once per caller.

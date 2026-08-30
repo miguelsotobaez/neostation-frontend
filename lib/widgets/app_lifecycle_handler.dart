@@ -12,6 +12,7 @@ import '../services/game_service.dart';
 import '../services/music_player_service.dart';
 import '../providers/sqlite_config_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// Widget that detects when the app returns to the foreground and reactivates the gamepad
 class AppLifecycleHandler extends StatefulWidget {
@@ -24,7 +25,7 @@ class AppLifecycleHandler extends StatefulWidget {
 }
 
 class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, WindowListener {
   String? _lastKnownPlan;
   AppLifecycleListener? _exitListener;
 
@@ -57,6 +58,13 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Desktop minimising does not reach didChangeAppLifecycleState: measured on
+    // Windows, parking the window fires no lifecycle state at all. window_manager
+    // is the only signal for it, so the off-screen handling is hung off both.
+    if (_isDesktop) {
+      windowManager.addListener(this);
+    }
 
     // Register exit listener to clean up native resources (SoLoud audio threads)
     // so the process exits cleanly when the window is closed.
@@ -104,6 +112,9 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   void dispose() {
     _exitListener?.dispose();
     GameService.onScreenStateChanged = null;
+    if (_isDesktop) {
+      windowManager.removeListener(this);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -148,6 +159,42 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       if (!mounted) return;
       Provider.of<NotificationService>(context, listen: false).suspend();
       MusicPlayerService().appPaused();
+      _releaseDecodedImages();
+    }
+  }
+
+  static bool get _isDesktop =>
+      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
+  /// Desktop's equivalent of going to the background.
+  ///
+  /// Only minimising counts. Losing focus to another window happens constantly
+  /// while alt-tabbing, and re-decoding the visible artwork every time would
+  /// cost more than it saves; minimising is the user actually parking the app.
+  @override
+  void onWindowMinimize() {
+    _releaseDecodedImages();
+  }
+
+  /// Hands the decoded-image cache back when the app leaves the screen.
+  ///
+  /// The cache fills to its whole budget as the user browses artwork and then
+  /// holds it: nothing evicts on idle, so a minimised NeoStation sits on
+  /// hundreds of megabytes of box art that nothing is drawing. Desktop makes
+  /// that the normal case, since the app is left running behind other windows
+  /// for hours at a time.
+  ///
+  /// [ImageCache.clear] drops the cached and pending entries but leaves the
+  /// live ones, so whatever is still on screen does not have to be decoded
+  /// again on the way back in. Scrollback re-decodes, which is the intended
+  /// trade and the same one [GameLaunchService] already makes when handing the
+  /// machine over to an emulator.
+  void _releaseDecodedImages() {
+    final imageCache = PaintingBinding.instance.imageCache;
+    final int freedMb = imageCache.currentSizeBytes ~/ (1024 * 1024);
+    imageCache.clear();
+    if (freedMb > 0) {
+      _log.i('Released $freedMb MB of decoded images while off screen');
     }
   }
 
