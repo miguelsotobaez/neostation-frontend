@@ -310,6 +310,7 @@ class MySystems extends StatelessWidget {
 
       try {
         GamepadNavigationManager.deactivateAll();
+        GamepadNavigationManager.rememberFocusOwner('my_systems_list');
         MySystems.gridLaunchNotifier.value = true;
 
         final fileProvider = Provider.of<FileProvider>(context, listen: false);
@@ -352,7 +353,7 @@ class MySystems extends StatelessWidget {
             // Stop the poll and hide the panel so it fades back to the art.
             achievementsController.stop(hidePanel: true);
             MySystems.gridLaunchNotifier.value = false;
-            GamepadNavigationManager.reactivate();
+            GamepadNavigationManager.restoreFocusOwner();
             Provider.of<SqliteDatabaseProvider>(
               context,
               listen: false,
@@ -361,7 +362,7 @@ class MySystems extends StatelessWidget {
           onLaunchFailed: (ctx, r) async {
             achievementsController.stop(hidePanel: true);
             MySystems.gridLaunchNotifier.value = false;
-            GamepadNavigationManager.reactivate();
+            GamepadNavigationManager.restoreFocusOwner();
           },
         );
       } catch (e) {
@@ -375,7 +376,7 @@ class MySystems extends StatelessWidget {
             type: NotificationType.error,
           );
         }
-        GamepadNavigationManager.reactivate();
+        GamepadNavigationManager.restoreFocusOwner();
       } finally {
         MySystems.isNavigating = false;
       }

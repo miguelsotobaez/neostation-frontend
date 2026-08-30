@@ -147,6 +147,76 @@ class GamepadNavigationManager {
     }
   }
 
+  /// Records which layer owned input when an external launch began.
+  ///
+  /// Cleared by [restoreFocusOwner].
+  static String? _focusOwnerId;
+
+  /// Remembers [id] as the layer to hand input back to when the game ends.
+  ///
+  /// Call it where the launch begins, before the emulator handoff — by the time
+  /// the game exits, the stack may no longer say who was in charge.
+  static void rememberFocusOwner(String id) {
+    _focusOwnerId = id;
+    _log.i('[GamepadNavigationManager] Launch focus owner: $id');
+  }
+
+  /// Returns input to the layer that owned it when the launch began.
+  ///
+  /// [reactivate] alone is not enough here. A launch tears down and rebuilds a
+  /// lot of UI — the games list drops its entries to free memory for the
+  /// emulator, artwork caches are cleared — and a background screen that
+  /// remounts during that window re-pushes its own layer, landing it on top of
+  /// the stack. Waking "the top layer" then wakes whatever drifted up there
+  /// rather than the screen the user is looking at, and the controller appears
+  /// dead: the observed case was the systems carousel re-registering behind the
+  /// launch dialog, so returning from a game left input on the carousel while
+  /// the games list stayed on screen and deactivated.
+  ///
+  /// Restoring the owner moves it back to the top, which is also the right
+  /// order for what follows: a screen that mounted behind it stays behind it.
+  /// Falls back to [reactivate] when nothing was remembered or the owner is
+  /// gone (its screen was disposed while the game ran).
+  static void restoreFocusOwner() {
+    final ownerId = _focusOwnerId;
+    _focusOwnerId = null;
+
+    if (ownerId == null) {
+      reactivate();
+      return;
+    }
+
+    final index = _stack.indexWhere((layer) => layer.id == ownerId);
+    if (index == -1) {
+      _log.w(
+        '[GamepadNavigationManager] Launch focus owner $ownerId is no longer '
+        'registered; falling back to the top of the stack',
+      );
+      reactivate();
+      return;
+    }
+
+    if (index != _stack.length - 1) {
+      final displaced = _stack.last;
+      _log.i(
+        '[GamepadNavigationManager] Restoring $ownerId over ${displaced.id}, '
+        'which took the top of the stack during the launch',
+      );
+
+      // The drifted layer may have been activated by its own push while the
+      // game was running, so take input off it explicitly.
+      try {
+        displaced.onDeactivate();
+      } catch (e) {
+        _log.e('Error deactivating layer ${displaced.id}: $e');
+      }
+
+      _stack.add(_stack.removeAt(index));
+    }
+
+    reactivate();
+  }
+
   /// Reactivates the topmost layer in the stack.
   static void reactivate() {
     if (_stack.isNotEmpty) {

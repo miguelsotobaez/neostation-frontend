@@ -318,6 +318,8 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
         final syncProvider = context.read<SyncManager>().active!;
 
+        GamepadNavigationManager.rememberFocusOwner('my_systems_carousel');
+
         // Push the in-game RetroAchievements panel to the secondary display.
         // Fired without awaiting so it never blocks the emulator handoff; it
         // lands during launchGameWithDialog's foreground window, overlaying the
@@ -346,7 +348,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
             // Stop the poll and hide the panel so it fades back to the art.
             _achievementsController.stop(hidePanel: true);
             if (mounted) setState(() => _isGameLaunching = false);
-            _gamepadNav.activate();
+            GamepadNavigationManager.restoreFocusOwner();
             Provider.of<SqliteDatabaseProvider>(
               context,
               listen: false,
@@ -355,7 +357,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
           onLaunchFailed: (ctx, r) async {
             _achievementsController.stop(hidePanel: true);
             if (mounted) setState(() => _isGameLaunching = false);
-            _gamepadNav.activate();
+            GamepadNavigationManager.restoreFocusOwner();
           },
         );
       } catch (e) {

@@ -64,10 +64,15 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _dialogGamepadNav.initialize();
+      // Modal: launching frees memory and clears caches, so background screens
+      // remount while this dialog is up. Without the flag they push their own
+      // layer on top of it and take the controller off the dialog — including
+      // its own dismiss buttons — for the rest of the session.
       GamepadNavigationManager.pushLayer(
         'game_launch_dialog',
         onActivate: () => _dialogGamepadNav.activate(),
         onDeactivate: () => _dialogGamepadNav.deactivate(),
+        modal: true,
       );
     });
   }

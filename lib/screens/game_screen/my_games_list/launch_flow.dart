@@ -92,7 +92,7 @@ extension _LaunchFlow on _SystemGamesListState {
       if (_selectedGame != null) _updateSecondaryDisplay(_selectedGame!);
     }
 
-    GamepadNavigationManager.reactivate();
+    GamepadNavigationManager.restoreFocusOwner();
 
     // Reload games list (was cleared to free RAM during gameplay).
     try {
@@ -211,7 +211,11 @@ extension _LaunchFlow on _SystemGamesListState {
     _pushAchievementsForLaunch(_selectedGame!);
 
     // CRITICAL: Deactivate local input to avoid conflicts with external processes.
+    // Claim the input back by name on return: the stack is rebuilt underneath
+    // us during the launch, so "the top layer" is no longer a reliable answer
+    // to who was in charge.
     _gamepadNav.deactivate();
+    GamepadNavigationManager.rememberFocusOwner('system_games_list');
 
     // Free maximum RAM before handing off to the emulator.
     _freeMemoryForGameplay();

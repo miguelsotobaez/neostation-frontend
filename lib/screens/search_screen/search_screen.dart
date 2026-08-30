@@ -1246,6 +1246,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final game = GameModel.fromDatabaseModel(dbGame);
 
     _gamepadNav.deactivate();
+    GamepadNavigationManager.rememberFocusOwner('search_screen');
 
     // Drive the secondary display's "Now Playing" page (and the live RA panel)
     // for this session, exactly as the games list and the Recent Games cards do
@@ -1275,7 +1276,7 @@ class _SearchScreenState extends State<SearchScreen> {
         // Stop the poll and hide the panel; search pushes no display state of
         // its own, so the secondary fades back to whatever art is underneath.
         _achievementsController.stop(hidePanel: true);
-        GamepadNavigationManager.reactivate();
+        GamepadNavigationManager.restoreFocusOwner();
       },
       onLaunchFailed: (ctx, result) async {
         _achievementsController.stop(hidePanel: true);
@@ -1288,7 +1289,7 @@ class _SearchScreenState extends State<SearchScreen> {
             type: NotificationType.error,
           );
         }
-        GamepadNavigationManager.reactivate();
+        GamepadNavigationManager.restoreFocusOwner();
       },
     );
   }
