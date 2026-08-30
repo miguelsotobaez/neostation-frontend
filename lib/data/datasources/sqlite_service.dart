@@ -4124,6 +4124,45 @@ class SqliteService {
     DatabaseExecutorAdapter db,
   ) => instance._fixEmulatorDefaults(db);
 
+  /// Systems holding more than one *distinct* user-selected default emulator,
+  /// mapped to the emulator ids competing for them.
+  ///
+  /// The `DISTINCT` is the whole point. `user_emulator_config`'s primary key is
+  /// `emulator_unique_id` alone, so the same emulator can never appear twice —
+  /// but `app_emulators` is keyed on `(os_id, unique_identifier)` and therefore
+  /// holds one row per operating system the emulator is defined for. Joining
+  /// them fans a single user choice out to one row per OS, and counting those
+  /// rows reported a perfectly healthy database as broken: DuckStation is
+  /// defined for Android, Windows, Linux and macOS, so one PS1 default logged
+  /// as "system=ps1 has 4 user defaults (ps1.com.github.stenzek.duckstation
+  /// ×4)". The repeated id was the tell — a real violation names *different*
+  /// emulators.
+  ///
+  /// Counting distinct emulator ids still catches the real thing, which is two
+  /// different emulators both flagged as the user's pick for one system.
+  @visibleForTesting
+  static Future<Map<String, List<String>>> findDuplicateUserDefaults(
+    DatabaseExecutorAdapter db,
+  ) async {
+    final rows = await db.rawQuery('''
+      SELECT e.system_id AS sid,
+             GROUP_CONCAT(DISTINCT uc.emulator_unique_id) AS uids
+      FROM user_emulator_config uc
+      JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id
+      WHERE uc.is_user_default = 1
+      GROUP BY e.system_id
+      HAVING COUNT(DISTINCT uc.emulator_unique_id) > 1
+    ''');
+
+    return {
+      for (final row in rows)
+        row['sid'].toString(): (row['uids']?.toString() ?? '')
+            .split(',')
+            .where((id) => id.isNotEmpty)
+            .toList(),
+    };
+  }
+
   /// Logs any system whose default-emulator state is self-contradictory.
   ///
   /// The invariant is "at most one `is_user_default` per system, and no app
@@ -4138,21 +4177,12 @@ class SqliteService {
       // NB: messages here deliberately avoid a word ending in "y" immediately
       // before a colon — `y` is a redacted query parameter, so "ANOMALY: system
       // ds" gets scrubbed to "ANOMALY: <redacted> ds" by the log redactor.
-      final dupes = await db.rawQuery('''
-        SELECT e.system_id AS sid,
-               COUNT(*) AS n,
-               GROUP_CONCAT(uc.emulator_unique_id) AS uids
-        FROM user_emulator_config uc
-        JOIN app_emulators e ON e.unique_identifier = uc.emulator_unique_id
-        WHERE uc.is_user_default = 1
-        GROUP BY e.system_id
-        HAVING COUNT(*) > 1
-      ''');
+      final dupes = await findDuplicateUserDefaults(db);
 
-      for (final row in dupes) {
+      for (final entry in dupes.entries) {
         _log.w(
-          '[EmuSel] anomaly - system=${row['sid']} has ${row['n']} user '
-          'defaults (${row['uids']})',
+          '[EmuSel] anomaly - system=${entry.key} has ${entry.value.length} '
+          'user defaults (${entry.value.join(', ')})',
         );
       }
 
