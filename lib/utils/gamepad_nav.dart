@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import '../responsive.dart';
+import 'desktop_window_focus.dart';
 import 'gamepad_translator.dart';
 import 'select_tap.dart';
 import '../main.dart' show FullscreenNotifier;
@@ -699,6 +700,16 @@ class GamepadNavigation {
       final translatedEvent = _translator.translateEvent(event);
 
       if (translatedEvent == null) return;
+
+      // Desktop: the pad reaches us whether or not our window has focus, so a
+      // launched emulator in front of NeoStation would otherwise drive the UI
+      // behind it. Deliberately placed AFTER translation, for the same reason
+      // the reactivation grace below is: the translator must observe every edge
+      // or its press/release state sticks and swallows the next real press.
+      if (!DesktopWindowFocus.allowsInput) {
+        DesktopWindowFocus.verifySoon();
+        return;
+      }
 
       final isShoulderInput =
           translatedEvent.inputType == GamepadInputType.buttonLB ||

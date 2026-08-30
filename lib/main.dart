@@ -28,6 +28,7 @@ import 'package:neostation/services/startup_theme_cache.dart';
 import 'package:neostation/widgets/splash_status_layout.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
+import 'package:neostation/utils/desktop_window_focus.dart';
 import 'package:neostation/utils/display_metrics_log.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -250,6 +251,10 @@ void main() async {
       }
       FullscreenNotifier().notifyFullscreenChanged(false);
     }
+
+    // Gamepad input follows window focus from here on. Must come after
+    // ensureInitialized() above, which owns the channel it listens on.
+    await DesktopWindowFocus.initialize();
 
     log.i('Window manager initialized');
   }
