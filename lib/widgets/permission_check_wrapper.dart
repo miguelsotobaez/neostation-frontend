@@ -4,7 +4,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/sqlite_config_provider.dart';
 import 'setup_wizard.dart';
-import 'shimmering_logo.dart';
+import 'splash_status_layout.dart';
 
 /// Widget that checks the initial configuration and shows the wizard if necessary
 class PermissionCheckWrapper extends StatefulWidget {
@@ -125,7 +125,10 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     if (_isChecking) {
       // Show loading while checking — same shimmering logo as the rest of the
       // startup chain, so this gate doesn't read as a separate plain screen.
-      return const Scaffold(body: Center(child: ShimmeringLogo()));
+      // Laid out by SplashStatusLayout (with no status block) rather than a
+      // bare centred logo: that keeps the glyph at the same size and centre as
+      // the screens on either side of this gate, so it doesn't jump.
+      return const Scaffold(body: SplashStatusLayout(children: []));
     }
 
     if (_needsSetup) {

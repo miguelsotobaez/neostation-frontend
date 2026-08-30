@@ -1,6 +1,7 @@
 import '../../services/ra_library_match_runner.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
@@ -132,21 +133,21 @@ class _SystemContentState extends State<SystemContent> {
         // and one calm line is the whole point.
         if (raProgress != null) ...[
           SizedBox(
-            width: 220,
+            width: 220.r,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(2.r),
               child: LinearProgressIndicator(
                 value: raProgress.total != null && raProgress.total! > 0
                     ? (raProgress.done ?? 0) / raProgress.total!
                     : null,
-                minHeight: 3,
+                minHeight: 3.r,
                 backgroundColor: Theme.of(
                   context,
                 ).colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.r),
           Text(
             raProgress.done != null && raProgress.total != null
                 ? AppLocale.raMatchProgressCounted
@@ -155,7 +156,7 @@ class _SystemContentState extends State<SystemContent> {
                       .replaceFirst('{total}', raProgress.total.toString())
                 : AppLocale.raMatchProgressBusy.getString(context),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 17,
+              fontSize: 17.r,
               color: Theme.of(
                 context,
               ).colorScheme.onSurface.withValues(alpha: 0.6),
@@ -166,19 +167,19 @@ class _SystemContentState extends State<SystemContent> {
           ),
         ] else if (configProvider.isScanning) ...[
           SizedBox(
-            width: 220,
+            width: 220.r,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(2.r),
               child: LinearProgressIndicator(
                 value: configProvider.scanProgress,
-                minHeight: 3,
+                minHeight: 3.r,
                 backgroundColor: Theme.of(
                   context,
                 ).colorScheme.onSurface.withValues(alpha: 0.12),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.r),
           Text(
             configProvider.scanStatus.isNotEmpty
                 ? configProvider.scanStatus
@@ -186,7 +187,7 @@ class _SystemContentState extends State<SystemContent> {
             // 17 to match the startup screen's status line — the theme's
             // bodySmall (12) reads too small at couch distance.
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 17,
+              fontSize: 17.r,
               color: Theme.of(
                 context,
               ).colorScheme.onSurface.withValues(alpha: 0.6),

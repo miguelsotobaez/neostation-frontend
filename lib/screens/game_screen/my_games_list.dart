@@ -1534,11 +1534,21 @@ class _SystemGamesListState extends State<SystemGamesList> {
       builder: (context, constraints) {
         // Scale the preview to the panel: fill most of the width but leave room
         // for the name/count and keep it within the panel height.
+        //
+        // The cap is in design space (`.r`), never below its original 460: a
+        // fixed cap left the mosaic at roughly half its relative size on a
+        // desktop window, where every other element in the panel scales up
+        // around it, and the floor keeps the panels that already laid out
+        // correctly exactly as they were. The lower bound stays a raw 200 —
+        // that is a size the mosaic may overflow a cramped panel to reach, so
+        // scaling it up would push the mosaic off the bottom of a short screen
+        // rather than enlarge it.
         final maxByWidth = constraints.maxWidth * 0.82;
         final maxByHeight = constraints.maxHeight.isFinite
             ? constraints.maxHeight * 0.68
             : maxByWidth;
-        final side = min(maxByWidth, maxByHeight).clamp(200.0, 460.0);
+        final maxSide = max(460.0, 460.r);
+        final side = min(maxByWidth, maxByHeight).clamp(200.0, maxSide);
 
         return Center(
           child: Column(

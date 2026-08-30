@@ -96,11 +96,55 @@ void main() {
       }
     });
 
-    testWidgets('a tall panel renders the logo at its full width', (
+    testWidgets('the design size renders the logo at its full width', (
       tester,
     ) async {
-      await pumpAt(tester, const Size(831, 467), const [Text('x')]);
+      // 640x480 is the app's ScreenUtil design space, so the scale is 1 there
+      // and the logo lands on the 280 the splash has always used.
+      await pumpAt(tester, const Size(640, 480), const [Text('x')]);
       expect(tester.getRect(find.byType(ShimmeringLogo)).width, 280);
+    });
+
+    testWidgets('a short panel is capped by its height, not the width', (
+      tester,
+    ) async {
+      // The Thor is 467dp tall, so the height fraction sets the size — landing
+      // within a few pixels of the 280 it rendered at before the splash
+      // started scaling with the screen.
+      await pumpAt(tester, const Size(831, 467), const [Text('x')]);
+      expect(
+        tester.getRect(find.byType(ShimmeringLogo)).width,
+        moreOrLessEquals(280, epsilon: 4),
+      );
+    });
+
+    testWidgets('the logo scales up with a desktop window', (tester) async {
+      // A fixed 280px logo is stranded in the middle of a 1920x1080 window
+      // while the rest of the app scales up around it (everything else sizes
+      // off ScreenUtil's 640x480 design space). The splash follows the same
+      // scale, still inside the width and height caps.
+      await pumpAt(tester, const Size(1920, 1080), const [Text('x')]);
+      final logo = tester.getRect(find.byType(ShimmeringLogo));
+      expect(logo.width, greaterThan(560));
+      expect(logo.width, lessThanOrEqualTo(1920 * 0.55));
+      expect(logo.height, lessThanOrEqualTo(1080 * 0.40));
+    });
+
+    testWidgets('panels below the design size never grow', (tester) async {
+      // The scale is floored at 1, so the handhelds that were already laying
+      // out correctly render exactly as they did before.
+      for (final size in const [
+        Size(320, 240),
+        Size(480, 320),
+        Size(480, 272),
+        Size(575, 431),
+      ]) {
+        await pumpAt(tester, size, const [Text('x')]);
+        expect(
+          tester.getRect(find.byType(ShimmeringLogo)).width,
+          lessThanOrEqualTo(280),
+        );
+      }
     });
   });
 }

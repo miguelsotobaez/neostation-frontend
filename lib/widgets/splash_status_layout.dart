@@ -17,6 +17,11 @@ import 'shimmering_logo.dart';
 /// progress bar ended up printed across the glyph. For the same reason the
 /// logo is scaled down once it would take more than [_maxLogoHeightFraction]
 /// of the screen, which is what guarantees room for the status block below it.
+///
+/// Every size here is expressed in the app's 640×480 design space and scaled by
+/// [scaleOf], so the splash keeps its proportions on a desktop window instead
+/// of stranding a fixed-size logo in the middle of a 1920×1080 screen while the
+/// rest of the app scales up around it.
 class SplashStatusLayout extends StatelessWidget {
   const SplashStatusLayout({super.key, required this.children, this.progress});
 
@@ -26,10 +31,10 @@ class SplashStatusLayout extends StatelessWidget {
   /// Forwarded to [ShimmeringLogo]. Null keeps the ambient sweep.
   final double? progress;
 
-  /// Rendered logo width on a screen with room for it. Matches what the
-  /// startup and scan splashes used before the layout was made responsive,
-  /// so nothing moves on the devices that were already laying out correctly.
-  static const double _maxLogoWidth = 280;
+  /// Rendered logo width in design space. Matches what the startup and scan
+  /// splashes used before the layout was made responsive, so on a screen the
+  /// size of the design space nothing moves.
+  static const double _logoWidth = 280;
 
   /// Aspect ratio of `assets/images/logo_transparent.png` (772×510).
   static const double _logoAspect = 772 / 510;
@@ -40,7 +45,7 @@ class SplashStatusLayout extends StatelessWidget {
 
   /// Share of the screen height the logo may take before it is scaled down.
   /// Chosen so the Thor's ~467dp-tall screen still renders the logo at its
-  /// full [_maxLogoWidth] — only panels shorter than that scale it back.
+  /// full [_logoWidth] — only panels shorter than that scale it back.
   static const double _maxLogoHeightFraction = 0.40;
 
   /// Clear space between the logo's bottom edge and the status block.
@@ -54,8 +59,39 @@ class SplashStatusLayout extends StatelessWidget {
   static const double _horizontalPadding = 32;
   static const double _maxStatusWidth = 480;
 
+  /// The app's `ScreenUtil` design size (see `ScreenUtilInit` in `main.dart`).
+  static const Size _designSize = Size(640, 480);
+
+  /// Minimum screen height ScreenUtil's `splitScreenMode` assumes.
+  static const double _splitScreenMinHeight = 700;
+
+  /// The factor `.r` resolves to at this screen size, computed without
+  /// ScreenUtil.
+  ///
+  /// The startup screens (`_StartupScaffold` in `main.dart`) are mounted by
+  /// `runApp` *before* `ScreenUtilInit`, so `.r` there throws a late-init
+  /// error. Mirroring the formula keeps the pre-init splash, the scan splash
+  /// and the app itself at one scale, so the logo neither jumps nor changes
+  /// size across the handoff.
+  ///
+  /// Floored at 1 so no device renders the splash smaller than it did before
+  /// the splash became scale-aware; screens too short for the result are
+  /// handled by [_maxLogoHeightFraction], not by shrinking the whole scale.
+  static double scaleOf(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final scaleWidth = size.width / _designSize.width;
+    final scaleHeight =
+        math.max(size.height, _splitScreenMinHeight) / _designSize.height;
+    return math.max(1.0, math.min(scaleWidth, scaleHeight));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scale = scaleOf(context);
+    final maxLogoWidth = _logoWidth * scale;
+    final gap = _gap * scale;
+    final bottomInset = _bottomInset * scale;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // Fall back to the design size when handed an unbounded axis; the
@@ -63,13 +99,13 @@ class SplashStatusLayout extends StatelessWidget {
         // would otherwise produce a NaN offset.
         final width = constraints.maxWidth.isFinite
             ? constraints.maxWidth
-            : _maxLogoWidth / _maxLogoWidthFraction;
+            : maxLogoWidth / _maxLogoWidthFraction;
         final height = constraints.maxHeight.isFinite
             ? constraints.maxHeight
-            : _maxLogoWidth / _logoAspect / _maxLogoHeightFraction;
+            : maxLogoWidth / _logoAspect / _maxLogoHeightFraction;
 
         final logoWidth = math.min(
-          _maxLogoWidth,
+          maxLogoWidth,
           math.min(
             width * _maxLogoWidthFraction,
             height * _maxLogoHeightFraction * _logoAspect,
@@ -77,9 +113,11 @@ class SplashStatusLayout extends StatelessWidget {
         );
         final logoHeight = logoWidth / _logoAspect;
 
+        final maxStatusWidth = _maxStatusWidth * scale;
+        final statusPadding = _horizontalPadding * scale;
         final statusWidth = math.max(
           0.0,
-          math.min(_maxStatusWidth, width) - _horizontalPadding * 2,
+          math.min(maxStatusWidth, width) - statusPadding * 2,
         );
 
         return Stack(
@@ -88,10 +126,10 @@ class SplashStatusLayout extends StatelessWidget {
               child: ShimmeringLogo(width: logoWidth, progress: progress),
             ),
             Positioned(
-              top: height / 2 + logoHeight / 2 + _gap,
+              top: height / 2 + logoHeight / 2 + gap,
               left: 0,
               right: 0,
-              bottom: _bottomInset,
+              bottom: bottomInset,
               // The status text is laid out at its natural size and only
               // scaled down when the panel is too short to hold it — a long
               // status that wraps to three lines shrinks to fit rather than

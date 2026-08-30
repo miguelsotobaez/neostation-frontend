@@ -533,7 +533,12 @@ class _StartupScaffold extends StatefulWidget {
   });
 
   /// Builds the status area, given the resolved startup palette.
-  final List<Widget> Function(StartupThemeColors colors) childrenBuilder;
+  ///
+  /// Handed the context so callers can size their text with
+  /// [SplashStatusLayout.scaleOf] — these screens run before `ScreenUtilInit`,
+  /// so `.r` is not available to them.
+  final List<Widget> Function(BuildContext context, StartupThemeColors colors)
+  childrenBuilder;
 
   /// Show the shimmering logo instead of the static one. Used by the loading
   /// screen, where the shine doubles as the activity indicator; the error
@@ -566,7 +571,11 @@ class _StartupScaffoldState extends State<_StartupScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final children = widget.childrenBuilder(_colors);
+    // Same factor the shimmering splash uses, so the wordmark and the status
+    // block grow with the logo instead of being stranded at design size on a
+    // desktop window.
+    final scale = SplashStatusLayout.scaleOf(context);
+    final children = widget.childrenBuilder(context, _colors);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: _colors.themeData,
@@ -589,26 +598,26 @@ class _StartupScaffoldState extends State<_StartupScaffold> {
               ? SplashStatusLayout(children: children)
               : Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(32),
+                    padding: EdgeInsets.all(32 * scale),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Image.asset(
                           'assets/images/logo_transparent.png',
-                          width: 112,
-                          height: 112,
+                          width: 112 * scale,
+                          height: 112 * scale,
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24 * scale),
                         Text(
                           'NeoStation',
                           style: TextStyle(
                             color: _colors.foreground,
-                            fontSize: 28,
+                            fontSize: 28 * scale,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24 * scale),
                         ...children,
                       ],
                     ),
@@ -656,27 +665,30 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
   Widget build(BuildContext context) {
     return _StartupScaffold(
       animatedLogo: true,
-      childrenBuilder: (colors) => [
-        AnimatedOpacity(
-          opacity: _showText ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 400),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Text(
-              _startupString(AppLocale.startupLoading),
-              textAlign: TextAlign.center,
-              // Same voice as the splash's status line: the app font (Anta),
-              // small and dimmed. GoogleFonts falls back gracefully for the
-              // first frames if the font isn't warmed up yet.
-              style: GoogleFonts.anta(
-                color: colors.foreground.withValues(alpha: 0.6),
-                fontSize: 17,
-                letterSpacing: 0.3,
+      childrenBuilder: (context, colors) {
+        final scale = SplashStatusLayout.scaleOf(context);
+        return [
+          AnimatedOpacity(
+            opacity: _showText ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 400),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 440 * scale),
+              child: Text(
+                _startupString(AppLocale.startupLoading),
+                textAlign: TextAlign.center,
+                // Same voice as the splash's status line: the app font (Anta),
+                // small and dimmed. GoogleFonts falls back gracefully for the
+                // first frames if the font isn't warmed up yet.
+                style: GoogleFonts.anta(
+                  color: colors.foreground.withValues(alpha: 0.6),
+                  fontSize: 17 * scale,
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ];
+      },
     );
   }
 }
@@ -718,52 +730,57 @@ class StartupStorageErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return _StartupScaffold(
       onKeyEvent: _handleKey,
-      childrenBuilder: (colors) => [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _startupString(AppLocale.startupStorageUnavailable),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: colors.foreground.withValues(alpha: 0.8),
-                  fontSize: 16,
-                ),
-              ),
-              if (storagePath != null && storagePath!.isNotEmpty) ...[
-                const SizedBox(height: 12),
+      childrenBuilder: (context, colors) {
+        final scale = SplashStatusLayout.scaleOf(context);
+        return [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 520 * scale),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  storagePath!,
+                  _startupString(AppLocale.startupStorageUnavailable),
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: colors.foreground.withValues(alpha: 0.55),
-                    fontSize: 13,
+                    color: colors.foreground.withValues(alpha: 0.8),
+                    fontSize: 16 * scale,
                   ),
                 ),
-              ],
-              const SizedBox(height: 24),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ElevatedButton(
-                    onPressed: onRetry,
-                    child: Text(_startupString(AppLocale.startupStorageRetry)),
-                  ),
-                  const SizedBox(width: 16),
-                  TextButton(
-                    onPressed: onUseDefault,
-                    child: Text(
-                      _startupString(AppLocale.startupStorageUseDefault),
+                if (storagePath != null && storagePath!.isNotEmpty) ...[
+                  SizedBox(height: 12 * scale),
+                  Text(
+                    storagePath!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: colors.foreground.withValues(alpha: 0.55),
+                      fontSize: 13 * scale,
                     ),
                   ),
                 ],
-              ),
-            ],
+                SizedBox(height: 24 * scale),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton(
+                      onPressed: onRetry,
+                      child: Text(
+                        _startupString(AppLocale.startupStorageRetry),
+                      ),
+                    ),
+                    SizedBox(width: 16 * scale),
+                    TextButton(
+                      onPressed: onUseDefault,
+                      child: Text(
+                        _startupString(AppLocale.startupStorageUseDefault),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ];
+      },
     );
   }
 }
