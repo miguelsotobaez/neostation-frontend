@@ -8,8 +8,7 @@ import 'package:neostation/models/ra_hash_policy.dart';
 import 'package:neostation/utils/disc/chd_disc_image.dart';
 import 'package:neostation/utils/disc/ra_disc_hash.dart';
 
-import 'ra_disc_hash_test.dart'
-    show directory, psxExecutableHeader, sector, volumeDescriptor;
+import 'disc_fixtures.dart';
 
 /// The CHD reader, against CHDs built here rather than mocked.
 ///

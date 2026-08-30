@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/utils/disc/binary_disc_image.dart';
+import 'package:neostation/utils/disc/ccd_sheet.dart';
 import 'package:neostation/utils/disc/cue_sheet.dart';
 import 'package:neostation/utils/disc/disc_image.dart';
 import 'package:neostation/utils/disc/disc_paths.dart';
@@ -257,6 +258,162 @@ FILE game.bin BINARY
       expect(image, isNotNull);
       expect((await image!.readSector(0, 20))?[0], 20);
       await image.close();
+    });
+  });
+
+  group('CloneCD descriptor parsing', () {
+    /// A PC Engine CD as CloneCD writes one: an audio track in front of the
+    /// data track, and the session descriptors around them.
+    const pceDescriptor = '''
+[CloneCD]
+Version=3
+[Disc]
+TocEntries=5
+Sessions=1
+[Session 1]
+PreGapMode=2
+[Entry 0]
+Session=1
+Point=0xa0
+ADR=0x01
+Control=0x00
+TrackNo=0
+ALBA=-150
+PMin=1
+PLBA=6750
+[Entry 1]
+Session=1
+Point=0xa1
+Control=0x00
+PLBA=6750
+[Entry 2]
+Session=1
+Point=0xa2
+Control=0x00
+PLBA=180000
+[Entry 3]
+Session=1
+Point=0x01
+ADR=0x01
+Control=0x00
+TrackNo=0
+PLBA=0
+[Entry 4]
+Session=1
+Point=0x02
+ADR=0x01
+Control=0x04
+TrackNo=0
+PLBA=10
+[TRACK 1]
+MODE=0
+INDEX 1=0
+[TRACK 2]
+MODE=1
+INDEX 1=10
+''';
+
+    test('reads the tracks and leaves the session descriptors out', () {
+      final sheet = CcdSheet.parse(pceDescriptor);
+
+      expect(sheet.tracks.length, 2);
+      expect(sheet.tracks[0].number, 1);
+      expect(sheet.tracks[0].startLba, 0);
+      expect(sheet.tracks[0].isData, isFalse);
+      expect(sheet.tracks[1].number, 2);
+      expect(sheet.tracks[1].startLba, 10);
+      expect(sheet.tracks[1].isData, isTrue);
+      // MODE1 keeps a 16-byte header in front of the user data.
+      expect(sheet.tracks[1].dataOffset, 16);
+    });
+
+    test('knows where the user data starts in each mode', () {
+      int offset(String mode) => CcdSheet.parse(
+        '[Entry 0]\nPoint=0x01\nControl=0x04\nPLBA=0\n[TRACK 1]\nMODE=$mode\n',
+      ).tracks.single.dataOffset;
+
+      expect(offset('1'), 16);
+      expect(offset('2'), 24);
+    });
+
+    test('reads a track whose entry gives its point in decimal', () {
+      // The field is hexadecimal in every file seen, but the format does not
+      // insist on it.
+      final sheet = CcdSheet.parse(
+        '[Entry 0]\nPoint=1\nControl=4\nPLBA=0\n[TRACK 1]\nMODE=1\n',
+      );
+
+      expect(sheet.tracks.single.number, 1);
+      expect(sheet.tracks.single.isData, isTrue);
+    });
+
+    test('takes a MODE=0 section as audio whatever the TOC flagged', () {
+      final sheet = CcdSheet.parse(
+        '[Entry 0]\nPoint=0x01\nControl=0x04\nPLBA=0\n[TRACK 1]\nMODE=0\n',
+      );
+
+      expect(sheet.tracks.single.isData, isFalse);
+    });
+
+    test('parses nothing out of a descriptor with no track entries', () {
+      expect(CcdSheet.parse('[CloneCD]\nVersion=3\n').tracks, isEmpty);
+    });
+
+    group('opened over the image beside it', () {
+      late Directory temp;
+
+      setUp(() async {
+        temp = await Directory.systemTemp.createTemp('neostation_ccd_test');
+      });
+
+      tearDown(() async {
+        if (await temp.exists()) await temp.delete(recursive: true);
+      });
+
+      test('lays the table of contents over the .img', () async {
+        await File(
+          '${temp.path}/game.img',
+        ).writeAsBytes(buildImage(sectorSize: 2352, dataOffset: 16));
+        final ccdPath = '${temp.path}/game.ccd';
+        await File(ccdPath).writeAsString(pceDescriptor);
+
+        final image = await BinaryDiscImage.openCcd(ccdPath);
+
+        expect(image, isNotNull);
+        expect(image!.tracks.length, 2);
+        // Without the descriptor the whole image reads as one data track, and
+        // a PC Engine CD hash would be taken from the audio in front of it.
+        expect(image.firstDataTrackIndex, 1);
+        expect(image.tracks[1].startLba, 10);
+        expect((await image.readSector(1, 20))?[0], 20);
+        await image.close();
+      });
+
+      test('gives up when the .img is not beside it', () async {
+        final ccdPath = '${temp.path}/game.ccd';
+        await File(ccdPath).writeAsString(pceDescriptor);
+
+        expect(await BinaryDiscImage.openCcd(ccdPath), isNull);
+      });
+
+      test('opens an Alcohol descriptor through its .mdf', () async {
+        // The `.mds` is a binary table of contents this does not read: the
+        // `.mdf` beside it is a raw image whose first track starts at its
+        // first sector.
+        await File(
+          '${temp.path}/game.mdf',
+        ).writeAsBytes(buildImage(sectorSize: 2352, dataOffset: 24));
+        final mdsPath = '${temp.path}/game.mds';
+        await File(
+          mdsPath,
+        ).writeAsBytes(Uint8List.fromList('MEDIA '.codeUnits));
+
+        final image = await BinaryDiscImage.openMds(mdsPath);
+
+        expect(image, isNotNull);
+        expect((await image!.readSector(0, 20))?[0], 20);
+        await image.close();
+      });
     });
   });
 }

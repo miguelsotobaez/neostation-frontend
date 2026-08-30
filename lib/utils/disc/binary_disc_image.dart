@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../optimized_md5_utils.dart';
+import 'ccd_sheet.dart';
 import 'cue_sheet.dart';
 import 'disc_image.dart';
 import 'disc_paths.dart';
@@ -67,21 +68,66 @@ class BinaryDiscImage extends DiscImage {
     ]);
   }
 
+  /// Opens a CloneCD `.ccd` descriptor and the `.img` beside it.
+  ///
+  /// The `.img` is a raw image of the whole disc from sector zero; everything
+  /// the `.ccd` adds is the table of contents, which is the difference between
+  /// finding a PC Engine CD's data track and hashing the audio track in front
+  /// of it.
+  static Future<BinaryDiscImage?> openCcd(String ccdPath) async {
+    final text = await _readText(ccdPath);
+    if (text == null) return null;
+
+    final sheet = CcdSheet.parse(text);
+    if (sheet.tracks.isEmpty) return null;
+
+    final imagePath = await _companion(ccdPath, const ['img', 'IMG']);
+    if (imagePath == null) return null;
+    final fileSectors =
+        await OptimizedMd5Utils.getFileSize(imagePath) ~/ ccdSectorSize;
+    if (fileSectors <= 0) return null;
+
+    final tracks = <_BinaryTrack>[];
+    for (var i = 0; i < sheet.tracks.length; i++) {
+      final track = sheet.tracks[i];
+      if (track.startLba >= fileSectors) continue;
+      final next = i + 1 < sheet.tracks.length
+          ? sheet.tracks[i + 1].startLba
+          : fileSectors;
+      tracks.add(
+        _BinaryTrack(
+          info: DiscTrackInfo(
+            number: track.number,
+            isData: track.isData,
+            startLba: track.startLba,
+            sectors: next - track.startLba,
+          ),
+          path: imagePath,
+          sectorSize: ccdSectorSize,
+          dataOffset: track.dataOffset,
+          fileStartSector: track.startLba,
+        ),
+      );
+    }
+
+    if (tracks.isEmpty) return null;
+    return BinaryDiscImage._(tracks);
+  }
+
+  /// Opens an Alcohol 120% `.mds` descriptor by way of the `.mdf` beside it.
+  ///
+  /// The descriptor itself is a binary table of contents this does not read:
+  /// the `.mdf` is a raw image whose first track starts at its first sector,
+  /// which is the track every console this hashes for boots from.
+  static Future<BinaryDiscImage?> openMds(String mdsPath) async {
+    final dataPath = await _companion(mdsPath, const ['mdf', 'MDF']);
+    return dataPath == null ? null : openImage(dataPath);
+  }
+
   /// Opens a `.cue` sheet and the binaries it names.
   static Future<BinaryDiscImage?> openCue(String cuePath) async {
-    if (!await OptimizedMd5Utils.fileExists(cuePath)) return null;
-    final bytes = await OptimizedMd5Utils.readAllBytes(cuePath);
-    if (bytes.isEmpty) return null;
-
-    // Cue sheets are usually ASCII but sometimes carry accented filenames in a
-    // legacy encoding; latin1 decodes any byte rather than throwing, and the
-    // fields we read are ASCII either way.
-    String text;
-    try {
-      text = utf8.decode(bytes);
-    } on FormatException {
-      text = latin1.decode(bytes);
-    }
+    final text = await _readText(cuePath);
+    if (text == null) return null;
 
     final sheet = CueSheet.parse(text);
     if (sheet.tracks.isEmpty) return null;
@@ -218,6 +264,44 @@ class BinaryDiscImage extends DiscImage {
     // divides evenly into.
     if (size % 2352 == 0) return const _SectorLayout(2352, 16);
     if (size % 2048 == 0) return const _SectorLayout(2048, 0);
+    return null;
+  }
+
+  /// Reads a text descriptor, tolerating whatever encoding it was written in.
+  ///
+  /// Cue sheets and CloneCD descriptors are usually ASCII but sometimes carry
+  /// accented filenames in a legacy encoding.
+  static Future<String?> _readText(String path) async {
+    if (!await OptimizedMd5Utils.fileExists(path)) return null;
+    final bytes = await OptimizedMd5Utils.readAllBytes(path);
+    if (bytes.isEmpty) return null;
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      // latin1 decodes any byte rather than throwing, and the fields read here
+      // are ASCII either way.
+      return latin1.decode(bytes);
+    }
+  }
+
+  /// The file beside [descriptorPath] carrying the sectors, tried under each of
+  /// [extensions] in turn.
+  ///
+  /// A descriptor names no companion — the pairing is by name — so this is a
+  /// substitution rather than a lookup, and the spelling of the extension is
+  /// the only thing that varies.
+  static Future<String?> _companion(
+    String descriptorPath,
+    List<String> extensions,
+  ) async {
+    final dot = descriptorPath.lastIndexOf('.');
+    if (dot <= 0) return null;
+    final stem = descriptorPath.substring(0, dot);
+
+    for (final extension in extensions) {
+      final candidate = '$stem.$extension';
+      if (await OptimizedMd5Utils.fileExists(candidate)) return candidate;
+    }
     return null;
   }
 

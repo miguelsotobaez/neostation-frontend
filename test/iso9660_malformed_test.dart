@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/utils/disc/disc_image.dart';
 import 'package:neostation/utils/disc/iso9660.dart';
 
-import 'ra_disc_hash_test.dart' show FakeDiscImage, directory, volumeDescriptor;
+import 'disc_fixtures.dart';
 
 /// What the ISO9660 reader does when the bytes it is handed are not a
 /// filesystem.

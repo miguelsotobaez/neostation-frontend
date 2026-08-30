@@ -72,6 +72,12 @@ void main() {
         '/roms/ps1/Game.m3u',
         '/roms/psp/Game.pbp',
         '/roms/ps1/GAME.CHD',
+        '/roms/psp/Game.cso',
+        '/roms/psp/GAME.CSO',
+        '/roms/ps2/Game.ciso',
+        '/roms/ps1/Game.ccd',
+        '/roms/ps1/Game.mds',
+        '/roms/ps2/Game.mdf',
       ]) {
         expect(RaDiscHash.canHash(path), isTrue, reason: path);
       }
@@ -84,8 +90,11 @@ void main() {
       for (final path in const [
         '/roms/dc/Game.gdi',
         '/roms/dc/Game.cdi',
-        '/roms/psp/Game.cso',
         '/roms/gc/Game.rvz',
+        // Whole-file compression a sector reader cannot seek into.
+        '/roms/ps1/Game.ecm',
+        '/roms/ps2/Game.isz',
+        '/roms/ps2/Game.gz',
       ]) {
         expect(RaDiscHash.canHash(path), isFalse, reason: path);
       }

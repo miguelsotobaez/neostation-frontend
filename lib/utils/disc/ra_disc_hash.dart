@@ -5,6 +5,7 @@ import '../../services/logger_service.dart';
 import '../optimized_md5_utils.dart';
 import 'binary_disc_image.dart';
 import 'chd_disc_image.dart';
+import 'cso_disc_image.dart';
 import 'disc_image.dart';
 import 'disc_paths.dart';
 import 'm3u_playlist.dart';
@@ -16,6 +17,11 @@ class RaDiscHash {
 
   /// Containers this can read. Anything else is left to the caller to park as
   /// unhashable rather than hashed wrongly.
+  ///
+  /// Still missing, and deliberately: `.gdi` and `.cdi`, whose consoles have no
+  /// hash here to reach; `.ecm`, `.isz` and `.gz`, which are whole-file
+  /// compression a sector reader cannot seek into; `.toc`, `.nrg` and the Wii
+  /// containers, which nothing in a library here has arrived as.
   static const Set<String> supportedExtensions = {
     '.chd',
     '.cue',
@@ -24,6 +30,13 @@ class RaDiscHash {
     '.img',
     '.m3u',
     '.pbp',
+    // CISO: a deflated `.iso`, which is how most PSP libraries are stored.
+    '.cso',
+    '.ciso',
+    // A CloneCD or Alcohol 120% descriptor and the raw image beside it.
+    '.ccd',
+    '.mds',
+    '.mdf',
   };
 
   /// Whether [romPath] is a container this can open.
@@ -80,6 +93,11 @@ class RaDiscHash {
     final lower = path.toLowerCase();
     if (lower.endsWith('.chd')) return ChdDiscImage.open(path);
     if (lower.endsWith('.cue')) return BinaryDiscImage.openCue(path);
+    if (lower.endsWith('.ccd')) return BinaryDiscImage.openCcd(path);
+    if (lower.endsWith('.mds')) return BinaryDiscImage.openMds(path);
+    if (lower.endsWith('.cso') || lower.endsWith('.ciso')) {
+      return CsoDiscImage.open(path);
+    }
     return BinaryDiscImage.openImage(path);
   }
 

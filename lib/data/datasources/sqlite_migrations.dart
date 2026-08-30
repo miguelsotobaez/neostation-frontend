@@ -529,6 +529,9 @@ class SqliteMigrations {
       case 149:
         await _migrateToVersion149(db);
         break;
+      case 153:
+        await _migrateToVersion153(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6604,6 +6607,66 @@ class SqliteMigrations {
       _log.i('Migration v149 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v149: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v153: reopens the disc ROMs parked in containers the reader has
+  /// since learned to open.
+  ///
+  /// Adds no column. A disc image the reader could not open was parked with
+  /// `ra_hash_skipped = 'disc'` and never looked at again — the match pass
+  /// walks ROMs that have no hash and steps over parked ones — so a whole
+  /// library stored as `.cso` stayed unmatched however many passes ran. The
+  /// containers listed here are the ones this build added: CISO, and the
+  /// CloneCD and Alcohol 120% descriptors.
+  ///
+  /// Scoped by extension so the containers still unreadable — `.gdi`, `.cdi`,
+  /// the Wii ones — stay parked, and by folder because `'disc'` also parks a
+  /// stray disc image sitting in a cartridge system's folder, where hashing the
+  /// container is still the wrong answer. The folder list is a statement about
+  /// history rather than policy — the live policy is in
+  /// `assets/systems/<sys>.json`, and this runs before `syncSystems` has
+  /// written it. Nothing needs clearing on the hash side: a container that
+  /// could not be opened produced no hash to be wrong.
+  static Future<void> _migrateToVersion153(Database db) async {
+    _log.i('Migration v153: Reopening disc ROMs in newly readable containers');
+    try {
+      final romColumns = db
+          .select('PRAGMA table_info(user_roms)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!romColumns.contains('ra_hash_skipped')) {
+        _log.i('v153: user_roms has no ra_hash_skipped yet, nothing to reopen');
+        return;
+      }
+
+      const extensions = ['cso', 'ciso', 'ccd', 'mds', 'mdf'];
+      final matches = extensions
+          .map((extension) => "rom_path LIKE '%.$extension'")
+          .join(' OR ');
+
+      const folders = ['ps1', 'ps2', 'psp', 'scd', 'sat', 'pccd', 'tgcd'];
+      final placeholders = List.filled(folders.length, '?').join(', ');
+
+      db.execute('''
+        UPDATE user_roms SET ra_hash_skipped = NULL
+        WHERE ra_hash_skipped = 'disc'
+          AND ($matches)
+          AND app_system_id IN (
+            SELECT id FROM app_systems WHERE folder_name IN ($placeholders)
+          )
+      ''', folders);
+
+      final reopened = db.select('SELECT changes() AS n').first['n'] as int;
+      if (reopened > 0) {
+        _log.i('v153: reopened $reopened ROM(s) for re-matching');
+      }
+
+      _log.i('Migration v153 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v153: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
