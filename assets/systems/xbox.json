@@ -43,7 +43,7 @@
     },
     {
       "name": "Standalone Xenra",
-      "unique_id": "ali.xanite.green.xenra.xbox",
+      "unique_id": "xbox.ali.xanite.green",
       "is_retroachievements_compatible": false,
       "description": "Supported extensions: xiso, iso.",
       "platforms": {

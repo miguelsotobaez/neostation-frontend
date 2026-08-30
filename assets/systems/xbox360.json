@@ -72,14 +72,14 @@
       "platforms": {
         "android": {
           "launch_arguments": "-n emu.x360.mobile/.X360MobileGameLaunchActivity -d \"{file.uri}\""
-         }
+        }
       }
     },
     {
       "name": "Standalone Xenra",
-      "unique_id": "ali.xanite.green.xenra.xbox360",
+      "unique_id": "xbox360.ali.xanite.green",
       "is_retroachievements_compatible": false,
-      "description": "Supported extensions: xiso, iso.",
+      "description": "Supported extensions: iso.",
       "platforms": {
         "android": {
           "launch_arguments": "-n Ali.Xanite.green/Ali.Xanite.LauncherActivity -d \"{file.uri}\""
