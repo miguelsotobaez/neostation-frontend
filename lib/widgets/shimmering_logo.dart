@@ -28,6 +28,16 @@ class _ShimmeringLogoState extends State<ShimmeringLogo>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
+  /// Sweep position the glint is actually drawn at, republished from
+  /// [_controller] at a capped rate. See [_publishSweep].
+  final ValueNotifier<double> _sweep = ValueNotifier<double>(0);
+
+  /// Sweep travel required before the glint is redrawn.
+  ///
+  /// The controller spans the whole sweep over two seconds, so this is about
+  /// one 60 Hz frame's worth of movement, or roughly 2% of the logo's width.
+  static const double _minSweepDelta = 0.0075;
+
   @override
   void initState() {
     super.initState();
@@ -35,12 +45,40 @@ class _ShimmeringLogoState extends State<ShimmeringLogo>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     );
+    _controller.addListener(_publishSweep);
     final progress = widget.progress;
     if (progress == null) {
       _controller.repeat();
     } else {
       _controller.value = progress.clamp(0.0, 1.0);
     }
+  }
+
+  /// Republishes the controller's position to [_sweep] once the glint has
+  /// moved far enough to be worth redrawing.
+  ///
+  /// Every repaint rebuilds a [ShaderMask], which forces an offscreen
+  /// `saveLayer`. Driving that straight off the controller means paying for it
+  /// once per vsync, so the same sweep cost four times as much on a 240 Hz
+  /// display as on a 60 Hz one while looking identical. It is shown during
+  /// startup and library loading, which is where the app can least afford it.
+  ///
+  /// The gate is distance travelled rather than elapsed wall-clock time. A
+  /// 60 Hz display already covers more than [_minSweepDelta] per frame and so
+  /// is unaffected, while a 240 Hz one folds four vsyncs into one repaint of
+  /// what is the same picture. Throttling on a [Stopwatch] instead would run
+  /// off a clock the animation knows nothing about, ignoring `timeDilation`
+  /// and never advancing at all under a test's fake clock.
+  ///
+  /// A controller that has stopped always publishes, so a settled position is
+  /// never left short of where it should be.
+  void _publishSweep() {
+    final double value = _controller.value;
+    if (_controller.isAnimating &&
+        (value - _sweep.value).abs() < _minSweepDelta) {
+      return;
+    }
+    _sweep.value = value;
   }
 
   @override
@@ -65,7 +103,9 @@ class _ShimmeringLogoState extends State<ShimmeringLogo>
 
   @override
   void dispose() {
+    _controller.removeListener(_publishSweep);
     _controller.dispose();
+    _sweep.dispose();
     super.dispose();
   }
 
@@ -75,9 +115,9 @@ class _ShimmeringLogoState extends State<ShimmeringLogo>
     final clear = glint.withValues(alpha: 0.0);
     final shine = glint.withValues(alpha: 0.55);
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
+    return ValueListenableBuilder<double>(
+      valueListenable: _sweep,
+      builder: (context, sweep, child) {
         return ShaderMask(
           shaderCallback: (bounds) {
             return LinearGradient(
@@ -86,7 +126,7 @@ class _ShimmeringLogoState extends State<ShimmeringLogo>
               end: const Alignment(1.0, 0.4),
               colors: [clear, clear, shine, clear, clear],
               stops: const [0.0, 0.38, 0.5, 0.62, 1.0],
-              transform: _SlidingGradientTransform(_controller.value),
+              transform: _SlidingGradientTransform(sweep),
             ).createShader(bounds);
           },
           // srcATop draws the glint over the logo but only where the logo has
