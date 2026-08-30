@@ -1527,6 +1527,18 @@ class GameLaunchService {
   }
 
   /// Checks for a running process on Windows using the tasklist command.
+  ///
+  /// CSV output is not cosmetic. `tasklist`'s default table format renders the
+  /// image name in a fixed 25-character column and silently truncates anything
+  /// longer, so reading the full name back out of it is impossible. DuckStation
+  /// ships as `duckstation-qt-x64-ReleaseLTCG.exe` (34 characters) and tasklist
+  /// printed it as `duckstation-qt-x64-Releas`: the filter matched and the row
+  /// came back, but the substring test against the full name did not, so a
+  /// running emulator was reported as gone. [GameLaunchManager]'s poll then
+  /// declared the session over ~2s after launch, which closed the launch dialog
+  /// and handed the controller back to the UI while the game was still on
+  /// screen — every D-pad press navigated NeoStation behind the emulator and
+  /// every A press launched another game. `/FO CSV` quotes the name in full.
   static Future<bool> _isProcessRunning(String processName) async {
     if (!Platform.isWindows) return false;
 
@@ -1535,14 +1547,40 @@ class GameLaunchService {
         '/FI',
         'IMAGENAME eq $processName',
         '/NH',
+        '/FO',
+        'CSV',
       ]);
-      return result.stdout.toString().toLowerCase().contains(
-        processName.toLowerCase(),
-      );
+      return csvListsProcess(result.stdout.toString(), processName);
     } catch (e) {
       _log.e('Error checking if $processName is running: $e');
       return false;
     }
+  }
+
+  /// Whether [output] from `tasklist /FO CSV` lists [processName] as running.
+  ///
+  /// Only the first CSV field — the image name — is compared, and it must match
+  /// in full. Searching the whole line would match a name appearing in another
+  /// column, and would also match the `INFO: No tasks are running which match
+  /// the specified criteria.` notice that tasklist prints on stdout whenever
+  /// the filter selects nothing (that notice echoes no name today, but reading
+  /// only the field we mean costs nothing and cannot be surprised).
+  @visibleForTesting
+  static bool csvListsProcess(String output, String processName) {
+    final target = processName.toLowerCase();
+
+    for (final line in output.split(RegExp(r'\r?\n'))) {
+      final row = line.trim();
+      // Every data row is quoted; anything else is a notice, not a process.
+      if (!row.startsWith('"')) continue;
+
+      final closingQuote = row.indexOf('"', 1);
+      if (closingQuote <= 1) continue;
+
+      if (row.substring(1, closingQuote).toLowerCase() == target) return true;
+    }
+
+    return false;
   }
 
   /// Checks for a running process on Unix-like systems using the pgrep command.
