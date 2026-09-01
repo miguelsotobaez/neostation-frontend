@@ -237,6 +237,19 @@ class NeoAssetsService {
   /// 404-versus-transient-failure split without a network.
   static http.Client _client = http.Client();
 
+  /// Forgets the resolved theme-cache directory so the next call re-derives it
+  /// from the current user-data path.
+  ///
+  /// [_cacheDir] memoises the path on first use, which is at app start — before
+  /// the setup wizard's first step can move the user-data location. Without
+  /// this, a wizard that relocates the user data downloads the art pack into
+  /// the *old* folder while the database records the pack at the new one: the
+  /// art shows for the rest of that session and is gone on the next launch,
+  /// with the pack still selected in System Art.
+  static void resetCacheDir() {
+    _cachedThemeDir = null;
+  }
+
   /// Points the service at a stub client and a scratch cache directory.
   @visibleForTesting
   static void debugConfigure({http.Client? client, String? cacheDir}) {

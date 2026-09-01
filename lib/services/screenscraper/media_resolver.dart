@@ -32,6 +32,14 @@ class ScreenscraperMediaResolver {
     return _cachedMediaDirectory!;
   }
 
+  /// Forgets the resolved media directory so the next call re-derives it from
+  /// the current user-data path. Call after the user-data location changes —
+  /// the path is memoised on first use and would otherwise keep writing
+  /// scraped media into the previous location for the rest of the session.
+  static void resetMediaDirectory() {
+    _cachedMediaDirectory = null;
+  }
+
   /// Maps API media type names to NeoStation folder names.
   static String mapMediaTypeToFolder(String mediaType) {
     switch (mediaType) {

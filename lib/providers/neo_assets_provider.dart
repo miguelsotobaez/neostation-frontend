@@ -50,6 +50,17 @@ class NeoAssetsProvider extends ChangeNotifier {
     await loadThemes();
   }
 
+  /// Re-runs [init] against the *current* user-data location.
+  ///
+  /// The setup wizard's first step can move the user data after this provider
+  /// has already initialised, which leaves the cache directory and the active
+  /// theme resolved against the folder the app started in. Calling this once
+  /// the database has been reopened at the new path re-derives both.
+  Future<void> reinitialize() async {
+    _initialized = false;
+    await init();
+  }
+
   /// Fetches the list of available themes from the remote server.
   Future<void> loadThemes() async {
     _loading = true;
@@ -82,8 +93,10 @@ class NeoAssetsProvider extends ChangeNotifier {
   /// Downloads all required assets for the specified theme and applies it.
   ///
   /// Calculates a download plan to identify missing or outdated assets and
-  /// performs a batch download with real-time progress updates.
-  Future<void> downloadAndApplyTheme(
+  /// performs a batch download with real-time progress updates. Returns whether
+  /// the pack was actually applied, so a caller that reports success (the setup
+  /// wizard) doesn't claim a pack the user has no art for.
+  Future<bool> downloadAndApplyTheme(
     String themeFolder,
     List<String> systemFolderNames, {
     bool forceRedownload = false,
@@ -105,6 +118,21 @@ class NeoAssetsProvider extends ChangeNotifier {
           'Skipping forced redownload of "$themeFolder": '
           'theme metadata unreachable, keeping the cached art',
         );
+      }
+
+      // Nothing the pack declares matched anything installed — which on a first
+      // apply means the theme metadata never arrived (a dropped request leaves
+      // `systems` unknown, and an unknown list covers nothing). Marking the
+      // pack active here is how a theme comes to read as applied with not one
+      // background on disk: no later launch re-plans it, so the art never
+      // appears until the user re-picks the pack by hand.
+      if (plan.systemsToDownload.isEmpty) {
+        _log.w(
+          'Not applying theme "$themeFolder": the download plan covers no '
+          'systems (metadata unreachable, or the pack covers none of the '
+          '${systemFolderNames.length} installed systems)',
+        );
+        return false;
       }
 
       final clearFirst = forced || plan.forceRedownload;
@@ -149,8 +177,10 @@ class NeoAssetsProvider extends ChangeNotifier {
 
       _activeThemeFolder = themeFolder;
       await ConfigRepository.updateActiveTheme(themeFolder);
+      return true;
     } catch (e) {
       _log.e('Error downloading theme: $e');
+      return false;
     } finally {
       _downloading = false;
       _downloadProgress = 0.0;

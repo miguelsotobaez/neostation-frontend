@@ -46,6 +46,14 @@ class RetroAchievementsCache {
     return _cachedDir!;
   }
 
+  /// Forgets the resolved cache directory so the next call re-derives it from
+  /// the current user-data path. Call after the user-data location changes —
+  /// the path is memoised on first use and would otherwise keep writing to the
+  /// previous location for the rest of the session.
+  static void resetCacheDir() {
+    _cachedDir = null;
+  }
+
   /// Points the cache at [directory] and forgets which keys were replayed.
   /// Tests use this to exercise the store without a platform user-data path.
   @visibleForTesting

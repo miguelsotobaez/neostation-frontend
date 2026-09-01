@@ -806,6 +806,14 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       );
       await configProvider.reinitialize();
 
+      // The database is now open at the new path, but this provider resolved
+      // its cache directory and active theme against the old one at launch.
+      // Without this the art pack downloaded on the final step lands in the
+      // folder the app started in, and is gone on the next launch even though
+      // System Art still shows the pack as applied.
+      if (!mounted) return;
+      await context.read<NeoAssetsProvider>().reinitialize();
+
       if (mounted) setState(() => _selectedUserDataPath = selected);
     } catch (e) {
       _log.e('User data location selection failed in wizard: $e');
@@ -1597,13 +1605,27 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         .toList();
 
     setState(() => _isDownloadingArt = true);
+    bool applied = false;
     try {
-      await neoAssets.downloadAndApplyTheme(recommended.folder, systemFolders);
+      applied = await neoAssets.downloadAndApplyTheme(
+        recommended.folder,
+        systemFolders,
+      );
     } catch (e) {
       _log.e('Wizard art pack download failed: $e');
     }
     if (!mounted) return;
     setState(() => _isDownloadingArt = false);
+
+    // A failed download leaves the step exactly as it was — the button reads
+    // "Download Art Pack" again, so the user can retry or skip past it. Ending
+    // setup here instead would drop them into an app whose art never arrived
+    // with nothing said about it.
+    if (!applied) {
+      _log.w('Art pack was not applied; staying on the wizard art-pack step');
+      return;
+    }
+
     // Downloading the pack is the final action — finish setup directly instead
     // of making the user press Finish on a redundant "installed" screen.
     await _finishSetup();

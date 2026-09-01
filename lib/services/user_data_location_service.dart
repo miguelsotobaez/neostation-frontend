@@ -4,6 +4,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/neo_assets_service.dart';
+import 'package:neostation/services/retro_achievements_cache.dart';
+import 'package:neostation/services/screenscraper/media_resolver.dart';
 
 class UserDataLocationService {
   static const String customPathKey = 'custom_user_data_path';
@@ -21,12 +24,29 @@ class UserDataLocationService {
     // A new location invalidates any "storage unavailable" verdict cached for
     // the previous one, which would otherwise fail fast for the whole session.
     ConfigService.resetStorageAvailability();
+    _resetPathDerivedCaches();
   }
 
   static Future<void> clearCustomPath() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(customPathKey);
     ConfigService.resetStorageAvailability();
+    _resetPathDerivedCaches();
+  }
+
+  /// Drops every directory that was derived from the *previous* user-data path.
+  ///
+  /// These services each memoise their folder on first use, which happens at
+  /// app start — before the setup wizard's first step can move the user data.
+  /// Leaving them pinned means the rest of the session keeps writing to the old
+  /// location while the database lives at the new one, so the work is silently
+  /// stranded: the art pack downloaded during the wizard is gone on the next
+  /// launch even though System Art still shows it as applied. The settings-side
+  /// move gets away with it only because it forces a restart afterwards.
+  static void _resetPathDerivedCaches() {
+    NeoAssetsService.resetCacheDir();
+    RetroAchievementsCache.resetCacheDir();
+    ScreenscraperMediaResolver.resetMediaDirectory();
   }
 
   /// Counts top-level entries in [dirPath].
