@@ -532,6 +532,9 @@ class SqliteMigrations {
       case 153:
         await _migrateToVersion153(db);
         break;
+      case 154:
+        await _migrateToVersion154(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6667,6 +6670,60 @@ class SqliteMigrations {
       _log.i('Migration v153 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v153: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v154: Reopens ROMs parked because their archive could not be
+  /// extracted.
+  ///
+  /// `ArchiveService` named its extraction directory with the basename of the
+  /// ROM path. On Android that path is a SAF `content://` URI whose document id
+  /// encodes every `/` as `%2F`, so there was no separator left to split on and
+  /// the whole encoded id became the directory name — 267 bytes for a ROM whose
+  /// own file name is 137. Past the filesystem's 255-byte limit on one
+  /// component the directory could not be created, extraction failed with
+  /// errno 36, and the ROM was parked `ra_hash_skipped = 'extract_failed'`.
+  ///
+  /// The bulk pass steps over parked ROMs, and the unpark in
+  /// `RetroAchievementsHashService` only runs when a human asked for the pass,
+  /// so without this the fix would never reach a library that already hit the
+  /// bug: the affected ROMs stay unmatched forever on every existing install.
+  /// Same reasoning as v144 and v153, which reopened what the CHD reader and
+  /// the new disc containers had parked.
+  ///
+  /// Scoped to `'extract_failed'`. `'error'` is the pass's general bucket and a
+  /// ROM under it failed for some other reason, so it is left alone. Archives
+  /// that are genuinely corrupt are reopened too and simply park again on the
+  /// next pass, which costs one read each and is the same trade the two earlier
+  /// migrations made. Nothing needs clearing on the hash side: an archive that
+  /// never extracted produced no hash to be wrong.
+  static Future<void> _migrateToVersion154(Database db) async {
+    _log.i('Migration v154: Reopening ROMs whose archive failed to extract');
+    try {
+      final romColumns = db
+          .select('PRAGMA table_info(user_roms)')
+          .map((c) => c['name'].toString())
+          .toSet();
+      if (!romColumns.contains('ra_hash_skipped')) {
+        _log.i('v154: user_roms has no ra_hash_skipped yet, nothing to reopen');
+        return;
+      }
+
+      db.execute("""
+        UPDATE user_roms SET ra_hash_skipped = NULL
+        WHERE ra_hash_skipped = 'extract_failed'
+      """);
+
+      final reopened = db.select('SELECT changes() AS n').first['n'] as int;
+      if (reopened > 0) {
+        _log.i('v154: reopened $reopened ROM(s) for re-matching');
+      }
+
+      _log.i('Migration v154 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v154: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
