@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive_io.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_7zip/flutter_7zip.dart' as f7z;
 import 'config_service.dart';
@@ -13,6 +15,74 @@ import 'package:neostation/services/logger_service.dart';
 class ArchiveService {
   static final _log = LoggerService.instance;
 
+  /// Longest single path component most Android and Linux filesystems accept,
+  /// in bytes. Not characters: a Japanese ROM title costs three bytes a glyph.
+  static const int _maxNameBytes = 255;
+
+  /// Name of the directory that holds one archive's extracted contents.
+  ///
+  /// On desktop [archivePath] is a filesystem path and its basename is the file
+  /// name. On Android it is a SAF `content://` URI, and a SAF document id
+  /// encodes every `/` as `%2F` — so there is no separator left for
+  /// [path.basename] to split on and it returns the whole encoded id,
+  /// `primary%3Aemu%2Froms%2Fgba%2F…`, as the name. The encoding is what makes
+  /// that fatal rather than merely ugly: each separator costs three bytes
+  /// instead of one and every space becomes `%20`, so a deep folder plus a long
+  /// ROM name overruns the 255-byte limit on a single name and the directory
+  /// cannot be created at all (errno 36, `File name too long`). The ROM is then
+  /// parked as `extract_failed` and never hashed.
+  ///
+  /// Decoding the id and taking its real basename brings the name back inside
+  /// the limit by construction, because the archive itself lives on a
+  /// filesystem with the same limit, so its own file name already fits.
+  ///
+  /// Both callers derive the directory through here so that `extractRom` and
+  /// `cleanupTempFolder` cannot disagree about where it is; they each built the
+  /// path independently before, which is what let this go unnoticed on one of
+  /// them.
+  @visibleForTesting
+  static String tempDirNameFor(String archivePath) {
+    if (!archivePath.startsWith('content://')) {
+      // A plain path is already split on real separators. It is also not
+      // percent-encoded, so decoding it would corrupt any name holding a
+      // literal '%'.
+      return _clampToNameLimit(path.basename(archivePath));
+    }
+
+    final documentId = archivePath.split('/').last;
+    String decoded;
+    try {
+      decoded = Uri.decodeComponent(documentId);
+    } on ArgumentError {
+      decoded = documentId;
+    }
+
+    // A document id reads like "primary:emu/roms/gba/Game.zip" once decoded,
+    // and is always '/'-separated whatever the host platform's style is.
+    final name = path.posix.basename(decoded);
+    return _clampToNameLimit(name.isEmpty ? documentId : name);
+  }
+
+  /// Truncates [name] to [_maxNameBytes] **bytes** without splitting a rune.
+  ///
+  /// The backstop for the two paths above that can still hand back something
+  /// long: an undecodable document id, and a name that is genuinely oversized.
+  /// Nothing reads this name back, so losing the tail costs nothing.
+  static String _clampToNameLimit(String name) {
+    if (utf8.encode(name).length <= _maxNameBytes) return name;
+
+    final buffer = StringBuffer();
+    var bytes = 0;
+    for (final rune in name.runes) {
+      final char = String.fromCharCode(rune);
+      final size = utf8.encode(char).length;
+      if (bytes + size > _maxNameBytes) break;
+      buffer.write(char);
+      bytes += size;
+    }
+    return buffer.toString();
+  }
+
   /// Extracts a ROM from a ZIP or 7z archive into a temporary system-specific directory.
   ///
   /// The extraction target is located at `user-data/temp/[systemFolderName]/[archiveName]`.
@@ -25,7 +95,7 @@ class ArchiveService {
   ) async {
     try {
       final userDataPath = await ConfigService.getUserDataPath();
-      final archiveName = path.basename(archivePath);
+      final archiveName = tempDirNameFor(archivePath);
       final extension = path.extension(archivePath).toLowerCase();
 
       final tempDirPath = path.join(
@@ -156,7 +226,7 @@ class ArchiveService {
   ) async {
     try {
       final userDataPath = await ConfigService.getUserDataPath();
-      final zipName = path.basename(zipPath);
+      final zipName = tempDirNameFor(zipPath);
       final tempDirPath = path.join(
         userDataPath,
         'temp',
