@@ -156,7 +156,7 @@ class _SystemContentState extends State<SystemContent> {
                       .replaceFirst('{total}', raProgress.total.toString())
                 : AppLocale.raMatchProgressBusy.getString(context),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 17.r,
+              fontSize: 17 * SplashStatusLayout.textScaleOf(context),
               color: Theme.of(
                 context,
               ).colorScheme.onSurface.withValues(alpha: 0.6),
@@ -187,7 +187,7 @@ class _SystemContentState extends State<SystemContent> {
             // 17 to match the startup screen's status line — the theme's
             // bodySmall (12) reads too small at couch distance.
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 17.r,
+              fontSize: 17 * SplashStatusLayout.textScaleOf(context),
               color: Theme.of(
                 context,
               ).colorScheme.onSurface.withValues(alpha: 0.6),

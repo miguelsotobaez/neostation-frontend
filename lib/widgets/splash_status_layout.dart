@@ -21,7 +21,9 @@ import 'shimmering_logo.dart';
 /// Every size here is expressed in the app's 640×480 design space and scaled by
 /// [scaleOf], so the splash keeps its proportions on a desktop window instead
 /// of stranding a fixed-size logo in the middle of a 1920×1080 screen while the
-/// rest of the app scales up around it.
+/// rest of the app scales up around it. The status text the callers hand in is
+/// the exception: it uses the damped [textScaleOf] instead, so a big window
+/// grows the logo without turning the status line into a headline.
 class SplashStatusLayout extends StatelessWidget {
   const SplashStatusLayout({super.key, required this.children, this.progress});
 
@@ -84,6 +86,28 @@ class SplashStatusLayout extends StatelessWidget {
         math.max(size.height, _splitScreenMinHeight) / _designSize.height;
     return math.max(1.0, math.min(scaleWidth, scaleHeight));
   }
+
+  /// How much bigger than the design space a panel has to be before the status
+  /// text grows at all.
+  ///
+  /// Handhelds sit just above the 640×480 design space — the Thor's 831×467
+  /// resolves to ~1.3 — and their status line was already the right size at a
+  /// flat 17px. Anything inside this headroom therefore renders text exactly
+  /// as it did before the splash became scale-aware; only a genuinely larger
+  /// panel, a desktop window or a TV, starts growing it.
+  static const double _textGrowthHeadroom = 1.4;
+
+  /// The factor the splash *text* is scaled by.
+  ///
+  /// Text does not want the logo's scale. The logo is a graphic and reads
+  /// right at a constant share of the screen, but a status line grown by the
+  /// full factor turns into a headline on a desktop window — the 17px line
+  /// under the logo landed at ~38px on 1080p. So the growth is both deferred
+  /// past [_textGrowthHeadroom] and damped by a square root: the line still
+  /// scales up on a big panel, where 17px is too small to read at couch
+  /// distance, but far more slowly than the glyph above it.
+  static double textScaleOf(BuildContext context) =>
+      math.sqrt(math.max(1.0, scaleOf(context) / _textGrowthHeadroom));
 
   @override
   Widget build(BuildContext context) {

@@ -130,6 +130,57 @@ void main() {
       expect(logo.height, lessThanOrEqualTo(1080 * 0.40));
     });
 
+    testWidgets('the status text scale is damped against the logo scale', (
+      tester,
+    ) async {
+      // The logo wants the full ScreenUtil factor; the status line under it
+      // does not. Scaled in step, the 17px line landed near 38px on a 1080p
+      // window and read as a headline rather than a caption.
+      Future<({double scale, double textScale})> factorsAt(Size size) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        late double scale;
+        late double textScale;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) {
+                scale = SplashStatusLayout.scaleOf(context);
+                textScale = SplashStatusLayout.textScaleOf(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        );
+        return (scale: scale, textScale: textScale);
+      }
+
+      // Every handheld — up to and including the Thor, which is half again
+      // the design space — renders the status line at exactly the flat size it
+      // always did. Only the logo above it grows on those panels.
+      for (final size in const [
+        Size(320, 240),
+        Size(480, 320),
+        Size(640, 480),
+        Size(831, 467), // Thor
+      ]) {
+        final f = await factorsAt(size);
+        expect(
+          f.textScale,
+          moreOrLessEquals(1.0, epsilon: 0.001),
+          reason: '$size must keep the status text at its design size',
+        );
+      }
+
+      // A desktop window still grows the text — a 17px line is too small at
+      // couch distance on a big panel — but by much less than the logo.
+      final desktop = await factorsAt(const Size(1920, 1080));
+      expect(desktop.textScale, greaterThan(1.0));
+      expect(desktop.textScale, lessThan(desktop.scale));
+      expect(17 * desktop.textScale, lessThan(24));
+    });
+
     testWidgets('panels below the design size never grow', (tester) async {
       // The scale is floored at 1, so the handhelds that were already laying
       // out correctly render exactly as they did before.

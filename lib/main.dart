@@ -571,10 +571,12 @@ class _StartupScaffoldState extends State<_StartupScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    // Same factor the shimmering splash uses, so the wordmark and the status
-    // block grow with the logo instead of being stranded at design size on a
-    // desktop window.
+    // Same factor the shimmering splash uses, so the logo and the spacing
+    // around it grow instead of being stranded at design size on a desktop
+    // window. The wordmark takes the damped text scale — grown by the full
+    // factor it reads as a banner rather than a caption under the glyph.
     final scale = SplashStatusLayout.scaleOf(context);
+    final textScale = SplashStatusLayout.textScaleOf(context);
     final children = widget.childrenBuilder(context, _colors);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -612,7 +614,7 @@ class _StartupScaffoldState extends State<_StartupScaffold> {
                           'NeoStation',
                           style: TextStyle(
                             color: _colors.foreground,
-                            fontSize: 28 * scale,
+                            fontSize: 28 * textScale,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 1.2,
                           ),
@@ -667,6 +669,7 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
       animatedLogo: true,
       childrenBuilder: (context, colors) {
         final scale = SplashStatusLayout.scaleOf(context);
+        final textScale = SplashStatusLayout.textScaleOf(context);
         return [
           AnimatedOpacity(
             opacity: _showText ? 1.0 : 0.0,
@@ -681,7 +684,7 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
                 // first frames if the font isn't warmed up yet.
                 style: GoogleFonts.anta(
                   color: colors.foreground.withValues(alpha: 0.6),
-                  fontSize: 17 * scale,
+                  fontSize: 17 * textScale,
                   letterSpacing: 0.3,
                 ),
               ),
@@ -732,6 +735,7 @@ class StartupStorageErrorApp extends StatelessWidget {
       onKeyEvent: _handleKey,
       childrenBuilder: (context, colors) {
         final scale = SplashStatusLayout.scaleOf(context);
+        final textScale = SplashStatusLayout.textScaleOf(context);
         return [
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 520 * scale),
@@ -743,7 +747,7 @@ class StartupStorageErrorApp extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: colors.foreground.withValues(alpha: 0.8),
-                    fontSize: 16 * scale,
+                    fontSize: 16 * textScale,
                   ),
                 ),
                 if (storagePath != null && storagePath!.isNotEmpty) ...[
@@ -753,7 +757,7 @@ class StartupStorageErrorApp extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: colors.foreground.withValues(alpha: 0.55),
-                      fontSize: 13 * scale,
+                      fontSize: 13 * textScale,
                     ),
                   ),
                 ],
