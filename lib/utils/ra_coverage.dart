@@ -82,6 +82,18 @@ bool isRaSupportedSystem(String? raId) {
   return id != null && id.isNotEmpty && id != '0';
 }
 
+/// Whether an achievement count of zero is RetroAchievements' answer about the
+/// game rather than a gap in what the app has read.
+///
+/// The achievements pill shows a count, and a count of zero has two very
+/// different causes: RetroAchievements published no set for this dump
+/// ([RaCoverage.noSet], or a match with an empty set), or nothing ever got a
+/// usable hash out of the ROM. Only the first is "No Achievements"; the second
+/// has to say so, otherwise the pill contradicts the search screen's
+/// achievements filter, which files those ROMs under "Unknown".
+bool raCoverageAnswersZero(RaCoverage coverage) =>
+    coverage == RaCoverage.matched || coverage == RaCoverage.noSet;
+
 /// Classifies a ROM from the fields the library queries already return.
 RaCoverage raCoverageOf({
   required String? systemRaId,
@@ -103,16 +115,3 @@ RaCoverage raCoverageOf({
   if (isDiscImageFilename(filename)) return RaCoverage.pendingDiscSupport;
   return RaCoverage.notChecked;
 }
-
-/// The coverage states the library can filter on, in the order the chip cycles.
-///
-/// [RaCoverage.unsupportedSystem] is deliberately absent: filtering to "systems
-/// RetroAchievements does not cover" is a question about the systems list, not
-/// about achievements, and the facet would swamp the chip on a library with
-/// arcade or PC folders in it.
-const List<RaCoverage> kFilterableRaCoverage = [
-  RaCoverage.matched,
-  RaCoverage.noSet,
-  RaCoverage.notChecked,
-  RaCoverage.pendingDiscSupport,
-];

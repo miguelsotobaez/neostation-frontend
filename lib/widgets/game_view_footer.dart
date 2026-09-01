@@ -397,12 +397,17 @@ class _CompactAchievementsIndicator extends StatelessWidget {
     final noAchievements = !isLoading && total == 0;
 
     // A dash rather than a zero while the earned count is outstanding: "0/45"
-    // is a claim about the user's progress that has not been fetched yet.
+    // is a claim about the user's progress that has not been fetched yet. And
+    // zero only reads as "No Achievements" when RetroAchievements actually
+    // answered: a ROM nothing could hash says "Unknown", the same word the
+    // search screen's achievements filter files it under.
     final progressText = total > 0
         ? (knowsProgress ? '$awarded/$total' : '\u2013/$total')
         : (isLoading
               ? AppLocale.loading.getString(context)
-              : AppLocale.noAchievements.getString(context));
+              : raCoverageAnswersZero(game.raCoverage)
+              ? AppLocale.noAchievements.getString(context)
+              : AppLocale.raCoverageUnknown.getString(context));
 
     // Indeterminate only while something is genuinely outstanding: a known
     // total whose earned count has not arrived, or a lookup still running. A

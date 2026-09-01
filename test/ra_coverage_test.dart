@@ -107,13 +107,17 @@ void main() {
     });
   });
 
-  group('kFilterableRaCoverage', () {
-    test('leads with matched and omits the unsupported-system state', () {
-      expect(kFilterableRaCoverage.first, RaCoverage.matched);
-      expect(
-        kFilterableRaCoverage,
-        isNot(contains(RaCoverage.unsupportedSystem)),
-      );
+  group('raCoverageAnswersZero', () {
+    test('only a hashed ROM lets an empty count mean "No Achievements"', () {
+      expect(raCoverageAnswersZero(RaCoverage.matched), isTrue);
+      expect(raCoverageAnswersZero(RaCoverage.noSet), isTrue);
+    });
+
+    test('an unhashed ROM never claims the game has no achievements', () {
+      // These are the states the search screen files under "Unknown"; the
+      // achievements pill has to agree with it rather than settle on zero.
+      expect(raCoverageAnswersZero(RaCoverage.notChecked), isFalse);
+      expect(raCoverageAnswersZero(RaCoverage.pendingDiscSupport), isFalse);
     });
   });
 }

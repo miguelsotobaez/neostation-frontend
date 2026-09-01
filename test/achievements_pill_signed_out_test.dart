@@ -24,21 +24,29 @@ class _FakeRaProvider extends RetroAchievementsProvider {
   bool get isConnected => _connected;
 }
 
-GameModel _game({int? idRa, String? systemRaId, int? raNumAchievements}) =>
-    GameModel(
-      romname: 'Sonic The Hedgehog.gg',
-      realname: 'Sonic The Hedgehog',
-      name: 'Sonic The Hedgehog',
-      year: '',
-      developer: '',
-      publisher: '',
-      genre: '',
-      players: '',
-      rating: 0,
-      idRa: idRa,
-      systemRaId: systemRaId,
-      raNumAchievements: raNumAchievements,
-    );
+/// [raHash] defaults to a hash on purpose: a hashed, unmatched ROM is the case
+/// where an empty pill is an answer from RetroAchievements. Pass null for a ROM
+/// nothing could hash, where it is not.
+GameModel _game({
+  int? idRa,
+  String? systemRaId,
+  int? raNumAchievements,
+  String? raHash = 'deadbeef',
+}) => GameModel(
+  romname: 'Sonic The Hedgehog.gg',
+  realname: 'Sonic The Hedgehog',
+  name: 'Sonic The Hedgehog',
+  year: '',
+  developer: '',
+  publisher: '',
+  genre: '',
+  players: '',
+  rating: 0,
+  idRa: idRa,
+  raHash: raHash,
+  systemRaId: systemRaId,
+  raNumAchievements: raNumAchievements,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -107,10 +115,10 @@ void main() {
   });
 
   testWidgets('the pill returns once signed in', (tester) async {
-    await pumpFooter(tester, connected: true);
+    await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
 
-    // Connected with no game info loaded is the honest "none" case: the
-    // lookup ran and came back empty.
+    // Connected, hashed and unmatched is the honest "none" case: the ROM was
+    // read and RetroAchievements has no set registered for it.
     expect(
       find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
       findsOneWidget,
@@ -171,7 +179,7 @@ void main() {
       tester.takeException();
     });
 
-    testWidgets('an unmatched ROM still reports none once the lookup ran', (
+    testWidgets('a hashed, unmatched ROM reports none once the lookup ran', (
       tester,
     ) async {
       await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
@@ -179,6 +187,29 @@ void main() {
       expect(
         find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
         findsOneWidget,
+      );
+      tester.takeException();
+    });
+
+    testWidgets('a ROM nothing could hash says so instead of "none"', (
+      tester,
+    ) async {
+      // Nothing was ever looked up for this ROM, so "No Achievements" would be
+      // a claim the app cannot make — and it would contradict the search
+      // screen, whose achievements filter files this game under "Unknown".
+      await pumpFooter(
+        tester,
+        connected: true,
+        game: _game(systemRaId: '15', raHash: null),
+      );
+
+      expect(
+        find.text(AppLocale.en[AppLocale.raCoverageUnknown]!.toUpperCase()),
+        findsOneWidget,
+      );
+      expect(
+        find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
+        findsNothing,
       );
       tester.takeException();
     });

@@ -333,12 +333,17 @@ class GameDetailsFooter extends StatelessWidget {
 
     final bool noAchievements = !isLoadingAchievements && total == 0;
 
-    // A dash rather than a zero while the earned count is outstanding.
+    // A dash rather than a zero while the earned count is outstanding, and
+    // "Unknown" rather than "No Achievements" when the zero is a gap in what
+    // the app could hash instead of an answer from RetroAchievements. See
+    // _CompactAchievementsIndicator, which makes the same distinction.
     final String progressText = total > 0
         ? (knowsProgress ? '$awarded/$total' : '\u2013/$total')
         : (isLoadingAchievements
               ? AppLocale.loading.getString(context)
-              : AppLocale.noAchievements.getString(context));
+              : raCoverageAnswersZero(game.raCoverage)
+              ? AppLocale.noAchievements.getString(context)
+              : AppLocale.raCoverageUnknown.getString(context));
 
     // Indeterminate only while something is genuinely outstanding; a settled
     // "no achievements" gets an empty, still bar. See the compact pill.

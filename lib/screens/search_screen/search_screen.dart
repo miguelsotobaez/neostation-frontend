@@ -1970,16 +1970,17 @@ class _SearchScreenState extends State<SearchScreen> {
     _ => AppLocale.filterAny.getString(context),
   };
 
-  /// Display label for a [kFilterAchievements] value ([RaCoverage] names).
+  /// Display label for a [kFilterAchievements] value.
   ///
-  /// Each label says what is actually known: only [RaCoverage.noSet] claims the
-  /// game has no achievements, because it is the one bucket where the ROM was
-  /// hashed and RetroAchievements answered.
+  /// Reads as a plain Yes / No / Unknown, but the three are not a yes-no
+  /// question with a spare slot: only [kAchievementsNoSet] may say "No",
+  /// because it is the one option where the ROM was hashed and
+  /// RetroAchievements answered. Everything the app could not read is
+  /// "Unknown", never folded into the "No".
   String _achievementsDisplay(String value) => switch (value) {
-    'matched' => AppLocale.raCoverageMatched.getString(context),
-    'noSet' => AppLocale.raCoverageNoSet.getString(context),
-    'notChecked' => AppLocale.raCoverageNotChecked.getString(context),
-    'pendingDiscSupport' => AppLocale.raCoverageDiscPending.getString(context),
+    kAchievementsYes => AppLocale.raCoverageMatched.getString(context),
+    kAchievementsNoSet => AppLocale.raCoverageNoSet.getString(context),
+    kAchievementsUnknown => AppLocale.raCoverageUnknown.getString(context),
     _ => AppLocale.filterAny.getString(context),
   };
 
@@ -2401,8 +2402,10 @@ class _SearchScreenState extends State<SearchScreen> {
                 Icon(Symbols.star_rounded, size: 14.r, color: scheme.primary),
                 SizedBox(width: 2.r),
                 Text(
-                  // Stored 0..20, shown out of 10 as everywhere else in the app.
-                  searchRatingScore(g.rating!).toStringAsFixed(1),
+                  // Stored 0..20, shown as a whole score out of 10 like the
+                  // game views' badge — and as the same bucket the rating
+                  // filter groups this result under.
+                  '${searchRatingBucket(g.rating)}',
                   style: TextStyle(
                     fontSize: 12.r,
                     fontWeight: FontWeight.w600,

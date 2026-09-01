@@ -522,14 +522,24 @@ void main() {
       expect(searchAchievementsBucket(disc), RaCoverage.pendingDiscSupport);
     });
 
+    test('the filter offers three options, not one per bucket', () {
+      // Both "nobody has asked yet" buckets answer the same filter option; the
+      // hashed-and-answered bucket stays on its own.
+      expect(searchAchievementsOption(matched), kAchievementsYes);
+      expect(searchAchievementsOption(noSet), kAchievementsNoSet);
+      expect(searchAchievementsOption(notChecked), kAchievementsUnknown);
+      expect(searchAchievementsOption(disc), kAchievementsUnknown);
+    });
+
     test('a game on an uncovered system is outside the dimension', () {
       expect(searchAchievementsBucket(unsupported), isNull);
+      expect(searchAchievementsOption(unsupported), isNull);
     });
 
     test('filtering to matched returns only the matched game', () {
       final results = filterAndSortGames(
         all,
-        const SearchCriteria(achievements: 'matched'),
+        const SearchCriteria(achievements: kAchievementsYes),
       );
       expect(results.map((g) => g.realName), ['Matched']);
     });
@@ -537,27 +547,34 @@ void main() {
     test('"no set" does not sweep up unhashed or disc ROMs', () {
       final results = filterAndSortGames(
         all,
-        const SearchCriteria(achievements: 'noSet'),
+        const SearchCriteria(achievements: kAchievementsNoSet),
       );
       expect(results.map((g) => g.realName), ['No set']);
     });
 
-    test('games on uncovered systems match no bucket at all', () {
-      for (final bucket in kFilterableRaCoverage) {
+    test('"unknown" collects both of the unanswered buckets', () {
+      final results = filterAndSortGames(
+        all,
+        const SearchCriteria(achievements: kAchievementsUnknown),
+      );
+      expect(results.map((g) => g.realName), ['Disc', 'Not checked']);
+    });
+
+    test('games on uncovered systems match no option at all', () {
+      for (final option in kSearchAchievementsOptions) {
         final results = filterAndSortGames([
           unsupported,
-        ], SearchCriteria(achievements: bucket.name));
-        expect(results, isEmpty, reason: bucket.name);
+        ], SearchCriteria(achievements: option));
+        expect(results, isEmpty, reason: option);
       }
     });
 
-    test('the facet offers the buckets present, matched first', () {
+    test('the facet offers the options present, matched first', () {
       final facets = computeFacets(all, const SearchCriteria());
       expect(facets.achievements, [
-        'matched',
-        'noSet',
-        'notChecked',
-        'pendingDiscSupport',
+        kAchievementsYes,
+        kAchievementsNoSet,
+        kAchievementsUnknown,
       ]);
       expect(facets.optionsFor(kFilterAchievements), facets.achievements);
     });
@@ -569,9 +586,9 @@ void main() {
       );
     });
 
-    test('a fully hashed library stops offering "not checked"', () {
+    test('a fully hashed library stops offering "unknown"', () {
       final facets = computeFacets([matched, noSet], const SearchCriteria());
-      expect(facets.achievements, ['matched', 'noSet']);
+      expect(facets.achievements, [kAchievementsYes, kAchievementsNoSet]);
     });
 
     test('the active value survives a query that strands it', () {
@@ -579,22 +596,22 @@ void main() {
       // cycle back off it; see _facet's equivalent for string dimensions.
       final facets = computeFacets([
         matched,
-      ], const SearchCriteria(achievements: 'pendingDiscSupport'));
-      expect(facets.achievements, contains('pendingDiscSupport'));
+      ], const SearchCriteria(achievements: kAchievementsUnknown));
+      expect(facets.achievements, contains(kAchievementsUnknown));
     });
 
-    test('an active bucket does not narrow its own facet', () {
+    test('an active option does not narrow its own facet', () {
       final facets = computeFacets(
         all,
-        const SearchCriteria(achievements: 'matched'),
+        const SearchCriteria(achievements: kAchievementsYes),
       );
-      expect(facets.achievements, hasLength(4));
+      expect(facets.achievements, hasLength(3));
     });
 
     test('the dimension cannot be evaluated against RomM results', () {
       expect(const SearchCriteria().rommFilterable, isTrue);
       expect(
-        const SearchCriteria(achievements: 'matched').rommFilterable,
+        const SearchCriteria(achievements: kAchievementsYes).rommFilterable,
         isFalse,
       );
     });

@@ -65,6 +65,41 @@ RaCoverage? searchAchievementsBucket(DatabaseGameModel g) {
   return coverage == RaCoverage.unsupportedSystem ? null : coverage;
 }
 
+/// Values for [kFilterAchievements].
+///
+/// The filter asks a coarser question than [RaCoverage] answers: the two
+/// "nobody has asked yet" buckets ([RaCoverage.notChecked] and
+/// [RaCoverage.pendingDiscSupport]) are one option here, because the
+/// difference between them is about *why* the app cannot say and not about the
+/// game — nothing the user can act on while picking a filter, and four options
+/// where three answer the question is what made the filter read as noise.
+/// [RaCoverage] keeps the distinction for everything else that needs it.
+///
+/// [kAchievementsNoSet] stays separate from [kAchievementsUnknown]: it is the
+/// one option where the ROM was hashed and RetroAchievements answered, so it is
+/// the only one that may honestly be read as "no achievements".
+const String kAchievementsYes = 'matched';
+const String kAchievementsNoSet = 'noSet';
+const String kAchievementsUnknown = 'unknown';
+
+/// The achievements options, in the order the filter cycles them: the answer
+/// most people want first.
+const List<String> kSearchAchievementsOptions = [
+  kAchievementsYes,
+  kAchievementsNoSet,
+  kAchievementsUnknown,
+];
+
+/// The [kFilterAchievements] option a game answers, or null when the game is
+/// outside the dimension (see [searchAchievementsBucket]).
+String? searchAchievementsOption(DatabaseGameModel g) =>
+    switch (searchAchievementsBucket(g)) {
+      null => null,
+      RaCoverage.matched => kAchievementsYes,
+      RaCoverage.noSet => kAchievementsNoSet,
+      _ => kAchievementsUnknown,
+    };
+
 /// Active filter selection. A null field means "Any" for that dimension.
 class SearchCriteria {
   const SearchCriteria({
@@ -207,7 +242,7 @@ bool matchesCriteria(DatabaseGameModel g, SearchCriteria criteria) {
     return false;
   }
   if (criteria.achievements != null &&
-      searchAchievementsBucket(g)?.name != criteria.achievements) {
+      searchAchievementsOption(g) != criteria.achievements) {
     return false;
   }
   return true;
@@ -298,9 +333,9 @@ class SearchFacets {
   /// Whole 1..10 scores at least one candidate game is filed under, ascending.
   final List<int> ratings;
 
-  /// [RaCoverage] names at least one candidate game falls into, in
-  /// [kFilterableRaCoverage] order. A library that has been fully hashed never
-  /// offers "not checked"; one with no disc systems never offers "disc".
+  /// [kSearchAchievementsOptions] at least one candidate game falls into, in
+  /// that order. A library that has been fully hashed and matched never offers
+  /// "unknown".
   final List<String> achievements;
 
   static const SearchFacets empty = SearchFacets();
@@ -394,21 +429,21 @@ List<int> _ratingFacet(List<DatabaseGameModel> games, SearchCriteria criteria) {
   return scores.toList()..sort();
 }
 
-/// Coverage buckets actually present in the candidate set, in a fixed order
+/// Coverage options actually present in the candidate set, in a fixed order
 /// rather than alphabetically: "has achievements" is the answer most people
 /// want and belongs at the head of the cycle.
 List<String> _achievementsFacet(
   List<DatabaseGameModel> games,
   SearchCriteria criteria,
 ) {
-  final present = <RaCoverage>{};
+  final present = <String>{};
   for (final g in _candidates(games, criteria, kFilterAchievements)) {
-    final bucket = searchAchievementsBucket(g);
-    if (bucket != null) present.add(bucket);
+    final option = searchAchievementsOption(g);
+    if (option != null) present.add(option);
   }
   final options = [
-    for (final c in kFilterableRaCoverage)
-      if (present.contains(c)) c.name,
+    for (final o in kSearchAchievementsOptions)
+      if (present.contains(o)) o,
   ];
   final active = criteria.achievements;
   if (active != null && !options.contains(active)) options.add(active);
