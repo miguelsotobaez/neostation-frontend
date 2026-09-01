@@ -286,10 +286,12 @@ class OptimizedMd5Utils {
             filePath,
             'temp_nes',
           );
-          if (extractedPath != null) {
-            final extractedBytes = await File(extractedPath).readAsBytes();
-            romBytes = extractedBytes;
-            await File(extractedPath).delete();
+          try {
+            if (extractedPath != null) {
+              romBytes = await File(extractedPath).readAsBytes();
+            }
+          } finally {
+            await ArchiveService.cleanupTempFolder('temp_nes', filePath);
           }
         } else if (bytes[0] == 0x50 &&
             bytes[1] == 0x4B &&
@@ -359,10 +361,12 @@ class OptimizedMd5Utils {
             filePath,
             'temp_snes',
           );
-          if (extractedPath != null) {
-            final extractedBytes = await File(extractedPath).readAsBytes();
-            romBytes = extractedBytes;
-            await File(extractedPath).delete();
+          try {
+            if (extractedPath != null) {
+              romBytes = await File(extractedPath).readAsBytes();
+            }
+          } finally {
+            await ArchiveService.cleanupTempFolder('temp_snes', filePath);
           }
         } else if (bytes[0] == 0x50 &&
             bytes[1] == 0x4B &&
@@ -529,9 +533,12 @@ class OptimizedMd5Utils {
             filePath,
             'temp_n64',
           );
-          if (extractedPath != null) {
-            romBytes = await File(extractedPath).readAsBytes();
-            await File(extractedPath).delete();
+          try {
+            if (extractedPath != null) {
+              romBytes = await File(extractedPath).readAsBytes();
+            }
+          } finally {
+            await ArchiveService.cleanupTempFolder('temp_n64', filePath);
           }
         } else {
           try {

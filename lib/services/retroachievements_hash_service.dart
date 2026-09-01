@@ -104,19 +104,26 @@ class RetroAchievementsHashService {
       await Future.delayed(const Duration(milliseconds: 500));
 
       final isolateToken = RootIsolateToken.instance!;
-      final hash = _replayIsolateLog(
-        await compute(_generateHashForSystemIsolate, {
-          'romPath': romPathToProcess,
-          'algo': policy.algo.jsonName,
-          'token': isolateToken,
-        }),
-      );
-
-      if (isArchive) {
-        await ArchiveService.cleanupTempFolder(
-          game.systemFolderName ?? 'unknown',
-          game.romPath!,
+      String? hash;
+      try {
+        hash = _replayIsolateLog(
+          await compute(_generateHashForSystemIsolate, {
+            'romPath': romPathToProcess,
+            'algo': policy.algo.jsonName,
+            'token': isolateToken,
+          }),
         );
+      } finally {
+        // In a finally because the hash runs in another isolate: a throw there
+        // used to skip the cleanup and strand the extracted ROM on disk, at
+        // full size, for every archive that failed to hash. The sibling path
+        // below already does it this way.
+        if (isArchive) {
+          await ArchiveService.cleanupTempFolder(
+            game.systemFolderName ?? 'unknown',
+            game.romPath!,
+          );
+        }
       }
 
       if (hash != null && hash.isNotEmpty) {
