@@ -658,7 +658,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Immediate resource termination.
     _stopVideoAndCleanup();
 
-    // Release current input layers.
+    // Release current input layers — all three of them.
+    //
+    // Only the view actually in use has a layer on the stack; popping the other
+    // two is a no-op that logs "not found in stack". Missing one is not: the
+    // route stays mounted for the length of the pop transition, so whichever
+    // layer is left behind is still the *top* one and goes on swallowing input
+    // on behalf of a screen that is being torn down. `games_carousel` was the
+    // one missing, and it is popped from the carousel's `dispose()` — which
+    // runs at the *end* of the pop. So backing out of a system in carousel view
+    // left the D-pad dead for the whole transition: the press played its nav
+    // sound and moved the dying carousel's own index, while the systems screen
+    // underneath never saw it.
+    GamepadNavigationManager.popLayer('games_carousel');
     GamepadNavigationManager.popLayer('games_grid');
     GamepadNavigationManager.popLayer('system_games_list');
 
