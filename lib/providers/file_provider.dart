@@ -5,6 +5,7 @@ import 'package:neostation/repositories/system_repository.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/esde_import_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
 /// Provider responsible for abstracting filesystem access across Android and Desktop platforms.
@@ -46,8 +47,16 @@ class FileProvider extends ChangeNotifier {
   /// import is not configured. Used for read-time fallback artwork resolution.
   String? _esdeRoot;
 
-  /// NeoStation system folder name -> ES-DE `downloaded_media` subfolder name,
-  /// captured during ES-DE import.
+  /// Absolute path to the folder ES-DE writes downloaded artwork into, or null
+  /// when ES-DE is not configured. Usually `<_esdeRoot>/downloaded_media`, but
+  /// ES-DE lets the user move it (see [EsdeImportService.resolveMediaRoot]), so
+  /// it is re-resolved from `es_settings.xml` on every load rather than
+  /// persisted: a user who moves the folder in ES-DE keeps their art without
+  /// having to re-run the import.
+  String? _esdeMediaRoot;
+
+  /// NeoStation system folder name -> ES-DE media subfolder name, captured
+  /// during ES-DE import (a folder under [_esdeMediaRoot]).
   Map<String, String> _esdeSystemDirs = {};
 
   /// "systemFolder\u0000romBase" -> ES-DE media subfolder (the ROM's directory
@@ -446,6 +455,9 @@ class FileProvider extends ChangeNotifier {
       _esdeRoot = (rootRaw != null && rootRaw.trim().isNotEmpty)
           ? rootRaw.trim()
           : null;
+      _esdeMediaRoot = _esdeRoot == null
+          ? null
+          : EsdeImportService.resolveMediaRoot(_esdeRoot!);
 
       final map = <String, String>{};
       if (_esdeRoot != null) {
@@ -486,6 +498,7 @@ class FileProvider extends ChangeNotifier {
       _esdeMediaSubdirs = subdirs;
     } catch (e) {
       _esdeRoot = null;
+      _esdeMediaRoot = null;
       _esdeSystemDirs = {};
       _esdeMediaSubdirs = {};
     }
@@ -517,7 +530,8 @@ class FileProvider extends ChangeNotifier {
     String romName, [
     List<String>? extensions,
   ]) {
-    if (_esdeRoot == null) return const [];
+    final mediaRoot = _esdeMediaRoot;
+    if (mediaRoot == null) return const [];
     final esdeDir = _esdeSystemDirs[systemFolderName];
     if (esdeDir == null) return const [];
     final categories = _esdeMediaCategories[imageType];
@@ -538,8 +552,7 @@ class FileProvider extends ChangeNotifier {
         for (final extension in extList) {
           candidates.add(
             path.joinAll([
-              _esdeRoot!,
-              'downloaded_media',
+              mediaRoot,
               esdeDir,
               category,
               if (sub.isNotEmpty) sub,
@@ -576,6 +589,7 @@ class FileProvider extends ChangeNotifier {
     _mediaPath = null;
     _documentsPath = null;
     _esdeRoot = null;
+    _esdeMediaRoot = null;
     _esdeSystemDirs = {};
     _esdeMediaSubdirs = {};
     _isInitialized = false;

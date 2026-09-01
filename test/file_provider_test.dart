@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/providers/file_provider.dart';
 
@@ -96,6 +98,29 @@ void main() {
         ]);
       },
     );
+
+    test('follows a relocated ES-DE MediaDirectory', () async {
+      // ES-DE lets the user move the media folder; the choice lives in
+      // es_settings.xml and replaces `downloaded_media` outright (issue #456).
+      final esdeRoot = Directory.systemTemp.createTempSync('esde_root_');
+      addTearDown(() => esdeRoot.deleteSync(recursive: true));
+      final mediaDir = Directory.systemTemp.createTempSync('esde_media_');
+      addTearDown(() => mediaDir.deleteSync(recursive: true));
+
+      Directory('${esdeRoot.path}/settings').createSync(recursive: true);
+      File('${esdeRoot.path}/settings/es_settings.xml').writeAsStringSync(
+        '<string name="MediaDirectory" value="${mediaDir.path}" />',
+      );
+
+      await db.update('user_config', {'esde_folder_path': esdeRoot.path});
+      await provider.refreshEsde();
+
+      expect(provider.getEsdeMediaCandidates('snes', 'fanarts', 'sonic.smc'), [
+        '${mediaDir.path}/snes/fanart/sonic.png',
+        '${mediaDir.path}/snes/fanart/sonic.jpg',
+        '${mediaDir.path}/snes/fanart/sonic.webp',
+      ]);
+    });
 
     test('returns nothing for a system with no recorded ES-DE media dir', () {
       expect(

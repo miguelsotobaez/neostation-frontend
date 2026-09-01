@@ -71,14 +71,15 @@ class EsdeImportResult {
 /// NeoStation's `user_screenscraper_metadata` on a fill-gaps-only basis (never
 /// clobbering existing NeoStation-scraped values). Artwork is NOT copied: the
 /// ES-DE folder path plus a per-system `esde_media_dir` are persisted so
-/// [FileProvider] can resolve `downloaded_media/` files as read-time fallback
+/// [FileProvider] can resolve ES-DE's media files as read-time fallback
 /// (a later NeoStation scrape lands in NeoStation's own media folder and takes
-/// precedence automatically).
+/// precedence automatically). Which folder that media sits in is not assumed:
+/// see [resolveMediaRoot].
 class EsdeImportService {
   static final _log = LoggerService.instance;
 
   /// Runs the import against [esdeRoot] (the ES-DE application folder that
-  /// contains `gamelists/` and `downloaded_media/`).
+  /// contains `gamelists/`, `settings/`, and by default `downloaded_media/`).
   ///
   /// [onProgress] is invoked as `(fraction 0..1, currentSystemLabel)`.
   static Future<EsdeImportResult> import(
@@ -87,6 +88,7 @@ class EsdeImportService {
   }) async {
     var result = const EsdeImportResult();
     _mediaIndexCache.clear();
+    final mediaRoot = resolveMediaRoot(esdeRoot);
 
     final gamelistsDir = Directory(path.join(esdeRoot, 'gamelists'));
     if (!gamelistsDir.existsSync()) {
@@ -126,7 +128,7 @@ class EsdeImportService {
       // system with an unreadable gamelist.xml counts as skipped, not matched.
       final matchedBefore = result.systemsMatched;
       result = await _importSystem(
-        esdeRoot: esdeRoot,
+        mediaRoot: mediaRoot,
         esdeDirName: esdeDirName,
         appSystemId: appSystemId,
         gamelistFile: File(path.join(systemDir.path, 'gamelist.xml')),
@@ -144,12 +146,12 @@ class EsdeImportService {
       // imported (a corrupt/unparseable gamelist.xml is skipped, not matched);
       // otherwise we'd record an esde_media_dir with no matching metadata rows.
       if (result.systemsMatched > matchedBefore) {
-        await _recordEsdeMediaDir(esdeRoot, esdeDirName, appSystemId);
+        await _recordEsdeMediaDir(mediaRoot, esdeDirName, appSystemId);
         importedDirs.add(esdeDirName.toLowerCase());
       }
     }
 
-    await _linkMediaOnlySystems(esdeRoot, importedDirs);
+    await _linkMediaOnlySystems(mediaRoot, importedDirs);
 
     onProgress?.call(1.0, '');
     _log.i(
@@ -184,8 +186,109 @@ class EsdeImportService {
     return deleted;
   }
 
+  /// Default media folder name inside an ES-DE application folder.
+  static const String defaultMediaDirName = 'downloaded_media';
+
+  /// Absolute path to the folder ES-DE actually writes downloaded artwork
+  /// into for the application folder [esdeRoot].
+  ///
+  /// ES-DE lets the user move that folder anywhere; the choice lives in
+  /// `settings/es_settings.xml` as `<string name="MediaDirectory" value="…" />`
+  /// and, when set, REPLACES `<esdeRoot>/downloaded_media` outright (the value
+  /// is the media folder itself, not a parent holding one). Without reading it
+  /// an import of such an install finds no artwork at all — issue #456.
+  ///
+  /// ES-DE expands `~` and `%ESPATH%` inside the value, so we do too.
+  /// `%ESPATH%` is the ES-DE *binary's* directory, which we can't know from
+  /// the picked folder, so both the ES-DE folder and its parent are tried (the
+  /// usual portable layout puts `ES-DE.exe` next to the `ES-DE/` data folder).
+  ///
+  /// Falls back to `<esdeRoot>/downloaded_media` whenever the setting is
+  /// absent, blank, unreadable, or names a folder that isn't there — a stale
+  /// setting must not cost the user the media they do have.
+  static String resolveMediaRoot(String esdeRoot) {
+    final fallback = path.join(esdeRoot, defaultMediaDirName);
+    final settingsFile = File(
+      path.join(esdeRoot, 'settings', 'es_settings.xml'),
+    );
+    if (!settingsFile.existsSync()) return fallback;
+
+    String? raw;
+    try {
+      // Parsed as a fragment and decoded leniently for the same reasons
+      // gamelist.xml is: ES-DE's own parser is lenient, and one bad byte in an
+      // unrelated setting must not cost us the media directory.
+      final doc = XmlDocumentFragment.parse(
+        utf8.decode(settingsFile.readAsBytesSync(), allowMalformed: true),
+      );
+      for (final e in doc.findAllElements('string')) {
+        if (e.getAttribute('name') == 'MediaDirectory') {
+          raw = e.getAttribute('value');
+          break;
+        }
+      }
+    } catch (e) {
+      _log.w('ES-DE: failed to read ${settingsFile.path}: $e');
+      return fallback;
+    }
+
+    if (raw == null || raw.trim().isEmpty) return fallback;
+
+    for (final candidate in _expandEsdePath(raw.trim(), esdeRoot)) {
+      if (Directory(candidate).existsSync()) {
+        if (candidate != fallback) {
+          _log.i('ES-DE: using custom MediaDirectory "$candidate"');
+        }
+        return candidate;
+      }
+    }
+
+    _log.w(
+      'ES-DE: MediaDirectory "$raw" does not exist, '
+      'falling back to $fallback',
+    );
+    return fallback;
+  }
+
+  /// Expansions of an ES-DE settings path [raw], most-likely first. `~` uses
+  /// the user's home directory; `%ESPATH%` has no single answer from a picked
+  /// data folder, so it yields one candidate per plausible binary location.
+  static List<String> _expandEsdePath(String raw, String esdeRoot) {
+    var value = raw.replaceAll('\\', '/');
+
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+    if (home != null && home.isNotEmpty) {
+      if (value == '~') {
+        value = home;
+      } else if (value.startsWith('~/')) {
+        value = path.join(home, value.substring(2));
+      }
+    }
+
+    final esPaths = value.contains('%ESPATH%')
+        ? [path.dirname(esdeRoot), esdeRoot]
+        : const <String?>[null];
+
+    final candidates = <String>[];
+    for (final esPath in esPaths) {
+      var expanded = esPath == null
+          ? value
+          : value.replaceAll('%ESPATH%', esPath.replaceAll('\\', '/'));
+      // ES-DE tolerates a trailing separator; path.join would keep it and the
+      // resulting media paths would carry a doubled separator.
+      while (expanded.length > 1 && expanded.endsWith('/')) {
+        expanded = expanded.substring(0, expanded.length - 1);
+      }
+      if (expanded.isEmpty) continue;
+      final normalized = path.normalize(expanded);
+      if (!candidates.contains(normalized)) candidates.add(normalized);
+    }
+    return candidates;
+  }
+
   /// Wires up the artwork fallback for ES-DE systems that have a
-  /// `downloaded_media/<system>/` tree but no `gamelists/<system>/gamelist.xml`
+  /// `<mediaRoot>/<system>/` tree but no `gamelists/<system>/gamelist.xml`
   /// — a normal state in ES-DE (media survives a gamelist the user deleted, and
   /// some systems are scraped for art without ever being played).
   ///
@@ -194,13 +297,13 @@ class EsdeImportService {
   /// ROM NeoStation has scanned. Without this the whole system's art is
   /// invisible even though the files are right there.
   static Future<void> _linkMediaOnlySystems(
-    String esdeRoot,
+    String mediaRoot,
     Set<String> importedDirs,
   ) async {
-    final mediaRoot = Directory(path.join(esdeRoot, 'downloaded_media'));
-    if (!mediaRoot.existsSync()) return;
+    final mediaDir = Directory(mediaRoot);
+    if (!mediaDir.existsSync()) return;
 
-    for (final dir in mediaRoot.listSync().whereType<Directory>()) {
+    for (final dir in mediaDir.listSync().whereType<Directory>()) {
       final esdeDirName = path.basename(dir.path);
       if (importedDirs.contains(esdeDirName.toLowerCase())) continue;
 
@@ -210,7 +313,7 @@ class EsdeImportService {
       if (system == null) continue;
 
       await _recordEsdeMediaDir(
-        esdeRoot,
+        mediaRoot,
         esdeDirName,
         system['app_system_id']!,
       );
@@ -222,7 +325,7 @@ class EsdeImportService {
   }
 
   static Future<EsdeImportResult> _importSystem({
-    required String esdeRoot,
+    required String mediaRoot,
     required String esdeDirName,
     required String appSystemId,
     required File gamelistFile,
@@ -283,7 +386,7 @@ class EsdeImportService {
     // transaction (and fsync) per game.
     final batch = db.batch();
 
-    final games = _selectGames(doc, esdeRoot, esdeDirName);
+    final games = _selectGames(doc, mediaRoot, esdeDirName);
     for (var g = 0; g < games.length; g++) {
       if (g % 100 == 0) onGameProgress?.call(g / games.length);
       final game = games[g];
@@ -401,19 +504,17 @@ class EsdeImportService {
     return result;
   }
 
-  /// Persists which ES-DE `downloaded_media` subfolder backs a NeoStation
-  /// system so read-time fallback can resolve artwork. Prefers a folder that
-  /// actually contains a `downloaded_media/<dir>` tree; otherwise only sets it
-  /// when not already populated.
+  /// Persists which ES-DE media subfolder backs a NeoStation system so
+  /// read-time fallback can resolve artwork. Prefers a folder that actually
+  /// contains a `<mediaRoot>/<dir>` tree; otherwise only sets it when not
+  /// already populated.
   static Future<void> _recordEsdeMediaDir(
-    String esdeRoot,
+    String mediaRoot,
     String esdeDirName,
     String appSystemId,
   ) async {
     final db = await SqliteService.getDatabase();
-    final hasMedia = Directory(
-      path.join(esdeRoot, 'downloaded_media', esdeDirName),
-    ).existsSync();
+    final hasMedia = Directory(path.join(mediaRoot, esdeDirName)).existsSync();
 
     final existing = await db.query(
       'user_system_settings',
@@ -503,7 +604,7 @@ class EsdeImportService {
   /// the artwork fallback resolves correctly; otherwise keep the first seen.
   static List<XmlElement> _selectGames(
     XmlNode doc,
-    String esdeRoot,
+    String mediaRoot,
     String esdeDirName,
   ) {
     final chosen = <String, XmlElement>{};
@@ -524,19 +625,19 @@ class EsdeImportService {
         (_text(existing, 'path') ?? '').replaceAll('\\', '/'),
       );
       final newSubdir = _mediaSubdir(normalized);
-      if (!_esdeMediaExists(esdeRoot, esdeDirName, filename, existingSubdir) &&
-          _esdeMediaExists(esdeRoot, esdeDirName, filename, newSubdir)) {
+      if (!_esdeMediaExists(mediaRoot, esdeDirName, filename, existingSubdir) &&
+          _esdeMediaExists(mediaRoot, esdeDirName, filename, newSubdir)) {
         chosen[key] = game;
       }
     }
     return chosen.values.toList();
   }
 
-  /// Whether any `downloaded_media/<system>/<category>/<subdir>/` folder holds a
+  /// Whether any `<mediaRoot>/<system>/<category>/<subdir>/` folder holds a
   /// file whose name (sans extension) matches [filename]'s base — i.e. ES-DE
   /// scraped artwork for this ROM under [subdir].
   static bool _esdeMediaExists(
-    String esdeRoot,
+    String mediaRoot,
     String esdeDirName,
     String filename,
     String subdir,
@@ -550,13 +651,7 @@ class EsdeImportService {
       'marquees',
       'fanart',
     ]) {
-      final dir = path.join(
-        esdeRoot,
-        'downloaded_media',
-        esdeDirName,
-        category,
-        subdir,
-      );
+      final dir = path.join(mediaRoot, esdeDirName, category, subdir);
       if (_mediaIndex(dir).contains(base)) return true;
     }
     return false;
@@ -624,7 +719,7 @@ class EsdeImportService {
   @visibleForTesting
   static List<XmlElement> selectGamesForTest(
     XmlNode doc,
-    String esdeRoot,
+    String mediaRoot,
     String esdeDirName,
-  ) => _selectGames(doc, esdeRoot, esdeDirName);
+  ) => _selectGames(doc, mediaRoot, esdeDirName);
 }

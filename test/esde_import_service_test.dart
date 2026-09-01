@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/services/esde_import_service.dart';
+import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import 'database_test_helper.dart';
@@ -123,6 +124,97 @@ void main() {
     });
   });
 
+  group('resolveMediaRoot', () {
+    late Directory root;
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('esde_settings_');
+    });
+
+    tearDown(() => root.deleteSync(recursive: true));
+
+    void writeSettings(String body) {
+      Directory('${root.path}/settings').createSync(recursive: true);
+      File('${root.path}/settings/es_settings.xml').writeAsStringSync(body);
+    }
+
+    test('defaults to downloaded_media when there is no settings file', () {
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.join(root.path, 'downloaded_media'),
+      );
+    });
+
+    test('defaults when MediaDirectory is absent or blank', () {
+      writeSettings(
+        '<?xml version="1.0"?>\n<string name="ROMDirectory" value="/roms" />',
+      );
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.join(root.path, 'downloaded_media'),
+      );
+
+      writeSettings('<string name="MediaDirectory" value="" />');
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.join(root.path, 'downloaded_media'),
+      );
+    });
+
+    test('uses a custom MediaDirectory that exists', () {
+      final custom = Directory('${root.path}/elsewhere/media')
+        ..createSync(recursive: true);
+      writeSettings('<string name="MediaDirectory" value="${custom.path}" />');
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.normalize(custom.path),
+      );
+    });
+
+    test('ignores a trailing separator on the value', () {
+      final custom = Directory('${root.path}/elsewhere/media')
+        ..createSync(recursive: true);
+      writeSettings('<string name="MediaDirectory" value="${custom.path}/" />');
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.normalize(custom.path),
+      );
+    });
+
+    test('expands %ESPATH% against the ES-DE folder and its parent', () {
+      // Portable layout: the binary sits next to the data folder, so
+      // %ESPATH% is the PARENT of the folder the user picked.
+      final custom = Directory('${root.parent.path}/media_espath')
+        ..createSync(recursive: true);
+      addTearDown(() => custom.deleteSync(recursive: true));
+      writeSettings(
+        '<string name="MediaDirectory" value="%ESPATH%/media_espath" />',
+      );
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.normalize(custom.path),
+      );
+    });
+
+    test('falls back to downloaded_media when the custom folder is gone', () {
+      writeSettings(
+        '<string name="MediaDirectory" value="${root.path}/not_there" />',
+      );
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.join(root.path, 'downloaded_media'),
+      );
+    });
+
+    test('survives a malformed settings file', () {
+      writeSettings('<string name="MediaDirectory" value="/x" ');
+      expect(
+        EsdeImportService.resolveMediaRoot(root.path),
+        p.join(root.path, 'downloaded_media'),
+      );
+    });
+  });
+
   group('EsdeImportService DB behavior', () {
     final dbHelper = DatabaseTestHelper();
     late dynamic db;
@@ -232,6 +324,51 @@ void main() {
         expect(result.gamesImported, 1);
       },
     );
+
+    test('import reads media from a relocated ES-DE MediaDirectory', () async {
+      // A second system whose art exists but that has no gamelist.xml, so the
+      // only thing that can wire it up is the media walk (issue #456).
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('megadrive', 'Mega Drive', 'megadrive', 1)",
+      );
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('sonic.smc', '/roms/snes/sonic.smc', 'snes')",
+      );
+
+      final tempRoot = Directory.systemTemp.createTempSync('esde_test_');
+      addTearDown(() => tempRoot.deleteSync(recursive: true));
+
+      // The media lives OUTSIDE the ES-DE folder, exactly as it does once the
+      // user moves it: `<tempRoot>/downloaded_media` never exists.
+      final mediaDir = Directory.systemTemp.createTempSync('esde_media_');
+      addTearDown(() => mediaDir.deleteSync(recursive: true));
+      Directory(
+        '${mediaDir.path}/megadrive/covers',
+      ).createSync(recursive: true);
+      File(
+        '${mediaDir.path}/megadrive/covers/sonic.png',
+      ).writeAsStringSync('x');
+
+      Directory('${tempRoot.path}/settings').createSync(recursive: true);
+      File('${tempRoot.path}/settings/es_settings.xml').writeAsStringSync(
+        '<?xml version="1.0"?>\n'
+        '<string name="MediaDirectory" value="${mediaDir.path}" />\n',
+      );
+
+      final systemDir = Directory('${tempRoot.path}/gamelists/snes')
+        ..createSync(recursive: true);
+      File('${systemDir.path}/gamelist.xml').writeAsStringSync(
+        '<gameList><game><path>./sonic.smc</path><name>Sonic</name></game></gameList>',
+      );
+
+      await EsdeImportService.import(tempRoot.path);
+
+      final rows = await db.rawQuery(
+        "SELECT esde_media_dir FROM user_system_settings WHERE app_system_id = 'megadrive'",
+      );
+      expect(rows.length, 1);
+      expect(rows.first['esde_media_dir'], 'megadrive');
+    });
 
     test('import does not skip games ES-DE marks hidden', () async {
       await db.execute(
