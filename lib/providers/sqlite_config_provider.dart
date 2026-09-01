@@ -296,6 +296,7 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
           fanartDimLevel: _config.fanartDimLevel,
           sfxEnabled: _config.sfxEnabled,
           sfxVolume: _config.sfxVolume,
+          use12HourClock: _config.use12HourClock,
         );
       }
 

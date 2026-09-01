@@ -224,6 +224,14 @@ class SecondaryDisplayStateData {
   /// pushed by the main engine for the same cross-engine reason as [sfxEnabled].
   final double sfxVolume;
 
+  /// Whether clocks use the 12-hour (AM/PM) form. User setting, pushed by the
+  /// main engine so the Now Playing corner clock matches the primary header.
+  ///
+  /// Null means "not pushed yet": the secondary engine seeds its own value from
+  /// the config row at startup (see `subDisplay`), and a non-null default here
+  /// would let the first shared-state snapshot overwrite that seed with a guess.
+  final bool? use12HourClock;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -293,6 +301,7 @@ class SecondaryDisplayStateData {
     // like the persisted setting rather than silently muting or blasting.
     this.sfxEnabled = true,
     this.sfxVolume = 0.75,
+    this.use12HourClock,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -373,6 +382,7 @@ class SecondaryDisplayStateData {
     bool? setupWizardActive,
     bool? sfxEnabled,
     double? sfxVolume,
+    bool? use12HourClock,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -454,6 +464,7 @@ class SecondaryDisplayStateData {
       setupWizardActive: setupWizardActive ?? this.setupWizardActive,
       sfxEnabled: sfxEnabled ?? this.sfxEnabled,
       sfxVolume: sfxVolume ?? this.sfxVolume,
+      use12HourClock: use12HourClock ?? this.use12HourClock,
     );
   }
 
@@ -537,6 +548,7 @@ class SecondaryDisplayStateData {
       setupWizardActive: json['setupWizardActive'] as bool? ?? false,
       sfxEnabled: json['sfxEnabled'] as bool? ?? true,
       sfxVolume: (json['sfxVolume'] as num?)?.toDouble() ?? 0.75,
+      use12HourClock: json['use12HourClock'] as bool?,
     );
   }
 
@@ -603,6 +615,7 @@ class SecondaryDisplayStateData {
       'setupWizardActive': setupWizardActive,
       'sfxEnabled': sfxEnabled,
       'sfxVolume': sfxVolume,
+      'use12HourClock': use12HourClock,
     };
   }
 }
@@ -719,6 +732,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     bool? setupWizardActive,
     bool? sfxEnabled,
     double? sfxVolume,
+    bool? use12HourClock,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -804,6 +818,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           setupWizardActive: setupWizardActive,
           sfxEnabled: sfxEnabled,
           sfxVolume: sfxVolume,
+          use12HourClock: use12HourClock,
         ),
       );
     } catch (e) {

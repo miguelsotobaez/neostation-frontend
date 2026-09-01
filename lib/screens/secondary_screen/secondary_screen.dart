@@ -25,12 +25,21 @@ import 'widgets/app_dock.dart';
 import 'widgets/now_playing_panel.dart';
 
 class SecondaryScreen extends StatefulWidget {
-  const SecondaryScreen({super.key, this.initialThemeName});
+  const SecondaryScreen({
+    super.key,
+    this.initialThemeName,
+    this.initialUse12HourClock = false,
+  });
 
   /// Theme name read from the database by this engine's entrypoint, used until
   /// the main engine pushes its state. Without it the display would open on
   /// the platform-brightness fallback — black on a light theme.
   final String? initialThemeName;
+
+  /// 12/24-hour clock preference read from the database by this engine's
+  /// entrypoint, used for the Now Playing corner clock until the main engine
+  /// pushes its own value.
+  final bool initialUse12HourClock;
 
   @override
   State<SecondaryScreen> createState() => _SecondaryScreenState();
@@ -1414,6 +1423,8 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                       value: value,
                       sessionRunning: _sessionWatch.isRunning,
                       sessionTime: _formatSessionTime(),
+                      use12HourClock:
+                          value.use12HourClock ?? widget.initialUse12HourClock,
                       onRequestScreenshot: _requestScreenshot,
                     ),
             ),

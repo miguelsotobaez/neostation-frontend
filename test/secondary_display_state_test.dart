@@ -95,6 +95,9 @@ void main() {
       // are the only way the UI-sound setting crosses the engine boundary.
       sfxEnabled: false,
       sfxVolume: 0.25,
+      // Non-null and non-default: the secondary engine's corner clock reads
+      // this, and null would round-trip as "not pushed yet" either way.
+      use12HourClock: true,
     );
 
     test('round-trips every field through toJson/fromJson', () {
@@ -154,6 +157,10 @@ void main() {
       // setting rather than silently muting the bottom screen.
       expect(restored.sfxEnabled, isTrue);
       expect(restored.sfxVolume, 0.75);
+      // Null, not false: the secondary engine seeds the clock format from the
+      // config row itself, and a `false` here would look like a real push and
+      // overwrite that seed with 24-hour on every snapshot.
+      expect(restored.use12HourClock, isNull);
     });
 
     test('coerces numeric fields delivered as doubles', () {
@@ -282,6 +289,28 @@ void main() {
 
       expect(loud.sfxEnabled, isTrue);
       expect(loud.copyWith(sfxEnabled: false).sfxEnabled, isFalse);
+    });
+
+    test('a partial update that omits the clock format preserves it', () {
+      // Pushed once, from General settings; every later push from either
+      // engine has to carry it or the corner clock flips format mid-game.
+      final twelveHour = SecondaryDisplayStateData(
+        systemName: 'snes',
+        use12HourClock: true,
+      );
+
+      final next = twelveHour.copyWith(nowPlayingActive: true);
+
+      expect(next.use12HourClock, isTrue);
+    });
+
+    test('an unpushed clock format stays null through a partial update', () {
+      // Null is the secondary engine's cue to keep its own seeded value, so a
+      // merge must not settle it to a default.
+      final unpushed = SecondaryDisplayStateData(systemName: 'snes');
+
+      expect(unpushed.use12HourClock, isNull);
+      expect(unpushed.copyWith(nowPlayingActive: true).use12HourClock, isNull);
     });
   });
 }

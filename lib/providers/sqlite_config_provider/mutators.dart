@@ -188,9 +188,13 @@ extension SqliteConfigMutators on SqliteConfigProvider {
   }
 
   /// Updates whether the header clock uses a 12-hour (AM/PM) format.
+  ///
+  /// Also pushed to the secondary display, whose Now Playing corner clock uses
+  /// the same preference and runs in an engine that can't see this provider.
   Future<void> updateUse12HourClock(bool value) async {
     _config = _config.copyWith(use12HourClock: value);
     await SqliteConfigService.saveConfig(_config);
+    _secondaryDisplayState?.updateState(use12HourClock: value);
     _notify();
   }
 

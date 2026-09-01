@@ -844,6 +844,11 @@ Future<void> subDisplay() async {
   // even for a user on a light theme. Read it from the same config row.
   String? initThemeName;
 
+  // Same story for the Now Playing corner clock: the shared state carries the
+  // 12/24-hour preference, but only once the main engine has pushed it, so seed
+  // it here to avoid opening on the wrong format.
+  bool initUse12HourClock = false;
+
   // Same screen-power guard as the main engine, keyed off this engine's own
   // notifier: the two engines share no memory, so GameService's is not live
   // here. Set before the config read below, which can throw — falling back to
@@ -857,6 +862,10 @@ Future<void> subDisplay() async {
       initLang = rawConfig['app_language'].toString();
     }
     initThemeName = rawConfig?['theme_name']?.toString();
+    initUse12HourClock =
+        (int.tryParse(rawConfig?['use_12_hour_clock']?.toString() ?? '0') ??
+            0) ==
+        1;
     // Same story for UI sounds: this engine has its own SfxService singleton,
     // so the main engine's setEnabled/setVolume never reach it. The main engine
     // also pushes these through the shared state, but that can land after the
@@ -890,7 +899,12 @@ Future<void> subDisplay() async {
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
 
-  runApp(SecondaryScreen(initialThemeName: initThemeName));
+  runApp(
+    SecondaryScreen(
+      initialThemeName: initThemeName,
+      initialUse12HourClock: initUse12HourClock,
+    ),
+  );
 }
 
 /// Provides MaterialLocalizations as a fallback for locales that Flutter's

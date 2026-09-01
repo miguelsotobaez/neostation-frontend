@@ -100,6 +100,7 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
         dockSlotCount: _config.dockSlotCount,
         sfxEnabled: _config.sfxEnabled,
         sfxVolume: _config.sfxVolume,
+        use12HourClock: _config.use12HourClock,
         // If the main UI is already up (e.g. a display hot-connected after
         // launch), carry the ready latch so the dock slides in on connect;
         // during cold boot this is still false and the dock stays parked until
@@ -197,6 +198,8 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
               state.fanartDimLevel != _config.fanartDimLevel ||
               state.sfxEnabled != _config.sfxEnabled ||
               state.sfxVolume != _config.sfxVolume ||
+              (state.use12HourClock != null &&
+                  state.use12HourClock != _config.use12HourClock) ||
               (ScreenshotService.lastKnownAccess != null &&
                   state.screenshotAccessEnabled !=
                       ScreenshotService.lastKnownAccess))) {
@@ -227,6 +230,7 @@ extension SqliteConfigSecondaryDisplay on SqliteConfigProvider {
           fanartDimLevel: _config.fanartDimLevel,
           sfxEnabled: _config.sfxEnabled,
           sfxVolume: _config.sfxVolume,
+          use12HourClock: _config.use12HourClock,
           screenshotAccessEnabled: ScreenshotService.lastKnownAccess,
         );
       }

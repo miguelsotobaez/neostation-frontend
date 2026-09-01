@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../../models/secondary_display_state.dart';
 import '../now_playing_helpers.dart';
+import 'status_readout.dart';
 
 /// The Now Playing page shown on the secondary display: boxart + game/system
 /// title + play-time / session / last-played stats.
@@ -20,6 +21,7 @@ class NowPlayingPanel extends StatelessWidget {
     required this.value,
     required this.sessionRunning,
     required this.sessionTime,
+    required this.use12HourClock,
     required this.onRequestScreenshot,
   });
 
@@ -31,6 +33,10 @@ class NowPlayingPanel extends StatelessWidget {
   /// Pre-formatted elapsed session time (`HH:MM:SS`); only shown when
   /// [sessionRunning].
   final String sessionTime;
+
+  /// Whether the corner clock uses the 12-hour (AM/PM) form, mirroring the
+  /// user's header-clock preference.
+  final bool use12HourClock;
 
   /// Asks the main engine to capture a screenshot of the main screen.
   final VoidCallback onRequestScreenshot;
@@ -122,6 +128,19 @@ class NowPlayingPanel extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          // Clock + battery, pinned to the corner the panel's own content never
+          // reaches. The bottom screen is the only place these are readable
+          // while a game owns the top screen, and a single wake tap surfaces
+          // them alongside the play-time stats.
+          Positioned(
+            top: 22.r,
+            right: 26.r,
+            child: StatusReadout(
+              scheme: scheme,
+              themeName: value.themeName,
+              use12HourClock: use12HourClock,
             ),
           ),
         ],

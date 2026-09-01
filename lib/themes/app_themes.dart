@@ -63,55 +63,64 @@ class AppThemes {
   static dynamic get palenightCustomColors => palenight.PalenightCustomColors();
   static dynamic get horizonCustomColors => horizon.HorizonCustomColors();
 
+  /// Retrieves a theme's custom colors from its name.
+  ///
+  /// The same mapping [getCustomColors] uses, minus the [ThemeProvider] lookup
+  /// — the secondary display runs in an engine with no provider in its tree but
+  /// does know the theme name pushed by the main engine, and its battery
+  /// readout has to color itself exactly like the primary header's.
+  static dynamic getCustomColorsByName(String? themeName) {
+    var resolvedThemeName = themeName ?? 'system';
+
+    if (resolvedThemeName == 'system') {
+      final brightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      resolvedThemeName = brightness == Brightness.dark ? 'dark' : 'light';
+    }
+
+    final custom = customThemes[resolvedThemeName];
+    if (custom != null) {
+      return custom.customColors;
+    }
+
+    switch (resolvedThemeName) {
+      case 'light':
+        return light.LightCustomColors();
+      case 'oled':
+        return oled.OledCustomColors();
+      case 'valentine':
+        return valentine.ValentineCustomColors();
+      case 'dracula':
+        return dracula.DraculaCustomColors();
+      case 'nord':
+        return nord.NordCustomColors();
+      case 'coffee':
+        return coffee.CoffeeCustomColors();
+      case 'tokyo_night':
+        return tokyo_night.TokyoNightCustomColors();
+      case 'retro':
+        return retro.RetroCustomColors();
+      case 'abyss':
+        return abyss.AbyssCustomColors();
+      case 'cyberpunk':
+        return cyberpunk.CyberpunkCustomColors();
+      case 'aqua':
+        return aqua.AquaCustomColors();
+      case 'palenight':
+        return palenight.PalenightCustomColors();
+      case 'horizon':
+        return horizon.HorizonCustomColors();
+      default:
+        return dark.DarkCustomColors();
+    }
+  }
+
   /// Retrieves header colors based on the current context's theme.
   static dynamic getCustomColors(BuildContext context) {
     // Prefer detection by theme name if a ThemeProvider is available (more reliable).
     try {
       final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-      final themeName = themeProvider.currentThemeName;
-      String resolvedThemeName = themeName;
-
-      if (themeName == 'system') {
-        final brightness =
-            WidgetsBinding.instance.platformDispatcher.platformBrightness;
-        resolvedThemeName = brightness == Brightness.dark ? 'dark' : 'light';
-      }
-
-      final custom = customThemes[resolvedThemeName];
-      if (custom != null) {
-        return custom.customColors;
-      }
-
-      switch (resolvedThemeName) {
-        case 'light':
-          return light.LightCustomColors();
-        case 'oled':
-          return oled.OledCustomColors();
-        case 'valentine':
-          return valentine.ValentineCustomColors();
-        case 'dracula':
-          return dracula.DraculaCustomColors();
-        case 'nord':
-          return nord.NordCustomColors();
-        case 'coffee':
-          return coffee.CoffeeCustomColors();
-        case 'tokyo_night':
-          return tokyo_night.TokyoNightCustomColors();
-        case 'retro':
-          return retro.RetroCustomColors();
-        case 'abyss':
-          return abyss.AbyssCustomColors();
-        case 'cyberpunk':
-          return cyberpunk.CyberpunkCustomColors();
-        case 'aqua':
-          return aqua.AquaCustomColors();
-        case 'palenight':
-          return palenight.PalenightCustomColors();
-        case 'horizon':
-          return horizon.HorizonCustomColors();
-        default:
-          return dark.DarkCustomColors();
-      }
+      return getCustomColorsByName(themeProvider.currentThemeName);
     } catch (_) {
       // Fallback to color comparison if provider is not available.
     }
