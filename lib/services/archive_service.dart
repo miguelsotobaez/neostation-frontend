@@ -83,6 +83,25 @@ class ArchiveService {
     return buffer.toString();
   }
 
+  /// Resolves an archive entry's name to a path inside [tempDirPath], or null
+  /// if the entry would land anywhere else.
+  ///
+  /// Entry names come out of the archive, not from us, and [path.join] trusts
+  /// them: an absolute name is treated as a complete path and [tempDirPath] is
+  /// discarded outright, while a relative one may walk out with `../`. Either
+  /// shape lets a crafted ROM archive write to any path the app can reach —
+  /// zip slip. No genuine ROM archive names its entries that way, so refusing
+  /// the entry costs nothing and the extraction simply reports failure.
+  @visibleForTesting
+  static String? safeOutputPath(String tempDirPath, String entryName) {
+    final root = path.normalize(path.absolute(tempDirPath));
+    final resolved = path.normalize(path.join(root, entryName));
+
+    // isWithin is false for the directory itself as well as for anything
+    // outside it, which is what we want: an entry must name a file under root.
+    return path.isWithin(root, resolved) ? resolved : null;
+  }
+
   /// Extracts a ROM from a ZIP or 7z archive into a temporary system-specific directory.
   ///
   /// The extraction target is located at `user-data/temp/[systemFolderName]/[archiveName]`.
@@ -159,15 +178,21 @@ class ArchiveService {
 
       if (largestIndex != -1) {
         final file = archive.getFile(largestIndex);
-        final outPath = path.join(tempDirPath, file.name);
+        final outPath = safeOutputPath(tempDirPath, file.name);
 
-        final outFile = File(outPath);
-        if (!await outFile.parent.exists()) {
-          await outFile.parent.create(recursive: true);
+        if (outPath == null) {
+          // Leaves largestFilePath null, so this returns failure below after
+          // the archive and the staged copy have been cleaned up as usual.
+          _log.e('Refusing 7z entry outside the temp directory: ${file.name}');
+        } else {
+          final outFile = File(outPath);
+          if (!await outFile.parent.exists()) {
+            await outFile.parent.create(recursive: true);
+          }
+
+          archive.extractToFile(largestIndex, outPath);
+          largestFilePath = outPath;
         }
-
-        archive.extractToFile(largestIndex, outPath);
-        largestFilePath = outPath;
       }
 
       archive.dispose();
@@ -202,7 +227,15 @@ class ArchiveService {
       }
 
       if (largestFile != null) {
-        final filePath = path.join(tempDirPath, largestFile.name);
+        final filePath = safeOutputPath(tempDirPath, largestFile.name);
+        if (filePath == null) {
+          _log.e(
+            'Refusing ZIP entry outside the temp directory: '
+            '${largestFile.name}',
+          );
+          return null;
+        }
+
         final outFile = File(filePath);
         await outFile.create(recursive: true);
 
