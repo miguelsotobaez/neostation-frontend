@@ -70,6 +70,7 @@ if [ -f "$SOURCE_APK" ]; then
     echo "Result in: release/"
     ls -lh "$DEST_APK"
 else
-    echo "APK not found at: $SOURCE_APK"
+    echo "No arm64-v8a release APK found in: $APK_DIR"
+    ls -1 "$APK_DIR" 2>/dev/null || echo "  (directory does not exist)"
     exit 1
 fi
