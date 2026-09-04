@@ -45,12 +45,13 @@ else
   echo "Warning: Keystore environment variables not set. Release build may use debug signing."
 fi
 
-# One APK instead of a universal one: every device NeoStation targets is arm64,
-# but plain `flutter build apk` packs armeabi-v7a and x86_64 in as well. Both
-# flags are needed: --target-platform only drops the engine and AOT libs, while
-# --split-per-abi sets abiFilters, which is what drops the plugin natives
-# Gradle packages for every ABI.
-flutter build apk --release --split-per-abi --target-platform android-arm64 $ENV_ARG
+# One APK per ABI instead of a universal one: no target device is x86_64, and
+# armeabi-v7a is kept for 32-bit Android TV boxes. Both flags are needed:
+# --target-platform only drops the engine and AOT libs, while --split-per-abi
+# sets abiFilters, which is what drops the plugin natives Gradle packages for
+# every ABI.
+flutter build apk --release --split-per-abi \
+    --target-platform android-arm64,android-arm $ENV_ARG
 
 # Get version from pubspec.yaml
 VERSION=$(grep 'version:' pubspec.yaml | head -1 | awk '{print $2}' | tr -d '\r')
@@ -58,19 +59,29 @@ VERSION=$(grep 'version:' pubspec.yaml | head -1 | awk '{print $2}' | tr -d '\r'
 # Create output directory
 mkdir -p "$PROJECT_ROOT/release"
 
-# Copy and rename APK. --split-per-abi renames the output to carry the ABI.
+# Copy and rename the APKs. Both must publish: UpdateService picks the one
+# matching the ABI the running app was installed for.
 APK_DIR="$PROJECT_ROOT/build/app/outputs/flutter-apk"
-SOURCE_APK="$APK_DIR/app-arm64-v8a-release.apk"
-DEST_APK="$PROJECT_ROOT/release/neostation-android-arm64-v8a-$VERSION.apk"
+MISSING=0
 
-if [ -f "$SOURCE_APK" ]; then
-    cp "$SOURCE_APK" "$DEST_APK"
-    echo ""
-    echo "Build completed!"
-    echo "Result in: release/"
-    ls -lh "$DEST_APK"
-else
-    echo "No arm64-v8a release APK found in: $APK_DIR"
+for ABI in arm64-v8a armeabi-v7a; do
+    SOURCE_APK="$APK_DIR/app-$ABI-release.apk"
+    DEST_APK="$PROJECT_ROOT/release/neostation-android-$ABI-$VERSION.apk"
+
+    if [ -f "$SOURCE_APK" ]; then
+        cp "$SOURCE_APK" "$DEST_APK"
+    else
+        echo "No $ABI release APK found in: $APK_DIR"
+        MISSING=1
+    fi
+done
+
+if [ "$MISSING" -ne 0 ]; then
     ls -1 "$APK_DIR" 2>/dev/null || echo "  (directory does not exist)"
     exit 1
 fi
+
+echo ""
+echo "Build completed!"
+echo "Result in: release/"
+ls -lh "$PROJECT_ROOT/release/neostation-android-"*"-$VERSION.apk"

@@ -21,12 +21,12 @@ if (Test-Path "$projectRoot\$EnvFile") {
     Write-Host "Env file not found: $EnvFile" -ForegroundColor Yellow
 }
 
-# One APK instead of a universal one: every device NeoStation targets is arm64,
-# but plain `flutter build apk` packs armeabi-v7a and x86_64 in as well. Both
-# flags are needed: --target-platform only drops the engine and AOT libs, while
-# --split-per-abi sets abiFilters, which is what drops the plugin natives
-# Gradle packages for every ABI.
-flutter build apk --release --split-per-abi --target-platform android-arm64 $envArg
+# One APK per ABI instead of a universal one: no target device is x86_64, and
+# armeabi-v7a is kept for 32-bit Android TV boxes. Both flags are needed:
+# --target-platform only drops the engine and AOT libs, while --split-per-abi
+# sets abiFilters, which is what drops the plugin natives Gradle packages for
+# every ABI.
+flutter build apk --release --split-per-abi --target-platform android-arm64,android-arm $envArg
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error during build" -ForegroundColor Red
@@ -40,22 +40,26 @@ $version = (Select-String -Path "$projectRoot\pubspec.yaml" -Pattern "^version:\
 Write-Host "Creating output directory..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Path "$projectRoot\release" -Force | Out-Null
 
-# Copiar y renombrar APK
-Write-Host "Copying APK to release..." -ForegroundColor Cyan
-# --split-per-abi renames the output to carry the ABI.
+# Copiar y renombrar APKs
+Write-Host "Copying APKs to release..." -ForegroundColor Cyan
+# Both must publish: UpdateService picks the one matching the ABI the running
+# app was installed for.
 $apkDir = "$projectRoot\build\app\outputs\flutter-apk"
-$sourceApk = "$apkDir\app-arm64-v8a-release.apk"
-$destApk = "$projectRoot\release\neostation-android-arm64-v8a-$version.apk"
+$missing = $false
 
-if (Test-Path $sourceApk) {
-    Copy-Item -Path $sourceApk -Destination $destApk -Force
-    
-    Write-Host ""
-    Write-Host "Build completado!" -ForegroundColor Green
-    Write-Host "Resultado en: release\" -ForegroundColor Cyan
-    Get-ChildItem -Path "$projectRoot\release" -Filter "*.apk" | Format-Table Name, @{Name="Size (MB)";Expression={[math]::Round($_.Length/1MB, 2)}}, LastWriteTime
-} else {
-    Write-Host "No arm64-v8a release APK found in: $apkDir" -ForegroundColor Red
+foreach ($abi in @("arm64-v8a", "armeabi-v7a")) {
+    $sourceApk = "$apkDir\app-$abi-release.apk"
+    $destApk = "$projectRoot\release\neostation-android-$abi-$version.apk"
+
+    if (Test-Path $sourceApk) {
+        Copy-Item -Path $sourceApk -Destination $destApk -Force
+    } else {
+        Write-Host "No $abi release APK found in: $apkDir" -ForegroundColor Red
+        $missing = $true
+    }
+}
+
+if ($missing) {
     if (Test-Path $apkDir) {
         Get-ChildItem -Path $apkDir | Select-Object -ExpandProperty Name
     } else {
@@ -63,3 +67,8 @@ if (Test-Path $sourceApk) {
     }
     exit 1
 }
+
+Write-Host ""
+Write-Host "Build completado!" -ForegroundColor Green
+Write-Host "Resultado en: release\" -ForegroundColor Cyan
+Get-ChildItem -Path "$projectRoot\release" -Filter "*.apk" | Format-Table Name, @{Name="Size (MB)";Expression={[math]::Round($_.Length/1MB, 2)}}, LastWriteTime
