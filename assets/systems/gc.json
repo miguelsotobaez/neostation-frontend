@@ -115,6 +115,23 @@
       }
     },
     {
+      "name": "PrimeHack",
+      "unique_id": "gc.primehack",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz, m3u.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "primehack.exe",
+          "args": "-e \"{file.path}\""
+        },
+        "linux": {
+          "executable": "primehack",
+          "emudeck_launcher": "primehack.sh",
+          "args": "-e \"{file.path}\""
+        }
+      }
+    },
+    {
       "name": "Dolphin Ishiiruka",
       "unique_id": "gc.org.dolphin.ishiirukadark",
       "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz.",
