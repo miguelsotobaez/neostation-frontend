@@ -77,8 +77,11 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.neoglassBlur: 'Sfocatura del vetro',
   AppLocale.neoglassBlurSubtitle: 'Intensità sfocatura: Off, 1 o 2',
   AppLocale.neoglassBlurOff: 'Off',
-  AppLocale.neoglassOpacity: 'Trasparenza del vetro',
-  AppLocale.neoglassOpacitySubtitle: 'Quanto è trasparente il vetro',
+  AppLocale.neoglassBlurGpuWarning:
+      'Attiva solo su una GPU potente — su hardware di fascia bassa la sfocatura ghiacciata può non restare fluida.',
+  AppLocale.neoglassTransparency: 'Trasparenza del vetro',
+  AppLocale.neoglassTransparencySubtitle:
+      '0 = nessuna trasparenza, 50 = massima',
   AppLocale.neoglassBorderWidth: 'Bordo del vetro',
   AppLocale.neoglassBorderWidthSubtitle: 'Spessore del bordo del vetro',
   AppLocale.systemTheme: 'Tema di Sistema',

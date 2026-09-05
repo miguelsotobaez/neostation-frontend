@@ -77,8 +77,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.neoglassBlur: 'Размытие стекла',
   AppLocale.neoglassBlurSubtitle: 'Сила размытия: Выкл, 1 или 2',
   AppLocale.neoglassBlurOff: 'Выкл',
-  AppLocale.neoglassOpacity: 'Прозрачность стекла',
-  AppLocale.neoglassOpacitySubtitle: 'Насколько стекло прозрачно',
+  AppLocale.neoglassBlurGpuWarning:
+      'Включайте только на мощном GPU — на слабом железе матовое размытие может не оставаться плавным.',
+  AppLocale.neoglassTransparency: 'Прозрачность стекла',
+  AppLocale.neoglassTransparencySubtitle: '0 = без прозрачности, 50 = максимум',
   AppLocale.neoglassBorderWidth: 'Рамка стекла',
   AppLocale.neoglassBorderWidthSubtitle: 'Толщина края стекла',
   AppLocale.systemTheme: 'Системная',

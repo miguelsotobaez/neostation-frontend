@@ -34,7 +34,7 @@ class NeoGlass extends StatelessWidget {
     this.padding,
     this.rimIntensity = 1,
     this.borderWidth,
-    this.opacity,
+    this.transparency,
   });
 
   final Widget child;
@@ -66,25 +66,26 @@ class NeoGlass extends StatelessWidget {
   /// width is used.
   final double? borderWidth;
 
-  /// Alpha of the tint fill (0.0–1.0). Higher is more opaque (less see-through).
-  /// When null, the user's configured opacity is used.
-  final double? opacity;
+  /// Transparency of the tint fill on a 0–50 scale. `0` means no transparency
+  /// (opaque tint), `50` means the maximum transparency (backdrop shows through
+  /// the most). When null, the user's configured transparency is used.
+  final int? transparency;
 
   /// Reads the user's NeoGlass preferences from [SqliteConfigProvider], falling
   /// back to the feature defaults when the provider is absent (e.g. a preview
   /// subtree built without it).
-  static ({double blur, double opacity, double borderWidth}) _prefs(
+  static ({double blur, int transparency, double borderWidth}) _prefs(
     BuildContext context,
   ) {
     try {
       final config = context.watch<SqliteConfigProvider>().config;
       return (
         blur: config.neoglassBlur.toDouble(),
-        opacity: config.neoglassOpacity,
+        transparency: config.neoglassTransparency,
         borderWidth: config.neoglassBorderWidth,
       );
     } catch (_) {
-      return (blur: 2, opacity: 0.8, borderWidth: 2);
+      return (blur: 0, transparency: 10, borderWidth: 2);
     }
   }
 
@@ -92,8 +93,11 @@ class NeoGlass extends StatelessWidget {
   Widget build(BuildContext context) {
     final prefs = _prefs(context);
     final effectiveBlur = blur ?? prefs.blur;
-    final effectiveOpacity = opacity ?? prefs.opacity;
+    final effectiveTransparency = transparency ?? prefs.transparency;
     final effectiveBorderWidth = borderWidth ?? prefs.borderWidth;
+    // Transparency 0–50 maps to the tint alpha: 0 → opaque (1.0), 50 → the
+    // maximum see-through.
+    final effectiveOpacity = (50 - effectiveTransparency) / 50.0;
 
     // Semi-transparent so the image behind shows through and the rim (drawn
     // beneath it) glows with the backdrop's colours.

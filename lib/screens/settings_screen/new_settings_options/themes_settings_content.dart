@@ -53,22 +53,25 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Keys used for calculating viewport alignment during grid-based navigation.
   final List<GlobalKey> _itemKeys = [];
 
-  /// Number of NeoGlass appearance rows appended below the theme grid.
+  /// Number of NeoGlass appearance rows shown at the top, above the theme grid.
   static const int _neoglassRowCount = 3;
 
   /// Blur sigma choices (Off / 1 / 2). 0 disables the blur entirely.
   static const List<int> _blurSteps = [0, 1, 2];
 
-  /// Tint opacity (transparency) choices, 0.5–0.9.
-  static const List<double> _opacitySteps = [0.5, 0.6, 0.7, 0.8, 0.9];
+  /// Transparency choices on a 0–50 scale: 0 = no transparency, 50 = maximum.
+  static const List<int> _transparencySteps = [0, 10, 20, 30, 40, 50];
 
   /// Rim stroke width choices.
   static const List<double> _borderSteps = [0, 1, 2, 3, 4];
 
-  /// The first index owned by the NeoGlass rows (everything before it is a
-  /// grid cell).
-  int _neoglassStartIndex(BuildContext context) =>
+  /// Number of theme-grid cells (system + registered variants + import tile).
+  int _gridCount(BuildContext context) =>
       getItemCount(context) - _neoglassRowCount;
+
+  /// The first index owned by the theme grid (everything before it is a
+  /// NeoGlass appearance row).
+  int get _gridStartIndex => _neoglassRowCount;
 
   @override
   void initState() {
@@ -104,47 +107,54 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Dynamic Grid Resolution: Column count based on display geometry.
   int get _gridColumns => Responsive.getThemesCrossAxisCount(context);
 
-  /// Vertical Progression: Moves focus to the element above in the grid or
-  /// back into the grid from the first NeoGlass row.
+  /// Vertical Progression: Moves focus to the element above in the grid or back
+  /// into the NeoGlass rows from the grid's first row.
   void navigateUp() {
     final current = widget.selectedContentIndex;
-    final gridCount = _neoglassStartIndex(context);
+    final gridCount = _gridCount(context);
     int newIndex;
-    if (current >= gridCount) {
-      // NeoGlass rows: move up, or into the grid's last cell.
-      newIndex = current == gridCount ? gridCount - 1 : current - 1;
+    if (current < _neoglassRowCount) {
+      // NeoGlass rows: move up, or wrap to the grid's last cell.
+      newIndex = current == 0 ? _gridStartIndex + gridCount - 1 : current - 1;
     } else {
-      newIndex = GridNavUtils.navigateUp(
-        currentIndex: current,
-        crossAxisCount: _gridColumns,
-        maxItems: gridCount,
-      );
+      final gridIndex = current - _gridStartIndex;
+      if (gridIndex < _gridColumns) {
+        // Top grid row: step up into the last NeoGlass row.
+        newIndex = _neoglassRowCount - 1;
+      } else {
+        newIndex =
+            _gridStartIndex +
+            GridNavUtils.navigateUp(
+              currentIndex: gridIndex,
+              crossAxisCount: _gridColumns,
+              maxItems: gridCount,
+            );
+      }
     }
     widget.onSelectionChanged?.call(newIndex);
     _ensureSelectedItemVisible(newIndex);
   }
 
   /// Vertical Progression: Moves focus to the element below in the grid or into
-  /// the NeoGlass rows from the grid's last row.
+  /// the grid from the last NeoGlass row.
   void navigateDown() {
     final current = widget.selectedContentIndex;
-    final gridCount = _neoglassStartIndex(context);
+    final gridCount = _gridCount(context);
     int newIndex;
-    if (current >= gridCount) {
-      // NeoGlass rows: move down, clamped at the last row.
-      newIndex = (current + 1).clamp(
-        gridCount,
-        gridCount + _neoglassRowCount - 1,
-      );
+    if (current < _neoglassRowCount) {
+      // NeoGlass rows: move down, or into the grid's first cell.
+      newIndex = current == _neoglassRowCount - 1
+          ? _gridStartIndex
+          : current + 1;
     } else {
-      final gridDown = GridNavUtils.navigateDown(
-        currentIndex: current,
-        crossAxisCount: _gridColumns,
-        maxItems: gridCount,
-      );
-      // GridNavUtils wraps from the last grid row to the top; enter the
-      // NeoGlass rows instead when the grid has nowhere left to go down.
-      newIndex = gridDown == current % _gridColumns ? gridCount : gridDown;
+      final gridIndex = current - _gridStartIndex;
+      newIndex =
+          _gridStartIndex +
+          GridNavUtils.navigateDown(
+            currentIndex: gridIndex,
+            crossAxisCount: _gridColumns,
+            maxItems: gridCount,
+          );
     }
     widget.onSelectionChanged?.call(newIndex);
     _ensureSelectedItemVisible(newIndex);
@@ -153,20 +163,20 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Horizontal Progression: Moves focus left or exits to the master menu if at boundary.
   bool navigateLeft() {
     final current = widget.selectedContentIndex;
-    final gridCount = _neoglassStartIndex(context);
-    if (current >= gridCount) {
+    if (current < _neoglassRowCount) {
       return true; // NeoGlass rows are full-width; Left returns to the menu.
     }
-    final currentCol = current % _gridColumns;
-    if (currentCol == 0) {
+    final gridIndex = current - _gridStartIndex;
+    if (gridIndex % _gridColumns == 0) {
       return true; // Boundary reached: Return focus to the master menu.
     }
-
-    final newIndex = GridNavUtils.navigateLeft(
-      currentIndex: current,
-      crossAxisCount: _gridColumns,
-      maxItems: gridCount,
-    );
+    final newIndex =
+        _gridStartIndex +
+        GridNavUtils.navigateLeft(
+          currentIndex: gridIndex,
+          crossAxisCount: _gridColumns,
+          maxItems: _gridCount(context),
+        );
     widget.onSelectionChanged?.call(newIndex);
     _ensureSelectedItemVisible(newIndex);
     return false;
@@ -175,15 +185,17 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Horizontal Progression: Moves focus to the next element on the right.
   void navigateRight() {
     final current = widget.selectedContentIndex;
-    final gridCount = _neoglassStartIndex(context);
-    if (current >= gridCount) {
+    if (current < _neoglassRowCount) {
       return; // NeoGlass rows are full-width; Right is a no-op.
     }
-    final newIndex = GridNavUtils.navigateRight(
-      currentIndex: current,
-      crossAxisCount: _gridColumns,
-      maxItems: gridCount,
-    );
+    final gridIndex = current - _gridStartIndex;
+    final newIndex =
+        _gridStartIndex +
+        GridNavUtils.navigateRight(
+          currentIndex: gridIndex,
+          crossAxisCount: _gridColumns,
+          maxItems: _gridCount(context),
+        );
     widget.onSelectionChanged?.call(newIndex);
     _ensureSelectedItemVisible(newIndex);
   }
@@ -201,25 +213,25 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   }
 
   /// Persistence Protocol: Updates the active application theme, or cycles a
-  /// NeoGlass appearance option when [index] points at one of the rows below
-  /// the theme grid.
+  /// NeoGlass appearance option when [index] points at one of the rows at the
+  /// top of the panel.
   void selectItem(int index) async {
-    final gridCount = _neoglassStartIndex(context);
-    if (index >= gridCount) {
-      await _cycleNeoglassOption(index - gridCount);
+    if (index < _neoglassRowCount) {
+      await _cycleNeoglassOption(index);
       widget.onSelectionChanged?.call(index);
       return;
     }
 
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final themes = themeProvider.getThemeList();
+    final gridIndex = index - _gridStartIndex;
 
-    if (index == 0) {
+    if (gridIndex == 0) {
       // Index 0: Native System/Dynamic theme resolution.
       await themeProvider.setTheme('system');
-    } else if (index - 1 < themes.length) {
+    } else if (gridIndex - 1 < themes.length) {
       // Indices >0: Specific registered theme variants.
-      await themeProvider.setTheme(themes[index - 1]['name']!);
+      await themeProvider.setTheme(themes[gridIndex - 1]['name']!);
     } else {
       // Last item: the "Import theme" tile.
       await _importTheme();
@@ -229,7 +241,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
     widget.onSelectionChanged?.call(index);
   }
 
-  /// Cycles the NeoGlass appearance option at [row] (0 = blur, 1 = opacity,
+  /// Cycles the NeoGlass appearance option at [row] (0 = blur, 1 = transparency,
   /// 2 = border width) to its next step and persists it.
   Future<void> _cycleNeoglassOption(int row) async {
     final provider = Provider.of<SqliteConfigProvider>(context, listen: false);
@@ -241,11 +253,10 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
         await provider.updateNeoglassBlur(next);
         break;
       case 1:
-        final current = _opacitySteps.indexWhere(
-          (v) => (v - config.neoglassOpacity).abs() < 0.001,
-        );
-        final next = _opacitySteps[(current + 1) % _opacitySteps.length];
-        await provider.updateNeoglassOpacity(next);
+        final current = _transparencySteps.indexOf(config.neoglassTransparency);
+        final next =
+            _transparencySteps[(current + 1) % _transparencySteps.length];
+        await provider.updateNeoglassTransparency(next);
         break;
       case 2:
         final current = _borderSteps.indexWhere(
@@ -324,11 +335,11 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   /// Gamepad entry point: deletes the theme at [index] if it is a custom
   /// (imported) one. No-op for built-ins, 'system', or the Import tile.
   void deleteFocusedTheme(int index) {
-    if (index <= 0) return;
-    if (index >= _neoglassStartIndex(context)) return; // NeoGlass rows.
+    if (index < _neoglassRowCount) return; // NeoGlass rows.
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final themes = themeProvider.getThemeList();
-    final themeIndex = index - 1;
+    final themeIndex = index - _gridStartIndex - 1;
+    if (themeIndex < 0) return; // System theme.
     if (themeIndex >= themes.length) return; // Import tile.
     final t = themes[themeIndex];
     if (!themeProvider.isCustomTheme(t['name']!)) return;
@@ -385,6 +396,54 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
             subtitle: AppLocale.themesSubtitle.getString(context),
           ),
           SizedBox(height: 12.r),
+
+          // NeoGlass appearance controls (frosted-glass chrome).
+          Text(
+            AppLocale.neoglassGroup.getString(context),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontSize: 13.r,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 8.r),
+          _buildNeoglassRow(
+            keyIndex: 0,
+            title: AppLocale.neoglassBlur.getString(context),
+            subtitle: AppLocale.neoglassBlurSubtitle.getString(context),
+            value: _blurLabel(config.neoglassBlur),
+          ),
+          if (config.neoglassBlur > 0) ...[
+            SizedBox(height: 4.r),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12.r),
+              child: Text(
+                AppLocale.neoglassBlurGpuWarning.getString(context),
+                style: TextStyle(
+                  fontSize: 9.r,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+          ],
+          SizedBox(height: 8.r),
+          _buildNeoglassRow(
+            keyIndex: 1,
+            title: AppLocale.neoglassTransparency.getString(context),
+            subtitle: AppLocale.neoglassTransparencySubtitle.getString(context),
+            value: '${config.neoglassTransparency}',
+          ),
+          SizedBox(height: 8.r),
+          _buildNeoglassRow(
+            keyIndex: 2,
+            title: AppLocale.neoglassBorderWidth.getString(context),
+            subtitle: AppLocale.neoglassBorderWidthSubtitle.getString(context),
+            value: _borderLabel(config.neoglassBorderWidth),
+          ),
+          SizedBox(height: 20.r),
+
+          // Theme grid.
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -395,14 +454,15 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
               mainAxisSpacing: 8.r,
               childAspectRatio: 1.05,
             ),
-            itemBuilder: (context, index) {
+            itemBuilder: (context, gridIndex) {
+              final index = gridIndex + _gridStartIndex;
               // Focus Resolution: Determines if the item is currently highlighted via gamepad.
               final isFocused =
                   widget.isContentFocused &&
                   widget.selectedContentIndex == index;
 
               // Last item: the "Import theme" tile.
-              if (index == allThemes.length) {
+              if (gridIndex == allThemes.length) {
                 return Container(
                   key: _itemKeys[index],
                   child: ImportThemeCard(
@@ -417,12 +477,13 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                 );
               }
 
-              final t = allThemes[index];
+              final t = allThemes[gridIndex];
 
               // State Resolution: Determines if the theme is currently active.
               final isSelected =
                   themeProvider.currentThemeName == t['name'] ||
-                  (index == 0 && themeProvider.currentThemeName == 'system');
+                  (gridIndex == 0 &&
+                      themeProvider.currentThemeName == 'system');
 
               final isCustom = themeProvider.isCustomTheme(t['name']!);
 
@@ -447,37 +508,6 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                 ),
               );
             },
-          ),
-
-          // NeoGlass appearance controls (frosted-glass chrome).
-          SizedBox(height: 20.r),
-          Text(
-            AppLocale.neoglassGroup.getString(context),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontSize: 13.r,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: 8.r),
-          _buildNeoglassRow(
-            keyIndex: _neoglassStartIndex(context),
-            title: AppLocale.neoglassBlur.getString(context),
-            subtitle: AppLocale.neoglassBlurSubtitle.getString(context),
-            value: _blurLabel(config.neoglassBlur),
-          ),
-          SizedBox(height: 8.r),
-          _buildNeoglassRow(
-            keyIndex: _neoglassStartIndex(context) + 1,
-            title: AppLocale.neoglassOpacity.getString(context),
-            subtitle: AppLocale.neoglassOpacitySubtitle.getString(context),
-            value: '${(config.neoglassOpacity * 100).round()}%',
-          ),
-          SizedBox(height: 8.r),
-          _buildNeoglassRow(
-            keyIndex: _neoglassStartIndex(context) + 2,
-            title: AppLocale.neoglassBorderWidth.getString(context),
-            subtitle: AppLocale.neoglassBorderWidthSubtitle.getString(context),
-            value: _borderLabel(config.neoglassBorderWidth),
           ),
         ],
       ),

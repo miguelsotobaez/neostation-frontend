@@ -77,8 +77,10 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.neoglassBlur: 'Desenfoque de cristal',
   AppLocale.neoglassBlurSubtitle: 'Intensidad del desenfoque: Apagado, 1 o 2',
   AppLocale.neoglassBlurOff: 'Apagado',
-  AppLocale.neoglassOpacity: 'Transparencia del cristal',
-  AppLocale.neoglassOpacitySubtitle: 'Qué tan translúcido es el cristal',
+  AppLocale.neoglassBlurGpuWarning:
+      'Actívalo solo en una GPU potente: en hardware de gama baja el desenfoque esmerilado puede no mantenerse fluido.',
+  AppLocale.neoglassTransparency: 'Transparencia del cristal',
+  AppLocale.neoglassTransparencySubtitle: '0 = sin transparencia, 50 = máxima',
   AppLocale.neoglassBorderWidth: 'Borde del cristal',
   AppLocale.neoglassBorderWidthSubtitle: 'Grosor del borde del cristal',
   AppLocale.systemTheme: 'Sistema',

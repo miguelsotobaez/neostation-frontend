@@ -222,12 +222,14 @@ class ConfigModel {
   final bool subfolderViewAll;
 
   /// Gaussian blur sigma of the frosted-glass chrome (NeoGlass), clamped to
-  /// 0–2. `0` disables the blur entirely (flat translucent panel, cheapest).
+  /// 0–2. `0` (the default) disables the blur entirely (flat translucent
+  /// panel, cheapest). Higher values are only smooth on a powerful GPU.
   final int neoglassBlur;
 
-  /// Alpha of the frosted-glass tint fill (0.0–1.0). Higher is more opaque
-  /// (less see-through). Controls the transparency of the glass chrome.
-  final double neoglassOpacity;
+  /// Transparency of the frosted-glass chrome on a 0–50 scale: `0` means no
+  /// transparency (the tint is fully opaque), `50` means the maximum
+  /// transparency (the backdrop shows through the most).
+  final int neoglassTransparency;
 
   /// Width of the frosted-glass specular rim stroke. Controls the size of the
   /// glass border.
@@ -281,8 +283,8 @@ class ConfigModel {
     this.showCloudSyncIcon = true,
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
-    this.neoglassBlur = 2,
-    this.neoglassOpacity = 0.8,
+    this.neoglassBlur = 0,
+    this.neoglassTransparency = 10,
     this.neoglassBorderWidth = 2,
   });
 
@@ -509,22 +511,19 @@ class ConfigModel {
               '1' ||
           (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
               'true',
-      // Absent => 2 => the feature's default frosted blur.
+      // Absent => 0 => blur off (the default). The frosted blur is only smooth
+      // on a powerful GPU, so it starts disabled.
       neoglassBlur:
           (int.tryParse(
-                    (json['neoglassBlur'] ?? json['neoglass_blur'] ?? 2)
+                    (json['neoglassBlur'] ?? json['neoglass_blur'] ?? 0)
                         .toString(),
                   ) ??
-                  2)
+                  0)
               .clamp(0, 2),
-      // Absent => 0.8 => the feature's default tint alpha.
-      neoglassOpacity:
-          (double.tryParse(
-                    (json['neoglassOpacity'] ?? json['neoglass_opacity'] ?? 0.8)
-                        .toString(),
-                  ) ??
-                  0.8)
-              .clamp(0.0, 1.0),
+      // Absent => 10 => the default transparency. Accepts the pre-release
+      // `neoglassOpacity` (0.0–1.0) as a fallback, converting it to the 0–50
+      // scale so a config written by an earlier build is not reset.
+      neoglassTransparency: _parseNeoglassTransparency(json),
       // Absent => 2 => the feature's default rim stroke width.
       neoglassBorderWidth:
           (double.tryParse(
@@ -536,6 +535,23 @@ class ConfigModel {
                   2)
               .clamp(0.0, 8.0),
     );
+  }
+
+  /// Parses the NeoGlass transparency (0–50) from a config map, falling back to
+  /// the pre-release `neoglassOpacity` (0.0–1.0) when only that key is present.
+  static int _parseNeoglassTransparency(Map<String, dynamic> json) {
+    final raw = json['neoglassTransparency'] ?? json['neoglass_transparency'];
+    if (raw != null) {
+      return (int.tryParse(raw.toString()) ?? 10).clamp(0, 50);
+    }
+    final legacy = json['neoglassOpacity'] ?? json['neoglass_opacity'];
+    if (legacy != null) {
+      final opacity = double.tryParse(legacy.toString());
+      if (opacity != null) {
+        return ((1.0 - opacity) * 50).round().clamp(0, 50);
+      }
+    }
+    return 10;
   }
 
   /// Converts the configuration model into a JSON-compatible map.
@@ -594,7 +610,7 @@ class ConfigModel {
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
       'neoglassBlur': neoglassBlur,
-      'neoglassOpacity': neoglassOpacity,
+      'neoglassTransparency': neoglassTransparency,
       'neoglassBorderWidth': neoglassBorderWidth,
     };
   }
@@ -649,7 +665,7 @@ class ConfigModel {
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
     int? neoglassBlur,
-    double? neoglassOpacity,
+    int? neoglassTransparency,
     double? neoglassBorderWidth,
   }) {
     return ConfigModel(
@@ -703,7 +719,7 @@ class ConfigModel {
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
       neoglassBlur: neoglassBlur ?? this.neoglassBlur,
-      neoglassOpacity: neoglassOpacity ?? this.neoglassOpacity,
+      neoglassTransparency: neoglassTransparency ?? this.neoglassTransparency,
       neoglassBorderWidth: neoglassBorderWidth ?? this.neoglassBorderWidth,
     );
   }

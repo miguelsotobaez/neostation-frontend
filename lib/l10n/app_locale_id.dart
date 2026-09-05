@@ -76,8 +76,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.neoglassBlur: 'Blur Kaca',
   AppLocale.neoglassBlurSubtitle: 'Kekuatan buram: Mati, 1 atau 2',
   AppLocale.neoglassBlurOff: 'Mati',
-  AppLocale.neoglassOpacity: 'Transparansi Kaca',
-  AppLocale.neoglassOpacitySubtitle: 'Seberapa tembus pandang kacanya',
+  AppLocale.neoglassBlurGpuWarning:
+      'Aktifkan hanya pada GPU yang kuat — pada perangkat kelas bawah, blur buram mungkin tidak tetap halus.',
+  AppLocale.neoglassTransparency: 'Transparansi Kaca',
+  AppLocale.neoglassTransparencySubtitle:
+      '0 = tanpa transparansi, 50 = maksimal',
   AppLocale.neoglassBorderWidth: 'Bingkai Kaca',
   AppLocale.neoglassBorderWidthSubtitle: 'Ketebalan tepi kaca',
   AppLocale.systemTheme: 'Tema Sistem',

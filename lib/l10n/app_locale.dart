@@ -83,8 +83,10 @@ mixin AppLocale {
   static const String neoglassBlur = 'neoglass_blur';
   static const String neoglassBlurSubtitle = 'neoglass_blur_subtitle';
   static const String neoglassBlurOff = 'neoglass_blur_off';
-  static const String neoglassOpacity = 'neoglass_opacity';
-  static const String neoglassOpacitySubtitle = 'neoglass_opacity_subtitle';
+  static const String neoglassBlurGpuWarning = 'neoglass_blur_gpu_warning';
+  static const String neoglassTransparency = 'neoglass_transparency';
+  static const String neoglassTransparencySubtitle =
+      'neoglass_transparency_subtitle';
   static const String neoglassBorderWidth = 'neoglass_border_width';
   static const String neoglassBorderWidthSubtitle =
       'neoglass_border_width_subtitle';

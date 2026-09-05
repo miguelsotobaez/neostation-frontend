@@ -386,12 +386,12 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
-  /// Sets the frosted-glass tint alpha (0.0–1.0), clamped. Higher is more
-  /// opaque (less see-through).
-  Future<void> updateNeoglassOpacity(double value) async {
-    final clamped = value.clamp(0.0, 1.0).toDouble();
-    if (_config.neoglassOpacity == clamped) return;
-    _config = _config.copyWith(neoglassOpacity: clamped);
+  /// Sets the frosted-glass transparency on a 0–50 scale, clamped. `0` means no
+  /// transparency (opaque tint), `50` means the maximum transparency.
+  Future<void> updateNeoglassTransparency(int value) async {
+    final clamped = value.clamp(0, 50);
+    if (_config.neoglassTransparency == clamped) return;
+    _config = _config.copyWith(neoglassTransparency: clamped);
     await SqliteConfigService.saveConfig(_config);
     _notify();
   }
