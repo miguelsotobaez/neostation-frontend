@@ -6,8 +6,12 @@ import 'package:neostation/services/retro_achievements_cache.dart';
 import 'package:neostation/services/retro_achievements_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
+
   group('RetroAchievementsService', () {
     test('uses the supplied API key when provided', () {
       expect(RetroAchievementsService.resolveApiKey('demo-key'), 'demo-key');
@@ -82,6 +86,42 @@ void main() {
         () => RetroAchievementsService.getAchievementComments(1234, apiKey: ''),
         throwsStateError,
       );
+    });
+
+    test('requests AOTW with the API key and parses an active event', () async {
+      late Uri requestedUri;
+      final client = MockClient((request) async {
+        requestedUri = request.url;
+        return http.Response(
+          '{"Achievement":{"ID":178634,"Title":"Saved Summer","Description":"Win","Points":10,"TrueRatio":11},"Console":{"ID":3,"Title":"SNES"},"Game":{"ID":2865,"Title":"A Game"},"StartAt":"2026-09-01T00:00:00Z","TotalPlayers":427,"Unlocks":[],"UnlocksCount":280,"UnlocksHardcoreCount":268}',
+          200,
+        );
+      });
+
+      final result = await RetroAchievementsService.getAchievementOfTheWeek(
+        apiKey: 'secret-key',
+        client: client,
+      );
+
+      expect(requestedUri.path, '/API/API_GetAchievementOfTheWeek.php');
+      expect(requestedUri.queryParameters['y'], 'secret-key');
+      expect(result?.achievement.id, 178634);
+    });
+
+    test('treats the documented empty AOTW payload as no event', () async {
+      final client = MockClient(
+        (_) async => http.Response(
+          '{"Achievement":{"ID":null},"Console":null,"Game":null,"StartAt":null,"TotalPlayers":0,"Unlocks":[],"UnlocksCount":0,"UnlocksHardcoreCount":0}',
+          200,
+        ),
+      );
+
+      final result = await RetroAchievementsService.getAchievementOfTheWeek(
+        apiKey: 'secret-key',
+        client: client,
+      );
+
+      expect(result, isNull);
     });
 
     test('requests recent unlocks with documented lookback parameter', () async {

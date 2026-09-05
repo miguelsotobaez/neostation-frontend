@@ -691,10 +691,8 @@ mixin AppLocale {
   static const String noMottoSet = 'no_motto_set';
   static const String contributions = 'contributions';
   static const String aotw = 'aotw';
-  static const String players = 'players';
   static const String achievementLabel = 'achievement_label';
   static const String unlocks = 'unlocks';
-  static const String couldNotLoadAOTW = 'could_not_load_aotw';
   static const String recentlyPlayed = 'recently_played';
   static const String achivs = 'achivs';
   static const String noRecentGames = 'no_recent_games';
@@ -1159,6 +1157,7 @@ mixin AppLocale {
   static const String rommNoCollections = 'romm_no_collections';
   static const String rommNoRoms = 'romm_no_roms';
   static const String rommSearch = 'romm_search';
+  static const String rommSearching = 'romm_searching';
   static const String rommDownloading = 'romm_downloading';
   static const String rommDownloaded = 'romm_downloaded';
   static const String rommDownloadComplete = 'romm_download_complete';
@@ -1231,11 +1230,7 @@ mixin AppLocale {
   // RetroAchievements dashboard & achievement comments
   static const String raCompletionsLabel = 'ra_completions_label';
   static const String raMasteriesLabel = 'ra_masteries_label';
-  static const String raEarned = 'ra_earned';
-  static const String raOwned = 'ra_owned';
   static const String raPointsAbbrev = 'ra_points_abbrev';
-  static const String raAlreadyEarned = 'ra_already_earned';
-  static const String raTapToOpenLocalGame = 'ra_tap_to_open_local_game';
   static const String raRecentUnlocks = 'ra_recent_unlocks';
   static const String raRecentCompletions = 'ra_recent_completions';
   static const String raRecentMasteries = 'ra_recent_masteries';
@@ -1260,6 +1255,21 @@ mixin AppLocale {
   static const String raNoRecentUnlocks = 'ra_no_recent_unlocks';
   static const String raRecentlyPlayedTitle = 'ra_recently_played_title';
   static const String raNoRecentlyPlayed = 'ra_no_recently_played';
+  static const String raAotwNoActive = 'ra_aotw_no_active';
+  static const String raAotwEarnedHardcore = 'ra_aotw_earned_hardcore';
+  static const String raAotwEarnedCasual = 'ra_aotw_earned_casual';
+  static const String raAotwEarnedPreviously = 'ra_aotw_earned_previously';
+  static const String raAotwNotEarned = 'ra_aotw_not_earned';
+  static const String raAotwStatusUnavailable = 'ra_aotw_status_unavailable';
+  static const String raAotwNotInLibrary = 'ra_aotw_not_in_library';
+  static const String raAotwWeekStarted = 'ra_aotw_week_started';
+  static const String raAotwTrueRatio = 'ra_aotw_true_ratio';
+  static const String raAotwParticipation = 'ra_aotw_participation';
+  static const String raAotwOpenLocalGame = 'ra_aotw_open_local_game';
+  static const String raAotwDownloadFromRomm = 'ra_aotw_download_from_romm';
+  static const String raGamesPlayed = 'ra_games_played';
+  static const String raAchievementProgress = 'ra_achievement_progress';
+  static const String raRecent30Days = 'ra_recent_30_days';
 
   // Custom save folders (NeoSync v2)
   static const String customSaveFoldersTitle = 'custom_save_folders_title';

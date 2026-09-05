@@ -94,6 +94,12 @@ class RetroAchievementsRepository {
   static const String raMatchHash = 'hash';
   static const String raMatchFilename = 'filename';
   static const String raMatchTitle = 'title';
+
+  /// RomM supplied the exact RetroAchievements game id for this download.
+  ///
+  /// This is automatic metadata, rather than a user override, so a later hash
+  /// match may still correct it if the server's metadata becomes stale.
+  static const String raMatchRomm = 'romm';
   static const String raMatchManual = 'manual';
 
   /// SQL fragment guarding automatic writes against overwriting a user's pick.
@@ -110,6 +116,25 @@ class RetroAchievementsRepository {
       'UPDATE user_roms SET id_ra = ?, ra_match_source = ? '
       'WHERE rom_path = ? AND $_notManuallyMatched',
       [gameId, matchSource, romPath],
+    );
+  }
+
+  /// Assigns a RomM-provided RA game id once the download has been indexed.
+  ///
+  /// The scanner owns the actual path (especially for Android SAF URIs), so
+  /// this deliberately addresses the row by its indexed filename and system.
+  /// Manual picks remain authoritative.
+  static Future<void> updateRommRomRaGameId(
+    String filename,
+    String systemId,
+    int gameId,
+  ) async {
+    if (filename.isEmpty || systemId.isEmpty || gameId <= 0) return;
+    final db = await SqliteService.getDatabase();
+    await db.rawUpdate(
+      'UPDATE user_roms SET id_ra = ?, ra_match_source = ? '
+      'WHERE filename = ? AND app_system_id = ? AND $_notManuallyMatched',
+      [gameId, raMatchRomm, filename, systemId],
     );
   }
 

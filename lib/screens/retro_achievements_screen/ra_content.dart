@@ -42,9 +42,11 @@ class _RAContentState extends State<RAContent>
   /// back along the axis onto the week card.
   bool _logoutSelected = false;
 
-  /// The dashboard's one actionable content card. It is only selectable when
-  /// the weekly game has a matching ROM in the user's library.
+  /// The dashboard's one actionable content card. It is selectable when the
+  /// weekly game is local or has a matched RomM download.
   bool _weekCardSelected = false;
+  final GlobalKey<RADashboardHubState> _dashboardKey =
+      GlobalKey<RADashboardHubState>();
 
   /// Set while a selection is scrolling the header back into view, so the
   /// scroll listener doesn't read that movement as the user leaving the
@@ -115,8 +117,7 @@ class _RAContentState extends State<RAContent>
         return;
       }
       if (_weekCardSelected) {
-        final owned = raProvider.ownedWeekGame;
-        if (owned != null) _openOwnedWeekGame(owned);
+        _dashboardKey.currentState?.selectWeekCard();
       }
       return;
     }
@@ -263,7 +264,7 @@ class _RAContentState extends State<RAContent>
     if (!raProvider.isConnected) return moveSelection(1);
     if (!_logoutSelected &&
         !_weekCardSelected &&
-        raProvider.ownedWeekGame != null &&
+        _dashboardKey.currentState?.weekCardSelectable == true &&
         _dashboardAtTop) {
       return _setWeekCardSelected(true);
     }
@@ -300,7 +301,9 @@ class _RAContentState extends State<RAContent>
     final raProvider = context.read<RetroAchievementsProvider>();
     if (!raProvider.isConnected) return false;
     final released = _logoutSelected ? _setLogoutSelected(false) : false;
-    if (raProvider.ownedWeekGame == null) return released;
+    if (_dashboardKey.currentState?.weekCardSelectable != true) {
+      return released;
+    }
     _scrollHeaderIntoView();
     return _setWeekCardSelected(true) || released;
   }
@@ -430,10 +433,10 @@ class _RAContentState extends State<RAContent>
             Expanded(
               child: RepaintBoundary(
                 child: RADashboardHub(
+                  key: _dashboardKey,
                   scrollController: _dashboardScrollController,
                   logoutSelected: _logoutSelected,
-                  weekCardSelected:
-                      _weekCardSelected && raProvider.ownedWeekGame != null,
+                  weekCardSelected: _weekCardSelected,
                   onDisconnectRequested: _requestDisconnect,
                   onOwnedWeekGameSelected: _openOwnedWeekGame,
                 ),
