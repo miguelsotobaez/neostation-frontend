@@ -121,4 +121,62 @@ void main() {
       expect(File(zipPath).existsSync(), isTrue);
     });
   });
+
+  group('RommProvider.extractScummVmDownload', () {
+    late Directory dir;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('romm_scummvm_extract_test');
+    });
+
+    tearDown(() async {
+      if (await dir.exists()) await dir.delete(recursive: true);
+    });
+
+    test('extracts a RomM archive into the descriptor ID folder', () async {
+      final zipPath = p.join(dir.path, 'Loom.zip');
+      _writeZip(zipPath, {
+        'Loom/Loom.scummvm': 'loom'.codeUnits,
+        'Loom/LOOM.000': [1, 2, 3],
+        'Loom/VIDEO/INTRO.DXA': [4, 5, 6],
+      });
+
+      final descriptorName = await RommProvider.extractScummVmDownload(
+        zipPath,
+        dir.path,
+      );
+
+      expect(descriptorName, 'Loom.scummvm');
+      expect(File(zipPath).existsSync(), isFalse);
+      expect(
+        File(p.join(dir.path, 'loom', 'Loom.scummvm')).existsSync(),
+        isTrue,
+      );
+      expect(File(p.join(dir.path, 'loom', 'LOOM.000')).existsSync(), isTrue);
+      expect(
+        File(p.join(dir.path, 'loom', 'VIDEO', 'INTRO.DXA')).existsSync(),
+        isTrue,
+      );
+      expect(Directory(p.join(dir.path, 'loom', 'Loom')).existsSync(), isFalse);
+    });
+
+    test('moves a shortcut-only descriptor into its ID folder', () async {
+      final descriptor = File(p.join(dir.path, 'Day of the Tentacle.scummvm'));
+      await descriptor.writeAsString('tentacle');
+
+      final descriptorName = await RommProvider.extractScummVmDownload(
+        descriptor.path,
+        dir.path,
+      );
+
+      expect(descriptorName, 'Day of the Tentacle.scummvm');
+      expect(descriptor.existsSync(), isFalse);
+      expect(
+        File(
+          p.join(dir.path, 'tentacle', 'Day of the Tentacle.scummvm'),
+        ).existsSync(),
+        isTrue,
+      );
+    });
+  });
 }

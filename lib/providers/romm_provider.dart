@@ -1059,9 +1059,38 @@ class RommProvider extends ChangeNotifier {
         for (final candidate in candidates) {
           if (await File(p.join(dir, candidate)).exists()) return dir;
         }
+        // ScummVM game data lives in an ID-named subfolder. The descriptor is
+        // what the scanner indexes, but it is no longer a direct child of the
+        // system folder, so look for it recursively when checking whether this
+        // RomM entry already exists locally.
+        if (system.folderName == 'scummvm' &&
+            await _containsNamedFileRecursively(dir, candidates)) {
+          return dir;
+        }
       }
     }
     return null;
+  }
+
+  /// Whether [dir] contains a file with one of [names] anywhere below it.
+  Future<bool> _containsNamedFileRecursively(
+    String dir,
+    List<String> names,
+  ) async {
+    final wanted = names.map((name) => name.toLowerCase()).toSet();
+    try {
+      await for (final entity in Directory(
+        dir,
+      ).list(recursive: true, followLinks: false)) {
+        if (entity is File &&
+            wanted.contains(p.basename(entity.path).toLowerCase())) {
+          return true;
+        }
+      }
+    } catch (_) {
+      // Missing or unreadable directories are simply not downloaded copies.
+    }
+    return false;
   }
 
   /// On-disk names that mark [rom] as already downloaded in a folder.
@@ -1265,7 +1294,10 @@ class RommProvider extends ChangeNotifier {
     // becomes the playlist (.m3u) we write below. Save-sync and metadata both
     // key on this, so it must match what the scan records as GameModel.romname.
     var indexedName = p.basename(destPath);
-    if (isArchive) {
+    if (system.folderName == 'scummvm') {
+      final descriptorName = await extractScummVmDownload(destPath, destDir);
+      if (descriptorName != null) indexedName = descriptorName;
+    } else if (isArchive) {
       final exts = await SystemRepository.getExtensionsForSystem(
         system.id ?? '',
       );
@@ -1472,6 +1504,99 @@ class RommProvider extends ChangeNotifier {
     } finally {
       await input?.close();
     }
+  }
+
+  /// Places a ScummVM download in `<destDir>/<scummvm-id>/`.
+  ///
+  /// RomM serves multi-file games as zip archives, while a shortcut-only game
+  /// is a plain `.scummvm` descriptor. In both cases the descriptor's contents
+  /// are ScummVM's stable target ID, so they are the only safe folder name.
+  /// Archive paths are retained below that folder (apart from a common wrapper
+  /// directory), which keeps games that rely on subdirectories intact.
+  @visibleForTesting
+  static Future<String?> extractScummVmDownload(
+    String downloadPath,
+    String destDir,
+  ) async {
+    final isZip = p.extension(downloadPath).toLowerCase() == '.zip';
+    InputFileStream? input;
+    try {
+      if (!isZip) {
+        final id = _scummVmId(await File(downloadPath).readAsString());
+        if (id == null) return null;
+        final gameDir = Directory(p.join(destDir, id));
+        await gameDir.create(recursive: true);
+        final descriptorName = p.basename(downloadPath);
+        final target = p.join(gameDir.path, descriptorName);
+        if (p.normalize(downloadPath) != p.normalize(target)) {
+          if (await File(target).exists()) await File(target).delete();
+          await File(downloadPath).rename(target);
+        }
+        return descriptorName;
+      }
+
+      input = InputFileStream(downloadPath);
+      final archive = ZipDecoder().decodeStream(input);
+      final files = archive.files.where((file) => file.isFile).toList();
+      final descriptor = files.cast<ArchiveFile?>().firstWhere(
+        (file) =>
+            file != null && p.extension(file.name).toLowerCase() == '.scummvm',
+        orElse: () => null,
+      );
+      if (descriptor == null) return null;
+      final id = _scummVmId(utf8.decode(descriptor.content));
+      if (id == null) return null;
+
+      final paths = <ArchiveFile, List<String>>{};
+      for (final file in files) {
+        final normalized = p.posix.normalize(file.name);
+        if (normalized == '.' ||
+            p.posix.isAbsolute(normalized) ||
+            normalized == '..' ||
+            normalized.startsWith('../')) {
+          return null;
+        }
+        paths[file] = normalized.split('/');
+      }
+      // RomM archives may include a wrapper directory. Do not duplicate it
+      // under the ID folder when every file shares that first segment.
+      final firstSegments = paths.values
+          .map((segments) => segments.first)
+          .toSet();
+      final stripWrapper =
+          firstSegments.length == 1 &&
+          paths.values.every((segments) => segments.length > 1);
+      final gameDir = Directory(p.join(destDir, id));
+      await gameDir.create(recursive: true);
+      for (final file in files) {
+        final segments = paths[file]!;
+        final relative = (stripWrapper ? segments.skip(1) : segments).join('/');
+        final output = File(p.join(gameDir.path, relative));
+        await output.parent.create(recursive: true);
+        final stream = OutputFileStream(output.path);
+        file.writeContent(stream);
+        stream.closeSync();
+      }
+      await input.close();
+      input = null;
+      await File(downloadPath).delete();
+      return p.basename(descriptor.name);
+    } catch (e, st) {
+      _log.e(
+        'RomM ScummVM extract failed for $downloadPath',
+        error: e,
+        stackTrace: st,
+      );
+      return null;
+    } finally {
+      await input?.close();
+    }
+  }
+
+  /// Parses the same target syntax standalone ScummVM accepts at launch.
+  static String? _scummVmId(String contents) {
+    final id = contents.replaceFirst(RegExp(r'^\uFEFF'), '').trim();
+    return RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_-]*$').hasMatch(id) ? id : null;
   }
 
   /// Imports RomM's metadata + cover art for [rom] into the same tables/media
