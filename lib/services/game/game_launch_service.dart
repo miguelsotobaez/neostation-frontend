@@ -179,6 +179,10 @@ class GameLaunchService {
             }
 
             try {
+              await LauncherService.instance.resolveAndroidLaunchFiles(
+                launchCmd,
+                game,
+              );
               GamepadNavigationManager.reactivate();
               await platform.invokeMethod('setGamepadBlock', {'block': true});
 
