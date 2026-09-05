@@ -221,6 +221,18 @@ class ConfigModel {
   /// by a later systems update inherits.
   final bool subfolderViewAll;
 
+  /// Gaussian blur sigma of the frosted-glass chrome (NeoGlass), clamped to
+  /// 0–2. `0` disables the blur entirely (flat translucent panel, cheapest).
+  final int neoglassBlur;
+
+  /// Alpha of the frosted-glass tint fill (0.0–1.0). Higher is more opaque
+  /// (less see-through). Controls the transparency of the glass chrome.
+  final double neoglassOpacity;
+
+  /// Width of the frosted-glass specular rim stroke. Controls the size of the
+  /// glass border.
+  final double neoglassBorderWidth;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -269,6 +281,9 @@ class ConfigModel {
     this.showCloudSyncIcon = true,
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
+    this.neoglassBlur = 2,
+    this.neoglassOpacity = 0.8,
+    this.neoglassBorderWidth = 2,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -494,6 +509,32 @@ class ConfigModel {
               '1' ||
           (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
               'true',
+      // Absent => 2 => the feature's default frosted blur.
+      neoglassBlur:
+          (int.tryParse(
+                    (json['neoglassBlur'] ?? json['neoglass_blur'] ?? 2)
+                        .toString(),
+                  ) ??
+                  2)
+              .clamp(0, 2),
+      // Absent => 0.8 => the feature's default tint alpha.
+      neoglassOpacity:
+          (double.tryParse(
+                    (json['neoglassOpacity'] ?? json['neoglass_opacity'] ?? 0.8)
+                        .toString(),
+                  ) ??
+                  0.8)
+              .clamp(0.0, 1.0),
+      // Absent => 2 => the feature's default rim stroke width.
+      neoglassBorderWidth:
+          (double.tryParse(
+                    (json['neoglassBorderWidth'] ??
+                            json['neoglass_border_width'] ??
+                            2)
+                        .toString(),
+                  ) ??
+                  2)
+              .clamp(0.0, 8.0),
     );
   }
 
@@ -552,6 +593,9 @@ class ConfigModel {
       'showCloudSyncIcon': showCloudSyncIcon,
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
+      'neoglassBlur': neoglassBlur,
+      'neoglassOpacity': neoglassOpacity,
+      'neoglassBorderWidth': neoglassBorderWidth,
     };
   }
 
@@ -604,6 +648,9 @@ class ConfigModel {
     bool? showCloudSyncIcon,
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
+    int? neoglassBlur,
+    double? neoglassOpacity,
+    double? neoglassBorderWidth,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -655,6 +702,9 @@ class ConfigModel {
       showCloudSyncIcon: showCloudSyncIcon ?? this.showCloudSyncIcon,
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
+      neoglassBlur: neoglassBlur ?? this.neoglassBlur,
+      neoglassOpacity: neoglassOpacity ?? this.neoglassOpacity,
+      neoglassBorderWidth: neoglassBorderWidth ?? this.neoglassBorderWidth,
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/widgets/dpad_glyph.dart';
+import 'package:neostation/widgets/neo_glass.dart';
 
 import '../../../../themes/corner_radii.dart';
 import '../detail_tab.dart';
@@ -75,67 +76,55 @@ class GameDetailsTabsHeader extends StatelessWidget {
             SizedBox(width: 6.r),
 
             // Tab Navigation Group: Hardware-mapped navigation controls.
-            Container(
-              height: 36.r,
-              padding: EdgeInsets.symmetric(horizontal: 8.r),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.9),
-                borderRadius:
-                    Theme.of(
-                      context,
-                    ).extension<CornerRadii>()?.radiusExternal ??
-                    BorderRadius.circular(12.r),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline,
-                  width: 1.r,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.shadow.withValues(alpha: 0.1),
-                    blurRadius: 4.r,
-                    offset: Offset(2.0.r, 2.0.r),
-                  ),
-                ],
-              ),
+            NeoGlass(
+              cornerRadius:
+                  Theme.of(
+                    context,
+                  ).extension<CornerRadii>()?.radiusExternalRadius ??
+                  12.r,
               child: SizedBox(
-                width: totalTabsWidth,
                 height: 36.r,
-                child: Stack(
-                  children: [
-                    // Transition Cursor: Fluidly follows the active selection.
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeInOut,
-                      left: visualIndex * tabWidth,
-                      top: 4.r,
-                      bottom: 4.r,
-                      width: tabWidth,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          borderRadius:
-                              Theme.of(
-                                context,
-                              ).extension<CornerRadii>()?.radiusInternal ??
-                              BorderRadius.circular(14.r),
-                        ),
-                      ),
-                    ),
-                    Row(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.r),
+                  child: SizedBox(
+                    width: totalTabsWidth,
+                    height: 36.r,
+                    child: Stack(
                       children: [
-                        for (final tab in visibleTabs)
-                          _TabItem(
-                            icon: _iconForTab(tab),
-                            tab: tab,
-                            width: tabWidth,
-                            isSelected: currentTab == tab,
-                            onTap: onTabChanged,
+                        // Transition Cursor: Fluidly follows the active selection.
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 160),
+                          curve: Curves.easeInOut,
+                          left: visualIndex * tabWidth,
+                          top: 4.r,
+                          bottom: 4.r,
+                          width: tabWidth,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              borderRadius:
+                                  Theme.of(
+                                    context,
+                                  ).extension<CornerRadii>()?.radiusInternal ??
+                                  BorderRadius.circular(14.r),
+                            ),
                           ),
+                        ),
+                        Row(
+                          children: [
+                            for (final tab in visibleTabs)
+                              _TabItem(
+                                icon: _iconForTab(tab),
+                                tab: tab,
+                                width: tabWidth,
+                                isSelected: currentTab == tab,
+                                onTap: onTabChanged,
+                              ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

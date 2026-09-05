@@ -13,6 +13,7 @@ import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/screens/game_screen/game_details_card/widgets/game_details_footer.dart';
 import 'package:neostation/themes/chrome_surface.dart';
+import 'package:neostation/widgets/neo_glass.dart';
 
 /// The details card's footer is one row: the readouts on the left, the
 /// controls on the right, and nothing above it.
@@ -106,7 +107,9 @@ void main() {
     of: find
         .ancestor(
           of: find.byIcon(Symbols.star_rounded),
-          matching: find.byType(Container),
+          matching: find.byWidgetPredicate(
+            (w) => w is NeoGlass || (w is Container && w.decoration != null),
+          ),
         )
         .first,
     matching: find.text(number),
@@ -311,13 +314,12 @@ void main() {
       find.byIcon(Symbols.settings_rounded),
     );
 
+    expect(score.widget, isA<NeoGlass>());
+    expect(gear.widget, isA<NeoGlass>());
     expect(
-      (score.widget as Container).decoration,
-      isA<BoxDecoration>().having(
-        (d) => d.color,
-        'fill',
-        ((gear.widget as Container).decoration as BoxDecoration).color,
-      ),
+      (score.widget as NeoGlass).cornerRadius,
+      (gear.widget as NeoGlass).cornerRadius,
+      reason: 'the score wears the same chip as the controls',
     );
     expect(score.size!.height, gear.size!.height);
   });
@@ -595,18 +597,29 @@ void main() {
   });
 }
 
-/// The nearest ancestor of [of] that actually draws a chip. The `Container`s
-/// further out are the footer's own padding boxes and carry no decoration.
-Element _decoratedAncestor(WidgetTester tester, Finder of) => find
-    .ancestor(of: of, matching: find.byType(Container))
-    .evaluate()
-    .firstWhere((e) => (e.widget as Container).decoration is BoxDecoration);
+/// The nearest ancestor of [of] that actually draws a chip. The chips are
+/// [NeoGlass] surfaces; a [Container] that still carries a [BoxDecoration] is
+/// the fallback (e.g. the PLAY button, which is deliberately not part of the
+/// glass set).
+Element _decoratedAncestor(WidgetTester tester, Finder of) {
+  final glass = find
+      .ancestor(of: of, matching: find.byType(NeoGlass))
+      .evaluate();
+  if (glass.isNotEmpty) return glass.first;
+  return find
+      .ancestor(of: of, matching: find.byType(Container))
+      .evaluate()
+      .firstWhere((e) => (e.widget as Container).decoration is BoxDecoration);
+}
 
-double _radiusOf(Element chip) =>
-    (((chip.widget as Container).decoration as BoxDecoration).borderRadius
-            as BorderRadius)
-        .topLeft
-        .x;
+double _radiusOf(Element chip) {
+  final widget = chip.widget;
+  if (widget is NeoGlass) return widget.cornerRadius;
+  return (((widget as Container).decoration as BoxDecoration).borderRadius
+          as BorderRadius)
+      .topLeft
+      .x;
+}
 
 /// The on-screen rectangle of the chip [of] sits inside.
 Rect _chipRect(WidgetTester tester, Finder of) {

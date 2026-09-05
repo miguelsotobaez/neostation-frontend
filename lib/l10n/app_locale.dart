@@ -79,6 +79,15 @@ mixin AppLocale {
   static const String exit = 'exit';
   static const String launcher = 'launcher';
   static const String themesSubtitle = 'themes_subtitle';
+  static const String neoglassGroup = 'neoglass_group';
+  static const String neoglassBlur = 'neoglass_blur';
+  static const String neoglassBlurSubtitle = 'neoglass_blur_subtitle';
+  static const String neoglassBlurOff = 'neoglass_blur_off';
+  static const String neoglassOpacity = 'neoglass_opacity';
+  static const String neoglassOpacitySubtitle = 'neoglass_opacity_subtitle';
+  static const String neoglassBorderWidth = 'neoglass_border_width';
+  static const String neoglassBorderWidthSubtitle =
+      'neoglass_border_width_subtitle';
   static const String systemTheme = 'system_theme';
   static const String importTheme = 'import_theme';
   static const String importThemeSuccess = 'import_theme_success';

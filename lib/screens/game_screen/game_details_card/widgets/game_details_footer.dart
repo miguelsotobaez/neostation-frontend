@@ -10,9 +10,9 @@ import 'package:neostation/themes/app_themes.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../models/retro_achievements_game_info.dart';
-import 'package:neostation/themes/chrome_surface.dart';
 import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
+import '../../../../widgets/neo_glass.dart';
 import '../../../../widgets/monospaced_clock.dart';
 import '../../music/music_player.dart';
 import 'package:neostation/utils/ra_coverage.dart';
@@ -437,107 +437,93 @@ class GameDetailsFooter extends StatelessWidget {
         highlightColor: Colors.transparent,
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: _controlRadius,
-        child: Container(
-          width: availableWidth.clamp(0.0, _pillMaxWidth.r),
-          height: _bottomRowHeight,
-          decoration: BoxDecoration(
-            color: ChromeSurface.fill(context),
-            borderRadius: _controlRadius,
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline,
-              width: 1.r,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.shadow.withValues(alpha: 0.1),
-                blurRadius: 4.r,
-                offset: Offset(2.0.r, 2.0.r),
-              ),
-            ],
-          ),
-          child: Padding(
-            // Symmetric 8.r horizontal inset so neither the trophy icon nor the
-            // progress bar hugs the pill border. The progress column is always
-            // Expanded, so it simply absorbs the padding at any pill width.
-            padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 4.r),
-            child: Row(
-              children: [
-                // RetroAchievements game icon.
-                ClipRRect(
-                  borderRadius:
-                      Theme.of(
-                        context,
-                      ).extension<CornerRadii>()?.radiusInternal ??
-                      BorderRadius.circular(14.r),
-                  child: Container(
-                    width: _pillIconSize,
-                    height: _pillIconSize,
-                    color: theme.colorScheme.surface,
-                    child: gameIconUrl != null
-                        ? Image.network(
-                            gameIconUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Icon(
+        child: NeoGlass(
+          cornerRadius: _bottomRow.r,
+          child: SizedBox(
+            width: availableWidth.clamp(0.0, _pillMaxWidth.r),
+            height: _bottomRowHeight,
+            child: Padding(
+              // Symmetric 8.r horizontal inset so neither the trophy icon nor the
+              // progress bar hugs the pill border. The progress column is always
+              // Expanded, so it simply absorbs the padding at any pill width.
+              padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 4.r),
+              child: Row(
+                children: [
+                  // RetroAchievements game icon.
+                  ClipRRect(
+                    borderRadius:
+                        Theme.of(
+                          context,
+                        ).extension<CornerRadii>()?.radiusInternal ??
+                        BorderRadius.circular(14.r),
+                    child: Container(
+                      width: _pillIconSize,
+                      height: _pillIconSize,
+                      color: theme.colorScheme.surface,
+                      child: gameIconUrl != null
+                          ? Image.network(
+                              gameIconUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Icon(
+                                Symbols.emoji_events_rounded,
+                                color: statusColor,
+                                size: 16.r,
+                              ),
+                            )
+                          : Icon(
                               Symbols.emoji_events_rounded,
                               color: statusColor,
                               size: 16.r,
                             ),
-                          )
-                        : Icon(
-                            Symbols.emoji_events_rounded,
-                            color: statusColor,
-                            size: 16.r,
-                          ),
+                    ),
                   ),
-                ),
-                SizedBox(width: 6.r),
-                // Progress bar and achievement count. When the legend is hidden
-                // the pill stretches, so let this column (and its bar) fill the
-                // extra width via Expanded; otherwise keep the fixed 70.r width.
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: Text(
-                          progressText.toUpperCase(),
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface,
-                            fontSize: 11.r,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                  SizedBox(width: 6.r),
+                  // Progress bar and achievement count. When the legend is hidden
+                  // the pill stretches, so let this column (and its bar) fill the
+                  // extra width via Expanded; otherwise keep the fixed 70.r width.
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            progressText.toUpperCase(),
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                              fontSize: 11.r,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      SizedBox(height: 4.r),
-                      // Hold the bar short of the pill's right edge so it
-                      // doesn't run all the way across — mirrors the grid/
-                      // carousel pill's right margin under the progress count.
-                      Padding(
-                        padding: EdgeInsets.only(right: 6.r),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4.r),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 6.r,
-                            backgroundColor: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.1),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              statusColor,
+                        SizedBox(height: 4.r),
+                        // Hold the bar short of the pill's right edge so it
+                        // doesn't run all the way across — mirrors the grid/
+                        // carousel pill's right margin under the progress count.
+                        Padding(
+                          padding: EdgeInsets.only(right: 6.r),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4.r),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 6.r,
+                              backgroundColor: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.1),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                statusColor,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -737,28 +723,19 @@ class _FooterActionButton extends StatelessWidget {
         highlightColor: Colors.transparent,
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: radius,
-        child: Container(
-          width: _bottomRowHeight,
-          height: _bottomRowHeight,
-          decoration: BoxDecoration(
-            color: ChromeSurface.fill(context),
-            borderRadius: radius,
-            border: Border.all(color: theme.colorScheme.outline, width: 1.r),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-                blurRadius: 4.r,
-                offset: Offset(2.0.r, 2.0.r),
-              ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            size: 21.r,
-            fill: isOn ? 1 : 0,
-            color: isOn
-                ? AppThemes.getCustomColors(context).errorColor
-                : theme.colorScheme.onSurface,
+        child: NeoGlass(
+          cornerRadius: _bottomRow.r,
+          child: SizedBox(
+            width: _bottomRowHeight,
+            height: _bottomRowHeight,
+            child: Icon(
+              icon,
+              size: 21.r,
+              fill: isOn ? 1 : 0,
+              color: isOn
+                  ? AppThemes.getCustomColors(context).errorColor
+                  : theme.colorScheme.onSurface,
+            ),
           ),
         ),
       ),
@@ -837,64 +814,57 @@ class _InlineRating extends StatelessWidget {
         highlightColor: Colors.transparent,
         splashColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: _controlRadius,
-        child: Container(
-          width: _scoreWidth.r,
-          height: _bottomRowHeight,
-          // Tighter than the row's own gap, because this chip is mostly air at the
-          // row's height already and every unit of it is one the achievements pill
-          // beside it does not get — and deliberately 2.r narrower on the left.
-          //
-          // That asymmetry is an optical correction, not a slip: measured on
-          // device, the star's ink sits about 9px inside its own icon box while
-          // the number's last digit runs nearly to the edge of its, so a
-          // *geometrically* centred group reads 5px left-heavy. It survives the
-          // decimal's removal because it is about the star, not the number. The
-          // widget rects are symmetric either way — this is only visible in the
-          // pixels, which is why the numbers came off a screenshot.
-          padding: EdgeInsets.only(left: 4.r, right: 6.r),
-          decoration: BoxDecoration(
-            color: ChromeSurface.fill(context),
-            borderRadius: _controlRadius,
-            border: Border.all(color: theme.colorScheme.outline, width: 1.r),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-                blurRadius: 4.r,
-                offset: Offset(2.0.r, 2.0.r),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                Symbols.star_rounded,
-                color: ratingColor,
-                size: 16.r,
-                fill: 1,
-              ),
-              SizedBox(width: 3.r),
-              // scaleDown never scales up, so every score that fits is untouched.
-              // Nothing reaches it at these sizes — it is here so a font-metric
-              // wobble shrinks the number rather than growing the chip.
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '$displayRating',
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface,
-                      fontSize: 16.r,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
+        child: NeoGlass(
+          cornerRadius: _bottomRow.r,
+          child: SizedBox(
+            width: _scoreWidth.r,
+            height: _bottomRowHeight,
+            child: Padding(
+              // Tighter than the row's own gap, because this chip is mostly air at the
+              // row's height already and every unit of it is one the achievements pill
+              // beside it does not get — and deliberately 2.r narrower on the left.
+              //
+              // That asymmetry is an optical correction, not a slip: measured on
+              // device, the star's ink sits about 9px inside its own icon box while
+              // the number's last digit runs nearly to the edge of its, so a
+              // *geometrically* centred group reads 5px left-heavy. It survives the
+              // decimal's removal because it is about the star, not the number. The
+              // widget rects are symmetric either way — this is only visible in the
+              // pixels, which is why the numbers came off a screenshot.
+              padding: EdgeInsets.only(left: 4.r, right: 6.r),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(
+                    Symbols.star_rounded,
+                    color: ratingColor,
+                    size: 16.r,
+                    fill: 1,
+                  ),
+                  SizedBox(width: 3.r),
+                  // scaleDown never scales up, so every score that fits is untouched.
+                  // Nothing reaches it at these sizes — it is here so a font-metric
+                  // wobble shrinks the number rather than growing the chip.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '$displayRating',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16.r,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
