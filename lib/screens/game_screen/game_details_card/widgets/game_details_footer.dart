@@ -15,6 +15,7 @@ import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../../../../widgets/monospaced_clock.dart';
 import '../../music/music_player.dart';
+import 'scrolling_status_line.dart';
 import 'package:neostation/utils/ra_coverage.dart';
 
 /// A sticky footer component for the game details card that provides actionable controls and status summaries.
@@ -93,10 +94,11 @@ class GameDetailsFooter extends StatelessWidget {
     // One row, always the same height, in reading order: what the game *is*
     // on the left, what you can *do* with it on the right.
     //
-    // The two text lines that used to sit above this row are mostly gone. The
+    // The two text lines that used to sit above this row are one line now. The
     // metadata strip (players, publisher, year, genre) reads better in the
     // game info tab, which already carried half of those facts, so the strip
-    // is not repeated on the artwork; the filename went with it.
+    // is not repeated on the artwork. The ROM filename that had the second of
+    // those lines to itself is back, sharing the play-time clock's line.
     //
     // The cloud-sync glyph rode at that strip's end, spent a while as a chip
     // in this row, and now lives on the game list's own selected row, at the
@@ -105,12 +107,12 @@ class GameDetailsFooter extends StatelessWidget {
     // look for a mark the row could carry itself, and it was taking a chip's
     // width off the achievements pill on every synced game.
     //
-    // What is left of those lines is the play-time clock, on its own above the
-    // row. It was on the row once and that is what starved the achievements
-    // pill down to seven pixels; a play-time reading is 96 to 112 units wide
-    // and the row's spare, on the handheld card, is about 46. The line costs
-    // the row nothing, which is the only place the clock fits without the pill
-    // paying for it.
+    // Neither of the survivors is on the row. The clock was there once and that
+    // is what starved the achievements pill down to seven pixels; a play-time
+    // reading is 96 to 112 units wide and the row's spare, on the handheld
+    // card, is about 46. The line above costs the row nothing, which is the
+    // only place the clock fits without the pill paying for it, and the
+    // filename rides the same line rather than reclaiming one of its own.
     //
     // Fixed height, both parts of it: the line is reserved whether or not the
     // game has a reading to put on it, so the footer does not resize with what
@@ -132,15 +134,32 @@ class GameDetailsFooter extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // The line above the row: the ROM filename on the left, the
+                // play-time clock on the right.
+                //
+                // The clock had this line to itself and the filename was not
+                // rendered anywhere on the card. They pair well: the reading is
+                // a fixed, short glyph+digits block that wants the right edge,
+                // and the name is the one variable-width thing here, so giving
+                // it whatever the clock leaves costs the clock nothing and puts
+                // the name back without a third line.
                 SizedBox(
                   height: _clockLine.r,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: hasPlayTime
-                        ? _InlinePlayTime(game: game)
-                        : const SizedBox.shrink(),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Takes the line's whole width when there is no reading
+                      // beside it, and scrolls when it is longer than what it
+                      // gets.
+                      Expanded(child: _InlineRomFileName(game: game)),
+                      if (hasPlayTime) ...[
+                        SizedBox(width: 10.r),
+                        _InlinePlayTime(game: game),
+                      ],
+                    ],
                   ),
                 ),
+                SizedBox(height: _clockRowGap.r),
                 SizedBox(
                   height: _bottomRowHeight,
                   // The whole row is touch-only. Every action on it has a
@@ -675,6 +694,20 @@ const double _controlSize = _bottomRow;
 /// achievements pill rendered seven pixels wide.
 const double _clockLine = 26;
 
+/// Air between the line above and the row of controls.
+///
+/// The line and the row used to butt straight together, which was survivable
+/// while the play-time clock sat at the left of the line, above the score chip.
+/// The clock is at the right margin now, and so is PLAY — the two are flush to
+/// within a couple of pixels — so the reading was sitting directly on the
+/// button's top edge with about 8 units between them, of which the shadow under
+/// the digits took three. It read as the digits hanging off the button rather
+/// than as a line above it.
+///
+/// Counted into [gameDetailsPanelBottomOffset] with the rest of the footer, so
+/// the panels above still stop clear of it.
+const double _clockRowGap = 6;
+
 /// Slack under the row, so the content does not sit on the card's edge.
 const double _bottomPadding = 11;
 
@@ -699,7 +732,7 @@ double get _pillIconSize => (_bottomRow - 10).r;
 ///
 /// Unscaled, like the panels' own offsets — the caller applies `.r`.
 double gameDetailsPanelBottomOffset() =>
-    _clockLine + _bottomRow + _bottomPadding + _panelGap;
+    _clockLine + _clockRowGap + _bottomRow + _bottomPadding + _panelGap;
 
 /// One square control on the footer's row: a glyph on the same pill the
 /// achievements indicator wears, so the row reads as a set.
@@ -910,6 +943,107 @@ class _InlineRating extends StatelessWidget {
 List<Shadow> get _onArtShadows => [
   Shadow(blurRadius: 1.r, color: Colors.black, offset: const Offset(2, 2)),
 ];
+
+/// How far [_onArtShadows] reaches past the glyphs it sits under: the 2px
+/// offset, plus the blur's own spread either side of that.
+///
+/// The filename needs it as slack in its marquee clip. Without it the name
+/// keeps its whole shadow while it fits and loses the bottom of it the moment
+/// it is long enough to scroll — see [ScrollingStatusLine.shadowRoom].
+double get _onArtShadowRoom => 6.r;
+
+/// The ROM filename, on the left of the play-time clock's line.
+///
+/// It is the one identity fact the list sidebar beside this card does not
+/// carry: the row there renders the *resolved display name*, and this is what
+/// that name was matched from. There is no game title on the card for the same
+/// reason in reverse — it would be a strict duplicate of the selected row.
+///
+/// Only populated for scraped games: [GameListService] sets
+/// `showRomFileNameSubtitle` exclusively on the scraped branch, because a
+/// filename under a name derived from that same filename says nothing. For an
+/// unscraped game, or a user running `preferFileName`, this renders nothing at
+/// all and the clock simply keeps its line — the line's height is reserved
+/// either way, so the footer does not resize as the cursor walks the list.
+///
+/// White with a drop shadow, matching the clock: this paints straight onto the
+/// game's fanart, which can be any colour under it.
+class _InlineRomFileName extends StatelessWidget {
+  final GameModel game;
+
+  const _InlineRomFileName({required this.game});
+
+  @override
+  Widget build(BuildContext context) {
+    final String label = game.showRomFileNameSubtitle ? game.romname : '';
+    if (label.isEmpty) return const SizedBox.shrink();
+
+    // The clock's own 15.r. They share a line, and two sizes on one line read
+    // as a heading with a caption after it rather than as two facts about the
+    // same game. The weight still separates them: w600 here against the
+    // reading's w700.
+    final TextStyle style = TextStyle(
+      color: Colors.white,
+      fontSize: 15.r,
+      fontWeight: FontWeight.w600,
+      height: 1.15,
+      shadows: _onArtShadows,
+    );
+
+    // No `RepaintBoundary` around this, deliberately. One looks free here —
+    // the footer rebuilds on every sync tick and every achievements poll, and
+    // a boundary would keep those off this line — but the marquee below moves
+    // this exact widget every 50ms, and a retained layer is *repositioned*
+    // rather than repainted. The damage the engine works out for that move is
+    // the layer's paint bounds, which for a `Text` is its line box and not the
+    // drop shadow hanging past it: the shadow's pixels are then neither
+    // cleared where they were nor drawn where they now belong, so the name
+    // scrolls out from under its own shadow and leaves it standing. It only
+    // shows up where a frame is a partial repaint, which is why it comes in
+    // from devices and not from a desktop build.
+    final Widget text = Text(
+      label,
+      maxLines: 1,
+      // No wrapping and no ellipsis: whichever branch below is taken, this
+      // text is laid out at its full width — either because it fits, or
+      // because the marquee is going to scroll past its end.
+      softWrap: false,
+      strutStyle: StrutStyle(
+        fontSize: 15.r,
+        height: 1.15,
+        forceStrutHeight: true,
+      ),
+      style: style,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final TextPainter painter = TextPainter(
+          text: TextSpan(text: label, style: style),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        final bool overflows = painter.width > constraints.maxWidth;
+        painter.dispose();
+
+        // Left in both branches: a name that fits sits at the margin, and one
+        // that does not starts there and travels. `ScrollingStatusLine` holds
+        // still until it genuinely overflows, but it is only given the line at
+        // all when the measurement above says it will move — a viewport and a
+        // 50ms timer are not worth arming for every short name.
+        if (!overflows) {
+          return Align(alignment: Alignment.centerLeft, child: text);
+        }
+        return ScrollingStatusLine(
+          resetKey: game.romname,
+          shadowRoom: _onArtShadowRoom,
+          children: [text],
+        );
+      },
+    );
+  }
+}
 
 /// Accumulated play time as a clock glyph and an HH:MM:SS reading, on its own
 /// line above the footer's row.

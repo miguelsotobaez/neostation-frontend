@@ -19,11 +19,13 @@ import 'package:neostation/themes/chrome_surface.dart';
 ///
 /// It got there by losing two text lines. The metadata strip (players,
 /// publisher, year, genre) was painting scraped facts onto the game's fanart
-/// that the info tab is the place for, and the filename under it went with it;
-/// the cloud-sync glyph that rode at the end of that line spent a while as a
-/// chip in this row and now lives on the game list's own selected row, which is
-/// where the selection it reports on actually is. What is left is pinned here
-/// because each piece has been moved before:
+/// that the info tab is the place for; the cloud-sync glyph that rode at the
+/// end of that line spent a while as a chip in this row and now lives on the
+/// game list's own selected row, which is where the selection it reports on
+/// actually is. The ROM filename came back from that cull — it is the one
+/// identity fact the list row does not carry — but on the play-time clock's
+/// line rather than one of its own. What is left is pinned here because each
+/// piece has been moved before:
 ///
 ///  * The score has been in five places — a pill in this row, a segment of
 ///    the metadata marquee (where a long publisher could scroll it out of
@@ -58,6 +60,7 @@ GameModel _game({
   double rating = 18.0,
   int? playTime = 3671,
   bool isFavorite = false,
+  bool showRomFileNameSubtitle = true,
 }) => GameModel(
   romname: 'A Game (USA).chd',
   realname: 'A Game',
@@ -70,7 +73,7 @@ GameModel _game({
   rating: rating,
   playTime: playTime,
   isFavorite: isFavorite,
-  showRomFileNameSubtitle: true,
+  showRomFileNameSubtitle: showRomFileNameSubtitle,
 );
 
 void main() {
@@ -179,12 +182,49 @@ void main() {
   testWidgets('the scraped facts are not on the footer at all', (tester) async {
     await pumpFooter(tester);
 
-    // Publisher, year, genre and the ROM filename all belong to the info tab
-    // now; painting them on the artwork here was the duplicate.
+    // Publisher, year and genre belong to the info tab now; painting them on
+    // the artwork here was the duplicate. The filename is the exception: it is
+    // the one identity fact neither the info tab's strip nor the list row
+    // beside the card carries, so it is back on the clock's line.
     expect(find.text('Sony'), findsNothing);
     expect(find.text('1999'), findsNothing);
     expect(find.text('RPG'), findsNothing);
+    expect(find.text('A Game (USA).chd'), findsOneWidget);
+  });
+
+  testWidgets('the filename shares the clock line, name left and clock right', (
+    tester,
+  ) async {
+    // One line for both: the reading is a fixed, short block that wants the
+    // right edge and the name is the variable-width thing, so the name takes
+    // whatever the clock leaves rather than claiming a second line.
+    await pumpFooter(tester, game: _game(playTime: 3671), width: 640);
+
+    final name = tester.getRect(find.text('A Game (USA).chd'));
+    final clock = tester.getRect(find.byIcon(Symbols.schedule_rounded));
+
+    expect(name.right, lessThanOrEqualTo(clock.left), reason: 'name left');
+    expect(
+      name.center.dy,
+      moreOrLessEquals(clock.center.dy, epsilon: 2.0),
+      reason: 'one line, not stacked',
+    );
+    expect(
+      clock.bottom,
+      lessThanOrEqualTo(tester.getRect(find.byType(ExcludeFocus)).top),
+      reason: 'still above the controls row',
+    );
+  });
+
+  testWidgets('an unscraped game leaves the clock its line', (tester) async {
+    // `showRomFileNameSubtitle` is set only where the display name came from
+    // somewhere other than the filename; a filename under a name derived from
+    // that same filename says nothing, so there is nothing to render and the
+    // line is unchanged in height either way.
+    await pumpFooter(tester, game: _game(showRomFileNameSubtitle: false));
+
     expect(find.text('A Game (USA).chd'), findsNothing);
+    expect(find.byIcon(Symbols.schedule_rounded), findsOneWidget);
   });
 
   testWidgets('the score is a whole number, rounded up', (tester) async {
@@ -239,10 +279,15 @@ void main() {
     final clock = find.byIcon(Symbols.schedule_rounded);
     expect(clock, findsOneWidget);
 
+    // A gap, not just "not overlapping". The clock and PLAY are both at the
+    // right margin, so with the two lines butted together the reading sat on
+    // the button's top edge and read as hanging off it — and the shadow under
+    // the digits closed most of what little space there was.
     expect(
-      tester.getRect(clock).bottom,
-      lessThanOrEqualTo(tester.getRect(find.byType(ExcludeFocus)).top),
-      reason: 'above the row, not among the controls',
+      tester.getRect(find.byType(ExcludeFocus)).top -
+          tester.getRect(clock).bottom,
+      greaterThanOrEqualTo(4.0),
+      reason: 'above the row with air between, not sitting on PLAY',
     );
   });
 
