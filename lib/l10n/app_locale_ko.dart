@@ -724,7 +724,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.appCount: '{count} 앱',
   AppLocale.errorSystemNotFound: '오류: 이 게임에 대한 시스템을 찾을 수 없습니다.',
   AppLocale.errorLaunchingGame: '게임 실행 중 오류 발생: {error}',
-  AppLocale.settingsNotAvailableRecent: '최근 게임 카드에서는 설정을 사용할 수 없습니다.',
   AppLocale.allSystems: '모든 시스템',
   AppLocale.noSystemsFound: '시스템을 찾을 수 없습니다',
   AppLocale.setupLibrary: '라이브러리 설정',

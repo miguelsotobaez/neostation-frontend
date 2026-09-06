@@ -381,6 +381,40 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('Y fires the host\'s current callback, not the mounted one', (
+      tester,
+    ) async {
+      // The host rebuilds onYPressed around whichever card is selected, so the
+      // grid has to read it on every press. Holding the closure it mounted with
+      // pinned the systems screen's Y menu to the card selected when the grid
+      // appeared — index 0 being the recent-activity card, that opened the last
+      // played game's system every time, wherever the cursor actually was.
+      final opened = <String?>[];
+
+      Widget gridFor(int index) => host(
+        SystemCardGridView(
+          crossAxisCount: 3,
+          systems: systems,
+          selectedIndex: index,
+          navLayerId: 'rebound_y',
+          onYPressed: () => opened.add(systems[index].title),
+          cardOverrideBuilder: stubCards,
+        ),
+      );
+
+      await tester.pumpWidget(gridFor(0));
+      await settleInput(tester);
+      await press(tester, LogicalKeyboardKey.keyY);
+      expect(opened, ['snes']);
+
+      await tester.pumpWidget(gridFor(2));
+      await settleInput(tester);
+      await press(tester, LogicalKeyboardKey.keyY);
+      expect(opened, ['snes', 'md']);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('the override builder replaces only the cards it claims', (
       tester,
     ) async {
@@ -447,6 +481,43 @@ void main() {
 
       expect(activated, [0]);
       expect(options, [0]);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 400));
+    });
+
+    testWidgets('Y fires the host\'s current callback, not the mounted one', (
+      tester,
+    ) async {
+      // Same contract as the grid's: the carousel re-reads onYPressed on every
+      // press, so the card the cursor is on is the one the menu opens for.
+      final opened = <String?>[];
+
+      Widget carouselFor(int index) => host(
+        MySystemsCarousel(
+          items: systems,
+          selectedIndex: index,
+          navLayerId: 'rebound_carousel_y',
+          onYPressed: () => opened.add(systems[index].title),
+          blockSystemBack: false,
+          enablePullToRescan: false,
+          enableDynamicBackground: false,
+          enableThemeAssets: false,
+          enableSecondaryDisplay: false,
+          enableTabBumpers: false,
+          cardOverrideBuilder: stubCards,
+        ),
+      );
+
+      await tester.pumpWidget(carouselFor(0));
+      await settleInput(tester);
+      await press(tester, LogicalKeyboardKey.keyY);
+      expect(opened, ['snes']);
+
+      await tester.pumpWidget(carouselFor(2));
+      await settleInput(tester);
+      await press(tester, LogicalKeyboardKey.keyY);
+      expect(opened, ['snes', 'md']);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 400));

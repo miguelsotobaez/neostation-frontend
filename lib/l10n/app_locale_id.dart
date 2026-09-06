@@ -789,8 +789,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.errorSystemNotFound:
       'Kesalahan: Sistem tidak ditemukan untuk game ini.',
   AppLocale.errorLaunchingGame: 'Kesalahan saat menjalankan game: {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Pengaturan tidak tersedia untuk game baru di sini.',
   AppLocale.allSystems: 'Semua Sistem',
   AppLocale.noSystemsFound: 'Tidak ada sistem ditemukan',
   AppLocale.setupLibrary: 'Siapkan Pustaka',

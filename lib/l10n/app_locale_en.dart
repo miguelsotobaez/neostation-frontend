@@ -785,8 +785,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.appCount: '{count} App',
   AppLocale.errorSystemNotFound: 'Error: System not found for this game.',
   AppLocale.errorLaunchingGame: 'Error launching game: {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Settings not available for Recent Games here.',
   AppLocale.allSystems: 'All Systems',
   AppLocale.noSystemsFound: 'No systems found',
   AppLocale.setupLibrary: 'Setup Your Library',

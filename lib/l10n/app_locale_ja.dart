@@ -718,7 +718,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.appCount: '{count}個のアプリ',
   AppLocale.errorSystemNotFound: 'エラー: このゲームのシステムが見つかりません。',
   AppLocale.errorLaunchingGame: 'ゲームの起動中にエラーが発生しました: {error}',
-  AppLocale.settingsNotAvailableRecent: 'ここでは最近プレイしたゲームの設定は利用できません。',
   AppLocale.allSystems: 'すべてのシステム',
   AppLocale.noSystemsFound: 'システムが見つかりません',
   AppLocale.setupLibrary: 'ライブラリをセットアップ',

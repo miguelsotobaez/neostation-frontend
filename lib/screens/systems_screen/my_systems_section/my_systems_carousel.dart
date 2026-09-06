@@ -289,7 +289,10 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       onNavigateRight: _navigateNext,
       onSelectItem: _selectCurrentSystem,
       onSettings: _openSystemSettingsFromCarousel,
-      onFavorite: widget.onYPressed,
+      // Resolved on every press: the host rebuilds this callback around the
+      // currently selected card, so holding the closure captured here would
+      // pin Y to the card selected when this state was created.
+      onFavorite: () => widget.onYPressed?.call(),
       onBack: widget.onBackPressed,
       onXButton:
           widget.onXPressed ??
@@ -570,6 +573,13 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   }
 
   /// Opens configuration dialogs for the focused carousel item.
+  ///
+  /// A recent-activity card used to be turned away here on the grounds that it
+  /// carries a game rather than a system. The grid's START and both layouts' Y
+  /// menu resolve one through [SystemInfo.settingsFolderName] instead, so this
+  /// did the same job three different ways and refused what its siblings
+  /// allowed. It now shares their resolution, and reports an unresolvable card
+  /// the way the grid does rather than doing nothing.
   void _openSystemSettingsFromCarousel() async {
     final allSystems = _getSystemsList();
 
@@ -582,30 +592,30 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     }
 
     final selectedSystemInfo = allSystems[_currentIndex];
-
-    // Block configuration for individual game cards (Recent Activity).
-    if (selectedSystemInfo.isGame) {
-      AppNotification.showNotification(
-        context,
-        AppLocale.settingsNotAvailableRecent.getString(context),
-        type: NotificationType.info,
-      );
-      return;
-    }
+    final folderName = selectedSystemInfo.settingsFolderName;
 
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
     );
 
-    final selectedSystem = selectedSystemInfo.folderName == 'all'
+    final selectedSystem = folderName == 'all'
         ? _createAllGamesSystem(configProvider.detectedSystems)
         : configProvider.detectedSystems.cast<SystemModel?>().firstWhere(
-            (system) => system?.folderName == selectedSystemInfo.folderName,
+            (system) => system?.folderName == folderName,
             orElse: () => null,
           );
 
-    if (selectedSystem == null) return;
+    if (selectedSystem == null) {
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.systemSettingsNotAvailable.getString(context),
+          type: NotificationType.info,
+        );
+      }
+      return;
+    }
 
     if (mounted) {
       await showDialog(

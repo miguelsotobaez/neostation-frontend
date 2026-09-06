@@ -265,6 +265,17 @@ class SystemInfo {
       ? customBackgroundPath!
       : 'assets/images/logos/$_resolvedPrimaryFolderName.webp';
 
+  /// The system whose settings this card configures.
+  ///
+  /// Normally its own [folderName]. A recent-activity card carries a game
+  /// rather than a system, but that game still belongs to one, so it resolves
+  /// through the game's `systemFolderName` — the same hop the card makes to
+  /// launch it. Both entry points to the settings dialog (the Y context menu
+  /// and START) read this, so neither can drift back into refusing a card the
+  /// other one accepts.
+  String? get settingsFolderName =>
+      (isGame ? gameModel?.systemFolderName : null) ?? folderName;
+
   /// Internal helper to determine the directory name used for asset resolution.
   String get _resolvedPrimaryFolderName =>
       (primaryFolderName != null && primaryFolderName!.isNotEmpty)

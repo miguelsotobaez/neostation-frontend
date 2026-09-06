@@ -38,9 +38,15 @@ extension _GamepadGridNav on _SystemCardGridViewState {
       },
       onSelectItem: () => widget.onEnterPressed?.call(),
       onSettings: () => widget.onEscapePressed?.call(),
-      // Y is unbound on the systems screen (the host passes nothing), so a null
-      // callback keeps the button silent exactly as before.
-      onFavorite: widget.onYPressed,
+      // Read through `widget` on every press, exactly as A and START above do.
+      // The host rebuilds this callback each frame around the *currently*
+      // selected card, so binding the closure itself here would pin Y to
+      // whichever card was selected when this state was created — Y opened the
+      // context menu for that first card no matter where the cursor had moved
+      // (the long-press route never had the bug: the card reads `widget` when
+      // it is built). A null `onYPressed` still does nothing, and Y counts as
+      // handled either way, so nothing else changes.
+      onFavorite: () => widget.onYPressed?.call(),
       // Likewise B: the systems screen is a root tab with nothing to pop, and a
       // null onBack also leaves the keyboard's Backspace unhandled, as it was.
       onBack: widget.onBackPressed,

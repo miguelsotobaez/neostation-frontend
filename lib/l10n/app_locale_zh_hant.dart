@@ -702,7 +702,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.appCount: '{count} 個應用程式',
   AppLocale.errorSystemNotFound: '錯誤：未發現該遊戲的系統。',
   AppLocale.errorLaunchingGame: '啟動遊戲發生錯誤：{error}',
-  AppLocale.settingsNotAvailableRecent: '此處無法使用最近遊玩設定。',
   AppLocale.allSystems: '所有系統',
   AppLocale.noSystemsFound: '未發現系統',
   AppLocale.setupLibrary: '設定您的收藏庫',

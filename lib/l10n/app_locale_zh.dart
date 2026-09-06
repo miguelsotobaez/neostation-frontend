@@ -702,7 +702,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.appCount: '{count} 个应用',
   AppLocale.errorSystemNotFound: '错误：未发现该游戏的系统。',
   AppLocale.errorLaunchingGame: '启动游戏出错：{error}',
-  AppLocale.settingsNotAvailableRecent: '此处不可用最近游玩设置。',
   AppLocale.allSystems: '所有系统',
   AppLocale.noSystemsFound: '未发现系统',
   AppLocale.setupLibrary: '设置您的库',
