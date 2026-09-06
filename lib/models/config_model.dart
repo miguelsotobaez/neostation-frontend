@@ -221,6 +221,20 @@ class ConfigModel {
   /// by a later systems update inherits.
   final bool subfolderViewAll;
 
+  /// Gaussian blur sigma of the frosted-glass chrome (NeoGlass), clamped to
+  /// 0–2. `0` (the default) disables the blur entirely (flat translucent
+  /// panel, cheapest). Higher values are only smooth on a powerful GPU.
+  final int neoglassBlur;
+
+  /// Transparency of the frosted-glass chrome on a 0–50 scale: `0` means no
+  /// transparency (the tint is fully opaque), `50` means the maximum
+  /// transparency (the backdrop shows through the most).
+  final int neoglassTransparency;
+
+  /// Width of the frosted-glass specular rim stroke. Controls the size of the
+  /// glass border.
+  final double neoglassBorderWidth;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -269,6 +283,9 @@ class ConfigModel {
     this.showCloudSyncIcon = true,
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
+    this.neoglassBlur = 0,
+    this.neoglassTransparency = 10,
+    this.neoglassBorderWidth = 2,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -494,7 +511,47 @@ class ConfigModel {
               '1' ||
           (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
               'true',
+      // Absent => 0 => blur off (the default). The frosted blur is only smooth
+      // on a powerful GPU, so it starts disabled.
+      neoglassBlur:
+          (int.tryParse(
+                    (json['neoglassBlur'] ?? json['neoglass_blur'] ?? 0)
+                        .toString(),
+                  ) ??
+                  0)
+              .clamp(0, 2),
+      // Absent => 10 => the default transparency. Accepts the pre-release
+      // `neoglassOpacity` (0.0–1.0) as a fallback, converting it to the 0–50
+      // scale so a config written by an earlier build is not reset.
+      neoglassTransparency: _parseNeoglassTransparency(json),
+      // Absent => 2 => the feature's default rim stroke width.
+      neoglassBorderWidth:
+          (double.tryParse(
+                    (json['neoglassBorderWidth'] ??
+                            json['neoglass_border_width'] ??
+                            2)
+                        .toString(),
+                  ) ??
+                  2)
+              .clamp(0.0, 8.0),
     );
+  }
+
+  /// Parses the NeoGlass transparency (0–50) from a config map, falling back to
+  /// the pre-release `neoglassOpacity` (0.0–1.0) when only that key is present.
+  static int _parseNeoglassTransparency(Map<String, dynamic> json) {
+    final raw = json['neoglassTransparency'] ?? json['neoglass_transparency'];
+    if (raw != null) {
+      return (int.tryParse(raw.toString()) ?? 10).clamp(0, 50);
+    }
+    final legacy = json['neoglassOpacity'] ?? json['neoglass_opacity'];
+    if (legacy != null) {
+      final opacity = double.tryParse(legacy.toString());
+      if (opacity != null) {
+        return ((1.0 - opacity) * 50).round().clamp(0, 50);
+      }
+    }
+    return 10;
   }
 
   /// Converts the configuration model into a JSON-compatible map.
@@ -552,6 +609,9 @@ class ConfigModel {
       'showCloudSyncIcon': showCloudSyncIcon,
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
+      'neoglassBlur': neoglassBlur,
+      'neoglassTransparency': neoglassTransparency,
+      'neoglassBorderWidth': neoglassBorderWidth,
     };
   }
 
@@ -604,6 +664,9 @@ class ConfigModel {
     bool? showCloudSyncIcon,
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
+    int? neoglassBlur,
+    int? neoglassTransparency,
+    double? neoglassBorderWidth,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -655,6 +718,9 @@ class ConfigModel {
       showCloudSyncIcon: showCloudSyncIcon ?? this.showCloudSyncIcon,
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
+      neoglassBlur: neoglassBlur ?? this.neoglassBlur,
+      neoglassTransparency: neoglassTransparency ?? this.neoglassTransparency,
+      neoglassBorderWidth: neoglassBorderWidth ?? this.neoglassBorderWidth,
     );
   }
 

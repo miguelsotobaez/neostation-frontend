@@ -73,6 +73,17 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.recentCardSizeDefault: 'Par défaut',
   AppLocale.recentCardSize2x1: 'Compact',
   AppLocale.themesSubtitle: 'Personnalisez le look de NeoStation',
+  AppLocale.neoglassGroup: 'NeoGlass',
+  AppLocale.neoglassBlur: 'Flou du verre',
+  AppLocale.neoglassBlurSubtitle: 'Intensité du flou: désactivé, 1 ou 2',
+  AppLocale.neoglassBlurOff: 'Désactivé',
+  AppLocale.neoglassBlurGpuWarning:
+      'À activer uniquement sur un GPU puissant — sur du matériel modeste, le flou givré peut ne pas rester fluide.',
+  AppLocale.neoglassTransparency: 'Transparence du verre',
+  AppLocale.neoglassTransparencySubtitle:
+      '0 = aucune transparence, 50 = maximale',
+  AppLocale.neoglassBorderWidth: 'Bordure du verre',
+  AppLocale.neoglassBorderWidthSubtitle: 'Épaisseur du bord du verre',
   AppLocale.systemTheme: 'Thème du Système',
   AppLocale.importTheme: 'Importer un thème',
   AppLocale.importThemeSuccess: 'Thème « %s » importé',

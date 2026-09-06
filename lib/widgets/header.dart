@@ -15,13 +15,13 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/widgets/bumper_glyph.dart';
 import 'package:neostation/widgets/notification_bell.dart';
+import 'package:neostation/widgets/neo_glass.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/utils/header_layout.dart';
 import 'package:neostation/utils/nav_tabs.dart';
 import 'package:neostation/utils/time_format.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 
-import 'package:neostation/themes/chrome_surface.dart';
 import '../themes/corner_radii.dart';
 
 class Header extends StatefulWidget {
@@ -326,124 +326,114 @@ class HeaderState extends State<Header> {
                         // Bumper glyphs sit outside the pill so the pill reads as a
                         // single switch and the hardware hints stay distinct from it.
                         _buildShoulderButton('LB', true),
-                        Container(
-                          height: 32.r,
-                          padding: EdgeInsets.symmetric(horizontal: 4.r),
-                          decoration: BoxDecoration(
-                            color: ChromeSurface.fill(context),
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.outline,
-                              width: 1.r,
-                            ),
-                            borderRadius:
-                                Theme.of(
-                                  context,
-                                ).extension<CornerRadii>()?.radiusExternal ??
-                                BorderRadius.circular(8.r),
-                            // normal black shadow
-                            boxShadow: [
-                              BoxShadow(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.shadow.withValues(alpha: 0.1),
-                                blurRadius: 4.r,
-                                offset: Offset(2.0.r, 2.0.r),
-                              ),
-                            ],
-                          ),
-                          child: Builder(
-                            builder: (context) {
-                              // The indicator tracks the tab's slot in the *rendered*
-                              // strip, not its canonical index — otherwise hiding a tab
-                              // parks it past the end of a shortened strip.
-                              final selectedSlot = visibleTabs.indexOf(
-                                NavTab.values[widget.selectedTabIndex],
-                              );
+                        NeoGlass(
+                          cornerRadius:
+                              Theme.of(context)
+                                  .extension<CornerRadii>()
+                                  ?.radiusExternalRadius ??
+                              8.r,
+                          child: SizedBox(
+                            height: 32.r,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4.r),
+                              child: Builder(
+                                builder: (context) {
+                                  // The indicator tracks the tab's slot in the *rendered*
+                                  // strip, not its canonical index — otherwise hiding a tab
+                                  // parks it past the end of a shortened strip.
+                                  final selectedSlot = visibleTabs.indexOf(
+                                    NavTab.values[widget.selectedTabIndex],
+                                  );
 
-                              // The indicator and the icon tints share ONE
-                              // animation. Flipping a tab's tint the instant
-                              // the selection changed, while the indicator took
-                              // 160ms to slide over, left the incoming icon
-                              // drawn in `onPrimary` on bare surface (and the
-                              // outgoing one in `onSurface` under the pill that
-                              // had not left yet) for the whole slide — read as
-                              // a flash on every tab change, and badly so once
-                              // a held bumper cycles faster than the slide.
-                              // Tinting from the ANIMATED position instead
-                              // keeps each icon's colour matched to how much of
-                              // the pill is actually under it.
-                              final strip = TweenAnimationBuilder<double>(
-                                tween: Tween<double>(
-                                  end: (selectedSlot < 0 ? 0 : selectedSlot)
-                                      .toDouble(),
-                                ),
-                                duration: const Duration(milliseconds: 160),
-                                curve: Curves.easeInOut,
-                                builder: (context, slot, _) {
-                                  return Stack(
-                                    children: [
-                                      // Moving indicator
-                                      Positioned(
-                                        left: slot * 32.r,
-                                        top: 4.r,
-                                        bottom: 4.r,
-                                        width: 32.r,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primary,
-                                            borderRadius:
-                                                Theme.of(context)
-                                                    .extension<CornerRadii>()
-                                                    ?.radiusInternal ??
-                                                BorderRadius.circular(4.r),
-                                          ),
-                                        ),
-                                      ),
-                                      // Tab buttons
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                  // The indicator and the icon tints share ONE
+                                  // animation. Flipping a tab's tint the instant
+                                  // the selection changed, while the indicator took
+                                  // 160ms to slide over, left the incoming icon
+                                  // drawn in `onPrimary` on bare surface (and the
+                                  // outgoing one in `onSurface` under the pill that
+                                  // had not left yet) for the whole slide — read as
+                                  // a flash on every tab change, and badly so once
+                                  // a held bumper cycles faster than the slide.
+                                  // Tinting from the ANIMATED position instead
+                                  // keeps each icon's colour matched to how much of
+                                  // the pill is actually under it.
+                                  final strip = TweenAnimationBuilder<double>(
+                                    tween: Tween<double>(
+                                      end: (selectedSlot < 0 ? 0 : selectedSlot)
+                                          .toDouble(),
+                                    ),
+                                    duration: const Duration(milliseconds: 160),
+                                    curve: Curves.easeInOut,
+                                    builder: (context, slot, _) {
+                                      return Stack(
                                         children: [
-                                          for (final (index, tab)
-                                              in visibleTabs.indexed)
-                                            SizedBox(
-                                              width: 32.r,
-                                              height: 32.r,
-                                              child: _buildTabButton(
-                                                context,
-                                                tab.index,
-                                                navTabSpec(tab).icon,
-                                                navTabSpec(
-                                                  tab,
-                                                ).labelKey.getString(context),
-                                                iconData: navTabSpec(
-                                                  tab,
-                                                ).iconData,
-                                                coverage:
-                                                    (1.0 - (slot - index).abs())
-                                                        .clamp(0.0, 1.0),
+                                          // Moving indicator
+                                          Positioned(
+                                            left: slot * 32.r,
+                                            top: 4.r,
+                                            bottom: 4.r,
+                                            width: 32.r,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
+                                                borderRadius:
+                                                    Theme.of(context)
+                                                        .extension<
+                                                          CornerRadii
+                                                        >()
+                                                        ?.radiusInternal ??
+                                                    BorderRadius.circular(4.r),
                                               ),
                                             ),
+                                          ),
+                                          // Tab buttons
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              for (final (index, tab)
+                                                  in visibleTabs.indexed)
+                                                SizedBox(
+                                                  width: 32.r,
+                                                  height: 32.r,
+                                                  child: _buildTabButton(
+                                                    context,
+                                                    tab.index,
+                                                    navTabSpec(tab).icon,
+                                                    navTabSpec(tab).labelKey
+                                                        .getString(context),
+                                                    iconData: navTabSpec(
+                                                      tab,
+                                                    ).iconData,
+                                                    coverage:
+                                                        (1.0 -
+                                                                (slot - index)
+                                                                    .abs())
+                                                            .clamp(0.0, 1.0),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         ],
-                                      ),
-                                    ],
+                                      );
+                                    },
+                                  );
+
+                                  if (visibleTabs.length <= maxSlots) {
+                                    _windowStart = 0;
+                                    return strip;
+                                  }
+
+                                  return _buildScrollingStrip(
+                                    strip,
+                                    visibleTabs.length,
+                                    selectedSlot,
+                                    maxSlots,
                                   );
                                 },
-                              );
-
-                              if (visibleTabs.length <= maxSlots) {
-                                _windowStart = 0;
-                                return strip;
-                              }
-
-                              return _buildScrollingStrip(
-                                strip,
-                                visibleTabs.length,
-                                selectedSlot,
-                                maxSlots,
-                              );
-                            },
+                              ),
+                            ),
                           ),
                         ),
                         _buildShoulderButton('RB', false),
@@ -471,80 +461,66 @@ class HeaderState extends State<Header> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
-                        child: Container(
-                          margin: EdgeInsets.only(right: 8.r),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10.r,
-                            vertical: 4.r,
-                          ),
-                          decoration: BoxDecoration(
-                            color: ChromeSurface.fill(context),
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.outline,
-                              width: 1.r,
+                        child: Padding(
+                          padding: EdgeInsets.only(right: 8.r),
+                          child: NeoGlass(
+                            cornerRadius:
+                                Theme.of(context)
+                                    .extension<CornerRadii>()
+                                    ?.radiusExternalRadius ??
+                                14.r,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
                             ),
-                            borderRadius:
-                                Theme.of(
-                                  context,
-                                ).extension<CornerRadii>()?.radiusExternal ??
-                                BorderRadius.circular(14),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.shadow.withValues(alpha: 0.1),
-                                blurRadius: 4.r,
-                                offset: Offset(2.0.r, 2.0.r),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const NotificationBell(),
-                              SizedBox(width: 10.r),
-                              if (showClockGlyph) ...[
-                                Icon(
-                                  Symbols.schedule,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                  size: 14.r,
-                                ),
-                                SizedBox(width: 4.r),
-                              ],
-                              Text(
-                                clockText,
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                  fontSize: 12.r,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.3.r,
-                                ),
-                              ),
-                              if (_batteryLevel != -1 &&
-                                  !_isTelevision &&
-                                  !Responsive.isHandheldXS(context)) ...[
-                                SizedBox(width: 12.r),
-                                Icon(
-                                  _getBatteryIconData(),
-                                  color: _getBatteryColor(customColors),
-                                  size: 16.r,
-                                ),
-                                SizedBox(width: 4.r),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const NotificationBell(),
+                                SizedBox(width: 10.r),
+                                if (showClockGlyph) ...[
+                                  Icon(
+                                    Symbols.schedule,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                    size: 14.r,
+                                  ),
+                                  SizedBox(width: 4.r),
+                                ],
                                 Text(
-                                  "$_batteryLevel%",
+                                  clockText,
                                   style: TextStyle(
-                                    color: _getBatteryColor(customColors),
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                     fontSize: 12.r,
                                     fontWeight: FontWeight.w500,
                                     letterSpacing: 0.3.r,
                                   ),
                                 ),
+                                if (_batteryLevel != -1 &&
+                                    !_isTelevision &&
+                                    !Responsive.isHandheldXS(context)) ...[
+                                  SizedBox(width: 12.r),
+                                  Icon(
+                                    _getBatteryIconData(),
+                                    color: _getBatteryColor(customColors),
+                                    size: 16.r,
+                                  ),
+                                  SizedBox(width: 4.r),
+                                  Text(
+                                    "$_batteryLevel%",
+                                    style: TextStyle(
+                                      color: _getBatteryColor(customColors),
+                                      fontSize: 12.r,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.3.r,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ),
