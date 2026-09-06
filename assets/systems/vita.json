@@ -65,6 +65,17 @@
       }
     },
 	{
+      "name": "Standalone Vita3K Plus",
+      "unique_id": "vita.vita3k.plus",
+      "description": "Supported extensions: psvita.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.vita3k.emulator/org.vita3k.emulator.Emulator --esa AppStartParameters \"-r,{tags.vita_game_id}\""
+        }
+      }
+    },
+	{
       "name": "Standalone EmucoreV",
       "unique_id": "vita.emucorev",
       "description": "Supported extensions: dpt.",
