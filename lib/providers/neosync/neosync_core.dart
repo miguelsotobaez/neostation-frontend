@@ -718,12 +718,19 @@ extension NeoSyncCore on NeoSyncProvider {
       }
 
       final parsed = CloudPathBuilder.parse(relativePath);
+      // RetroArch saves use the v1-style relative path, which the cloud path
+      // parser cannot see an emulator in, so derive the RetroArch slug from the
+      // save's core folder (ground truth), falling back to the game metadata.
+      final emulatorId =
+          parsed?.emulatorSlug ??
+          await _resolveRetroArchEmulatorSlug(file, basePath) ??
+          _retroArchCoreSlugFromGame(game);
       final result = await _neoSyncService.syncFile(
         file,
         game.name,
         customFilename: relativePath,
         systemId: parsed?.system ?? game.systemFolderName,
-        emulatorId: parsed?.emulatorSlug,
+        emulatorId: emulatorId,
         gameHash: await _resolveGameHashForUpload(game),
         isState: isState,
         scope: parsed?.scope,

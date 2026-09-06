@@ -75,34 +75,32 @@ class _CustomSaveFoldersDialogState extends State<CustomSaveFoldersDialog> {
       final emulators = await SqliteService.getEmulatorsForSystemCurrentOs(
         system.id ?? system.folderName,
       );
-      // Custom folders target standalone emulators (ARMSX2, DuckStation, ...).
+      // Standalone folders target standalone emulators (ARMSX2, DuckStation, ...).
       // RetroArch cores are discovered automatically from their saves dir, so
-      // they are not offered here.
-      final standalone = emulators.where((e) => e.isStandalone).toList();
+      // they must never be offered here — even if a core is mis-flagged as
+      // standalone, its `retroarch.*` slug is the reliable tell.
+      final standalone = emulators.where((e) {
+        if (!e.isStandalone) return false;
+        final slug = CloudPathBuilder.slugFromEmulatorUniqueId(e.uniqueId);
+        return !slug.startsWith('retroarch.');
+      }).toList();
       if (mounted) setState(() => _emulators = standalone);
     } catch (e) {
       // ignore
     }
   }
 
-  String? get _selectedEmulatorSlug {
-    if (_selectedEmulatorUniqueId == null) return null;
-    return CloudPathBuilder.slugFromEmulatorUniqueId(
-      _selectedEmulatorUniqueId!,
-    );
-  }
-
   Future<void> _selectFolder() async {
     final system = _selectedSystem;
-    final emulatorSlug = _selectedEmulatorSlug;
-    if (system == null || emulatorSlug == null || _pickingFolder) return;
+    final emulatorUniqueId = _selectedEmulatorUniqueId;
+    if (system == null || emulatorUniqueId == null || _pickingFolder) return;
 
     setState(() => _pickingFolder = true);
     // Closing the dialog before opening the SAF picker avoids the dialog being
     // disposed mid-flight on Android resume; the parent view completes the
     // operation and refreshes the list.
     if (mounted) Navigator.of(context).pop();
-    await widget.onSelectFolder(system, emulatorSlug);
+    await widget.onSelectFolder(system, emulatorUniqueId);
   }
 
   @override
@@ -193,7 +191,7 @@ class _CustomSaveFoldersDialogState extends State<CustomSaveFoldersDialog> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: isBusy || _selectedEmulatorSlug == null
+                  onPressed: isBusy || _selectedEmulatorUniqueId == null
                       ? null
                       : _selectFolder,
                   icon: _pickingFolder

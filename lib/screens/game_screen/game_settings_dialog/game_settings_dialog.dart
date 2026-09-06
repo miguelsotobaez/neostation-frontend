@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/sync/i_sync_provider.dart';
+import 'package:neostation/utils/effective_system.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/core_footer.dart';
 
@@ -188,12 +191,39 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// The system the *selected game* belongs to.
+  ///
+  /// In an aggregate view [widget.system] is the synthesized placeholder for
+  /// the view itself ('all' / 'favorites' / `collection:<uuid>`), and a
+  /// collection's id has no `app_systems` row at all — so the tabs get the
+  /// game's own system instead. Without this the Emulator tab enumerated
+  /// emulators for the placeholder and came up empty in every aggregate view,
+  /// leaving the user unable to assign an emulator from one. Every aggregate
+  /// view shares one resolver now — the games grid, carousel and details card
+  /// all call [resolveEffectiveSystem] too.
+  SystemModel get _effectiveSystem {
+    if (!widget.isAllMode) return widget.system;
+    try {
+      return resolveEffectiveSystem(
+        listSystem: widget.system,
+        game: widget.game,
+        detectedSystems: context.read<SqliteConfigProvider>().detectedSystems,
+      );
+    } catch (e) {
+      // No provider in scope (or nothing detected yet): the placeholder is the
+      // only answer available, exactly as before.
+      return widget.system;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final displayName = widget.game.name.isNotEmpty
         ? widget.game.name
         : widget.game.romname;
+    // Resolved once per build so all three tabs agree on the system.
+    final effectiveSystem = _effectiveSystem;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -226,14 +256,14 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
                   GameSettingsEmulatorTab(
                     key: _emulatorTabKey,
                     game: widget.game,
-                    system: widget.system,
+                    system: effectiveSystem,
                     isAllMode: widget.isAllMode,
                     onGameUpdated: widget.onGameUpdated,
                   ),
                   GameSettingsScrappingTab(
                     key: _scrappingTabKey,
                     game: widget.game,
-                    system: widget.system,
+                    system: effectiveSystem,
                     fileProvider: widget.fileProvider,
                     isAllMode: widget.isAllMode,
                     onGameUpdated: widget.onGameUpdated,
@@ -241,7 +271,7 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
                   GameSettingsManageTab(
                     key: _manageTabKey,
                     game: widget.game,
-                    system: widget.system,
+                    system: effectiveSystem,
                     fileProvider: widget.fileProvider,
                     syncProvider: widget.syncProvider,
                     isAllMode: widget.isAllMode,

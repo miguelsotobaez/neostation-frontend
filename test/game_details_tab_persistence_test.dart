@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/config_model.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
-import 'package:neostation/screens/game_screen/game_details_card/widgets/game_details_tabs_header.dart';
+import 'package:neostation/screens/game_screen/game_details_card/detail_tab.dart';
 
 import 'database_test_helper.dart';
 

@@ -2,18 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:neostation/widgets/bumper_glyph.dart';
+import 'package:neostation/widgets/dpad_glyph.dart';
 
 import '../../../../themes/corner_radii.dart';
+import '../detail_tab.dart';
 
-/// Defines the navigable sections within the game details card.
-enum DetailTab { wheel, box2d, screenshotVideo, gameInfo, achievements }
-
-/// A navigation header component that manages tab switching and global card actions.
+/// The tab strip at the card's top right: which section is open, and that
+/// left/right on the D-pad is what walks between them.
 ///
-/// Features hardware-mapped bumper iconography (LB/RB) for intuitive gamepad
-/// navigation and uses fluid animations for tab transitions. Dynamically adjusts
-/// its layout based on the availability of metadata and system features.
+/// The pill is the indicator; the D-pad glyphs either side of it are the hint,
+/// and they sit outside the pill so the pill reads as a single switch. The
+/// panels slide under it (a step or a swipe), so the strip is the only thing
+/// on the card that says where in the set you are.
+///
+/// Tabs a game cannot show are absent rather than disabled — the same
+/// availability rule the D-pad walks — so the cursor's index is resolved
+/// against the visible list, not against [DetailTab.values].
 class GameDetailsTabsHeader extends StatelessWidget {
   final bool isScreenshotVideoHidden;
   final bool hasRetroAchievements;
@@ -65,9 +69,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
           children: [
             const Spacer(),
 
-            // Bumper glyphs sit outside the pill so the pill reads as a single
+            // D-pad glyphs sit outside the pill so the pill reads as a single
             // switch and the hardware hints stay visually distinct from it.
-            const BumperGlyph(isLeft: true),
+            const DpadGlyph(isLeft: true),
             SizedBox(width: 6.r),
 
             // Tab Navigation Group: Hardware-mapped navigation controls.
@@ -137,19 +141,38 @@ class GameDetailsTabsHeader extends StatelessWidget {
             ),
 
             SizedBox(width: 6.r),
-            const BumperGlyph(isLeft: false),
+            const DpadGlyph(isLeft: false),
           ],
         ),
       ),
     );
   }
 
+  /// The glyph for each tab, chosen to say what that panel *shows*.
+  ///
+  /// The first three said nothing of the sort. A gamepad on the wheel tab
+  /// named the app, not the panel — every tab in a games frontend is about a
+  /// game — and four floating squares on the box art tab named nothing at all.
+  ///
+  /// The three artwork tabs now read as one set, because they are one: a mark
+  /// on artwork for the wheel logo, a frame around artwork for the box art,
+  /// and a picture for the screenshots. Each is a rectangle with different
+  /// contents, which is the actual difference between the three panels.
+  ///
+  /// Game info takes the standard info mark rather than a document. A page of
+  /// text is what that tab looks like, but "i" is what it *is*, and it is the
+  /// one glyph in this strip a user has already learned somewhere else.
+  ///
+  /// All of these are drawn filled — `IconThemeData(fill: 1.0)` is set app-wide
+  /// in `main.dart` — so a candidate that reads well as an outline is not
+  /// necessarily one that reads well here. Two that did not: a "T" for the
+  /// title art, and a shipping carton for the box.
   static IconData _iconForTab(DetailTab tab) {
     return switch (tab) {
-      DetailTab.wheel => Symbols.gamepad_rounded,
-      DetailTab.box2d => Symbols.widgets_rounded,
+      DetailTab.wheel => Symbols.branding_watermark_rounded,
+      DetailTab.box2d => Symbols.filter_frames_rounded,
       DetailTab.screenshotVideo => Symbols.image_rounded,
-      DetailTab.gameInfo => Symbols.description_rounded,
+      DetailTab.gameInfo => Symbols.info_rounded,
       DetailTab.achievements => Symbols.emoji_events_rounded,
     };
   }

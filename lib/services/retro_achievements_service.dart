@@ -101,8 +101,8 @@ class RetroAchievementsService {
   ///
   /// Optionally takes a [username] to include user-specific progress toward the achievement.
   static Future<RetroAchievementsGOTW?> getAchievementOfTheWeek({
-    String? username,
     String? apiKey,
+    http.Client? client,
   }) async {
     final effectiveApiKey = resolveApiKey(apiKey);
     if (effectiveApiKey.isEmpty) {
@@ -115,15 +115,28 @@ class RetroAchievementsService {
 
     return _fetchWithCache<RetroAchievementsGOTW?>(
       cacheKey: 'gotw',
-      send: () => http.get(
-        url,
-        headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
-      ),
+      send: () {
+        final headers = {
+          'User-Agent': 'NeoStation/1.0',
+          'Accept': 'application/json',
+        };
+        return client == null
+            ? http.get(url, headers: headers)
+            : client.get(url, headers: headers);
+      },
       parse: (data) {
-        if (data != null && data['Achievement'] != null) {
-          return RetroAchievementsGOTW.fromJson(data);
+        if (data is Map) {
+          final achievement = data['Achievement'];
+          final achievementId = achievement is Map
+              ? int.tryParse(achievement['ID']?.toString() ?? '') ?? 0
+              : 0;
+          if (achievementId > 0) {
+            return RetroAchievementsGOTW.fromJson(
+              Map<String, dynamic>.from(data),
+            );
+          }
         }
-        if (data != null && data['Error'] != null) {
+        if (data is Map && data['Error'] != null) {
           _log.e('API Error: ${data['Error']}');
         }
         return null;

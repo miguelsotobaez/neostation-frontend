@@ -11,10 +11,16 @@ import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
 
-/// The footer's achievements pill renders "No achievements" whenever no game
-/// info is loaded. Signed out, no game info is ever loaded — so without a
-/// connection check the pill states, for every game in the library, that the
-/// game has no achievements. It cannot know that.
+/// When the grid/carousel footer shows its achievements pill at all.
+///
+/// Two conditions hide it, and they are different questions. Signed out, no
+/// game info is ever loaded, so without a connection check the pill would state
+/// for every game in the library that it has no achievements — which it cannot
+/// know. And a *settled* zero hides it too: a game with nothing to earn gets no
+/// pill rather than a pill saying so. That second rule is the details card's,
+/// adopted here through [GameDetailsFooter.showsAchievementsFor] so the two
+/// footers cannot drift. While a lookup is genuinely outstanding the pill stays
+/// and says "Loading" — only an answered zero removes it.
 class _FakeRaProvider extends RetroAchievementsProvider {
   _FakeRaProvider({required bool connected}) : _connected = connected;
 
@@ -114,15 +120,16 @@ void main() {
     );
   });
 
-  testWidgets('the pill returns once signed in', (tester) async {
-    await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
-
-    // Connected, hashed and unmatched is the honest "none" case: the ROM was
-    // read and RetroAchievements has no set registered for it.
-    expect(
-      find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
-      findsOneWidget,
+  testWidgets('the pill returns once signed in, for a game that has a set', (
+    tester,
+  ) async {
+    await pumpFooter(
+      tester,
+      connected: true,
+      game: _game(idRa: 1234, systemRaId: '15', raNumAchievements: 45),
     );
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
 
     // The pill's fixed 101.r width rounds one pixel tight against its contents
     // at the test surface's scale factor. It is a layout artifact of this
@@ -134,6 +141,36 @@ void main() {
       isTrue,
       reason: 'only the known 1px overflow may be swallowed here',
     );
+  });
+
+  testWidgets('a game with no achievements gets no pill, signed in', (
+    tester,
+  ) async {
+    // Connected, hashed and unmatched: RetroAchievements was asked and has no
+    // set for this ROM. The answer is worth nothing on a footer the user scrolls
+    // past, so the pill stands down and gives the room back.
+    await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
+
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(
+      find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
+      findsNothing,
+    );
+    tester.takeException();
+  });
+
+  testWidgets('a lookup still in flight keeps the pill', (tester) async {
+    // The distinction the hide rule turns on: nothing is known yet, so removing
+    // the pill here would make it appear a moment later and shuffle the row.
+    await pumpFooter(
+      tester,
+      connected: true,
+      game: _game(systemRaId: '15'),
+      isLoading: true,
+    );
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    tester.takeException();
   });
 
   group('the total comes from the local snapshot, not the network', () {
@@ -179,46 +216,39 @@ void main() {
       tester.takeException();
     });
 
-    testWidgets('a hashed, unmatched ROM reports none once the lookup ran', (
+    testWidgets('a settled zero takes the pill away, however it got there', (
       tester,
     ) async {
-      await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
+      // Two different zeros, one outcome. A hashed, unmatched ROM is
+      // RetroAchievements answering "no set"; a ROM nothing could hash is the
+      // app never having asked. Main's footer told them apart in words ("No
+      // Achievements" against "Unknown"), which only mattered while a zero
+      // still drew a pill. Neither draws one now.
+      for (final game in [
+        _game(systemRaId: '15'),
+        _game(systemRaId: '15', raHash: null),
+      ]) {
+        await pumpFooter(tester, connected: true, game: game);
 
-      expect(
-        find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
-        findsOneWidget,
-      );
-      tester.takeException();
-    });
-
-    testWidgets('a ROM nothing could hash says so instead of "none"', (
-      tester,
-    ) async {
-      // Nothing was ever looked up for this ROM, so "No Achievements" would be
-      // a claim the app cannot make — and it would contradict the search
-      // screen, whose achievements filter files this game under "Unknown".
-      await pumpFooter(
-        tester,
-        connected: true,
-        game: _game(systemRaId: '15', raHash: null),
-      );
-
-      expect(
-        find.text(AppLocale.en[AppLocale.raCoverageUnknown]!.toUpperCase()),
-        findsOneWidget,
-      );
-      expect(
-        find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
-        findsNothing,
-      );
-      tester.takeException();
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(
+          find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
+          findsNothing,
+        );
+        expect(
+          find.text(AppLocale.en[AppLocale.raCoverageUnknown]!.toUpperCase()),
+          findsNothing,
+        );
+        tester.takeException();
+      }
     });
 
     testWidgets('a local count is ignored unless the ROM is matched', (
       tester,
     ) async {
       // raNumAchievements without an id_ra should never happen, but if a stale
-      // row carried one the pill must not advertise a set for an unmatched ROM.
+      // row carried one the pill must not advertise a set for an unmatched ROM
+      // — which now means not appearing at all rather than appearing empty.
       await pumpFooter(
         tester,
         connected: true,
@@ -226,33 +256,40 @@ void main() {
       );
 
       expect(find.text('\u2013/45'), findsNothing);
-      expect(
-        find.text(AppLocale.en[AppLocale.noAchievements]!.toUpperCase()),
-        findsOneWidget,
-      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
       tester.takeException();
     });
   });
 
-  group('the progress bar only animates while something is outstanding', () {
-    double? barValue(WidgetTester tester) => tester
-        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-        .value;
+  group('the progress bar never animates', () {
+    LinearProgressIndicator bar(WidgetTester tester) => tester
+        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
 
-    testWidgets('a settled "no achievements" sits still and empty', (
+    testWidgets('an outstanding lookup sits still rather than sweeping', (
       tester,
     ) async {
-      // An indeterminate bar reads as "still fetching". This state is an
-      // answer, not a wait: the lookup ran and came back empty.
-      await pumpFooter(tester, connected: true, game: _game(systemRaId: '15'));
+      // An indeterminate bar reads as "still fetching", and it used to run on
+      // every zero. A settled zero has no pill left to animate, so the case
+      // that remains is the wait itself — which the "Loading" text already
+      // reports without a strobe.
+      await pumpFooter(
+        tester,
+        connected: true,
+        game: _game(systemRaId: '15'),
+        isLoading: true,
+      );
 
-      expect(barValue(tester), 0.0);
+      expect(bar(tester).value, 0.0);
       tester.takeException();
     });
 
-    testWidgets('a known total with no earned count keeps animating', (
+    testWidgets('a known total with no earned count sits still too', (
       tester,
     ) async {
+      // The total comes from the bundled snapshot and the earned count from
+      // the network, so this gap opens on every selection change. It used to
+      // run an indeterminate bar, which flashed orange across the pill each
+      // time the user moved between games.
       await pumpFooter(
         tester,
         connected: true,
@@ -261,9 +298,14 @@ void main() {
       );
 
       expect(
-        barValue(tester),
-        isNull,
-        reason: 'the earned half is still outstanding',
+        bar(tester).value,
+        0.0,
+        reason: 'the earned half is outstanding, but that is not an animation',
+      );
+      expect(
+        bar(tester).valueColor?.value,
+        isNot(Colors.orange),
+        reason: 'the score colour arrives with the score, not before it',
       );
       tester.takeException();
     });

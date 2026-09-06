@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
+import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
+import 'package:neostation/utils/effective_system.dart';
 import 'package:neostation/utils/rom_tree.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
@@ -14,13 +16,12 @@ import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/letter_bar.dart';
 import 'package:neostation/utils/letter_jump.dart';
+import 'package:neostation/providers/collections_provider.dart';
 import 'package:neostation/widgets/achievements_badge.dart';
+import 'package:neostation/widgets/collection_badge.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
-import 'package:neostation/widgets/game_action_buttons.dart';
-import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
-import 'package:neostation/services/game_legend_visibility.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
 import 'package:neostation/constants/system_folder_names.dart';
@@ -74,6 +75,24 @@ class GamesCarousel extends StatefulWidget {
   })?
   folderCoverResolver;
 
+  /// Gamepad Y. Opens the per-game context menu; falls back to [onFavorite]
+  /// when the host does not provide one. The on-screen Y action button keeps
+  /// calling [onFavorite] directly — it is a mouse/touch affordance.
+  final VoidCallback? onYButton;
+
+  /// Attached to the centred card so the host can anchor the context menu to
+  /// it. Null when no anchor is needed.
+  final GlobalKey? selectedItemKey;
+
+  /// Whether a secondary display is attached and running.
+  ///
+  /// The preview video plays over there rather than in this view, and that
+  /// screen carries its own mute control — so the footer's mute pill would be
+  /// a second affordance for the same toggle, next to a video that is not on
+  /// this screen. The Select button keeps the binding either way; it is only
+  /// the pill that goes.
+  final bool isSecondaryScreenActive;
+
   const GamesCarousel({
     super.key,
     required this.system,
@@ -94,6 +113,9 @@ class GamesCarousel extends StatefulWidget {
     this.onFolderActivated,
     this.folderCoverResolver,
     this.artworkVersion = 0,
+    this.onYButton,
+    this.selectedItemKey,
+    this.isSecondaryScreenActive = false,
   });
 
   @override
@@ -110,6 +132,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
   // Set from the config this view already watches in build(); the card builders
   // below read it rather than looking the provider up per card.
   bool _showAchievementsBadge = false;
+
+  /// ROM paths filed in at least one collection, read once per build.
+  ///
+  /// Null inside a collection's own view, where every card is a member and the
+  /// mark would say nothing.
+  CollectionsProvider? _collections;
 
   // RetroAchievements info for the selected game (shown in the footer pill).
   GameInfoAndUserProgress? _currentGameInfo;
@@ -131,7 +159,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
   static const Duration _chromeSettleDelay = Duration(milliseconds: 160);
   String? _chromeSig;
   Widget? _chromeFooter;
-  Widget? _chromeLegend;
   final Map<String, double> _letterWidthCache = {};
   final Map<String, bool> _fileExistsCache = {};
 
@@ -224,7 +251,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
   /// Sentinel alphabet group for folder cards (see [_uniqueLetters]).
   static const String _folderJumpGroup = '\u0000folder';
 
-  bool get _hasFavoriteGames => widget.games.any((g) => g.isFavorite == true);
+  /// How many games at the head of the list loaded as favourites. See
+  /// [favoritesRunLength] for why the ★ group is a range of the list rather
+  /// than a property of a game.
+  int get _favoritesRunLength =>
+      favoritesRunLength(widget.games, folderCount: widget.folderCount);
 
   /// Whether the entry at [index] is a folder placeholder rather than a game.
   bool _isFolderIndex(int index) => index < widget.folderCount;
@@ -232,49 +263,36 @@ class _GamesCarouselState extends State<GamesCarousel> {
   /// Whether the centred card is a folder.
   bool get _isFolderCentred => _isFolderIndex(_currentIndex);
 
-  List<String> get _uniqueLetters {
-    final letters = <String>[];
-    if (_hasFavoriteGames) {
-      letters.add(_favoritesLabel);
+  List<String> get _uniqueLetters => letterBarGroups(
+    widget.games,
+    folderCount: widget.folderCount,
+    favoritesLabel: _favoritesLabel,
+  );
+
+  /// The bar's group for the entry at [index].
+  ///
+  /// Takes an index rather than a game because the ★ group is a range of the
+  /// list, not a property of a model — see [_favoritesRunLength].
+  String _getLetterForIndex(int index) {
+    if (_isFolderIndex(index)) return _folderJumpGroup;
+    if (index < widget.folderCount + _favoritesRunLength) {
+      return _favoritesLabel;
     }
-    for (var i = 0; i < widget.games.length; i++) {
-      // Folders are not alphabetical content — keep them out of the bar so its
-      // letters stay in order and always describe games.
-      if (_isFolderIndex(i)) continue;
-      final game = widget.games[i];
-      if (game.isFavorite == true) continue;
-
-      final displayName = game.name.isNotEmpty ? game.name : game.realname;
-      final letter = displayName.isNotEmpty
-          ? displayName[0].toUpperCase()
-          : '#';
-      if (letters.isEmpty || letters.last != letter) {
-        letters.add(letter);
-      }
-    }
-    return letters;
-  }
-
-  String _getLetterForGame(GameModel game) {
-    if (game.isFavorite == true) return _favoritesLabel;
-
-    final displayName = game.name.isNotEmpty ? game.name : game.realname;
-    return displayName.isNotEmpty ? displayName[0].toUpperCase() : '#';
+    return letterGroupOf(widget.games[index]);
   }
 
   int _getFirstGameIndexForLetter(String letter) {
+    final favoritesRun = _favoritesRunLength;
     if (letter == _favoritesLabel) {
-      for (int i = 0; i < widget.games.length; i++) {
-        if (_isFolderIndex(i)) continue;
-        if (widget.games[i].isFavorite == true) return i;
-      }
-      return 0;
+      return favoritesRun > 0 ? widget.folderCount : 0;
     }
 
-    for (int i = 0; i < widget.games.length; i++) {
-      if (_isFolderIndex(i)) continue;
-      if (widget.games[i].isFavorite == true) continue;
-      if (_getLetterForGame(widget.games[i]) == letter) return i;
+    for (
+      var i = widget.folderCount + favoritesRun;
+      i < widget.games.length;
+      i++
+    ) {
+      if (letterGroupOf(widget.games[i]) == letter) return i;
     }
     return 0;
   }
@@ -287,7 +305,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
     _currentIndex = widget.selectedIndex.clamp(0, _gamesLength - 1);
     _settledIndex = _currentIndex;
     _initializeGamepad();
-    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentLetter();
       _updateBackground();
@@ -333,7 +350,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
   void dispose() {
     _achievementsDebounce?.cancel();
     _settleTimer?.cancel();
-    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     _cleanupGamepad();
     _letterBarController.dispose();
     super.dispose();
@@ -344,6 +360,39 @@ class _GamesCarouselState extends State<GamesCarousel> {
     super.didChangeDependencies();
     // Theme / MediaQuery / ScreenUtil may have changed; drop memoized chrome.
     _chromeSig = null;
+  }
+
+  /// Overlays a slot-filling card with an invisible box that carries the host's
+  /// anchor key while the card is centred, so the Y context menu can be
+  /// positioned against the card the user is actually looking at.
+  ///
+  /// Only for cards that fill their carousel slot (fanart and folder cards). A
+  /// box-art card is aspect-fitted and centred inside a slot that is wider than
+  /// it, so anchoring to the slot would hang the menu off empty space beside
+  /// the artwork; those carry [_menuAnchorBox] inside the painted card instead.
+  ///
+  /// The wrapper is applied unconditionally (only the key moves) so the widget
+  /// tree keeps the same shape as the selection travels — swapping the shape
+  /// per card would tear down and rebuild the artwork subtree on every step.
+  /// `StackFit.passthrough` forwards the incoming constraints unchanged, so the
+  /// card lays out exactly as it did without the wrapper.
+  Widget _withMenuAnchor(Widget card, bool isCentred) {
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        card,
+        _menuAnchorBox(isCentred ? widget.selectedItemKey : null),
+      ],
+    );
+  }
+
+  /// The invisible anchor box itself, sized by whichever `Stack` it is dropped
+  /// into. Always built (with a null key when the card is not centred) so the
+  /// children list keeps its length as the selection moves.
+  Widget _menuAnchorBox(GlobalKey? key) {
+    return Positioned.fill(
+      child: IgnorePointer(child: SizedBox.expand(key: key)),
+    );
   }
 
   void _initializeGamepad() {
@@ -362,7 +411,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
         }
       },
       onBack: widget.onBack,
-      onFavorite: widget.onFavorite,
+      onFavorite: widget.onYButton ?? widget.onFavorite, // Button Y.
       onXButton: () {
         try {
           GameViewModeDropdown.globalKey.currentState?.showDropdown();
@@ -373,7 +422,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
       onLeftStickClick: widget.onRandom,
       onSelectButton: _toggleVideoMute, // Select tap - Mute preview video.
       onSelectModifierA: widget.onScrape, // Select + A - Scrape.
-      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
       // The bumpers deliberately bind nothing here. This view lives on a route
@@ -411,9 +459,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
       forward: forward,
       // Folders share one sentinel group so a held jump clears them in a
       // single hop rather than pausing on each folder's initial.
-      letterAt: (index) => _isFolderIndex(index)
-          ? _folderJumpGroup
-          : _getLetterForGame(widget.games[index]),
+      letterAt: _getLetterForIndex,
     );
     if (target == null) return false;
 
@@ -434,6 +480,21 @@ class _GamesCarouselState extends State<GamesCarousel> {
   void _cleanupGamepad() {
     GamepadNavigationManager.popLayer('games_carousel');
     _gamepadNav.dispose();
+  }
+
+  /// Long-press on the centred card — the touch route to the game context menu
+  /// the gamepad opens with Y.
+  ///
+  /// Centred only, and that is not just a design choice: an off-centre card is
+  /// painted outside the page slot the viewport hit-tests it by (the depth
+  /// envelope scales it down and pulls it toward the middle), so a long press
+  /// on one is never delivered to it. Tapping it centres it first — the
+  /// carousel's existing contract — and the press then lands. The guard is
+  /// kept explicit so the menu can never anchor to a card that is not the one
+  /// the anchor key is on.
+  void _handleCardLongPress(int index) {
+    if (index != _currentIndex) return;
+    widget.onYButton?.call();
   }
 
   void _onPageChanged(int index, CarouselPageChangeReason reason) {
@@ -491,10 +552,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
     // out and once on the way back, so the memoization survives the burst.
     final settled = _currentIndex == _settledIndex;
     final loadingRa = _isLoadingAchievements || !settled;
+    // The secondary-display state is in the signature because it decides
+    // whether the mute pill is in the footer at all, and it can flip while
+    // this view is open — a lid opening is exactly that.
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
-        '|$hasRa|$loadingRa|${identityHashCode(_currentGameInfo)}';
-    if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
+        '|$hasRa|$loadingRa|${identityHashCode(_currentGameInfo)}'
+        '|${widget.isSecondaryScreenActive}';
+    if (sig == _chromeSig && _chromeFooter != null) {
       return;
     }
     _chromeSig = sig;
@@ -505,54 +570,40 @@ class _GamesCarouselState extends State<GamesCarousel> {
       isLoadingAchievements: loadingRa,
       currentGameInfo: settled ? _currentGameInfo : null,
       onShowAchievements: _showAchievementsDialog,
-      onToggleMute: _toggleVideoMute,
+      onToggleMute: widget.isSecondaryScreenActive ? null : _toggleVideoMute,
       hasVideo: !isFolder && _hasVideoFor(settledGame),
       isFolder: isFolder,
+      // The game's own system, so the cloud mark reflects the game rather than
+      // the placeholder an aggregate view is browsing under.
+      system: isFolder ? null : _effectiveSystemFor(settledGame),
+      syncProvider: context.read<SyncManager>().active,
     );
-    // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
-    // so Select + B can slide it without invalidating this memoized subtree.
-    _chromeLegend = Consumer<SyncManager>(
-      builder: (context, syncManager, child) => GameActionButtons(
-        system: widget.system,
-        selectedGame: settledGame,
-        syncProvider: syncManager.active,
-        onBack: widget.onBack,
-        onFavorite: widget.onFavorite ?? () {},
-        onViewMode: () =>
-            GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-        onSettings: widget.onSettings ?? () {},
-        onRandom: widget.onRandom,
-        onScrape: widget.onScrape,
-      ),
-    );
-  }
-
-  /// Select + B — toggles the (session-global) vertical action-button legend.
-  void _toggleLegend() {
-    SfxService().playNavSound();
-    GameLegendVisibility.toggle();
-  }
-
-  void _onLegendVisibilityChanged() {
-    if (mounted) setState(() {});
   }
 
   bool get _isAllMode =>
-      widget.system.folderName == SystemFolderNames.all ||
-      widget.system.folderName == SystemFolderNames.favorites;
+      SystemFolderNames.isAggregate(widget.system.folderName);
 
+  /// The hardware system [game] belongs to, which in an aggregate view is not
+  /// the list's own [widget.system] — that is a synthesized placeholder for the
+  /// view, and a collection's id has no `app_systems` row behind it at all.
+  ///
+  /// Delegates to [resolveEffectiveSystem] rather than matching on the folder
+  /// name here: the shared resolver prefers the game's `system_id`, falls back
+  /// to a system's alternative ES-DE folder names, and can never answer with
+  /// another placeholder.
   SystemModel _effectiveSystemFor(GameModel game) {
-    final systemFolderName = game.systemFolderName;
-    if (systemFolderName == null || !_isAllMode) return widget.system;
+    // Single-system views keep the list's system without reading the provider,
+    // exactly as before.
+    if (!_isAllMode) return widget.system;
     try {
-      final detectedSystems = context
-          .read<SqliteConfigProvider>()
-          .detectedSystems;
-      return detectedSystems.firstWhere(
-        (s) => s.folderName == systemFolderName,
-        orElse: () => widget.system,
+      return resolveEffectiveSystem(
+        listSystem: widget.system,
+        game: game,
+        detectedSystems: context.read<SqliteConfigProvider>().detectedSystems,
       );
     } catch (e) {
+      // No provider in scope (or nothing detected yet): the placeholder is the
+      // only answer available.
       return widget.system;
     }
   }
@@ -679,8 +730,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (exists) {
       imageProvider = FileImage(File(imagePath));
     } else {
-      final sysId = widget.system.id;
-      final path = 'assets/images/logos/$sysId.webp';
+      // Fall back to the logo of the system the *game* belongs to, not the
+      // list's. In an aggregate view the list is not a hardware system, and a
+      // collection has no bundled logo at all ('collection:<uuid>.webp' does
+      // not exist), so keying the asset off the list would resolve to nothing.
+      // Mirrors the secondary display's fallback.
+      final path = 'assets/images/logos/${_folderForGame(game)}.webp';
       imageProvider = AssetImage(path);
       imagePath = path;
     }
@@ -695,7 +750,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (!_letterBarController.hasClients || widget.games.isEmpty) return;
 
     if (_isFolderCentred) return;
-    final currentLetter = _getLetterForGame(widget.games[_currentIndex]);
+    final currentLetter = _getLetterForIndex(_currentIndex);
     final letters = _uniqueLetters;
     final letterIndex = letters.indexOf(currentLetter);
     if (letterIndex < 0) return;
@@ -748,8 +803,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   }
 
   String _folderForGame(GameModel game) {
-    if ((widget.system.folderName == SystemFolderNames.all ||
-            widget.system.folderName == SystemFolderNames.favorites) &&
+    if (SystemFolderNames.isAggregate(widget.system.folderName) &&
         game.systemFolderName != null) {
       return game.systemFolderName!;
     }
@@ -865,6 +919,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
                     color: Colors.redAccent,
                   ),
                 ),
+              ),
+            if (_collections?.isInAnyCollection(game.romPath) == true)
+              Positioned(
+                // Under the heart when there is one; the left corner belongs to
+                // the achievements badge.
+                top: (game.isFavorite == true ? 44.r : 8.r),
+                right: 8.r,
+                child: CollectionBadge(size: 32.r),
               ),
             if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
               Positioned(
@@ -1118,7 +1180,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildBoxCard(GameModel game, bool isSelected) {
+  Widget _buildBoxCard(
+    GameModel game,
+    bool isSelected, {
+    GlobalKey? anchorKey,
+  }) {
     final theme = Theme.of(context);
     final boxPath = _resolveImagePath(game, 'box2d');
     final hasBox = boxPath.isNotEmpty;
@@ -1147,6 +1213,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   ),
                 ),
               ),
+            if (_collections?.isInAnyCollection(game.romPath) == true)
+              Positioned(
+                // Under the heart when there is one; the left corner belongs to
+                // the achievements badge.
+                top: (game.isFavorite == true ? 44.r : 8.r),
+                right: 8.r,
+                child: CollectionBadge(size: 32.r),
+              ),
             if (_showAchievementsBadge && AchievementsBadge.showsFor(game))
               Positioned(
                 top: 8.r,
@@ -1155,6 +1229,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
               ),
             if (widget.scrapingGameRomnames.contains(game.romname))
               _buildScrapeProgress(game),
+            _menuAnchorBox(anchorKey),
           ],
         ),
       );
@@ -1221,6 +1296,14 @@ class _GamesCarouselState extends State<GamesCarousel> {
                         ),
                       ),
                     ),
+                  if (_collections?.isInAnyCollection(game.romPath) == true)
+                    Positioned(
+                      // Under the heart when there is one; the left corner belongs to
+                      // the achievements badge.
+                      top: (game.isFavorite == true ? 44.r : 8.r),
+                      right: 8.r,
+                      child: CollectionBadge(size: 32.r),
+                    ),
                   if (_showAchievementsBadge &&
                       AchievementsBadge.showsFor(game))
                     Positioned(
@@ -1235,6 +1318,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                       bottom: 0,
                       child: _buildScrapeProgress(game),
                     ),
+                  _menuAnchorBox(anchorKey),
                 ],
               ),
             ),
@@ -1262,15 +1346,16 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final config = context.watch<SqliteConfigProvider>().config;
     final isFanart = config.gameCarouselCardStyle != 'box';
     _showAchievementsBadge = config.showAchievementsBadge;
+    _collections = SystemFolderNames.isCollection(widget.system.folderName)
+        ? null
+        : context.watch<CollectionsProvider>();
     final theme = Theme.of(context);
-    final currentGame =
-        widget.games[_currentIndex.clamp(0, widget.games.length - 1)];
     final letters = _uniqueLetters;
     // Null while a folder is centred: folders sit outside A–Z, so no chip is
     // highlighted rather than the folder's own initial claiming one.
     final String? currentLetter = _isFolderCentred
         ? null
-        : _getLetterForGame(currentGame);
+        : _getLetterForIndex(_currentIndex.clamp(0, widget.games.length - 1));
 
     final textStyle = TextStyle(
       color: theme.colorScheme.onSurface,
@@ -1299,6 +1384,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   key: _carouselKey,
                   itemCount: widget.games.length,
                   initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
+                  // The list has no readable end — a press at the last card
+                  // that does nothing reads as a dropped input, not as a
+                  // boundary. Stepping past either end continues from the
+                  // other.
+                  wrap: true,
                   itemBuilder: (context, index) {
                     final isCentred = index == _currentIndex;
                     if (index < widget.folderCount) {
@@ -1317,7 +1407,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
                               _carouselKey.currentState?.animateToPage(index);
                             }
                           },
-                          child: _buildFolderCard(folder, isFanart),
+                          child: _withMenuAnchor(
+                            _buildFolderCard(folder, isFanart),
+                            isCentred,
+                          ),
                         ),
                       );
                     }
@@ -1328,6 +1421,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                         // Tapping an off-centre card brings it to the middle;
                         // tapping the centred one plays it, so touch users
                         // never need the footer's A button.
+                        onLongPress: () => _handleCardLongPress(index),
                         onTap: () {
                           if (isCentred) {
                             SfxService().playEnterSound();
@@ -1338,8 +1432,17 @@ class _GamesCarouselState extends State<GamesCarousel> {
                           }
                         },
                         child: isFanart
-                            ? _buildFanartCard(game, isCentred)
-                            : _buildBoxCard(game, isCentred),
+                            ? _withMenuAnchor(
+                                _buildFanartCard(game, isCentred),
+                                isCentred,
+                              )
+                            : _buildBoxCard(
+                                game,
+                                isCentred,
+                                anchorKey: isCentred
+                                    ? widget.selectedItemKey
+                                    : null,
+                              ),
                       ),
                     );
                   },
@@ -1427,23 +1530,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
             _chromeFooter!,
           ],
         ),
-        // Vertical action-button legend (shared with the game list view);
-        // also memoized on the settled selection. Select + B slides it off the
-        // left edge. The centered carousel itself is left in place (there is no
-        // left-gutter to reflow into for a centered PageView).
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          top: 12.r,
-          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-            child: _chromeLegend!,
-          ),
-        ),
-        // Touch: swipe-right from the left edge reveals a hidden legend.
-        const LegendEdgeReshowZone(),
       ],
     );
   }

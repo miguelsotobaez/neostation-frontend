@@ -99,9 +99,9 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
-  /// Persists whether the game action-button legend is hidden (Select + B).
-  Future<void> updateLegendHidden(bool value) async {
-    _config = _config.copyWith(legendHidden: value);
+  /// Persists whether the game views draw the cloud-save status mark.
+  Future<void> updateShowCloudSyncIcon(bool value) async {
+    _config = _config.copyWith(showCloudSyncIcon: value);
     await SqliteConfigService.saveConfig(_config);
     _notify();
   }
@@ -353,6 +353,25 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     if (_config.systemSortOrder == order) return;
     _config = _config.copyWith(systemSortOrder: order);
     _sortDetectedSystems();
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates how the collections browser orders its cards.
+  ///
+  /// No `_sortDetectedSystems()` here: this setting says nothing about the
+  /// systems list, and the browser re-reads the order itself when it rebuilds.
+  Future<void> updateCollectionSortBy(String sortBy) async {
+    if (_config.collectionSortBy == sortBy) return;
+    _config = _config.copyWith(collectionSortBy: sortBy);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Updates the collections browser's sort direction (`asc` / `desc`).
+  Future<void> updateCollectionSortOrder(String order) async {
+    if (_config.collectionSortOrder == order) return;
+    _config = _config.copyWith(collectionSortOrder: order);
     await SqliteConfigService.saveConfig(_config);
     _notify();
   }

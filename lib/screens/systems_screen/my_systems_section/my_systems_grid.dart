@@ -5,6 +5,7 @@ import 'package:neostation/constants/recent_card_sizes.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/responsive.dart';
+import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/my_systems.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/screens/app_screen.dart';
@@ -27,12 +28,15 @@ import '../../../services/ra_library_match_runner.dart';
 import 'widgets/grid_empty_state.dart';
 import 'my_systems_carousel.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/systems_grid_footer.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/theme_provider.dart';
+import '../../collections_screen/collections_browser_screen.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
-import 'package:neostation/widgets/systems_grid_footer.dart';
+import 'package:neostation/widgets/context_menu/anchored_context_menu.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/models/secondary_display_state.dart';
@@ -45,6 +49,17 @@ import 'system_list_builder.dart';
 part 'my_systems_grid/gamepad_grid_nav.dart';
 part 'my_systems_grid/theme_background.dart';
 part 'my_systems_grid/pull_to_refresh.dart';
+
+/// Navigation-layer id the systems screen's own grid registers under.
+///
+/// A default, not a constant every caller shares: see
+/// [SystemCardGridView.navLayerId].
+const String kSystemsGridNavLayerId = 'my_systems_list';
+
+const String _menuSettings = 'settings';
+const String _menuViewMode = 'view_mode';
+const String _menuViewGrid = 'view_grid';
+const String _menuViewCarousel = 'view_carousel';
 
 /// Primary widget for the 'My Systems' view, supporting both Grid and Carousel layouts.
 ///
@@ -60,6 +75,11 @@ class MySystems extends StatelessWidget {
 
   /// Notifier to hide the systems grid while a game launch dialog is active.
   static final gridLaunchNotifier = ValueNotifier<bool>(false);
+
+  /// Anchor for the card context menu: both layouts move this key onto
+  /// whichever card is selected, so the menu opens beside that card rather
+  /// than in the middle of the screen.
+  static final GlobalKey _cardAnchorKey = GlobalKey();
 
   /// Currently selected system index in the active layout (Grid or Carousel).
   final int selectedIndex;
@@ -102,6 +122,12 @@ class MySystems extends StatelessWidget {
                     child: MySystemsCarousel(
                       selectedIndex: selectedIndex,
                       onCardTapped: onCardTapped,
+                      selectedItemKey: _cardAnchorKey,
+                      onYPressed: () => _openSystemContextMenu(
+                        context,
+                        currentSystem,
+                        configProvider,
+                      ),
                     ),
                   ),
                 ),
@@ -111,10 +137,11 @@ class MySystems extends StatelessWidget {
                     SfxService().playEnterSound();
                     _navigateToSystem(context, currentSystem, configProvider);
                   },
-                  onSettings: () {
-                    SfxService().playEnterSound();
-                    _openSystemSettings(context, currentSystem, configProvider);
-                  },
+                  onOptions: () => _openSystemContextMenu(
+                    context,
+                    currentSystem,
+                    configProvider,
+                  ),
                 ),
               ],
             );
@@ -206,7 +233,13 @@ class MySystems extends StatelessWidget {
               recentCardSize: configProvider.config.recentCardSize,
               selectedIndex: selectedIndex,
               onCardTapped: onCardTapped,
+              selectedItemKey: _cardAnchorKey,
               systems: allSystems,
+              onYPressed: () => _openSystemContextMenu(
+                context,
+                currentSystem,
+                configProvider,
+              ),
               onEnterPressed: () {
                 final current = selectedIndex < allSystems.length
                     ? allSystems[selectedIndex]
@@ -229,16 +262,95 @@ class MySystems extends StatelessWidget {
             SfxService().playEnterSound();
             _navigateToSystem(context, currentSystem, configProvider);
           },
-          onSettings: () {
-            SfxService().playEnterSound();
-            _openSystemSettings(context, currentSystem, configProvider);
-          },
+          onOptions: () =>
+              _openSystemContextMenu(context, currentSystem, configProvider),
         ),
       ],
     );
   }
 
+  /// The card context menu, opened by Y or by a long press on the card.
+  ///
+  /// It exists because the screen's footer does not: the footer carried the
+  /// only touch route to a system's settings, so removing it to give the cards
+  /// the vertical space needed somewhere else for that action to live. Start
+  /// still opens the settings dialog directly, so the pad keeps its one-press
+  /// route and this is purely an addition.
+  ///
+  /// `Settings` is the first row on every card, as it is in the games view's
+  /// own Y menu. It used to be omitted on a recent-game card, on the grounds
+  /// that such a card has no system to configure — but it does: the game on it
+  /// belongs to one, and [_openSystemSettings] now resolves it the same way
+  /// [_navigateToSystem] does. That left `View mode` as the top row on exactly
+  /// one kind of card, so the menu's first entry moved depending on which card
+  /// the cursor happened to be on.
+  Future<void> _openSystemContextMenu(
+    BuildContext context,
+    SystemInfo system,
+    SqliteConfigProvider configProvider,
+  ) async {
+    SfxService().playNavSound();
+
+    final isCarousel = configProvider.config.systemViewMode == 'carousel';
+
+    final items = <ContextMenuItem>[
+      ContextMenuItem(
+        id: _menuSettings,
+        label: AppLocale.settings.getString(context),
+        icon: Symbols.settings_rounded,
+      ),
+      ContextMenuItem(
+        id: _menuViewMode,
+        label: AppLocale.viewMode.getString(context),
+        icon: Symbols.grid_view_rounded,
+        separatorBefore: true,
+        children: [
+          ContextMenuItem(
+            id: _menuViewGrid,
+            label: AppLocale.gridView.getString(context),
+            icon: Symbols.grid_view_rounded,
+            selected: !isCarousel,
+          ),
+          ContextMenuItem(
+            id: _menuViewCarousel,
+            label: AppLocale.carouselView.getString(context),
+            icon: Symbols.view_carousel_rounded,
+            selected: isCarousel,
+          ),
+        ],
+      ),
+    ];
+
+    final result = await showAnchoredContextMenu(
+      context: context,
+      items: items,
+      // Falls back to the screen centre when no card is mounted: the key
+      // resolves to null and the menu centres itself.
+      anchorKey: _cardAnchorKey.currentContext != null ? _cardAnchorKey : null,
+      alignment: ContextMenuAlignment.overAnchor,
+      layerId: 'system_context_menu',
+      submenuLayerId: 'system_context_submenu',
+    );
+
+    if (result == null || !context.mounted) return;
+
+    switch (result) {
+      case _menuSettings:
+        _openSystemSettings(context, system, configProvider);
+      case _menuViewGrid:
+        await configProvider.updateSystemViewMode('grid');
+      case _menuViewCarousel:
+        await configProvider.updateSystemViewMode('carousel');
+    }
+  }
+
   /// Opens the emulator configuration dialog for a specific system.
+  ///
+  /// A recent-game card carries a game rather than a system, so it resolves
+  /// through the game's own `systemFolderName` — the same hop
+  /// [_navigateToSystem] makes to launch it. Without that the card's folder
+  /// name matches nothing in `detectedSystems`, the lookup throws, and the
+  /// catch below turns a real action into a "not available" notice.
   void _openSystemSettings(
     BuildContext context,
     SystemInfo system,
@@ -248,10 +360,14 @@ class MySystems extends StatelessWidget {
     MySystems.isNavigating = true;
 
     try {
-      final selectedSystem = system.folderName == 'all'
+      final String? folderName =
+          (system.isGame ? system.gameModel?.systemFolderName : null) ??
+          system.folderName;
+
+      final selectedSystem = folderName == 'all'
           ? _createAllGamesSystem(context, configProvider.detectedSystems)
           : configProvider.detectedSystems.firstWhere(
-              (s) => s.folderName == system.folderName,
+              (s) => s.folderName == folderName,
             );
 
       await Future.delayed(const Duration(milliseconds: 50));
@@ -404,6 +520,18 @@ class MySystems extends StatelessWidget {
             MaterialPageRoute(builder: (context) => targetScreen),
           );
         }
+      } else if (systemInfo.folderName == SystemFolderNames.collections) {
+        // Collections are user data, not `app_systems` rows, so there is no
+        // SystemModel to open: the browser screen lists them and synthesizes
+        // one per collection on the way into the games list.
+        if (context.mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CollectionsBrowserScreen(),
+            ),
+          );
+        }
       } else if (systemInfo.folderName == 'android') {
         final systemMeta = configProvider.detectedSystems.firstWhere(
           (system) => system.folderName == 'android',
@@ -553,8 +681,19 @@ class SystemCardGridView extends StatefulWidget {
     this.onCardTapped,
     this.onEnterPressed,
     this.onEscapePressed,
+    this.onYPressed,
+    this.onBackPressed,
+    this.onXPressed,
     this.systems = const [],
     this.recentCardSize = RecentCardSizes.defaultSize,
+    this.navLayerId = kSystemsGridNavLayerId,
+    this.cardOverrideBuilder,
+    this.enableTabBumpers = true,
+    this.enablePullToRescan = true,
+    this.enablePinchResize = true,
+    this.enableSecondaryDisplay = true,
+    this.enableThemeAssets = true,
+    this.selectedItemKey,
   });
 
   final int crossAxisCount;
@@ -573,7 +712,60 @@ class SystemCardGridView extends StatefulWidget {
   final Function(int index)? onCardTapped;
   final VoidCallback? onEnterPressed;
   final VoidCallback? onEscapePressed;
+
+  /// Y. Unbound on the systems screen; the collections browser opens its
+  /// per-collection menu with it (Start does the same, through
+  /// [onEscapePressed]).
+  final VoidCallback? onYPressed;
+
+  /// B. Unbound on the systems screen, which is a root tab and has nothing to
+  /// go back to. A pushed host (the collections browser) pops itself here.
+  final VoidCallback? onBackPressed;
+
+  /// X. Defaults to the header's view/sort picker, which is what the systems
+  /// screen wants; a host without a header passes [showSystemViewDropdown]
+  /// itself so both reach the same menu.
+  final VoidCallback? onXPressed;
+
   final List<dynamic> systems;
+
+  /// Identifier this view registers its [GamepadNavigationManager] layer under.
+  ///
+  /// Caller-supplied and per-instance on purpose: `popLayer` resolves an id to
+  /// the *first* match, so two live grids sharing one id unregister each
+  /// other's layer and strand a dead one — the failure that had the Android
+  /// apps grid launching several apps per press.
+  final String navLayerId;
+
+  /// Optional per-entry card override; see [SystemCardOverrideBuilder].
+  final SystemCardOverrideBuilder? cardOverrideBuilder;
+
+  /// Whether the shoulder buttons cycle the app's top-level tabs. Off for
+  /// pushed screens, which are not part of the tab strip.
+  final bool enableTabBumpers;
+
+  /// Whether pulling the grid past its top edge rescans the ROM folders.
+  final bool enablePullToRescan;
+
+  /// Whether a two-finger pinch changes `config.systemGridColumns`. Shared with
+  /// the systems screen, so a host that reads the same setting keeps it.
+  final bool enablePinchResize;
+
+  /// Whether the selection is pushed to a dual-screen device's second display.
+  /// Off for hosts whose entries are not systems: the secondary screen shows
+  /// the system the *systems* screen has selected.
+  final bool enableSecondaryDisplay;
+
+  /// Whether per-system theme artwork is resolved and cached for the cards.
+  /// Off where the entries have no theme assets to resolve.
+  final bool enableThemeAssets;
+
+  /// Anchor for a menu opened on the selected card.
+  ///
+  /// Attached to the card at [selectedIndex] so a context menu hangs off the
+  /// card it acts on rather than off the footer button that opened it. Only
+  /// the selected card carries it, so the key is never attached twice.
+  final GlobalKey? selectedItemKey;
 
   @override
   State<SystemCardGridView> createState() => _SystemCardGridViewState();
@@ -638,6 +830,21 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
   /// (`State.setState` is `@protected`).
   void rebuild(VoidCallback fn) => setState(fn);
 
+  /// Touch route to the card menu: select the pressed card, then open the menu
+  /// a frame later.
+  ///
+  /// The wait is not cosmetic. The menu anchors to the *selected* card's key,
+  /// and the host only moves that key onto this card once the selection has
+  /// been rebuilt, so opening in the same frame anchors the menu to whichever
+  /// card was selected before the press.
+  void _openMenuFor(int index) {
+    widget.onCardTapped?.call(index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onYPressed?.call();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -645,7 +852,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
     _cols = widget.crossAxisCount;
     _initializeGamepad();
 
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid && widget.enableSecondaryDisplay) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
@@ -805,7 +1012,7 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
           ),
         );
 
-        if (Platform.isAndroid) {
+        if (Platform.isAndroid && widget.enablePullToRescan) {
           grid = NotificationListener<ScrollNotification>(
             onNotification: (notification) {
               if (notification is ScrollUpdateNotification) {
@@ -826,7 +1033,14 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
             },
             child: grid,
           );
+        }
 
+        // The pointer listener drives both gestures: the pinch directly, and
+        // the pull's release edge (the pull only ever arms itself through the
+        // scroll notifier above, so a host with rescan off can keep the pinch
+        // without the pull arming).
+        if (Platform.isAndroid &&
+            (widget.enablePinchResize || widget.enablePullToRescan)) {
           grid = Listener(
             onPointerDown: _handlePointerDown,
             onPointerMove: _handlePointerMove,
@@ -1008,6 +1222,47 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
               selHeight = cardHeight;
             }
 
+            final bool cardIsSelected = cardIdx == widget.selectedIndex;
+            void handleTap() {
+              // Touch users have no A button: tapping the card that is
+              // already selected enters it, so reaching for the footer
+              // is only ever optional. (SystemCard plays the sound.)
+              if (cardIsSelected) {
+                widget.onEnterPressed?.call();
+                return;
+              }
+
+              if (_gamepadNavigationActive) {
+                return;
+              }
+              final now = DateTime.now();
+              if (_lastNavigationTime != null &&
+                  now.difference(_lastNavigationTime!).inMilliseconds < 60) {
+                return;
+              }
+
+              _lastNavigationTime = now;
+              widget.onCardTapped?.call(cardIdx);
+            }
+
+            final Widget cardWidget =
+                widget.cardOverrideBuilder?.call(
+                  context,
+                  cardIdx,
+                  card,
+                  cardIsSelected,
+                  handleTap,
+                ) ??
+                SystemCard(
+                  key: ValueKey('system_card_${card.title}_$cardIdx'),
+                  info: card,
+                  isSelected: cardIsSelected,
+                  onTap: handleTap,
+                  onLongPress: widget.onYPressed == null
+                      ? null
+                      : () => _openMenuFor(cardIdx),
+                );
+
             cardWidgets.add(
               Positioned(
                 left: left,
@@ -1015,32 +1270,26 @@ class _SystemCardGridViewState extends State<SystemCardGridView> {
                 width: width,
                 height: cardHeight,
                 child: RepaintBoundary(
-                  child: SystemCard(
-                    key: ValueKey('system_card_${card.title}_$cardIdx'),
-                    info: card,
-                    isSelected: cardIdx == widget.selectedIndex,
-                    onTap: () {
-                      // Touch users have no A button: tapping the card that is
-                      // already selected enters it, so reaching for the footer
-                      // is only ever optional. (SystemCard plays the sound.)
-                      if (cardIdx == widget.selectedIndex) {
-                        widget.onEnterPressed?.call();
-                        return;
-                      }
-
-                      if (_gamepadNavigationActive) {
-                        return;
-                      }
-                      final now = DateTime.now();
-                      if (_lastNavigationTime != null &&
-                          now.difference(_lastNavigationTime!).inMilliseconds <
-                              60) {
-                        return;
-                      }
-
-                      _lastNavigationTime = now;
-                      widget.onCardTapped?.call(cardIdx);
-                    },
+                  // The anchor is a sibling overlay, never a wrapper around the
+                  // card. Wrapping only the selected card changes that card's
+                  // subtree shape as the selection travels, which remounts
+                  // `SystemCard` and reloads its artwork — a visible flicker on
+                  // every D-pad press. Here the tree is identical for every
+                  // card and only the `SizedBox`'s key moves; a `SizedBox` has
+                  // no state to lose. `passthrough` hands the card exactly the
+                  // constraints it had before the Stack existed.
+                  child: Stack(
+                    fit: StackFit.passthrough,
+                    children: [
+                      cardWidget,
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: SizedBox.expand(
+                            key: cardIsSelected ? widget.selectedItemKey : null,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

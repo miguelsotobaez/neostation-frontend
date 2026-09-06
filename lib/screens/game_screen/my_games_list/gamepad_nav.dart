@@ -3,23 +3,40 @@ part of '../my_games_list.dart';
 /// Gamepad / keyboard input handling for the system games list.
 ///
 /// Registers the [GamepadNavigation] input mappings and implements the
-/// navigation-dispatch handlers (D-pad move, page jump, bumpers, Start). All
+/// navigation-dispatch handlers (D-pad move, details-tab switch, Start). All
 /// state lives on the host [State]; this extension only moves the methods out
 /// of the monolith — behaviour is unchanged.
 extension _GamepadNav on _SystemGamesListState {
-  /// Handles Right Bumper (RB) interactions for tab navigation or scraping.
-  Future<void> _handleRightBumper() async {
-    if (_tabNavigationAction != null && _tabNavigationAction!(true)) {
-      return;
+  /// Walks the details card one tab (artwork / info / achievements ...).
+  ///
+  /// Bound to D-pad left/right: the fast alphabet jump on a held up/down made
+  /// the old +/-10 page step redundant, so the horizontal axis drives the card
+  /// instead. The bumpers are deliberately unbound on this screen.
+  ///
+  /// Always returns false so a held direction never auto-repeats through the
+  /// tabs; the nav sound is played here instead of by the repeat dispatcher.
+  bool _switchDetailsTab(bool isRight) {
+    if (_tabNavigationAction?.call(isRight) ?? false) {
+      SfxService().playNavSound();
     }
-    _secondaryOverlayAction?.call();
+    return false;
   }
 
-  /// Handles Left Bumper (LB) interactions for tab navigation.
-  Future<void> _handleLeftBumper() async {
-    if (_tabNavigationAction != null && _tabNavigationAction!(false)) {
-      return;
-    }
+  /// Handles the A button: steps into the details card's panel when the tab
+  /// under the cursor has one, and launches the highlighted game otherwise.
+  ///
+  /// The panels are gated behind A so arriving on a tab never swallows the
+  /// D-pad; [_handleBButton] is the matching way back out.
+  void _handleAButton() {
+    if (_activateDetailsPanel?.call() ?? false) return;
+    _selectCurrentGame();
+  }
+
+  /// Handles the B button: leaves the details panel if it holds the D-pad,
+  /// and otherwise backs out of the screen as usual.
+  void _handleBButton() {
+    if (_dismissDetailsPanel?.call() ?? false) return;
+    _goBack();
   }
 
   /// Handles Select button (View/Share) for mute refresh depending on the
@@ -52,25 +69,22 @@ extension _GamepadNav on _SystemGamesListState {
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
-      onNavigateLeft: _navigateLeft, // Page Up (10 items).
-      onNavigateRight: _navigateRight, // Page Down (10 items).
+      onNavigateLeft: _navigateLeft, // Previous details tab.
+      onNavigateRight: _navigateRight, // Next details tab.
       onLetterJump: _letterJump, // Held D-pad up/down → alphabet skipping.
       accelerateRepeats: true, // Text-only rows keep up with a ramping repeat.
-      onSelectItem: _selectCurrentGame,
-      onBack: _goBack,
-      onFavorite: _toggleFavorite, // Button Y.
+      onSelectItem: _handleAButton, // Button A - panel gate, else launch.
+      onBack: _handleBButton, // Button B - leave the panel, else go back.
+      onFavorite: _openGameContextMenu, // Button Y - game context menu.
       onXButton:
           _handleXButton, // Button X - View mode picker (music: shuffle).
       onSettings: _openGameSettingsDialog, // Button Start.
       onSelectButton: _handleSelectButton, // Button Select (View) - tap.
       onSelectModifierA: () => _scrapeAction?.call(), // Select + A - Scrape.
-      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onSelectModifierY: _showRandomGameDialog, // Select + Y - Random.
       onRightStickClick: null,
-      onLeftBumper: _handleLeftBumper,
-      onRightBumper: _handleRightBumper,
-      onPreviousTab: _handleLeftBumper, // Key Q.
-      onNextTab: _handleRightBumper, // Key E.
+      // The bumpers (and their Q/E keyboard twins) bind nothing here: tab
+      // switching moved to D-pad left/right.
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -87,8 +101,8 @@ extension _GamepadNav on _SystemGamesListState {
   void _navigateUp() {
     if (_games.isEmpty) return;
 
-    if (_isAchievementsOpen != null && _isAchievementsOpen!()) {
-      _moveAchievementUp?.call();
+    if (_isDetailsPanelActive != null && _isDetailsPanelActive!()) {
+      _movePanelUp?.call();
       return;
     }
 
@@ -102,8 +116,8 @@ extension _GamepadNav on _SystemGamesListState {
   void _navigateDown() {
     if (_games.isEmpty) return;
 
-    if (_isAchievementsOpen != null && _isAchievementsOpen!()) {
-      _moveAchievementDown?.call();
+    if (_isDetailsPanelActive != null && _isDetailsPanelActive!()) {
+      _movePanelDown?.call();
       return;
     }
 
@@ -117,7 +131,7 @@ extension _GamepadNav on _SystemGamesListState {
   /// selection still wraps at the ends of the list.
   bool _letterJump(bool forward) {
     if (_games.isEmpty) return false;
-    if (_isAchievementsOpen != null && _isAchievementsOpen!()) return false;
+    if (_isDetailsPanelActive != null && _isDetailsPanelActive!()) return false;
 
     final target = LetterJump.targetIndex(
       length: _games.length,
@@ -136,31 +150,25 @@ extension _GamepadNav on _SystemGamesListState {
     return true;
   }
 
-  /// Jumps back by 10 games (Page Up logic).
-  void _navigateLeft() {
-    if (_games.isEmpty) return;
-
-    if (_isAchievementsOpen != null && _isAchievementsOpen!()) {
-      _moveAchievementLeft?.call();
-      return;
+  /// Switches to the previous details tab, or moves within the details panel
+  /// while it owns the input.
+  bool _navigateLeft() {
+    if (_isDetailsPanelActive != null && _isDetailsPanelActive!()) {
+      _movePanelLeft?.call();
+      return true;
     }
 
-    _resetVideoState();
-    final newIndex = (_selectedGameIndex - 10 + _games.length) % _games.length;
-    _updateSelectedGame(newIndex);
+    return _switchDetailsTab(false);
   }
 
-  /// Jumps forward by 10 games (Page Down logic).
-  void _navigateRight() {
-    if (_games.isEmpty) return;
-
-    if (_isAchievementsOpen != null && _isAchievementsOpen!()) {
-      _moveAchievementRight?.call();
-      return;
+  /// Switches to the next details tab, or moves within the details panel
+  /// while it owns the input.
+  bool _navigateRight() {
+    if (_isDetailsPanelActive != null && _isDetailsPanelActive!()) {
+      _movePanelRight?.call();
+      return true;
     }
 
-    _resetVideoState();
-    final newIndex = (_selectedGameIndex + 10) % _games.length;
-    _updateSelectedGame(newIndex);
+    return _switchDetailsTab(true);
   }
 }

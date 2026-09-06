@@ -4,10 +4,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
-import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/system_model.dart';
+import 'package:neostation/sync/i_sync_provider.dart';
+import 'package:neostation/widgets/neo_sync_status_icon.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
+import 'package:neostation/screens/game_screen/game_details_card/widgets/game_details_footer.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/ra_coverage.dart';
 import 'package:neostation/themes/app_themes.dart';
@@ -44,6 +47,17 @@ class GameViewFooter extends StatelessWidget {
   /// it, so the confirm button reads OPEN instead of PLAY.
   final bool isFolder;
 
+  /// The game's *own* system and the active sync provider, for the cloud-sync
+  /// status icon; both null hides it.
+  ///
+  /// This footer carries that indicator because nothing else in these two
+  /// views can: it used to sit on the vertical action rail, which is gone. The
+  /// system is the game's rather than the view's, so an aggregate view reports
+  /// on the game in front of the user and not on the placeholder it is
+  /// browsing under.
+  final SystemModel? system;
+  final ISyncProvider? syncProvider;
+
   const GameViewFooter({
     super.key,
     required this.game,
@@ -55,6 +69,8 @@ class GameViewFooter extends StatelessWidget {
     this.onToggleMute,
     this.hasVideo = false,
     this.isFolder = false,
+    this.system,
+    this.syncProvider,
   });
 
   @override
@@ -117,6 +133,35 @@ class GameViewFooter extends StatelessWidget {
           ExcludeFocus(
             child: Row(
               children: [
+                // The cloud mark leads the row, next to the name it reports on
+                // rather than among the controls at the far end. It is a marker
+                // on the file, not a fact to read, so it stays a bare glyph:
+                // the filled chip it wore on the old action rail is what made
+                // it read as a button sitting among buttons.
+                //
+                // It is here and not on the identity column's second line
+                // because every "nothing to say" state collapses it to zero
+                // size, and that column's height is load-bearing — see the
+                // subtitle's forced strut above.
+                // Watched here rather than passed in: the views that host this
+                // footer memoize the widget instance, so a setting read there
+                // would not reach a footer already built.
+                if (!isFolder &&
+                    system != null &&
+                    syncProvider != null &&
+                    context.select<SqliteConfigProvider, bool>(
+                      (p) => p.config.showCloudSyncIcon,
+                    )) ...[
+                  NeoSyncStatusIcon(
+                    system: system!,
+                    game: game,
+                    syncProvider: syncProvider!,
+                    size: 16.0,
+                    showBackground: false,
+                    showGlyphShadow: false,
+                  ),
+                  SizedBox(width: 8.r),
+                ],
                 if (onToggleMute != null && hasVideo) ...[
                   _MuteHintPill(onToggleMute: onToggleMute!),
                   SizedBox(width: 6.r),
@@ -125,14 +170,20 @@ class GameViewFooter extends StatelessWidget {
                   _SteamStyleRating(game: game),
                   SizedBox(width: 6.r),
                 ],
-                // Signed out, no achievement data is ever loaded, so the pill
-                // would render its "none" state for every game in the library
-                // and read as "this game has no achievements" rather than
-                // "nobody asked RetroAchievements". Say nothing instead.
-                if (hasRetroAchievements &&
-                    context.select<RetroAchievementsProvider, bool>(
-                      (ra) => ra.isConnected,
-                    )) ...[
+                // The details card's own test, shared rather than restated:
+                // signed out nothing is ever loaded, so the pill would settle
+                // on its "none" state for every game in the library and read as
+                // "this game has no achievements" rather than "nobody asked";
+                // and a game RetroAchievements has answered zero for gets no
+                // pill at all rather than one saying so. A lookup still in
+                // flight keeps it — only a settled zero hides it.
+                if (GameDetailsFooter.showsAchievementsFor(
+                  context,
+                  game: game,
+                  hasRetroAchievements: hasRetroAchievements,
+                  isLoadingAchievements: isLoadingAchievements,
+                  currentGameInfo: currentGameInfo,
+                )) ...[
                   _CompactAchievementsIndicator(
                     game: game,
                     isLoading: isLoadingAchievements,
@@ -409,16 +460,21 @@ class _CompactAchievementsIndicator extends StatelessWidget {
               ? AppLocale.noAchievements.getString(context)
               : AppLocale.raCoverageUnknown.getString(context));
 
-    // Indeterminate only while something is genuinely outstanding: a known
-    // total whose earned count has not arrived, or a lookup still running. A
-    // settled "no achievements" is an answer, so its bar sits empty and still
-    // rather than animating as though more were coming.
-    final progress = knowsProgress && total > 0
-        ? awarded / total
-        : (total > 0 || isLoading ? null : 0.0);
+    // Whether the earned count is still outstanding for a game that has
+    // achievements to earn. The bundled snapshot gives us the total instantly,
+    // so this gap is every single selection change.
+    final awaitingProgress = !knowsProgress && total > 0;
+
+    // Always determinate. This used to run an indeterminate bar through the
+    // gap above, which put an orange sweep across the pill on every game the
+    // user moved onto — a flash that said "working" about a lookup that
+    // resolves in a moment and that the text ("-/45") already reports.
+    final progress = knowsProgress && total > 0 ? awarded / total : 0.0;
 
     final theme = Theme.of(context);
-    final statusColor = noAchievements
+    // Orange is for a real, known score; an empty bar that is empty only
+    // because nobody has answered yet stays neutral.
+    final statusColor = noAchievements || awaitingProgress
         ? theme.colorScheme.onSurface
         : Colors.orange;
 

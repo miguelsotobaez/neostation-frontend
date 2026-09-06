@@ -14,8 +14,27 @@ import '../../../themes/corner_radii.dart';
 import '../../../widgets/shaders/shader_gif_widget.dart';
 import '../../../widgets/shaders/music_card_shader_background.dart';
 import '../../../utils/image_utils.dart';
+import '../../../widgets/cover_mosaic.dart';
 import '../../../widgets/system_logo_fallback.dart';
 import '../../../utils/game_utils.dart';
+import '../../../utils/count_label.dart';
+
+/// Replaces the card the systems grid/carousel would otherwise build for one
+/// entry.
+///
+/// Returning null falls through to the ordinary [SystemCard], so a caller only
+/// describes the entries that are not systems and every other card is still
+/// rendered by the systems widgets themselves. The collections browser uses it
+/// for exactly one entry — the trailing "New collection" card, which is an icon
+/// and a label rather than artwork plus a logo.
+typedef SystemCardOverrideBuilder =
+    Widget? Function(
+      BuildContext context,
+      int index,
+      SystemInfo info,
+      bool isSelected,
+      VoidCallback onTap,
+    );
 
 /// A premium card component representing a system or a 'Recent Game' entry.
 ///
@@ -26,8 +45,10 @@ class SystemCard extends StatefulWidget {
     super.key,
     required this.info,
     this.onTap,
+    this.onLongPress,
     this.isSelected = false,
     this.backgroundCacheWidth = 512,
+    this.showCount = false,
   });
 
   /// The system or game metadata resolved for this card.
@@ -36,8 +57,28 @@ class SystemCard extends StatefulWidget {
   /// Interaction callback for pointer/controller selection.
   final VoidCallback? onTap;
 
+  /// Touch route to the card's context menu, i.e. what Y does on a pad.
+  ///
+  /// Null leaves the card without a long-press gesture at all rather than
+  /// giving it an inert one, so a host that has no menu costs nothing.
+  final VoidCallback? onLongPress;
+
   /// Whether this card currently has visual focus in the grid.
   final bool isSelected;
+
+  /// Whether the card names its own count in a pill over its artwork.
+  ///
+  /// Off by default because it only pays for itself on a large card, where
+  /// the pill has artwork to sit on without crowding it. The systems carousel
+  /// turns it on; the grid puts the count in its footer instead, and the
+  /// collections browser has a footer of its own that already carries it.
+  ///
+  /// The pill floats over the artwork rather than taking a row under the
+  /// logo. That row is what the logo scales into: on the carousel the strip
+  /// is only ~60px tall, so a count row inside it left the logo smaller than
+  /// the word beneath it, and reserving the row's height on the card instead
+  /// only moved the cost onto the artwork. Floating it costs neither.
+  final bool showCount;
 
   /// Decode width for the card's background image. Defaults to 512 (grid
   /// cards); the carousel passes 1024 since its cards are much larger.
@@ -248,6 +289,9 @@ class _SystemCardState extends State<SystemCard> {
                 }
                 widget.onTap?.call();
               },
+              // No sound here: every host opens a menu from this callback and
+              // plays its own, so playing one too would double it.
+              onLongPress: widget.onLongPress,
               canRequestFocus: false,
               focusColor: Colors.transparent,
               hoverColor: Colors.transparent,
@@ -281,7 +325,10 @@ class _SystemCardState extends State<SystemCard> {
                             aspectRatio: 1,
                             child: Stack(
                               key: _contentStackKey,
-                              children: [_buildSystemBackground()],
+                              children: [
+                                _buildSystemBackground(),
+                                if (widget.showCount) _buildCountPill(context),
+                              ],
                             ),
                           ),
                           _buildSystemFooter(context),
@@ -375,8 +422,19 @@ class _SystemCardState extends State<SystemCard> {
     }
 
     // SCENARIO C: Static image (Custom or Theme-provided).
+    //
+    // A mosaic outranks the theme path. `resolveBackgroundPathSync` answers
+    // with the `<folder>.webp` path whether or not that file exists, so a
+    // collection card — whose folder name is `collection:<uuid>`, which no
+    // theme will ever carry — otherwise reads as "has a background", tries to
+    // decode a file that is not there, and lands in the error fallback. Only a
+    // card with no artwork of its own is ever given a mosaic, so this can never
+    // hide a picture the user chose.
     final activeBgPath = hasCustomBg ? customBgPath : _themeBackgroundPath;
-    final hasActiveBg = activeBgPath != null && activeBgPath.isNotEmpty;
+    final hasActiveBg =
+        activeBgPath != null &&
+        activeBgPath.isNotEmpty &&
+        (hasCustomBg || widget.info.mosaicPaths.isEmpty);
 
     return Positioned.fill(
       child: ClipRRect(
@@ -389,24 +447,41 @@ class _SystemCardState extends State<SystemCard> {
                 key: ValueKey('${activeBgPath}_${widget.info.imageVersion}'),
                 fit: BoxFit.cover,
                 cacheWidth: widget.backgroundCacheWidth,
-                errorBuilder: (context, error, stackTrace) => Stack(
-                  children: [
-                    Container(color: Theme.of(context).colorScheme.surface),
-                    Container(
-                      color: widget.info.color1AsColor?.withValues(alpha: 0.4),
-                    ),
-                  ],
-                ),
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildArtlessBackground(),
               )
-            : Stack(
-                children: [
-                  Container(color: Theme.of(context).colorScheme.surface),
-                  Container(
-                    color: widget.info.color1AsColor?.withValues(alpha: 0.4),
-                  ),
-                ],
-              ),
+            : _buildArtlessBackground(),
       ),
+    );
+  }
+
+  /// The background for a card with no artwork at all.
+  ///
+  /// A collection carries no theme background — there is no `collections/<id>`
+  /// entry in any theme — so instead of a flat tint it previews the games it
+  /// holds, the same way a subfolder card previews its contents. Falls back to
+  /// the tint when the collection is empty or none of its games have art.
+  Widget _buildArtlessBackground() {
+    final mosaicPaths = widget.info.mosaicPaths;
+    final tint = Stack(
+      children: [
+        Container(color: Theme.of(context).colorScheme.surface),
+        Container(color: widget.info.color1AsColor?.withValues(alpha: 0.4)),
+      ],
+    );
+
+    if (mosaicPaths.isEmpty) return tint;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        tint,
+        CoverMosaic(
+          key: ValueKey('mosaic_${mosaicPaths.join('|')}'),
+          covers: [for (final path in mosaicPaths) File(path)],
+          gutter: 2.r,
+        ),
+      ],
     );
   }
 
@@ -425,7 +500,13 @@ class _SystemCardState extends State<SystemCard> {
   }
 
   /// Renders the system brand logo with fallback support.
-  /// The white-transparent logo is tinted with [color] (falls back to theme text).
+  ///
+  /// The white-transparent logo is tinted with [color] (falls back to theme
+  /// text). The tint is applied through `frameBuilder`, so it wraps the loaded
+  /// image and *not* the error path: a `srcIn` filter repaints every
+  /// non-transparent pixel it covers, and over the name fallback that includes
+  /// the text's black drop shadow, which comes out as a light halo that reads
+  /// as a blurred title. The fallback takes the colour directly instead.
   Widget _buildSystemLogo(
     String assetLogoPath, {
     double? height,
@@ -433,8 +514,9 @@ class _SystemCardState extends State<SystemCard> {
   }) {
     final customLogoPath = widget.info.customLogoPath;
     final hasCustomLogo = customLogoPath != null && customLogoPath.isNotEmpty;
+    final resolvedHeight = height ?? 32.r;
 
-    Widget buildLogo(Widget image) {
+    Widget tint(Widget image) {
       if (color == null) return image;
       return ColorFiltered(
         colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
@@ -442,41 +524,46 @@ class _SystemCardState extends State<SystemCard> {
       );
     }
 
+    Widget assetLogo() => Image.asset(
+      assetLogoPath,
+      height: resolvedHeight,
+      cacheWidth: 256,
+      fit: BoxFit.contain,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+          tint(child),
+      errorBuilder: (context, error, stackTrace) =>
+          _buildLogoFallback(height: resolvedHeight, color: color),
+    );
+
     if (hasCustomLogo) {
-      return buildLogo(
-        Image.file(
-          File(customLogoPath),
-          key: ValueKey('${customLogoPath}_${widget.info.imageVersion}'),
-          height: height ?? 32.r,
-          cacheWidth: 256,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => Image.asset(
-            assetLogoPath,
-            height: height,
-            cacheWidth: 256,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => SystemLogoFallback(
-              title: widget.info.title,
-              shortName: widget.info.shortName,
-              height: height ?? 32.r,
-            ),
-          ),
-        ),
+      return Image.file(
+        File(customLogoPath),
+        key: ValueKey('${customLogoPath}_${widget.info.imageVersion}'),
+        height: resolvedHeight,
+        cacheWidth: 256,
+        fit: BoxFit.contain,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+            tint(child),
+        errorBuilder: (context, error, stackTrace) => assetLogo(),
       );
     }
 
-    return buildLogo(
-      Image.asset(
-        assetLogoPath,
-        height: height ?? 32.r,
-        cacheWidth: 256,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => SystemLogoFallback(
-          title: widget.info.title,
-          shortName: widget.info.shortName,
-          height: height ?? 32.r,
-        ),
-      ),
+    return assetLogo();
+  }
+
+  /// The name-as-logo fallback, already in its final colour.
+  ///
+  /// It must not go through [buildLogo]'s `srcIn` filter. That filter repaints
+  /// every non-transparent pixel in the requested colour *including the text's
+  /// black drop shadow*, which turns the shadow into a light halo and makes
+  /// the name look blurred — the state collection titles were in, since a
+  /// collection never has a logo asset to load.
+  Widget _buildLogoFallback({required double height, Color? color}) {
+    return SystemLogoFallback(
+      title: widget.info.title,
+      shortName: widget.info.shortName,
+      height: height,
+      color: color,
     );
   }
 
@@ -577,20 +664,66 @@ class _SystemCardState extends State<SystemCard> {
   /// Renders a bottom footer with the system logo for non-game system cards.
   ///
   /// The footer expands to fill the remaining space below the square artwork,
-  /// and the logo is auto-sized to fit while keeping its aspect ratio.
+  /// and the logo is auto-sized to fit while keeping its aspect ratio — the
+  /// whole strip is the logo's, which is the point of floating the count over
+  /// the artwork instead (see [_buildCountPill]).
   Widget _buildSystemFooter(BuildContext context) {
     final assetLogoPath = _resolveSystemLogoPath();
 
     return Expanded(
       child: Container(
-        alignment: Alignment.center,
         padding: EdgeInsets.only(top: 1.r, bottom: 1.r, left: 2.r, right: 2.r),
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: _buildSystemLogo(
-            assetLogoPath,
-            height: 128.r,
-            color: Theme.of(context).colorScheme.onSurface,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: _buildSystemLogo(
+                  assetLogoPath,
+                  height: 128.r,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The card's count, e.g. "12 GAMES", "1 APP", "48 TRACKS", as a pill
+  /// floating over the bottom left of the artwork.
+  ///
+  /// Bottom left rather than centred: the artwork's centre is where system art
+  /// usually puts its subject, and the card's own logo sits on the centre line
+  /// directly below, so a centred pill stacks two centred things. The fill is
+  /// opaque enough to stay legible over any background art.
+  Widget _buildCountPill(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Positioned(
+      left: 8.r,
+      bottom: 8.r,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 4.r),
+        decoration: BoxDecoration(
+          color: colorScheme.surface.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(100.r),
+          border: Border.all(
+            color: colorScheme.outline.withValues(alpha: 0.6),
+            width: 1.r,
+          ),
+        ),
+        child: Text(
+          systemCountLabel(context, widget.info).toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: colorScheme.onSurface,
+            fontSize: 10.r,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
           ),
         ),
       ),

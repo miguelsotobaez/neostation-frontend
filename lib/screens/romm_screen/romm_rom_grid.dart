@@ -7,12 +7,9 @@ import 'package:provider/provider.dart';
 import '../../models/romm_rom.dart';
 import '../../providers/romm_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
-import '../../services/game_legend_visibility.dart';
 import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../services/sfx_service.dart';
 import '../../utils/gamepad_nav.dart';
-import '../../widgets/legend_edge_reshow_zone.dart';
-import '../../widgets/romm_action_buttons.dart';
 import '../app_screen.dart';
 import 'romm_cover_aspect.dart';
 import 'romm_rom_card.dart';
@@ -92,7 +89,6 @@ class _RommRomGridState extends State<RommRomGrid> {
   /// [RommProvider.bulkSync] so the Y affordance reads "Cancel sync".
   bool _syncing = false;
   Widget? _chromeFooter;
-  Widget? _chromeLegend;
 
   // Memoized grid rows. Cards are a pure function of the layout generation, the
   // decode width and the theme, so a settle / legend / download-progress
@@ -149,7 +145,6 @@ class _RommRomGridState extends State<RommRomGrid> {
     _settledIndex = _selectedIndex;
     _updateCrossAxisCount();
     _initializeGamepad();
-    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
     _syncing = widget.provider.bulkSync.isRunning;
     widget.provider.bulkSync.addListener(_onBulkSyncChanged);
 
@@ -171,7 +166,6 @@ class _RommRomGridState extends State<RommRomGrid> {
     _settleTimer?.cancel();
     _measureSettle?.cancel();
     _cardSizeLabel.dispose();
-    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     widget.provider.bulkSync.removeListener(_onBulkSyncChanged);
     GamepadNavigationManager.popLayer(_navLayerId);
     _gamepadNav.dispose();
@@ -256,26 +250,11 @@ class _RommRomGridState extends State<RommRomGrid> {
       onBack: widget.onBack,
       onXButton: widget.onToggleView,
       onFavorite: widget.onSyncAll, // Y — sync the whole source.
-      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
       onRightBumper: AppNavigation.nextTab,
     );
-  }
-
-  /// Select + B — toggles the (session-global) vertical action-button legend.
-  /// When hidden it slides off the left edge and the grid reflows into the
-  /// 60.r gutter, exactly as the local game views do.
-  void _toggleLegend() {
-    SfxService().playNavSound();
-    GameLegendVisibility.toggle();
-  }
-
-  void _onLegendVisibilityChanged() {
-    if (!mounted) return;
-    _recenterAfterLayout = true;
-    setState(() {});
   }
 
   RommRom? get _focusedRom => widget.roms.isEmpty
@@ -678,53 +657,25 @@ class _RommRomGridState extends State<RommRomGrid> {
   Widget build(BuildContext context) {
     _buildSettledChrome();
 
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            Expanded(
-              // Indent to clear the vertical legend. The indent flips 60.r↔0 in
-              // a single frame (no animation) so there's no moving target to
-              // chase — the grid reflows once and the selected card is pinned
-              // in place by the recentre below.
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: GameLegendVisibility.hidden.value ? 0 : 60.r,
+        Expanded(
+          child: widget.roms.isEmpty
+              ? const SizedBox.shrink()
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    _computeLayout(constraints.maxWidth);
+                    if (_recenterAfterLayout) {
+                      _recenterAfterLayout = false;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _centerOnSelected();
+                      });
+                    }
+                    return _buildScrollView(context);
+                  },
                 ),
-                child: widget.roms.isEmpty
-                    ? const SizedBox.shrink()
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          _computeLayout(constraints.maxWidth);
-                          if (_recenterAfterLayout) {
-                            _recenterAfterLayout = false;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) _centerOnSelected();
-                            });
-                          }
-                          return _buildScrollView(context);
-                        },
-                      ),
-              ),
-            ),
-            _chromeFooter!,
-          ],
         ),
-        // Vertical action-button legend, memoized on the settled selection.
-        // Select + B slides it off the left edge in sync with the grid reflow.
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          top: 12.r,
-          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-            child: _chromeLegend!,
-          ),
-        ),
-        // Touch: swipe-right from the left edge reveals a hidden legend.
-        const LegendEdgeReshowZone(),
+        _chromeFooter!,
       ],
     );
   }
@@ -945,26 +896,11 @@ class _RommRomGridState extends State<RommRomGrid> {
     final onDisk = rom != null && widget.provider.downloadedStateFor(rom.id);
     final sig =
         '$_settledIndex|${rom?.id}|${download?.status}|${download?.fraction}|$onDisk|$_syncing';
-    if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
+    if (sig == _chromeSig && _chromeFooter != null) {
       return;
     }
     _chromeSig = sig;
     _chromeFooter = widget.footerBuilder(rom);
-    // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
-    // so Select + B can animate it without invalidating this memoized subtree.
-    _chromeLegend = RommActionButtons(
-      onBack: widget.onBack,
-      onViewMode: widget.onToggleView,
-      onDownload: rom == null
-          ? null
-          : () => download?.status == RommDownloadStatus.downloading
-                ? widget.onCancel(rom)
-                : widget.onConfirm(rom),
-      isDownloading: download?.status == RommDownloadStatus.downloading,
-      isDownloaded: download?.status == RommDownloadStatus.completed || onDisk,
-      onSyncAll: widget.onSyncAll,
-      isSyncing: _syncing,
-    );
   }
 }
 

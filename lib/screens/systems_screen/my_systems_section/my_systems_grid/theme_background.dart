@@ -13,7 +13,7 @@ extension _ThemeBackground on _SystemCardGridViewState {
   // When secondary display signals it's active (startup or reconnect),
   // immediately push current system state so default logo never shows.
   void _onSecondaryStateChanged() {
-    if (!mounted) return;
+    if (!mounted || !widget.enableSecondaryDisplay) return;
     final isActive = _secondaryDisplayState?.value?.isSecondaryActive ?? false;
     // Update the guard BEFORE pushing state. _updateSecondaryScreenName() calls
     // updateState(), which synchronously re-enters this listener via
@@ -28,7 +28,7 @@ extension _ThemeBackground on _SystemCardGridViewState {
   }
 
   void _loadThemeAssetsForSystems() {
-    if (!mounted) return;
+    if (!mounted || !widget.enableThemeAssets) return;
 
     final neoAssets = context.read<NeoAssetsProvider>();
     final themeFolder = neoAssets.activeThemeFolder;
@@ -119,6 +119,7 @@ extension _ThemeBackground on _SystemCardGridViewState {
   /// Synchronizes the current selection with the secondary hardware display.
   void _updateSecondaryScreenName() {
     if (!Platform.isAndroid) return;
+    if (!widget.enableSecondaryDisplay) return;
     if (_secondaryDisplayState == null) return;
     if (widget.selectedIndex < 0 ||
         widget.selectedIndex >= widget.systems.length) {

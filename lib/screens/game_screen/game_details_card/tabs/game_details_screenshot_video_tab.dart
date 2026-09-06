@@ -15,6 +15,15 @@ class GameDetailsScreenshotVideoTab extends StatefulWidget {
   final int imageVersion;
   final VoidCallback onToggleVideoMute;
 
+  /// Where the footer starts, so the media stops there and no lower.
+  ///
+  /// The other three panels have taken this from the card since the footer's
+  /// height stopped being a constant; this one kept a hardcoded 110 and went
+  /// on reserving room for a row that had shrunk to 90. Since a screenshot in
+  /// this panel is almost always height-bound — 4:3 art in a panel close to
+  /// 2:1 — every unit reserved here came straight off the image's width.
+  final double bottomOffset;
+
   const GameDetailsScreenshotVideoTab({
     super.key,
     required this.screenshotPath,
@@ -22,6 +31,7 @@ class GameDetailsScreenshotVideoTab extends StatefulWidget {
     this.videoController,
     required this.imageVersion,
     required this.onToggleVideoMute,
+    this.bottomOffset = 110.0,
   });
 
   @override
@@ -116,7 +126,7 @@ class _GameDetailsScreenshotVideoTabState
     }
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(12.r, 55.r, 12.r, 110.r),
+      padding: EdgeInsets.fromLTRB(12.r, 55.r, 12.r, widget.bottomOffset.r),
       child: Center(
         child: Container(
           decoration: BoxDecoration(

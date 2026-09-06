@@ -114,6 +114,8 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     final localeSkippedSuffix = AppLocale.organizeMultiDiscSkippedSuffix
         .getString(context);
     final localeFailed = AppLocale.organizeMultiDiscFailed.getString(context);
+    final localePartialFailure = AppLocale.organizeMultiDiscPartialFailure
+        .getString(context);
     final localeConfirm = AppLocale.confirm.getString(context);
 
     if (_currentRomFolders.isEmpty) {
@@ -207,9 +209,16 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                   )
                   .replaceFirst('{skipped}', skippedNote)
             : localeNoSetsFound.replaceFirst('{skipped}', skippedNote);
-        completionType = result.hasChanges
-            ? NotificationType.success
-            : NotificationType.info;
+        if (result.hasFailures) {
+          completionMessage = localePartialFailure
+              .replaceFirst('{failed}', result.groupsFailed.toString())
+              .replaceFirst('{result}', completionMessage);
+          completionType = NotificationType.error;
+        } else {
+          completionType = result.hasChanges
+              ? NotificationType.success
+              : NotificationType.info;
+        }
       }
     } catch (e, stackTrace) {
       _log.e('Failed to organize multi-disc games: $e', stackTrace: stackTrace);

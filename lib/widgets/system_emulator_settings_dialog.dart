@@ -115,6 +115,11 @@ class _SystemEmulatorSettingsDialogState
 
     // Initialize local system state
     _system = widget.system;
+    // Recursive scan + subfolder view (items 4/5) only mean something for a
+    // system that owns a ROM directory. Aggregate libraries ('all',
+    // 'favorites', 'collections', a single collection) own none, and a
+    // collection's id has no `app_systems` row for the setting to be written
+    // against at all.
     _totalGeneralItems =
         4 + (_offersRecursiveScan ? 1 : 0) + (_offersSubfolderView ? 1 : 0);
 
@@ -332,8 +337,13 @@ class _SystemEmulatorSettingsDialogState
 
   /// Whether this system offers the "Recursive Scan" row — see
   /// [SystemFolderNames.recursiveScanExcluded] for the systems that don't.
+  ///
+  /// A single collection (`collection:<uuid>`) is synthesized rather than read
+  /// from `app_systems`, so it never appears in that set and is ruled out on
+  /// its own: there is no row to write the setting against.
   bool get _offersRecursiveScan =>
-      !SystemFolderNames.recursiveScanExcluded.contains(_system.folderName);
+      !SystemFolderNames.recursiveScanExcluded.contains(_system.folderName) &&
+      !SystemFolderNames.isCollection(_system.folderName);
 
   /// Whether this system offers the "Show Subfolders" row.
   ///
@@ -341,16 +351,22 @@ class _SystemEmulatorSettingsDialogState
   /// [SystemFolderNames.subfolderViewExcluded] set, so offering the switch on
   /// an excluded system (the virtual aggregates, the music library, the
   /// installed-apps grid) would only ever write a value nothing reads.
+  /// A synthesized collection is ruled out for the same reason as in
+  /// [_offersRecursiveScan].
   bool get _offersSubfolderView =>
-      !SystemFolderNames.subfolderViewExcluded.contains(_system.folderName);
+      !SystemFolderNames.subfolderViewExcluded.contains(_system.folderName) &&
+      !SystemFolderNames.isCollection(_system.folderName);
 
   // ── Hidden games ──────────────────────────────────────────────────────────
 
-  /// True for the virtual libraries ('all' / 'favorites'), which aggregate
-  /// other systems and therefore list every hidden game rather than their own.
+  /// True for the virtual libraries ('all', 'favorites', 'collections' and a
+  /// single `collection:<uuid>`), which aggregate other systems and therefore
+  /// list every hidden game rather than their own.
+  ///
+  /// Scoping the hidden list to a collection's id would query `app_systems` for
+  /// a row that does not exist, so the tab could only ever come up empty.
   bool get _isVirtualLibrarySystem =>
-      _system.folderName == 'all' ||
-      _system.folderName == SystemFolderNames.favorites;
+      SystemFolderNames.isAggregate(_system.folderName);
 
   /// System to scope the hidden list to, or null for the whole library.
   String? get _hiddenScopeSystemId =>
@@ -375,7 +391,11 @@ class _SystemEmulatorSettingsDialogState
   /// the strip, the LB/RB cycle and the body switch.
   List<int> get _availableTabs => [
     0,
-    if (_system.folderName != 'all' && _system.folderName != 'android') 1,
+    // Emulators belong to a hardware system. An aggregate library has none of
+    // its own, so the tab could only ever render empty.
+    if (!SystemFolderNames.isAggregate(_system.folderName) &&
+        _system.folderName != 'android')
+      1,
     2,
     if (_showHiddenTab) 3,
   ];

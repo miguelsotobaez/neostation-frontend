@@ -338,7 +338,12 @@ class _GameViewModeOverlayState extends State<GameViewModeOverlay> {
     return Stack(
       children: [
         Positioned(
-          top: 42.r,
+          // Top-left, level with the games sidebar it covers: that panel's box
+          // starts at 12 from the top, and the panel used to open 30 below it
+          // for no reason the layout gives — there is no header above these
+          // views to clear. The 6 on the left is unchanged; it already sits
+          // outside the sidebar's own 12 margin, so the room here was vertical.
+          top: 12.r,
           left: 6.r,
           width: widget.width,
           child: Material(

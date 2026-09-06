@@ -188,6 +188,9 @@ mixin AppLocale {
   static const String showAchievementsBadge = 'show_achievements_badge';
   static const String showAchievementsBadgeSubtitle =
       'show_achievements_badge_subtitle';
+  static const String showCloudSyncIcon = 'show_cloud_sync_icon';
+  static const String showCloudSyncIconSubtitle =
+      'show_cloud_sync_icon_subtitle';
   static const String raMatchOnStartup = 'ra_match_on_startup';
   static const String raMatchOnStartupSubtitle = 'ra_match_on_startup_subtitle';
   static const String raMatchOnStartupBacklogWarning =
@@ -246,6 +249,8 @@ mixin AppLocale {
   static const String organizeMultiDiscNoSetsFound =
       'organize_multi_disc_no_sets_found';
   static const String organizeMultiDiscFailed = 'organize_multi_disc_failed';
+  static const String organizeMultiDiscPartialFailure =
+      'organize_multi_disc_partial_failure';
   static const String organizeMultiDiscWarning = 'organize_multi_disc_warning';
 
   static const String cleanOrphanedMetadata = 'clean_orphaned_metadata';
@@ -352,7 +357,6 @@ mixin AppLocale {
   static const String scrapingUnavailableAndroid =
       'scraping_unavailable_android';
   static const String achievements = 'achievements';
-  static const String loadingAchievements = 'loading_achievements';
 
   // ---------------------------------------------------------------------------
   // NeoSync
@@ -606,6 +610,8 @@ mixin AppLocale {
   static const String carouselView = 'carousel_view';
   static const String listView = 'list_view';
   static const String alphabetical = 'alphabetical';
+  static const String dateAdded = 'dateAdded';
+  static const String sortByGameCount = 'sortByGameCount';
   static const String releaseYear = 'release_year';
   static const String manufacturer = 'manufacturer';
   static const String manufacturerType = 'manufacturer_type';
@@ -676,10 +682,8 @@ mixin AppLocale {
   static const String noMottoSet = 'no_motto_set';
   static const String contributions = 'contributions';
   static const String aotw = 'aotw';
-  static const String players = 'players';
   static const String achievementLabel = 'achievement_label';
   static const String unlocks = 'unlocks';
-  static const String couldNotLoadAOTW = 'could_not_load_aotw';
   static const String recentlyPlayed = 'recently_played';
   static const String achivs = 'achivs';
   static const String noRecentGames = 'no_recent_games';
@@ -742,8 +746,21 @@ mixin AppLocale {
   static const String recentBadge = 'recent_badge';
   static const String unknownGame = 'unknown_game';
   static const String unknownSystem = 'unknown_system';
+  // Count labels for a card or header ("12 Games", "1 Game"). Each noun has a
+  // singular and a plural template rather than a shared noun concatenated onto
+  // a number: the word order is not the same in every language (ru puts the
+  // number last, ko puts it mid-phrase), so the number has to be interpolated
+  // into a translated template, not glued to a translated word.
+  //
+  // The split is binary, so it is exact only for languages whose plural rule
+  // is one-vs-many. ru has a third form for 5+ ('Игр:') that these two keys
+  // cannot carry; the plural key holds it, so ru is right at 1 and for 5+ and
+  // reads slightly off at 2-4. That is still better than the always-plural it
+  // replaces. Use lib/utils/count_label.dart rather than these keys directly.
   static const String gamesCount = 'games_count';
+  static const String gameCount = 'game_count';
   static const String appsCount = 'apps_count';
+  static const String appCount = 'app_count';
   static const String errorSystemNotFound = 'error_system_not_found';
   static const String errorLaunchingGame = 'error_launching_game';
   static const String settingsNotAvailableRecent =
@@ -773,6 +790,7 @@ mixin AppLocale {
   static const String second = 'second';
   static const String unknown = 'unknown';
   static const String tracksCount = 'tracks_count';
+  static const String trackCount = 'track_count';
   static const String hours = 'hours';
   static const String minutes = 'minutes';
   static const String seconds = 'seconds';
@@ -820,6 +838,37 @@ mixin AppLocale {
   static const String hintViewMode = 'hint_view_mode';
   static const String hintScrape = 'hint_scrape';
   static const String hintMoreActions = 'hint_more_actions';
+  static const String hintOptions = 'hint_options';
+
+  // ---------------------------------------------------------------------------
+  // Game context menu (Y)
+  // ---------------------------------------------------------------------------
+  static const String addTo = 'add_to';
+  static const String addedToCollection = 'added_to_collection';
+  static const String newCollection = 'new_collection';
+  static const String newCollectionDefaultName = 'new_collection_default_name';
+  static const String collections = 'collections';
+  static const String collectionsCount = 'collections_count';
+  static const String collectionCount = 'collection_count';
+
+  // ---------------------------------------------------------------------------
+  // Collections browser screen
+  // ---------------------------------------------------------------------------
+  static const String createCollection = 'create_collection';
+  static const String collectionName = 'collection_name';
+  static const String renameCollection = 'rename_collection';
+  static const String changeImage = 'change_image';
+  static const String removeImage = 'remove_image';
+  static const String deleteCollection = 'delete_collection';
+  static const String deleteCollectionConfirm = 'delete_collection_confirm';
+  static const String collectionCreated = 'collection_created';
+  static const String collectionDeleted = 'collection_deleted';
+  static const String emptyCollection = 'empty_collection';
+  static const String noCollections = 'no_collections';
+  static const String noCollectionsSubtitle = 'no_collections_subtitle';
+  static const String errorSavingCollection = 'error_saving_collection';
+  static const String errorUpdatingCollection = 'error_updating_collection';
+  static const String inACollection = 'in_a_collection';
 
   // ---------------------------------------------------------------------------
   // Misc
@@ -1099,6 +1148,7 @@ mixin AppLocale {
   static const String rommNoCollections = 'romm_no_collections';
   static const String rommNoRoms = 'romm_no_roms';
   static const String rommSearch = 'romm_search';
+  static const String rommSearching = 'romm_searching';
   static const String rommDownloading = 'romm_downloading';
   static const String rommDownloaded = 'romm_downloaded';
   static const String rommDownloadComplete = 'romm_download_complete';
@@ -1171,11 +1221,7 @@ mixin AppLocale {
   // RetroAchievements dashboard & achievement comments
   static const String raCompletionsLabel = 'ra_completions_label';
   static const String raMasteriesLabel = 'ra_masteries_label';
-  static const String raEarned = 'ra_earned';
-  static const String raOwned = 'ra_owned';
   static const String raPointsAbbrev = 'ra_points_abbrev';
-  static const String raAlreadyEarned = 'ra_already_earned';
-  static const String raTapToOpenLocalGame = 'ra_tap_to_open_local_game';
   static const String raRecentUnlocks = 'ra_recent_unlocks';
   static const String raRecentCompletions = 'ra_recent_completions';
   static const String raRecentMasteries = 'ra_recent_masteries';
@@ -1200,6 +1246,21 @@ mixin AppLocale {
   static const String raNoRecentUnlocks = 'ra_no_recent_unlocks';
   static const String raRecentlyPlayedTitle = 'ra_recently_played_title';
   static const String raNoRecentlyPlayed = 'ra_no_recently_played';
+  static const String raAotwNoActive = 'ra_aotw_no_active';
+  static const String raAotwEarnedHardcore = 'ra_aotw_earned_hardcore';
+  static const String raAotwEarnedCasual = 'ra_aotw_earned_casual';
+  static const String raAotwEarnedPreviously = 'ra_aotw_earned_previously';
+  static const String raAotwNotEarned = 'ra_aotw_not_earned';
+  static const String raAotwStatusUnavailable = 'ra_aotw_status_unavailable';
+  static const String raAotwNotInLibrary = 'ra_aotw_not_in_library';
+  static const String raAotwWeekStarted = 'ra_aotw_week_started';
+  static const String raAotwTrueRatio = 'ra_aotw_true_ratio';
+  static const String raAotwParticipation = 'ra_aotw_participation';
+  static const String raAotwOpenLocalGame = 'ra_aotw_open_local_game';
+  static const String raAotwDownloadFromRomm = 'ra_aotw_download_from_romm';
+  static const String raGamesPlayed = 'ra_games_played';
+  static const String raAchievementProgress = 'ra_achievement_progress';
+  static const String raRecent30Days = 'ra_recent_30_days';
 
   // Custom save folders (NeoSync v2)
   static const String customSaveFoldersTitle = 'custom_save_folders_title';

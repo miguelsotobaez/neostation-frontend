@@ -135,8 +135,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     }
 
     final systemFolderName =
-        (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
+        SystemFolderNames.isAggregate(widget.system.folderName) &&
             game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;
@@ -343,9 +342,9 @@ extension _SecondaryDisplay on _SystemGamesListState {
   }
 
   void _updateBackground(GameModel game) {
-    if (!mounted ||
-        widget.system.folderName == 'all' ||
-        widget.system.folderName == SystemFolderNames.favorites) {
+    // Aggregate views keep their own backdrop: the list's folder name is not a
+    // hardware system, so there is no per-system art to swap in.
+    if (!mounted || SystemFolderNames.isAggregate(widget.system.folderName)) {
       return;
     }
 
@@ -370,8 +369,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     } else {
       // Hardware-specific fallback if no game-specific art is resolved.
       final sysId =
-          (widget.system.folderName == 'all' ||
-                  widget.system.folderName == SystemFolderNames.favorites) &&
+          SystemFolderNames.isAggregate(widget.system.folderName) &&
               game.systemFolderName != null
           ? game.systemFolderName!
           : widget.system.id;
@@ -522,8 +520,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
   /// Resolves the absolute filesystem path for the targeted game video.
   String _getVideoPath(GameModel game) {
     final systemFolderName =
-        (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
+        SystemFolderNames.isAggregate(widget.system.folderName) &&
             game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;

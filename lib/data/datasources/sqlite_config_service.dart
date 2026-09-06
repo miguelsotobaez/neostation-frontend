@@ -167,6 +167,10 @@ class SqliteConfigService {
         systemSortBy:
             userConfig?['system_sort_by']?.toString() ?? 'alphabetical',
         systemSortOrder: userConfig?['system_sort_order']?.toString() ?? 'asc',
+        collectionSortBy:
+            userConfig?['collection_sort_by']?.toString() ?? 'name',
+        collectionSortOrder:
+            userConfig?['collection_sort_order']?.toString() ?? 'asc',
         appLanguage: userConfig?['app_language']?.toString() ?? 'en',
         hideRecentCard:
             (int.tryParse(userConfig?['hide_recent_card']?.toString() ?? '0') ??
@@ -177,10 +181,6 @@ class SqliteConfigService {
             userConfig?['recent_card_size']?.toString().isNotEmpty == true
             ? userConfig!['recent_card_size'].toString()
             : RecentCardSizes.defaultSize,
-        legendHidden:
-            (int.tryParse(userConfig?['legend_hidden']?.toString() ?? '0') ??
-                0) ==
-            1,
         // Missing column/row => the wheel tab (see migration v110).
         gameDetailsTab:
             userConfig?['game_details_tab']?.toString().isNotEmpty == true
@@ -262,6 +262,12 @@ class SqliteConfigService {
                 ) ??
                 0) ==
             1,
+        showCloudSyncIcon:
+            (int.tryParse(
+                  userConfig?['show_cloud_sync_icon']?.toString() ?? '1',
+                ) ??
+                1) ==
+            1,
         raMatchOnStartup:
             (int.tryParse(
                   userConfig?['ra_match_on_startup']?.toString() ?? '0',
@@ -312,10 +318,11 @@ class SqliteConfigService {
         use12HourClock: config.use12HourClock ? 1 : 0,
         systemSortBy: config.systemSortBy,
         systemSortOrder: config.systemSortOrder,
+        collectionSortBy: config.collectionSortBy,
+        collectionSortOrder: config.collectionSortOrder,
         appLanguage: config.appLanguage,
         hideRecentCard: config.hideRecentCard ? 1 : 0,
         recentCardSize: config.recentCardSize,
-        legendHidden: config.legendHidden ? 1 : 0,
         gameDetailsTab: config.gameDetailsTab,
         hideTabSync: config.hideTabSync ? 1 : 0,
         hideTabAchievements: config.hideTabAchievements ? 1 : 0,
@@ -336,6 +343,7 @@ class SqliteConfigService {
         fanartDimLevel: config.fanartDimLevel,
         esdeFolderPath: config.esdeFolderPath,
         showAchievementsBadge: config.showAchievementsBadge ? 1 : 0,
+        showCloudSyncIcon: config.showCloudSyncIcon ? 1 : 0,
         raMatchOnStartup: config.raMatchOnStartup ? 1 : 0,
         subfolderViewAll: config.subfolderViewAll ? 1 : 0,
       );

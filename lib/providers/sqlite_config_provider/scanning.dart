@@ -672,7 +672,13 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
       // Count systems with games, excluding virtual/media systems for 'all' logic
       int emulatorSystemsWithGamesCount = 0;
-      final virtualSystems = ['android', 'music', 'all', 'steam'];
+      final virtualSystems = [
+        'android',
+        'music',
+        'all',
+        'steam',
+        SystemFolderNames.collections,
+      ];
 
       // Build the set of existing folders once for efficient lookup.
       final allExistingFolders = rootFoldersMap.values
@@ -686,9 +692,13 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // the list the user actually sees.
       final hiddenBySystem = await GameRepository.getHiddenRomCountsBySystem();
 
-      // First pass: collect all systems except 'all'
+      // First pass: collect all systems except the ones the passes below add on
+      // their own terms ('all', 'collections'). Skipping 'collections' here also
+      // stops a user ROM folder that happens to be called "collections" from
+      // adding the card twice.
       for (final system in allSystems) {
         if (system.folderName == 'all') continue;
+        if (system.folderName == SystemFolderNames.collections) continue;
 
         final romCount = await SystemRepository.getRomCountForSystem(
           system.id!,
@@ -748,6 +758,21 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         } catch (_) {
           // favorites system not found in available systems, ignore
         }
+      }
+
+      // Fourth pass: add the 'collections' virtual system. Unlike favorites this
+      // is unconditional (D5 in docs/collections/05-decisions-and-risks.md):
+      // collections live in user_collections, not in the ROM scan, and the card
+      // is the only place the user can create their first one — hiding it while
+      // empty would leave no way in.
+      try {
+        final collectionsSystem = allSystems.firstWhere(
+          (s) => s.folderName == SystemFolderNames.collections,
+        );
+        systemsToKeep.add(collectionsSystem);
+      } catch (_) {
+        // 'collections' is missing from app_systems (an install whose systems
+        // bundle predates it); nothing to add until the next systems sync.
       }
 
       final folderNames = systemsToKeep.map((s) => s.folderName).toList();
@@ -882,7 +907,8 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           hasFolderWhenNonRecursive ||
           (updatedSystem.folderName == 'android' && Platform.isAndroid) ||
           updatedSystem.folderName == 'all' ||
-          updatedSystem.folderName == SystemFolderNames.favorites;
+          updatedSystem.folderName == SystemFolderNames.favorites ||
+          updatedSystem.folderName == SystemFolderNames.collections;
 
       if (shouldKeep) {
         await SystemRepository.addDetectedSystem(
@@ -1150,6 +1176,44 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     }
   }
 
+  /// Guarantees the 'collections' virtual system is in `user_detected_systems`.
+  ///
+  /// The ROM scan adds it (fourth pass above), but a device with
+  /// `scanOnStartup` off may go many launches without running one — and the
+  /// Collections card is the only route to creating a first collection (D5), so
+  /// its visibility must not depend on a scan happening. Cheap no-op once the
+  /// card is already there.
+  Future<void> _ensureCollectionsSystemDetected() async {
+    try {
+      if (_detectedSystems.any(
+        (s) => s.folderName == SystemFolderNames.collections,
+      )) {
+        return;
+      }
+
+      final collectionsSystem = await SystemRepository.getSystemByFolderName(
+        SystemFolderNames.collections,
+      );
+      final id = collectionsSystem?.id;
+      if (id == null) {
+        // The systems bundle on this install predates collections.json; the
+        // next systems sync creates the row and the next launch picks it up.
+        return;
+      }
+
+      await SystemRepository.addDetectedSystem(
+        id,
+        SystemFolderNames.collections,
+      );
+      await _refreshDetectedSystemsFromDatabase();
+      _notify();
+    } catch (e) {
+      SqliteConfigProvider._log.w(
+        'Could not register the Collections system: $e',
+      );
+    }
+  }
+
   /// Public method to refresh detected systems from the database.
   ///
   /// Called after external changes (e.g., toggling a favorite) that may affect
@@ -1183,8 +1247,9 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     final priorityMap = <String, int>{
       'all': 1,
       'favorites': 2,
-      'music': 3,
-      'android': 4,
+      SystemFolderNames.collections: 3,
+      'music': 4,
+      'android': 5,
     };
 
     _detectedSystems.sort((a, b) {

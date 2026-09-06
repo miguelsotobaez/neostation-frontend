@@ -92,14 +92,10 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   List<SystemModel> get detectedSystems => _detectedSystems;
 
   /// Detected systems excluding virtual aggregate groups (e.g. 'all',
-  /// 'favorites'), which are not real systems and would inflate any
-  /// "X systems found" count shown to the user.
+  /// 'favorites', 'collections'), which are not real systems and would inflate
+  /// any "X systems found" count shown to the user.
   List<SystemModel> get detectedRealSystems => _detectedSystems
-      .where(
-        (s) =>
-            s.folderName != SystemFolderNames.all &&
-            s.folderName != SystemFolderNames.favorites,
-      )
+      .where((s) => !SystemFolderNames.isAggregate(s.folderName))
       .toList();
   List<SystemModel> get availableSystems => _availableSystems;
   Map<String, EmulatorModel> get availableEmulators => _availableEmulators;
@@ -325,6 +321,8 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
           );
         }
       }
+
+      await _ensureCollectionsSystemDetected();
       if (_config.hideBottomScreen && Platform.isAndroid) {
         // ignore: unawaited_futures
         _secondaryDisplayChannel.invokeMethod('setSecondaryDisplayVisible', {

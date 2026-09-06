@@ -18,6 +18,12 @@ class SystemInfo {
   final String? shortName;
 
   /// Human-readable storage or ROM count string (e.g., '500 ROMs').
+  ///
+  /// **Nothing renders this.** Several places set it, including
+  /// `system_list_builder`, but the card count the user sees is built from
+  /// [numOfRoms] by `SystemCard` itself (via `lib/utils/count_label.dart`).
+  /// Setting it here does not change any label — a Collections card that
+  /// counted the wrong thing was traced to exactly that assumption.
   final String? totalStorage;
 
   /// Folder name on the filesystem where ROMs are located.
@@ -62,6 +68,13 @@ class SystemInfo {
   /// The underlying game data if [isGame] is true.
   final GameModel? gameModel;
 
+  /// Cover files to draw as a mosaic when the card has no artwork of its own.
+  ///
+  /// Used by collection cards, which have no theme background to fall back on:
+  /// rather than a flat tint, the card previews the games it holds. Empty for
+  /// every real system, which keeps the existing tint fallback untouched.
+  final List<String> mosaicPaths;
+
   SystemInfo({
     this.svgSrc,
     this.title,
@@ -81,6 +94,7 @@ class SystemInfo {
     this.imageVersion = 0,
     this.isGame = false,
     this.gameModel,
+    this.mosaicPaths = const [],
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -103,6 +117,7 @@ class SystemInfo {
     int? imageVersion,
     bool? isGame,
     GameModel? gameModel,
+    List<String>? mosaicPaths,
   }) {
     return SystemInfo(
       svgSrc: svgSrc ?? this.svgSrc,
@@ -123,6 +138,7 @@ class SystemInfo {
       imageVersion: imageVersion ?? this.imageVersion,
       isGame: isGame ?? this.isGame,
       gameModel: gameModel ?? this.gameModel,
+      mosaicPaths: mosaicPaths ?? this.mosaicPaths,
     );
   }
 

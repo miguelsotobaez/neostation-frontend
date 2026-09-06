@@ -25,7 +25,15 @@ class FooterLabelPill extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        padding: EdgeInsets.only(top: 4.r, bottom: 4.r, left: 12.r, right: 6.r),
+        // The tighter right inset is there to sit close to the count chip;
+        // with no chip it just makes the pill look off-centre, so a
+        // label-only pill is padded evenly.
+        padding: EdgeInsets.only(
+          top: 4.r,
+          bottom: 4.r,
+          left: 12.r,
+          right: countText != null ? 6.r : 12.r,
+        ),
         decoration: BoxDecoration(
           color: theme.colorScheme.tertiaryFixed,
           borderRadius: radii?.radiusExternal ?? BorderRadius.circular(24.r),

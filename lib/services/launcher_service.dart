@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import '../models/system_model.dart';
 import '../models/game_model.dart';
+import '../repositories/game_repository.dart';
 import 'logger_service.dart';
 import 'config_service.dart';
 import 'systems_update_service.dart';
@@ -398,6 +399,51 @@ class LauncherService {
       }
     }
     return result;
+  }
+
+  /// Resolves file-backed IDs after building the intent and before launching it.
+  /// Standalone ScummVM expects a registered target ID, not the descriptor URI.
+  Future<void> resolveAndroidLaunchFiles(
+    Map<String, dynamic> command,
+    GameModel game,
+  ) async {
+    const placeholder = '{tags.scummvm_id}';
+    final extras = (command['extras'] as List?) ?? const [];
+    bool needsId(Object? value) =>
+        value is String && value.contains(placeholder);
+    if (!needsId(command['data']) &&
+        !extras.any((extra) => needsId(extra['value']))) {
+      return;
+    }
+    final location = game.romPath;
+    if (location == null || location.isEmpty) {
+      throw const FormatException('ScummVM launch descriptor is missing');
+    }
+    final contents = await GameRepository.readLaunchDescriptor(location);
+    final target = contents.replaceFirst(RegExp(r'^\uFEFF'), '').trim();
+    // ScummVM configuration domains use letters, digits, underscores and
+    // hyphens. Reject options, multiple lines and engine:game detection IDs:
+    // this intent must name a game already configured in standalone ScummVM.
+    if (!RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_-]*$').hasMatch(target)) {
+      throw const FormatException(
+        'Invalid ScummVM target in launch descriptor',
+      );
+    }
+    if (needsId(command['data'])) {
+      command['data'] = (command['data'] as String).replaceAll(
+        placeholder,
+        target,
+      );
+    }
+    for (final extra in extras) {
+      if (needsId(extra['value'])) {
+        extra['value'] = (extra['value'] as String).replaceAll(
+          placeholder,
+          target,
+        );
+      }
+    }
+    LoggerService.instance.i('ScummVM launch target: $target');
   }
 
   /// Replaces placeholders in Android-specific launch templates with game data.

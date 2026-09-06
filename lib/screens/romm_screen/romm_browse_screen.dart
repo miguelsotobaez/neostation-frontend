@@ -23,6 +23,7 @@ import '../../utils/gamepad_nav.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/core_footer.dart' show kCoreFooterHeight;
 import '../../widgets/custom_notification.dart';
+import '../../utils/count_label.dart';
 import '../../widgets/romm_browse_footer.dart';
 import '../../widgets/romm_sync_banner.dart';
 import '../app_screen.dart';
@@ -1442,8 +1443,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
             listenable: provider.bulkSync,
             builder: (context, _) => RommBrowseFooter(
               label: focused.name,
-              countText:
-                  '${focused.romCount} ${AppLocale.games.getString(context)}',
+              countText: gamesCountLabel(context, focused.romCount),
               confirmLabel: AppLocale.enter.getString(context),
               onConfirm: _confirmSelection,
               onBack: _handleBack,
@@ -1558,7 +1558,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
               label: focused.name,
               countText: focusedUnsupported
                   ? AppLocale.rommPlatformUnsupported.getString(context)
-                  : '${focused.romCount} ${AppLocale.games.getString(context)}',
+                  : gamesCountLabel(context, focused.romCount),
               confirmLabel: AppLocale.enter.getString(context),
               onConfirm: _confirmSelection,
               onBack: _handleBack,
@@ -1666,6 +1666,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       // The ROM views memoize this footer against their own sync flag, so
       // reading the live value here stays in step with their repaints.
       isSyncing: provider.bulkSync.isRunning,
+      // X used to live on the vertical rail; this footer is now the only
+      // on-screen route to the list/grid switch.
+      onToggleView: _toggleRomLayout,
     );
   }
 }

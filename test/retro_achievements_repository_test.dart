@@ -100,6 +100,48 @@ void main() {
       );
     });
 
+    test('records a RomM RA id after the scanner indexes a download', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('week.nes', '/roms/nes/week.nes', 'nes')",
+      );
+
+      await RetroAchievementsRepository.updateRommRomRaGameId(
+        'week.nes',
+        'nes',
+        4321,
+      );
+
+      final result = await db.rawQuery(
+        "SELECT id_ra, ra_match_source FROM user_roms WHERE filename = 'week.nes'",
+      );
+      expect(result.single['id_ra'], 4321);
+      expect(
+        result.single['ra_match_source'],
+        RetroAchievementsRepository.raMatchRomm,
+      );
+    });
+
+    test('does not replace a manual RA match with RomM metadata', () async {
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id, id_ra, ra_match_source) VALUES ('picked.nes', '/roms/nes/picked.nes', 'nes', 99, 'manual')",
+      );
+
+      await RetroAchievementsRepository.updateRommRomRaGameId(
+        'picked.nes',
+        'nes',
+        4321,
+      );
+
+      final result = await db.rawQuery(
+        "SELECT id_ra, ra_match_source FROM user_roms WHERE filename = 'picked.nes'",
+      );
+      expect(result.single['id_ra'], 99);
+      expect(
+        result.single['ra_match_source'],
+        RetroAchievementsRepository.raMatchManual,
+      );
+    });
+
     group('getGameIdByHash', () {
       test('resolves a hash registered under the ROM\'s own console', () async {
         await db.execute(

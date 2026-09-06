@@ -1609,18 +1609,20 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
         result: MethodChannel.Result
     ) {
         Thread {
+            var created: Uri? = null
             try {
                 val sourceUri = Uri.parse(sourceUriString)
                 val targetUri = safDocumentUri(targetUriString)
-                val created = android.provider.DocumentsContract.createDocument(
+                val createdFile = android.provider.DocumentsContract.createDocument(
                     contentResolver,
                     targetUri,
                     "application/octet-stream",
                     name
                 ) ?: throw java.io.IOException("Could not create target file")
+                created = createdFile
 
                 contentResolver.openInputStream(sourceUri)?.use { input ->
-                    contentResolver.openOutputStream(created, "w")?.use { output ->
+                    contentResolver.openOutputStream(createdFile, "w")?.use { output ->
                         input.copyTo(output)
                     } ?: throw java.io.IOException("Could not open target file")
                 } ?: throw java.io.IOException("Could not open source file")
@@ -1628,8 +1630,19 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 if (!android.provider.DocumentsContract.deleteDocument(contentResolver, sourceUri)) {
                     throw java.io.IOException("Could not remove source file")
                 }
+                created = null
                 runOnUiThread { result.success(true) }
             } catch (e: Exception) {
+                // A move is copy-then-delete for SAF. Remove only the file we
+                // created if either step fails, so a retry cannot leave duplicates.
+                created?.let { destinationUri ->
+                    runCatching {
+                        android.provider.DocumentsContract.deleteDocument(
+                            contentResolver,
+                            destinationUri
+                        )
+                    }
+                }
                 runOnUiThread { result.error("MOVE_FILE_FAILED", e.message, null) }
             }
         }.start()

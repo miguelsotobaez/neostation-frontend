@@ -7,6 +7,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:io';
+import '../../../constants/system_folder_names.dart';
 import '../../../models/game_model.dart';
 import '../../../providers/file_provider.dart';
 import '../../../utils/game_utils.dart';
@@ -191,10 +192,13 @@ class _RandomGameDialogState extends State<RandomGameDialog>
     });
   }
 
-  /// Resolves the filesystem path for game artwork, supporting 'All Systems' global views.
+  /// Resolves the filesystem path for game artwork, supporting the aggregate
+  /// views (All Systems, Favorites, a collection) where each game's art lives
+  /// under its own system's folder, not the list's.
   String _getImagePath(GameModel game, String imageType) {
     final systemFolder =
-        widget.systemFolderName == 'all' && game.systemFolderName != null
+        SystemFolderNames.isAggregate(widget.systemFolderName) &&
+            game.systemFolderName != null
         ? game.systemFolderName!
         : widget.systemFolderName;
     return game.getImagePath(systemFolder, imageType, widget.fileProvider);
@@ -487,7 +491,7 @@ class _RandomGameDialogState extends State<RandomGameDialog>
     final wheelFile = File(wheelPath);
 
     String systemName;
-    if (widget.systemFolderName == 'all') {
+    if (SystemFolderNames.isAggregate(widget.systemFolderName)) {
       systemName = game.systemRealName ?? game.systemFolderName ?? '';
     } else {
       systemName = widget.systemRealName ?? widget.systemFolderName;

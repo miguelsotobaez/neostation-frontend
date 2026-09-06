@@ -1579,9 +1579,9 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
                   ),
                 ),
                 SizedBox(height: 2.r),
-                // Save file name (no path) + size
+                // Real on-disk path (file_path) + size
                 Text(
-                  '$fileName • ${file.fileSizeFormatted}',
+                  '${file.filePath.isNotEmpty ? file.filePath : fileName} • ${file.fileSizeFormatted}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

@@ -1,3 +1,5 @@
+import 'retro_achievements_date.dart';
+
 /// Represents the "Game of the Week" data from RetroAchievements.org.
 class RetroAchievementsGOTW {
   /// The specific achievement featured for the week.
@@ -37,10 +39,19 @@ class RetroAchievementsGOTW {
 
   /// Creates a [RetroAchievementsGOTW] from a JSON-compatible map.
   factory RetroAchievementsGOTW.fromJson(Map<String, dynamic> json) {
+    final achievement = json['Achievement'];
+    final console = json['Console'];
+    final game = json['Game'];
     return RetroAchievementsGOTW(
-      achievement: Achievement.fromJson(json['Achievement']),
-      console: Console.fromJson(json['Console']),
-      game: Game.fromJson(json['Game']),
+      achievement: Achievement.fromJson(
+        achievement is Map ? Map<String, dynamic>.from(achievement) : const {},
+      ),
+      console: Console.fromJson(
+        console is Map ? Map<String, dynamic>.from(console) : const {},
+      ),
+      game: Game.fromJson(
+        game is Map ? Map<String, dynamic>.from(game) : const {},
+      ),
       startAt: json['StartAt']?.toString() ?? '',
       totalPlayers: int.tryParse(json['TotalPlayers']?.toString() ?? '') ?? 0,
       unlocks:
@@ -50,6 +61,10 @@ class RetroAchievementsGOTW {
       unlocksHardcoreCount:
           int.tryParse(json['UnlocksHardcoreCount']?.toString() ?? '') ?? 0,
     );
+  }
+
+  DateTime? get startDateUtc {
+    return parseRetroAchievementsDateUtc(startAt);
   }
 }
 
@@ -163,6 +178,9 @@ class Unlock {
   /// Username of the player who earned the achievement.
   final String user;
 
+  /// Stable RetroAchievements identifier for the player.
+  final String ulid;
+
   /// Hardcore points earned.
   final String raPoints;
 
@@ -177,6 +195,7 @@ class Unlock {
 
   Unlock({
     required this.user,
+    this.ulid = '',
     required this.raPoints,
     required this.raCasualPoints,
     required this.hardcoreMode,
@@ -187,6 +206,7 @@ class Unlock {
   factory Unlock.fromJson(Map<String, dynamic> json) {
     return Unlock(
       user: (json['User'] ?? '').toString(),
+      ulid: (json['ULID'] ?? '').toString(),
       raPoints: (json['RAPoints'] ?? '0').toString(),
       raCasualPoints: (json['RASoftcorePoints'] ?? '0').toString(),
       hardcoreMode: int.tryParse((json['HardcoreMode'] ?? '0').toString()) ?? 0,

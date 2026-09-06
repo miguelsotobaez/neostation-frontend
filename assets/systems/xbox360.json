@@ -82,7 +82,7 @@
       "description": "Supported extensions: iso.",
       "platforms": {
         "android": {
-          "launch_arguments": "-n Ali.Xanite.green/Ali.Xanite.LauncherActivity -d \"{file.uri}\""
+          "launch_arguments": "-n Ali.Xanite.green/Ali.Xanite.LauncherActivity -d \"{file.path}\""
         }
       }
     },

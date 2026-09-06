@@ -12,6 +12,7 @@ import '../models/romm_rom.dart';
 import '../models/system_model.dart';
 import '../repositories/romm_repository.dart';
 import '../repositories/romm_save_map_repository.dart';
+import '../repositories/retro_achievements_repository.dart';
 import '../repositories/scraper_repository.dart';
 import '../repositories/system_repository.dart';
 import '../services/logger_service.dart';
@@ -40,6 +41,7 @@ class RommDownload {
   RommDownloadError error;
   String? errorDetail;
   bool cancelRequested;
+  final Completer<void> _indexedCompleter = Completer<void>();
 
   RommDownload({
     required this.romId,
@@ -53,6 +55,29 @@ class RommDownload {
 
   double? get fraction =>
       (total != null && total! > 0) ? received / total! : null;
+
+  /// Completes after the normal library scan has indexed this transfer.
+  /// Consumers that need a [DatabaseGameModel] (rather than just a file on
+  /// disk) can wait for this before querying the local library.
+  Future<void> get indexed => _indexedCompleter.future;
+
+  void markIndexed() {
+    if (!_indexedCompleter.isCompleted) _indexedCompleter.complete();
+  }
+}
+
+class _CompletedRommDownload {
+  const _CompletedRommDownload({
+    required this.rom,
+    required this.system,
+    required this.indexedName,
+    required this.tracker,
+  });
+
+  final RommRom rom;
+  final SystemModel system;
+  final String indexedName;
+  final RommDownload tracker;
 }
 
 /// State for browsing a remote RomM library and downloading ROMs locally.
@@ -90,6 +115,7 @@ class RommProvider extends ChangeNotifier {
   static const int _pageSize = 50;
 
   final Map<int, RommDownload> _downloads = {};
+  final Map<String, RommRom?> _raGameLookupCache = {};
 
   /// Backs [activeDownloadIds] / [downloadsRevision]; maintained by
   /// [_notifyDownloadState].
@@ -113,6 +139,14 @@ class RommProvider extends ChangeNotifier {
   /// to the config/database providers; receives the systems whose downloads
   /// completed since the last settle.
   Future<void> Function(List<SystemModel> systems)? onDownloadsSettled;
+
+  final Map<int, _CompletedRommDownload> _completedPendingIndex = {};
+  int _libraryRevision = 0;
+
+  /// Advances after completed downloads have been indexed into user_roms.
+  /// Consumers can use this to refresh derived local-library state without
+  /// polling or waiting for the next app launch.
+  int get libraryRevision => _libraryRevision;
 
   Timer? _settleTimer;
   bool _settling = false;
@@ -256,13 +290,52 @@ class RommProvider extends ChangeNotifier {
       return;
     }
     clearDownloadedSystems();
+    // Only process the downloads present when this scan began. A completion
+    // that lands during [handler] must wait for the next settle: its row does
+    // not exist yet, so assigning its RA id now would silently update nothing.
+    final pendingAtStart = <int, _CompletedRommDownload>{
+      for (final entry in _completedPendingIndex.entries)
+        if (systems.any(
+          (system) => system.folderName == entry.value.system.folderName,
+        ))
+          entry.key: entry.value,
+    };
     // These systems are being indexed now; the clock restarts for whatever
     // lands while the scan runs.
     _oldestPendingCompletion = null;
     _settling = true;
     try {
       await handler(systems);
+      final completed = <_CompletedRommDownload>[
+        for (final system in systems)
+          ...pendingAtStart.values.where(
+            (download) => download.system.folderName == system.folderName,
+          ),
+      ];
+      for (final download in completed) {
+        final systemId = download.system.id;
+        final raId = download.rom.raId;
+        if (systemId != null && raId != null) {
+          await RetroAchievementsRepository.updateRommRomRaGameId(
+            download.indexedName,
+            systemId,
+            raId,
+          );
+        }
+        _completedPendingIndex.remove(download.rom.id);
+        download.tracker.markIndexed();
+      }
+      if (completed.isNotEmpty) {
+        _libraryRevision++;
+        _notifyDownloadState();
+      }
     } finally {
+      // A failed or incomplete scan only clears entries it actually attempted;
+      // later completions remain queued for the next settle.
+      for (final download in pendingAtStart.values.toList()) {
+        _completedPendingIndex.remove(download.rom.id);
+        download.tracker.markIndexed();
+      }
       _settling = false;
     }
   }
@@ -466,6 +539,7 @@ class RommProvider extends ChangeNotifier {
     _romsHasMore = false;
     _searchTerm = '';
     _downloads.clear();
+    _raGameLookupCache.clear();
     _raEarnedByGameId = {};
     _downloadedSystems.clear();
     _systemByPlatformId.clear();
@@ -577,6 +651,36 @@ class RommProvider extends ChangeNotifier {
     } else if (_librarySearch) {
       await searchLibrary(term);
     }
+  }
+
+  /// Finds a RomM title with the exact RetroAchievements game id.
+  ///
+  /// RomM's public list API filters by title rather than `ra_id`, so the known
+  /// RA game title deliberately narrows the request before the stable numeric
+  /// id makes the final decision. This is an AOTW-sized lookup, not a library
+  /// sweep.
+  Future<RommRom?> findRomByRaGameId(int gameId, String gameTitle) async {
+    if (!isConnected || gameId <= 0 || gameTitle.trim().isEmpty) return null;
+    final cacheKey = '$gameId|${gameTitle.trim().toLowerCase()}';
+    if (_raGameLookupCache.containsKey(cacheKey)) {
+      return _raGameLookupCache[cacheKey];
+    }
+    try {
+      final matches = await _service.getRoms(search: gameTitle, limit: 100);
+      await _persistRefreshedTokens();
+      for (final rom in matches) {
+        if (rom.raId == gameId) {
+          _raGameLookupCache[cacheKey] = rom;
+          return rom;
+        }
+      }
+      _raGameLookupCache[cacheKey] = null;
+    } on RommException catch (e) {
+      _log.w('RomM RA lookup failed: ${e.message}');
+    } catch (e) {
+      _log.w('RomM RA lookup failed: $e');
+    }
+    return null;
   }
 
   /// Enters a library-wide search: queries ROMs by [term] alone across the
@@ -1059,9 +1163,38 @@ class RommProvider extends ChangeNotifier {
         for (final candidate in candidates) {
           if (await File(p.join(dir, candidate)).exists()) return dir;
         }
+        // ScummVM game data lives in an ID-named subfolder. The descriptor is
+        // what the scanner indexes, but it is no longer a direct child of the
+        // system folder, so look for it recursively when checking whether this
+        // RomM entry already exists locally.
+        if (system.folderName == 'scummvm' &&
+            await _containsNamedFileRecursively(dir, candidates)) {
+          return dir;
+        }
       }
     }
     return null;
+  }
+
+  /// Whether [dir] contains a file with one of [names] anywhere below it.
+  Future<bool> _containsNamedFileRecursively(
+    String dir,
+    List<String> names,
+  ) async {
+    final wanted = names.map((name) => name.toLowerCase()).toSet();
+    try {
+      await for (final entity in Directory(
+        dir,
+      ).list(recursive: true, followLinks: false)) {
+        if (entity is File &&
+            wanted.contains(p.basename(entity.path).toLowerCase())) {
+          return true;
+        }
+      }
+    } catch (_) {
+      // Missing or unreadable directories are simply not downloaded copies.
+    }
+    return false;
   }
 
   /// On-disk names that mark [rom] as already downloaded in a folder.
@@ -1265,7 +1398,10 @@ class RommProvider extends ChangeNotifier {
     // becomes the playlist (.m3u) we write below. Save-sync and metadata both
     // key on this, so it must match what the scan records as GameModel.romname.
     var indexedName = p.basename(destPath);
-    if (isArchive) {
+    if (system.folderName == 'scummvm') {
+      final descriptorName = await extractScummVmDownload(destPath, destDir);
+      if (descriptorName != null) indexedName = descriptorName;
+    } else if (isArchive) {
       final exts = await SystemRepository.getExtensionsForSystem(
         system.id ?? '',
       );
@@ -1301,6 +1437,12 @@ class RommProvider extends ChangeNotifier {
       systemFolder: system.folderName,
       rommRomId: rom.id,
       fsName: indexedName,
+    );
+    _completedPendingIndex[rom.id] = _CompletedRommDownload(
+      rom: rom,
+      system: system,
+      indexedName: indexedName,
+      tracker: tracker,
     );
     _notifyDownloadState();
     // Arm the debounced rescan so this ROM (and any others finishing around the
@@ -1472,6 +1614,99 @@ class RommProvider extends ChangeNotifier {
     } finally {
       await input?.close();
     }
+  }
+
+  /// Places a ScummVM download in `<destDir>/<scummvm-id>/`.
+  ///
+  /// RomM serves multi-file games as zip archives, while a shortcut-only game
+  /// is a plain `.scummvm` descriptor. In both cases the descriptor's contents
+  /// are ScummVM's stable target ID, so they are the only safe folder name.
+  /// Archive paths are retained below that folder (apart from a common wrapper
+  /// directory), which keeps games that rely on subdirectories intact.
+  @visibleForTesting
+  static Future<String?> extractScummVmDownload(
+    String downloadPath,
+    String destDir,
+  ) async {
+    final isZip = p.extension(downloadPath).toLowerCase() == '.zip';
+    InputFileStream? input;
+    try {
+      if (!isZip) {
+        final id = _scummVmId(await File(downloadPath).readAsString());
+        if (id == null) return null;
+        final gameDir = Directory(p.join(destDir, id));
+        await gameDir.create(recursive: true);
+        final descriptorName = p.basename(downloadPath);
+        final target = p.join(gameDir.path, descriptorName);
+        if (p.normalize(downloadPath) != p.normalize(target)) {
+          if (await File(target).exists()) await File(target).delete();
+          await File(downloadPath).rename(target);
+        }
+        return descriptorName;
+      }
+
+      input = InputFileStream(downloadPath);
+      final archive = ZipDecoder().decodeStream(input);
+      final files = archive.files.where((file) => file.isFile).toList();
+      final descriptor = files.cast<ArchiveFile?>().firstWhere(
+        (file) =>
+            file != null && p.extension(file.name).toLowerCase() == '.scummvm',
+        orElse: () => null,
+      );
+      if (descriptor == null) return null;
+      final id = _scummVmId(utf8.decode(descriptor.content));
+      if (id == null) return null;
+
+      final paths = <ArchiveFile, List<String>>{};
+      for (final file in files) {
+        final normalized = p.posix.normalize(file.name);
+        if (normalized == '.' ||
+            p.posix.isAbsolute(normalized) ||
+            normalized == '..' ||
+            normalized.startsWith('../')) {
+          return null;
+        }
+        paths[file] = normalized.split('/');
+      }
+      // RomM archives may include a wrapper directory. Do not duplicate it
+      // under the ID folder when every file shares that first segment.
+      final firstSegments = paths.values
+          .map((segments) => segments.first)
+          .toSet();
+      final stripWrapper =
+          firstSegments.length == 1 &&
+          paths.values.every((segments) => segments.length > 1);
+      final gameDir = Directory(p.join(destDir, id));
+      await gameDir.create(recursive: true);
+      for (final file in files) {
+        final segments = paths[file]!;
+        final relative = (stripWrapper ? segments.skip(1) : segments).join('/');
+        final output = File(p.join(gameDir.path, relative));
+        await output.parent.create(recursive: true);
+        final stream = OutputFileStream(output.path);
+        file.writeContent(stream);
+        stream.closeSync();
+      }
+      await input.close();
+      input = null;
+      await File(downloadPath).delete();
+      return p.basename(descriptor.name);
+    } catch (e, st) {
+      _log.e(
+        'RomM ScummVM extract failed for $downloadPath',
+        error: e,
+        stackTrace: st,
+      );
+      return null;
+    } finally {
+      await input?.close();
+    }
+  }
+
+  /// Parses the same target syntax standalone ScummVM accepts at launch.
+  static String? _scummVmId(String contents) {
+    final id = contents.replaceFirst(RegExp(r'^\uFEFF'), '').trim();
+    return RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_-]*$').hasMatch(id) ? id : null;
   }
 
   /// Imports RomM's metadata + cover art for [rom] into the same tables/media

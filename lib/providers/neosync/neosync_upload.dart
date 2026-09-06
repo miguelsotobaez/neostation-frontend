@@ -299,21 +299,20 @@ extension NeoSyncUpload on NeoSyncProvider {
       final String relativePath;
       String? syncSystemId;
       String? syncEmulatorId;
+      String syncType = 'save';
       if (customFolderSystem != null && customFolderEmulatorSlug != null) {
-        // The configured folder root is the basePath for custom folders, so a
-        // nested layout (e.g. `memcards/slot1/Mcd001.ps2`) is preserved on the
-        // cloud path instead of collapsing every file to its basename.
+        // The configured folder root is the basePath for the standalone folder,
+        // so a nested layout (e.g. `memcards/slot1/Mcd001.ps2`) is preserved.
+        // file_path keeps the real on-disk path; the backend builds the R2
+        // object key as `user_id/v2/custom/<emulator>/<relative>` where
+        // `<emulator>` is the emulator's unique id (e.g. `ps2.com.armsx2`).
         final relativeToFolder = path
             .relative(file.path, from: basePath)
             .replaceAll('\\', '/');
-        relativePath = CloudPathBuilder.build(
-          system: customFolderSystem,
-          emulatorSlug: customFolderEmulatorSlug,
-          scope: 'shared',
-          filePath: relativeToFolder,
-        );
+        relativePath = relativeToFolder;
         syncSystemId = customFolderSystem;
         syncEmulatorId = customFolderEmulatorSlug;
+        syncType = 'custom';
       } else if (retroArchBasePath != null) {
         final fileName = path.basenameWithoutExtension(file.path);
         final lowerPath = file.path.toLowerCase();
@@ -330,6 +329,7 @@ extension NeoSyncUpload on NeoSyncProvider {
             lowerPath.endsWith('.vmu') ||
             lowerPath.endsWith('.vmp') ||
             lowerPath.contains('vmu_save');
+        syncType = isState ? 'state' : (isSharedCard ? 'shared' : 'save');
         final gameRow = await GameRepository.findRomForSaveName(fileName);
         if (gameRow == null && !isSharedCard) {
           _skippedFiles++;
@@ -384,24 +384,22 @@ extension NeoSyncUpload on NeoSyncProvider {
         NeoSyncProvider._log.i(
           'RA upload: ${file.path} -> system=$system emulator=$emulatorSlug',
         );
-        // Memory-card style files are shared between games, matching the
-        // `_buildV2CloudPath` behaviour: they go under the `shared` scope with
-        // no game segment so the download routes them to the configured custom
-        // folder.
-        relativePath = CloudPathBuilder.build(
-          system: system,
-          emulatorSlug: emulatorSlug,
-          scope: isSharedCard ? 'shared' : 'game',
-          filePath: path.basename(file.path),
-          gameName: isSharedCard
-              ? null
-              : path.basenameWithoutExtension(file.path),
+        // Store the save under the original RetroArch on-disk path relative to
+        // the RetroArch save/state directory (e.g. `saves/FinalBurn Neo/fbneo/<file>`
+        // or `states/Snes9x/<file>`), exactly like the v1 flow did. This keeps
+        // the file name faithful to the real RetroArch layout (including the
+        // MAME/FBNeo internal subfolder) so a download places it back where it
+        // was written, instead of re-deriving the folder from the emulator slug.
+        relativePath = _calculateRelativePath(
+          file,
+          retroArchBasePath,
           isState: isState,
         );
         syncSystemId = system;
         syncEmulatorId = emulatorSlug;
       } else {
         relativePath = _calculateRelativePath(file, basePath, isState: isState);
+        syncType = isState ? 'state' : 'save';
       }
       final rawGameName = _extractGameNameFromPath(file.path);
       // The NeoSync backend hard-rejects an upload whose game_name is empty.
@@ -440,7 +438,8 @@ extension NeoSyncUpload on NeoSyncProvider {
         emulatorId: syncEmulatorId,
         gameHash: gameHash,
         isState: isState,
-        scope: customFolderSystem != null ? 'shared' : null,
+        scope: null,
+        type: syncType,
       );
 
       if (result['success']) {
@@ -511,6 +510,7 @@ extension NeoSyncUpload on NeoSyncProvider {
             file,
             game.name,
             customFilename: relativePath,
+            type: 'save',
           );
 
           if (result['success']) {
@@ -564,12 +564,20 @@ extension NeoSyncUpload on NeoSyncProvider {
       }
 
       String? gameHash;
+      String? systemId;
+      String? emulatorId;
       try {
         final fileName = path.basenameWithoutExtension(file.path);
         final row = await GameRepository.findRomForSaveName(fileName);
         if (row != null) {
           final game = _gameModelFromRomRow(row, fileName);
           gameHash = await _resolveGameHashForUpload(game);
+          systemId = game.systemFolderName;
+          // Derive the RetroArch slug from the save's core folder (ground
+          // truth); fall back to the game metadata.
+          emulatorId =
+              await _resolveRetroArchEmulatorSlug(file, basePath) ??
+              _retroArchCoreSlugFromGame(game);
         }
       } catch (e) {
         NeoSyncProvider._log.w(
@@ -582,6 +590,9 @@ extension NeoSyncUpload on NeoSyncProvider {
         gameName,
         customFilename: relativePath,
         gameHash: gameHash,
+        isState: isState,
+        systemId: systemId,
+        emulatorId: emulatorId,
       );
 
       if (result['success']) {
@@ -631,7 +642,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     _setSyncing(true);
     _error = null;
     _syncProgress = 0.0;
-    _syncStatus = 'Uploading custom save folder...';
+    _syncStatus = 'Uploading standalone save folder...';
     _totalFiles = 0;
     _processedFiles = 0;
     _uploadedFiles = 0;
@@ -670,7 +681,7 @@ extension NeoSyncUpload on NeoSyncProvider {
           'Upload complete: $_uploadedFiles uploaded, $_skippedFiles already synced';
       _processedItems.add(_syncStatus);
     } catch (e) {
-      _error = 'Error uploading custom save folder: $e';
+      _error = 'Error uploading standalone save folder: $e';
       _syncStatus = 'Error: $_error';
       _processedItems.add(_syncStatus);
       NeoSyncProvider._log.e(_error!);

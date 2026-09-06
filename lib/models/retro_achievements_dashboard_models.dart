@@ -1,5 +1,87 @@
 import '../utils/ra_utils.dart';
 import 'database_game_model.dart';
+import 'retro_achievements_date.dart';
+
+enum AotwUserState {
+  unknown,
+  notEarned,
+  earnedBeforeWeek,
+  earnedCasualThisWeek,
+  earnedHardcoreThisWeek,
+}
+
+class AotwPersonalProgress {
+  final AotwUserState state;
+  final DateTime? earnedAt;
+
+  const AotwPersonalProgress({required this.state, this.earnedAt});
+
+  const AotwPersonalProgress.unknown()
+    : state = AotwUserState.unknown,
+      earnedAt = null;
+
+  bool get earnedThisWeek =>
+      state == AotwUserState.earnedCasualThisWeek ||
+      state == AotwUserState.earnedHardcoreThisWeek;
+
+  factory AotwPersonalProgress.resolve({
+    required DateTime? weekStartedAt,
+    required bool achievementFound,
+    String? dateEarned,
+    String? dateEarnedHardcore,
+    bool weeklyUnlockFound = false,
+    bool weeklyUnlockWasHardcore = false,
+    String? weeklyUnlockDate,
+  }) {
+    final unlockAt = parseRetroAchievementsDateUtc(weeklyUnlockDate);
+    if (weeklyUnlockFound) {
+      if (weekStartedAt != null &&
+          unlockAt != null &&
+          unlockAt.isBefore(weekStartedAt)) {
+        return AotwPersonalProgress(
+          state: AotwUserState.earnedBeforeWeek,
+          earnedAt: unlockAt,
+        );
+      }
+      return AotwPersonalProgress(
+        state: weeklyUnlockWasHardcore
+            ? AotwUserState.earnedHardcoreThisWeek
+            : AotwUserState.earnedCasualThisWeek,
+        earnedAt: unlockAt,
+      );
+    }
+
+    if (!achievementFound || weekStartedAt == null) {
+      return const AotwPersonalProgress.unknown();
+    }
+
+    final hardcoreAt = parseRetroAchievementsDateUtc(dateEarnedHardcore);
+    final casualAt = parseRetroAchievementsDateUtc(dateEarned);
+    if (hardcoreAt != null && !hardcoreAt.isBefore(weekStartedAt)) {
+      return AotwPersonalProgress(
+        state: AotwUserState.earnedHardcoreThisWeek,
+        earnedAt: hardcoreAt,
+      );
+    }
+    if (casualAt != null && !casualAt.isBefore(weekStartedAt)) {
+      return AotwPersonalProgress(
+        state: AotwUserState.earnedCasualThisWeek,
+        earnedAt: casualAt,
+      );
+    }
+    if (hardcoreAt != null || casualAt != null) {
+      return AotwPersonalProgress(
+        state: AotwUserState.earnedBeforeWeek,
+        earnedAt: hardcoreAt ?? casualAt,
+      );
+    }
+    if ((dateEarnedHardcore?.isNotEmpty ?? false) ||
+        (dateEarned?.isNotEmpty ?? false)) {
+      return const AotwPersonalProgress.unknown();
+    }
+    return const AotwPersonalProgress(state: AotwUserState.notEarned);
+  }
+}
 
 class RetroAchievementRecentUnlockItem {
   final String date;

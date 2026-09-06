@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/my_systems.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/screens/app_screen.dart';
@@ -18,6 +19,7 @@ import '../../../utils/game_launch_utils.dart';
 import '../../../providers/system_background_provider.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
+import '../../collections_screen/collections_browser_screen.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
@@ -31,15 +33,42 @@ import 'package:neostation/widgets/native_carousel.dart';
 import 'system_list_builder.dart';
 import 'system_card.dart';
 
+/// Navigation-layer id the systems screen's own carousel registers under.
+///
+/// A default, not a shared constant: see [MySystemsCarousel.navLayerId].
+const String kSystemsCarouselNavLayerId = 'my_systems_carousel';
+
 /// A premium carousel-based orchestrator for system and recent game selection.
 ///
 /// Provides a high-immersion experience with dynamic backgrounds, music-synced
 /// shaders, and optimized hardware navigation support.
+///
+/// Every parameter below defaults to the systems screen's behaviour. A second
+/// host (the collections browser) supplies its own [items] and actions so the
+/// strip it shows *is* this widget rather than a lookalike, and turns off the
+/// system-only behaviours it has no business performing.
 class MySystemsCarousel extends StatefulWidget {
   const MySystemsCarousel({
     super.key,
     this.selectedIndex = 0,
     this.onCardTapped,
+    this.items,
+    this.onActivate,
+    this.onOptions,
+    this.onYPressed,
+    this.onBackPressed,
+    this.onXPressed,
+    this.navLayerId = kSystemsCarouselNavLayerId,
+    this.cardOverrideBuilder,
+    this.blockSystemBack = true,
+    this.enableTabBumpers = true,
+    this.enablePullToRescan = true,
+    this.enableSecondaryDisplay = true,
+    this.enableThemeAssets = true,
+    this.enableDynamicBackground = true,
+    this.selectedItemKey,
+    this.showCardCounts = false,
+    this.showChipFor,
   });
 
   /// The initially selected system index.
@@ -47,6 +76,86 @@ class MySystemsCarousel extends StatefulWidget {
 
   /// Callback for system selection via interaction.
   final Function(int index)? onCardTapped;
+
+  /// Cards to show. Null means "the systems list", which this widget builds
+  /// itself from the providers.
+  final List<SystemInfo>? items;
+
+  /// A. Null keeps the built-in system navigation (enter a system, or launch
+  /// the focused recent game).
+  final void Function(int index)? onActivate;
+
+  /// Start. Null keeps the built-in emulator-settings dialog.
+  final void Function(int index)? onOptions;
+
+  /// Y. Unbound on the systems screen.
+  final VoidCallback? onYPressed;
+
+  /// B. Unbound on the systems screen, which is a root tab.
+  final VoidCallback? onBackPressed;
+
+  /// X. Defaults to the header's view/sort picker.
+  final VoidCallback? onXPressed;
+
+  /// Anchor for a menu opened on the centred card.
+  ///
+  /// Attached to the *painted card* rather than to the page slot: a box-art
+  /// card is aspect-fitted inside a wider slot, so anchoring to the slot hangs
+  /// the menu off empty space beside the artwork. Only the centred card
+  /// carries it, so the key is never attached twice.
+  final GlobalKey? selectedItemKey;
+
+  /// Whether each card names its own count under the logo.
+  ///
+  /// The collections browser turns this on: its cards are collections, and a
+  /// collection's size is not something the systems footer below can say for
+  /// it. The systems screen leaves it off — its footer carries the count, as
+  /// it does on main.
+  final bool showCardCounts;
+
+  /// Whether an entry appears in the bottom indicator strip. Null shows them
+  /// all.
+  ///
+  /// An excluded entry keeps its place and its index — the strip's background
+  /// track, sliding cursor and scroll centring are all indexed by card
+  /// position, so dropping it from the list would put every later chip on the
+  /// wrong card. It is given zero width instead, which also makes the cursor
+  /// shrink away as the selection scrolls onto it rather than jumping.
+  ///
+  /// The collections browser uses this for the trailing "New collection" card:
+  /// it is an action, not a destination, so it does not belong in a strip of
+  /// places you can go.
+  final bool Function(SystemInfo info)? showChipFor;
+
+  /// Identifier this view registers its [GamepadNavigationManager] layer under.
+  ///
+  /// Caller-supplied and per-instance: `popLayer` resolves an id to the *first*
+  /// match, so two live carousels sharing one id unregister each other's layer.
+  final String navLayerId;
+
+  /// Optional per-entry card override; see [SystemCardOverrideBuilder].
+  final SystemCardOverrideBuilder? cardOverrideBuilder;
+
+  /// Whether this view swallows the hardware back gesture. The systems screen
+  /// does (it is the root); a pushed host must not, or its own back handling
+  /// never runs.
+  final bool blockSystemBack;
+
+  /// Whether the shoulder buttons cycle the app's top-level tabs.
+  final bool enableTabBumpers;
+
+  /// Whether a downward drag rescans the ROM folders.
+  final bool enablePullToRescan;
+
+  /// Whether the selection is pushed to a dual-screen device's second display.
+  final bool enableSecondaryDisplay;
+
+  /// Whether per-system theme artwork is resolved for the cards.
+  final bool enableThemeAssets;
+
+  /// Whether the selection drives the app-wide [SystemBackgroundProvider].
+  /// Off for pushed hosts, whose selection must not repaint the screen below.
+  final bool enableDynamicBackground;
 
   @override
   State<MySystemsCarousel> createState() => _MySystemsCarouselState();
@@ -108,7 +217,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     _pageOffsetNotifier.value = _currentIndex.toDouble();
     _initializeGamepad();
 
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid && widget.enableSecondaryDisplay) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryStateChanged);
     }
@@ -134,7 +243,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   // When secondary display signals it's active (startup or reconnect),
   // immediately push current system state so default logo never shows.
   void _onSecondaryStateChanged() {
-    if (!mounted) return;
+    if (!mounted || !widget.enableSecondaryDisplay) return;
     final isActive = _secondaryDisplayState?.value?.isSecondaryActive ?? false;
     final wasActive = _prevIsSecondaryActive;
     // Update the guard BEFORE calling _updateSecondaryScreenName(): that call
@@ -180,27 +289,38 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       onNavigateRight: _navigateNext,
       onSelectItem: _selectCurrentSystem,
       onSettings: _openSystemSettingsFromCarousel,
-      onXButton: () {
-        HeaderSortDropdown.globalKey.currentState?.showDropdown();
-      },
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-      onLeftBumper: AppNavigation.previousTab,
-      onRightBumper: AppNavigation.nextTab,
+      onFavorite: widget.onYPressed,
+      onBack: widget.onBackPressed,
+      onXButton:
+          widget.onXPressed ??
+          () {
+            HeaderSortDropdown.globalKey.currentState?.showDropdown();
+          },
+      onPreviousTab: widget.enableTabBumpers ? AppNavigation.previousTab : null,
+      onNextTab: widget.enableTabBumpers ? AppNavigation.nextTab : null,
+      onLeftBumper: widget.enableTabBumpers ? AppNavigation.previousTab : null,
+      onRightBumper: widget.enableTabBumpers ? AppNavigation.nextTab : null,
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _gamepadNav.initialize();
+      // A rebuild can re-mount this view while the screen sits behind a pushed
+      // route (the shared view-mode setting changing is the case that bites).
+      // Registering on top there would steal the controller from the route in
+      // front, so a backgrounded push slots in beneath it instead.
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
       GamepadNavigationManager.pushLayer(
-        'my_systems_carousel',
+        widget.navLayerId,
         onActivate: () => _gamepadNav.activate(),
         onDeactivate: () => _gamepadNav.deactivate(),
+        background: !isCurrentRoute,
       );
     });
   }
 
   void _cleanupGamepad() {
-    GamepadNavigationManager.popLayer('my_systems_carousel');
+    GamepadNavigationManager.popLayer(widget.navLayerId);
     _gamepadNav.dispose();
   }
 
@@ -216,7 +336,13 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   }
 
   /// Aggregates all logical systems (including virtuals like 'Recent') for display.
+  ///
+  /// An injected [MySystemsCarousel.items] short-circuits the whole build: the
+  /// host owns the list and the providers below have nothing to say about it.
   List<SystemInfo> _getSystemsList() {
+    final injected = widget.items;
+    if (injected != null) return injected;
+
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
@@ -239,11 +365,16 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     if (!mounted) return;
 
     final allSystems = _getSystemsList();
-    final fileProvider = Provider.of<FileProvider>(context, listen: false);
+    if (_currentIndex < 0 || _currentIndex >= allSystems.length) return;
 
-    if (_currentIndex >= 0 && _currentIndex < allSystems.length) {
-      _navigateToSystem(context, allSystems[_currentIndex], fileProvider);
+    final activate = widget.onActivate;
+    if (activate != null) {
+      activate(_currentIndex);
+      return;
     }
+
+    final fileProvider = Provider.of<FileProvider>(context, listen: false);
+    _navigateToSystem(context, allSystems[_currentIndex], fileProvider);
   }
 
   /// Re-entrancy lock for [_navigateToSystem], held for as long as the pushed
@@ -390,6 +521,15 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
           context,
           MaterialPageRoute(builder: (context) => targetScreen),
         );
+      } else if (systemInfo.folderName == SystemFolderNames.collections) {
+        // Same branch as the grid's: miss one copy and Collections works in
+        // only one of the two systems layouts.
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CollectionsBrowserScreen(),
+          ),
+        );
       } else if (systemInfo.folderName == 'android') {
         final systemMeta = configProvider.detectedSystems.firstWhere(
           (system) => system.folderName == 'android',
@@ -434,6 +574,12 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     final allSystems = _getSystemsList();
 
     if (_currentIndex < 0 || _currentIndex >= allSystems.length) return;
+
+    final options = widget.onOptions;
+    if (options != null) {
+      options(_currentIndex);
+      return;
+    }
 
     final selectedSystemInfo = allSystems[_currentIndex];
 
@@ -546,7 +692,9 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     final textStyle = TextStyle(fontSize: 10.r, fontWeight: FontWeight.bold);
     final widths =
         _cachedWidths ??
-        allSystems.map((s) => _calculateItemWidth(s, textStyle)).toList();
+        allSystems
+            .map((s) => _hasChip(s) ? _calculateItemWidth(s, textStyle) : 0.0)
+            .toList();
     if (widths.isEmpty) return;
     final screenWidth = MediaQuery.of(context).size.width;
 
@@ -583,6 +731,8 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
   /// Dynamically computes width for the system label indicator based on font metrics.
   /// Results are cached by text + font key to avoid repeated TextPainter layout calls.
+  bool _hasChip(SystemInfo system) => widget.showChipFor?.call(system) ?? true;
+
   double _calculateItemWidth(SystemInfo system, TextStyle style) {
     final text = (system.shortName ?? system.title ?? "Unknown").toUpperCase();
     final cacheKey = '$text|${style.fontSize}|${style.fontWeight?.value}';
@@ -599,7 +749,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
   /// Synchronously loads theme-specific backgrounds and logos for the carousel library.
   void _loadThemeAssetsForSystems() {
-    if (!mounted || _loadingThemeAssets) return;
+    if (!mounted || _loadingThemeAssets || !widget.enableThemeAssets) return;
 
     final neoAssets = context.read<NeoAssetsProvider>();
     final themeFolder = neoAssets.activeThemeFolder;
@@ -639,7 +789,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
 
   /// Logic to update the global system background provider on selection change.
   void _updateBackground(SystemInfo system) {
-    if (!mounted) return;
+    if (!mounted || !widget.enableDynamicBackground) return;
 
     final displayFolderName = system.primaryFolderName;
     final customBgPath = system.customBackgroundPath;
@@ -672,7 +822,10 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   @override
   Widget build(BuildContext context) {
     if (_isGameLaunching) {
-      return const PopScope(canPop: false, child: SizedBox.shrink());
+      return PopScope(
+        canPop: !widget.blockSystemBack,
+        child: const SizedBox.shrink(),
+      );
     }
 
     // Reload theme assets when active theme changes
@@ -706,272 +859,328 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
     }
     _wasScanning = isScanning;
 
-    final theme = Theme.of(context);
-
     return PopScope(
-      canPop: false,
-      child: Selector2<SqliteConfigProvider, SqliteDatabaseProvider, int>(
-        selector: (_, config, db) => Object.hash(
-          config.detectedSystems.length,
-          config.hiddenSystemFolders.length,
-          config.totalGames,
-          config.config.hideRecentCard,
-          db.getRecentlyPlayedGames(1).firstOrNull?.romPath.hashCode,
-          db.totalFavorites,
-        ),
-        builder: (context, _, child) {
-          final allSystems = _getSystemsList();
-
-          if (allSystems.isEmpty) {
-            return Center(
-              child: Text(
-                AppLocale.noSystemsFound.getString(context),
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface,
-                  fontSize: 20.r,
-                ),
+      // A pushed host handles B itself; leaving this false there would also
+      // swallow the platform back gesture before its own handler ever ran.
+      canPop: !widget.blockSystemBack,
+      // An injected list is the host's to change, so the systems providers have
+      // nothing to say about when this rebuilds — and watching them would run
+      // the recent-games and favourites queries on a screen that shows neither.
+      child: widget.items != null
+          ? Builder(builder: _buildContent)
+          : Selector2<SqliteConfigProvider, SqliteDatabaseProvider, int>(
+              selector: (_, config, db) => Object.hash(
+                config.detectedSystems.length,
+                config.hiddenSystemFolders.length,
+                config.totalGames,
+                config.config.hideRecentCard,
+                db.getRecentlyPlayedGames(1).firstOrNull?.romPath.hashCode,
+                db.totalFavorites,
               ),
-            );
-          }
+              builder: (context, _, child) => _buildContent(context),
+            ),
+    );
+  }
 
-          // Trigger background update only when the displayed index changes.
-          if (_lastBackgroundBuildIndex != _currentIndex) {
-            _lastBackgroundBuildIndex = _currentIndex;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _updateBackground(allSystems[_currentIndex]);
+  Widget _buildContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final allSystems = _getSystemsList();
+
+    if (allSystems.isEmpty) {
+      return Center(
+        child: Text(
+          AppLocale.noSystemsFound.getString(context),
+          style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 20.r),
+        ),
+      );
+    }
+
+    // An injected list can shrink under the cursor (a collection deleted
+    // while it was focused), and every read below indexes with it.
+    if (_currentIndex >= allSystems.length) {
+      _currentIndex = allSystems.length - 1;
+    }
+    if (_currentIndex < 0) _currentIndex = 0;
+
+    // Trigger background update only when the displayed index changes.
+    if (_lastBackgroundBuildIndex != _currentIndex) {
+      _lastBackgroundBuildIndex = _currentIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _updateBackground(allSystems[_currentIndex]);
+        }
+      });
+    }
+
+    final textStyle = TextStyle(
+      color: theme.colorScheme.onSurface,
+      fontSize: 10.r,
+      fontWeight: FontWeight.normal,
+    );
+    final selectedTextStyle = textStyle.copyWith(
+      color: theme.colorScheme.onPrimary,
+      fontWeight: FontWeight.bold,
+    );
+
+    final widths = allSystems
+        .map(
+          (s) => _hasChip(s) ? _calculateItemWidth(s, selectedTextStyle) : 0.0,
+        )
+        .toList();
+
+    // Cache for the hot scroll path (_scrollToPage) so it doesn't rebuild
+    // the list or re-measure text on every frame while scrolling.
+    _cachedSystems = allSystems;
+    _cachedWidths = widths;
+
+    Widget content = Column(
+      children: [
+        // Primary Horizontal Carousel.
+        Expanded(
+          child: GestureDetector(
+            onVerticalDragStart: (_) {
+              _pullOffsetNotifier.value = 0.0;
+              _pullProgress.value = 0.0;
+              _pullReady = false;
+            },
+            onVerticalDragUpdate: (details) {
+              final deltaY = details.delta.dy;
+              if (deltaY > 0) {
+                final newOffset = (_pullOffsetNotifier.value + deltaY).clamp(
+                  0.0,
+                  _maxPull,
+                );
+                _pullOffsetNotifier.value = newOffset;
+                _pullProgress.value = (newOffset / _maxPull).clamp(0.0, 1.0);
+                if (_pullProgress.value >= 1.0) _pullReady = true;
               }
-            });
-          }
+            },
+            onVerticalDragEnd: (_) {
+              if (_pullReady) {
+                _pullReady = false;
+                _triggerRefresh();
+              }
+              _pullOffsetNotifier.value = 0.0;
+              _pullProgress.value = 0.0;
+            },
+            onVerticalDragCancel: () {
+              _pullReady = false;
+              _pullOffsetNotifier.value = 0.0;
+              _pullProgress.value = 0.0;
+            },
+            behavior: HitTestBehavior.translucent,
+            child: ValueListenableBuilder<double>(
+              valueListenable: _pullOffsetNotifier,
+              builder: (context, offset, child) {
+                return Transform.translate(
+                  offset: Offset(0, offset),
+                  child: child!,
+                );
+              },
+              child: Focus(
+                descendantsAreFocusable:
+                    false, // Intercept native Flutter focus to use custom gamepad logic.
+                skipTraversal: true,
+                child: RepaintBoundary(
+                  child: NativeCarousel(
+                    key: _carouselKey,
+                    itemCount: allSystems.length,
+                    initialIndex: _currentIndex,
+                    footerHeight: 60.r,
+                    // System cards are height-bound (square art + footer)
+                    // so ~3.6 of them fit across the screen. With the
+                    // default envelope the 4th card is already down to
+                    // 44% scale / 10% opacity by the time it reaches the
+                    // edge, leaving a ~16px sliver. Floor the scale, lift
+                    // the fade, and pull the outer pair back toward the
+                    // pack so the row visibly continues past both edges.
+                    depth: const CarouselDepth(
+                      minScale: 0.7,
+                      opacityBase: 0.75,
+                      opacityFalloff: 0.55,
+                      minOpacity: 0.3,
+                      edgePull: 0.15,
+                    ),
+                    itemBuilder: (context, index) {
+                      final system = allSystems[index];
+                      final isSelected = index == _currentIndex;
+                      void handleTap() {
+                        // Tapping an off-centre card brings it to the
+                        // middle; tapping the centred one enters it, so
+                        // touch users never need the footer's A button.
+                        // (SystemCard plays the sound.)
+                        if (isSelected) {
+                          _selectCurrentSystem();
+                        } else {
+                          _carouselKey.currentState?.animateToPage(index);
+                        }
+                      }
 
-          final textStyle = TextStyle(
-            color: theme.colorScheme.onSurface,
-            fontSize: 10.r,
-            fontWeight: FontWeight.normal,
-          );
-          final selectedTextStyle = textStyle.copyWith(
-            color: theme.colorScheme.onPrimary,
-            fontWeight: FontWeight.bold,
-          );
+                      final Widget card =
+                          widget.cardOverrideBuilder?.call(
+                            context,
+                            index,
+                            system,
+                            isSelected,
+                            handleTap,
+                          ) ??
+                          SystemCard(
+                            key: ValueKey(
+                              'carousel_system_card_${system.title}_$index',
+                            ),
+                            info: system,
+                            isSelected: isSelected,
+                            backgroundCacheWidth: 1024,
+                            onTap: handleTap,
+                            // The centred card only. An off-centre card is
+                            // painted outside the page slot the viewport
+                            // hit-tests it by, so the gesture would never
+                            // reach it anyway; swipe or tap to centre first.
+                            onLongPress: isSelected && widget.onYPressed != null
+                                ? widget.onYPressed
+                                : null,
+                            showCount: widget.showCardCounts,
+                          );
 
-          final widths = allSystems
-              .map((s) => _calculateItemWidth(s, selectedTextStyle))
-              .toList();
-
-          // Cache for the hot scroll path (_scrollToPage) so it doesn't rebuild
-          // the list or re-measure text on every frame while scrolling.
-          _cachedSystems = allSystems;
-          _cachedWidths = widths;
-
-          Widget content = Column(
-            children: [
-              // Primary Horizontal Carousel.
-              Expanded(
-                child: GestureDetector(
-                  onVerticalDragStart: (_) {
-                    _pullOffsetNotifier.value = 0.0;
-                    _pullProgress.value = 0.0;
-                    _pullReady = false;
-                  },
-                  onVerticalDragUpdate: (details) {
-                    final deltaY = details.delta.dy;
-                    if (deltaY > 0) {
-                      final newOffset = (_pullOffsetNotifier.value + deltaY)
-                          .clamp(0.0, _maxPull);
-                      _pullOffsetNotifier.value = newOffset;
-                      _pullProgress.value = (newOffset / _maxPull).clamp(
-                        0.0,
-                        1.0,
-                      );
-                      if (_pullProgress.value >= 1.0) _pullReady = true;
-                    }
-                  },
-                  onVerticalDragEnd: (_) {
-                    if (_pullReady) {
-                      _pullReady = false;
-                      _triggerRefresh();
-                    }
-                    _pullOffsetNotifier.value = 0.0;
-                    _pullProgress.value = 0.0;
-                  },
-                  onVerticalDragCancel: () {
-                    _pullReady = false;
-                    _pullOffsetNotifier.value = 0.0;
-                    _pullProgress.value = 0.0;
-                  },
-                  behavior: HitTestBehavior.translucent,
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: _pullOffsetNotifier,
-                    builder: (context, offset, child) {
-                      return Transform.translate(
-                        offset: Offset(0, offset),
-                        child: child!,
+                      // Sibling overlay rather than a wrapper: wrapping only
+                      // the centred card changes that card's subtree shape as
+                      // the selection travels, remounting it and reloading its
+                      // artwork — a visible flicker on every page change. The
+                      // tree is identical for every card here and only the
+                      // `SizedBox`'s key moves. `passthrough` keeps the card's
+                      // constraints exactly as the carousel supplied them, so
+                      // the anchor still measures the painted card.
+                      return Stack(
+                        fit: StackFit.passthrough,
+                        children: [
+                          card,
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: SizedBox.expand(
+                                key: isSelected ? widget.selectedItemKey : null,
+                              ),
+                            ),
+                          ),
+                        ],
                       );
                     },
-                    child: Focus(
-                      descendantsAreFocusable:
-                          false, // Intercept native Flutter focus to use custom gamepad logic.
-                      skipTraversal: true,
-                      child: RepaintBoundary(
-                        child: NativeCarousel(
-                          key: _carouselKey,
-                          itemCount: allSystems.length,
-                          initialIndex: _currentIndex,
-                          footerHeight: 60.r,
-                          // System cards are height-bound (square art + footer)
-                          // so ~3.6 of them fit across the screen. With the
-                          // default envelope the 4th card is already down to
-                          // 44% scale / 10% opacity by the time it reaches the
-                          // edge, leaving a ~16px sliver. Floor the scale, lift
-                          // the fade, and pull the outer pair back toward the
-                          // pack so the row visibly continues past both edges.
-                          depth: const CarouselDepth(
-                            minScale: 0.7,
-                            opacityBase: 0.75,
-                            opacityFalloff: 0.55,
-                            minOpacity: 0.3,
-                            edgePull: 0.15,
-                          ),
-                          itemBuilder: (context, index) {
-                            final system = allSystems[index];
-                            final isSelected = index == _currentIndex;
-                            return SystemCard(
-                              key: ValueKey(
-                                'carousel_system_card_${system.title}_$index',
-                              ),
-                              info: system,
-                              isSelected: isSelected,
-                              backgroundCacheWidth: 1024,
-                              onTap: () {
-                                // Tapping an off-centre card brings it to the
-                                // middle; tapping the centred one enters it, so
-                                // touch users never need the footer's A button.
-                                // (SystemCard plays the sound.)
-                                if (isSelected) {
-                                  _selectCurrentSystem();
-                                } else {
-                                  _carouselKey.currentState?.animateToPage(
-                                    index,
-                                  );
-                                }
-                              },
-                            );
-                          },
-                          onPageScrolled: (page) {
-                            _pageOffsetNotifier.value = page;
-                            _scrollToPage(page);
-                          },
-                          onPageChanged: (index, reason) {
-                            if (reason == CarouselPageChangeReason.manual) {
-                              SfxService().playNavSound();
-                            }
-                            setState(() {
-                              _currentIndex = index;
-                            });
-                            _updateBackground(allSystems[index]);
-                            _updateSecondaryScreenName();
-                            widget.onCardTapped?.call(index);
-                          },
-                        ),
-                      ),
-                    ),
+                    onPageScrolled: (page) {
+                      _pageOffsetNotifier.value = page;
+                      _scrollToPage(page);
+                    },
+                    onPageChanged: (index, reason) {
+                      if (reason == CarouselPageChangeReason.manual) {
+                        SfxService().playNavSound();
+                      }
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                      _updateBackground(allSystems[index]);
+                      _updateSecondaryScreenName();
+                      widget.onCardTapped?.call(index);
+                    },
                   ),
                 ),
               ),
+            ),
+          ),
+        ),
 
-              // Secondary Systems Indicator List (Bottom).
-              SizedBox(
-                height: 40.r,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.symmetric(vertical: 6.r, horizontal: 4.r),
-                  child: Stack(
-                    children: [
-                      // Background track: every label keeps its surface shape
-                      // so unselected items still look like buttons.
-                      Row(
-                        children: allSystems.asMap().entries.map((entry) {
-                          final itemWidth = widths[entry.key];
-                          return Container(
+        // Secondary Systems Indicator List (Bottom).
+        SizedBox(
+          height: 40.r,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(vertical: 6.r, horizontal: 4.r),
+            child: Stack(
+              children: [
+                // Background track: every label keeps its surface shape
+                // so unselected items still look like buttons.
+                Row(
+                  children: allSystems.asMap().entries.map((entry) {
+                    final itemWidth = widths[entry.key];
+                    return Container(
+                      width: itemWidth,
+                      height: 32.r,
+                      margin: EdgeInsets.only(right: 4.r),
+                      decoration: BoxDecoration(
+                        color: itemWidth == 0
+                            ? Colors.transparent
+                            : Theme.of(context).colorScheme.surface,
+                        borderRadius:
+                            Theme.of(
+                              context,
+                            ).extension<CornerRadii>()?.radiusExternal ??
+                            BorderRadius.circular(14.r),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                // Focused item sliding indicator. Painted between the
+                // backgrounds and the text so the selected label gets a
+                // solid fill while the text stays perfectly readable.
+                Positioned.fill(
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _pageOffsetNotifier,
+                    builder: (context, page, _) {
+                      final (left, width) = _cursorRect(page, widths);
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: left,
+                            top: 0,
+                            bottom: 0,
+                            width: width,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary,
+                                borderRadius:
+                                    Theme.of(context)
+                                        .extension<CornerRadii>()
+                                        ?.radiusExternal ??
+                                    BorderRadius.circular(14.r),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+
+                // Foreground text track. Transparent background so the
+                // selector and surface backgrounds show through, while
+                // the selected label uses onPrimary for contrast.
+                ValueListenableBuilder<double>(
+                  valueListenable: _pageOffsetNotifier,
+                  builder: (context, page, _) {
+                    final selectedIndex = page.round().clamp(
+                      0,
+                      allSystems.length - 1,
+                    );
+                    return Row(
+                      children: allSystems.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final system = entry.value;
+                        final isSelected = index == selectedIndex;
+                        final itemWidth = widths[index];
+
+                        return GestureDetector(
+                          onTap: () {
+                            SfxService().playNavSound();
+                            _carouselKey.currentState?.animateToPage(index);
+                          },
+                          child: Container(
                             width: itemWidth,
                             height: 32.r,
                             margin: EdgeInsets.only(right: 4.r),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius:
-                                  Theme.of(
-                                    context,
-                                  ).extension<CornerRadii>()?.radiusExternal ??
-                                  BorderRadius.circular(14.r),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-
-                      // Focused item sliding indicator. Painted between the
-                      // backgrounds and the text so the selected label gets a
-                      // solid fill while the text stays perfectly readable.
-                      Positioned.fill(
-                        child: ValueListenableBuilder<double>(
-                          valueListenable: _pageOffsetNotifier,
-                          builder: (context, page, _) {
-                            final (left, width) = _cursorRect(page, widths);
-                            return Stack(
-                              children: [
-                                Positioned(
-                                  left: left,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: width,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary,
-                                      borderRadius:
-                                          Theme.of(context)
-                                              .extension<CornerRadii>()
-                                              ?.radiusExternal ??
-                                          BorderRadius.circular(14.r),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-
-                      // Foreground text track. Transparent background so the
-                      // selector and surface backgrounds show through, while
-                      // the selected label uses onPrimary for contrast.
-                      ValueListenableBuilder<double>(
-                        valueListenable: _pageOffsetNotifier,
-                        builder: (context, page, _) {
-                          final selectedIndex = page.round().clamp(
-                            0,
-                            allSystems.length - 1,
-                          );
-                          return Row(
-                            children: allSystems.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final system = entry.value;
-                              final isSelected = index == selectedIndex;
-                              final itemWidth = widths[index];
-
-                              return GestureDetector(
-                                onTap: () {
-                                  SfxService().playNavSound();
-                                  _carouselKey.currentState?.animateToPage(
-                                    index,
-                                  );
-                                },
-                                child: Container(
-                                  width: itemWidth,
-                                  height: 32.r,
-                                  margin: EdgeInsets.only(right: 4.r),
-                                  alignment: Alignment.center,
-                                  color: Colors.transparent,
-                                  child: Text(
+                            alignment: Alignment.center,
+                            color: Colors.transparent,
+                            child: !_hasChip(system)
+                                ? const SizedBox.shrink()
+                                : Text(
                                     (system.shortName ??
                                             system.title ??
                                             AppLocale.unknown.getString(
@@ -985,59 +1194,57 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
                                         ? selectedTextStyle
                                         : textStyle,
                                   ),
-                                ),
-                              );
-                            }).toList(),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-
-          if (Platform.isAndroid) {
-            content = Stack(
-              children: [
-                content,
-                ValueListenableBuilder<double>(
-                  valueListenable: _pullProgress,
-                  builder: (context, progress, child) {
-                    return AnimatedOpacity(
-                      opacity: progress > 0 ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: IgnorePointer(
-                        child: Container(
-                          alignment: Alignment.topCenter,
-                          padding: EdgeInsets.only(top: 16.r),
-                          child: SizedBox(
-                            width: 32.r,
-                            height: 32.r,
-                            child: CircularProgressIndicator(
-                              value: progress >= 1.0 ? null : progress,
-                              strokeWidth: 3,
-                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      }).toList(),
                     );
                   },
                 ),
               ],
-            );
-          }
-
-          return content;
-        },
-      ),
+            ),
+          ),
+        ),
+      ],
     );
+
+    if (Platform.isAndroid) {
+      content = Stack(
+        children: [
+          content,
+          ValueListenableBuilder<double>(
+            valueListenable: _pullProgress,
+            builder: (context, progress, child) {
+              return AnimatedOpacity(
+                opacity: progress > 0 ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  child: Container(
+                    alignment: Alignment.topCenter,
+                    padding: EdgeInsets.only(top: 16.r),
+                    child: SizedBox(
+                      width: 32.r,
+                      height: 32.r,
+                      child: CircularProgressIndicator(
+                        value: progress >= 1.0 ? null : progress,
+                        strokeWidth: 3,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    }
+
+    return content;
   }
 
   /// Pushes carousel state updates to secondary hardware displays (OEM support).
   Future<void> _updateSecondaryScreenName() async {
     if (!Platform.isAndroid) return;
+    if (!widget.enableSecondaryDisplay) return;
     if (_secondaryDisplayState == null) return;
 
     final allSystems = _getSystemsList();
@@ -1092,6 +1299,7 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
   }
 
   void _triggerRefresh() {
+    if (!widget.enablePullToRescan) return;
     final configProvider = context.read<SqliteConfigProvider>();
     if (!configProvider.isScanning) {
       SfxService().playNavSound();

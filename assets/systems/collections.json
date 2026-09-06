@@ -1,0 +1,34 @@
+{
+  "system": {
+    "id": "collections",
+    "multidisc": false,
+    "name": "Collections",
+    "short_name": "Coll",
+    "details": {
+      "manufacturer": "",
+      "release_date": "1900-01-01",
+      "description": "User-defined collections of games.",
+      "type": "virtual"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "collections"
+    ],
+    "colors": [
+      "#7C4DFF",
+      "#B0BEC5"
+    ],
+    "extensions": []
+  },
+  "emulators": [],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

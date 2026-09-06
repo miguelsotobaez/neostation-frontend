@@ -8,6 +8,11 @@ class SystemLogoFallback extends StatelessWidget {
   final double? height;
   final double? width;
 
+  /// Colour for the text. Callers that tint a logo asset with a colour filter
+  /// must pass it here instead of filtering this widget: the filter would
+  /// repaint the drop shadow too, turning it into a halo around the glyphs.
+  final Color? color;
+
   const SystemLogoFallback({
     super.key,
     this.title,
@@ -15,6 +20,7 @@ class SystemLogoFallback extends StatelessWidget {
     this.isShadow = false,
     this.height,
     this.width,
+    this.color,
   });
 
   @override
@@ -32,7 +38,7 @@ class SystemLogoFallback extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white,
+            color: color ?? Colors.white,
             fontSize: (height != null && height! < 40.r) ? 16.r : 42.r,
             fontWeight: FontWeight.w900,
             letterSpacing: 1,

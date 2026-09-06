@@ -16,9 +16,8 @@ extension _DataLoading on _SystemGamesListState {
     try {
       String? systemId;
 
-      // In 'Global Library' mode, resolve the game's native hardware system ID.
-      if ((widget.system.folderName == 'all' ||
-              widget.system.folderName == SystemFolderNames.favorites) &&
+      // In an aggregate view, resolve the game's native hardware system ID.
+      if (SystemFolderNames.isAggregate(widget.system.folderName) &&
           _selectedGame!.systemFolderName != null) {
         final originalSystem = await SystemRepository.getSystemByFolderName(
           _selectedGame!.systemFolderName!,
@@ -78,8 +77,11 @@ extension _DataLoading on _SystemGamesListState {
       bool subfolderView = false;
       final sysId = widget.system.id;
       final folderName = widget.system.folderName;
+      // Aggregate views have no folder tree to build one from, so they never
+      // get the subfolder view (nor a real system id to read settings off).
       if (sysId != null &&
-          !SystemFolderNames.subfolderViewExcluded.contains(folderName)) {
+          !SystemFolderNames.subfolderViewExcluded.contains(folderName) &&
+          !SystemFolderNames.isAggregate(folderName)) {
         final settings = await SystemRepository.getSystemSettings(sysId);
         subfolderView = (settings['subfolder_view'] ?? 0) == 1;
       }

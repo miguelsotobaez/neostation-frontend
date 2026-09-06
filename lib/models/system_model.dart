@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/system_folder_names.dart';
 import 'neo_sync_models.dart';
 import 'ra_hash_policy.dart';
 
@@ -208,8 +209,17 @@ class SystemModel {
   /// Extracts the canonical folder name used for asset and scraper resolution.
   ///
   /// Derives the name from the [iconImage] path (e.g., 'ps1' from '.../ps1-icon.png').
+  ///
+  /// Aggregate views short-circuit: their identity *is* the folder name, and a
+  /// synthesized model may carry a decorative [iconImage] that has nothing to
+  /// do with it. A collection is the case that made this load-bearing — its
+  /// icon is `/images/icons/folder-bulk.png`, which the derivation below would
+  /// reduce to `folder`, so every `isAggregate(primaryFolderName)` check
+  /// downstream (the random-game dialog, artwork folders) would silently take
+  /// the single-system path.
   String get primaryFolderName {
-    if (folderName == 'all' || folderName == 'all-background') {
+    if (folderName == 'all-background' ||
+        SystemFolderNames.isAggregate(folderName)) {
       return folderName;
     }
 

@@ -5,13 +5,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../models/romm_rom.dart';
 import '../../providers/romm_provider.dart';
-import '../../services/game_legend_visibility.dart';
 import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../services/sfx_service.dart';
 import '../../utils/gamepad_nav.dart';
 import '../../utils/letter_jump.dart';
-import '../../widgets/legend_edge_reshow_zone.dart';
-import '../../widgets/romm_action_buttons.dart';
 import '../app_screen.dart';
 import 'romm_rom_card.dart';
 
@@ -82,7 +79,6 @@ class _RommRomListState extends State<RommRomList> {
   /// [RommProvider.bulkSync] so the Y affordance reads "Cancel sync".
   bool _syncing = false;
   Widget? _chromeFooter;
-  Widget? _chromeLegend;
 
   // True while a deferred page request is already queued for after this frame.
   bool _pageRequestScheduled = false;
@@ -98,7 +94,6 @@ class _RommRomListState extends State<RommRomList> {
     );
     _settledIndex = _selectedIndex;
     _initializeGamepad();
-    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
     _syncing = widget.provider.bulkSync.isRunning;
     widget.provider.bulkSync.addListener(_onBulkSyncChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -116,7 +111,6 @@ class _RommRomListState extends State<RommRomList> {
   @override
   void dispose() {
     _settleTimer?.cancel();
-    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     widget.provider.bulkSync.removeListener(_onBulkSyncChanged);
     GamepadNavigationManager.popLayer(_navLayerId);
     _gamepadNav.dispose();
@@ -150,21 +144,11 @@ class _RommRomListState extends State<RommRomList> {
       onBack: widget.onBack,
       onXButton: widget.onToggleView,
       onFavorite: widget.onSyncAll, // Y — sync the whole source.
-      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
       onRightBumper: AppNavigation.nextTab,
     );
-  }
-
-  void _toggleLegend() {
-    SfxService().playNavSound();
-    GameLegendVisibility.toggle();
-  }
-
-  void _onLegendVisibilityChanged() {
-    if (mounted) setState(() {});
   }
 
   RommRom? get _focusedRom => widget.roms.isEmpty
@@ -309,92 +293,68 @@ class _RommRomListState extends State<RommRomList> {
   Widget build(BuildContext context) {
     _buildSettledChrome();
 
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            Expanded(
-              // Indent to clear the vertical legend, exactly as the local game
-              // list does; the rows reflow in a single frame on Select + B.
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: GameLegendVisibility.hidden.value ? 0 : 48.r,
-                ),
-                child: widget.roms.isEmpty
-                    ? const SizedBox.shrink()
-                    : NotificationListener<ScrollNotification>(
-                        onNotification: (scroll) {
-                          if (scroll.metrics.pixels >=
-                                  scroll.metrics.maxScrollExtent - 200.r &&
-                              widget.provider.romsHasMore &&
-                              !widget.provider.loadingRoms) {
-                            _requestPage();
-                          }
-                          return false;
-                        },
-                        child: ListView.separated(
-                          controller: _scrollController,
-                          padding: EdgeInsets.fromLTRB(12.r, 12.r, 12.r, 12.r),
-                          itemCount: widget.roms.length,
-                          separatorBuilder: (_, _) => SizedBox(height: 8.r),
-                          itemBuilder: (context, index) {
-                            final rom = widget.roms[index];
-                            return SizedBox(
-                              height: _rowHeight,
-                              child: RommRomCard(
-                                key: ValueKey('romm_row_${rom.id}'),
-                                rom: rom,
-                                provider: widget.provider,
-                                romFolders: widget.romFolders,
-                                isFocused: _selectedIndex == index,
-                                layout: RommRomLayout.list,
-                                onDownload: () => widget.onConfirm(rom),
-                                onCancel: () => widget.onCancel(rom),
-                                onTap: () {
-                                  // Second tap on the selected row confirms
-                                  // it (see RommRomGrid._buildCard).
-                                  if (index == _selectedIndex) {
-                                    SfxService().playEnterSound();
-                                    widget.onConfirm(rom);
-                                    return;
-                                  }
-                                  setState(() {
-                                    _selectedIndex = index;
-                                    _settledIndex = index;
-                                  });
-                                  _settleTimer?.cancel();
-                                  widget.onIndexChanged(index);
-                                  SfxService().playNavSound();
-                                },
-                              ),
-                            );
+        Expanded(
+          child: widget.roms.isEmpty
+              ? const SizedBox.shrink()
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (scroll) {
+                    if (scroll.metrics.pixels >=
+                            scroll.metrics.maxScrollExtent - 200.r &&
+                        widget.provider.romsHasMore &&
+                        !widget.provider.loadingRoms) {
+                      _requestPage();
+                    }
+                    return false;
+                  },
+                  child: ListView.separated(
+                    controller: _scrollController,
+                    padding: EdgeInsets.fromLTRB(12.r, 12.r, 12.r, 12.r),
+                    itemCount: widget.roms.length,
+                    separatorBuilder: (_, _) => SizedBox(height: 8.r),
+                    itemBuilder: (context, index) {
+                      final rom = widget.roms[index];
+                      return SizedBox(
+                        height: _rowHeight,
+                        child: RommRomCard(
+                          key: ValueKey('romm_row_${rom.id}'),
+                          rom: rom,
+                          provider: widget.provider,
+                          romFolders: widget.romFolders,
+                          isFocused: _selectedIndex == index,
+                          layout: RommRomLayout.list,
+                          onDownload: () => widget.onConfirm(rom),
+                          onCancel: () => widget.onCancel(rom),
+                          onTap: () {
+                            // Second tap on the selected row confirms
+                            // it (see RommRomGrid._buildCard).
+                            if (index == _selectedIndex) {
+                              SfxService().playEnterSound();
+                              widget.onConfirm(rom);
+                              return;
+                            }
+                            setState(() {
+                              _selectedIndex = index;
+                              _settledIndex = index;
+                            });
+                            _settleTimer?.cancel();
+                            widget.onIndexChanged(index);
+                            SfxService().playNavSound();
                           },
                         ),
-                      ),
-              ),
-            ),
-            _chromeFooter!,
-          ],
+                      );
+                    },
+                  ),
+                ),
         ),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          top: 12.r,
-          left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-            child: _chromeLegend!,
-          ),
-        ),
-        // Touch: swipe-right from the left edge reveals a hidden legend.
-        const LegendEdgeReshowZone(),
+        _chromeFooter!,
       ],
     );
   }
 
-  /// (Re)builds the footer + legend only when the settled selection or its
-  /// download state changes.
+  /// (Re)builds the footer only when the settled selection or its download
+  /// state changes.
   /// Repaints the chrome only when a bulk sync starts or stops.
   ///
   /// The sync notifies on every queue step; the only thing this view shows is
@@ -415,23 +375,10 @@ class _RommRomListState extends State<RommRomList> {
     final onDisk = rom != null && widget.provider.downloadedStateFor(rom.id);
     final sig =
         '$_settledIndex|${rom?.id}|${download?.status}|${download?.fraction}|$onDisk|$_syncing';
-    if (sig == _chromeSig && _chromeFooter != null && _chromeLegend != null) {
+    if (sig == _chromeSig && _chromeFooter != null) {
       return;
     }
     _chromeSig = sig;
     _chromeFooter = widget.footerBuilder(rom);
-    _chromeLegend = RommActionButtons(
-      onBack: widget.onBack,
-      onViewMode: widget.onToggleView,
-      onDownload: rom == null
-          ? null
-          : () => download?.status == RommDownloadStatus.downloading
-                ? widget.onCancel(rom)
-                : widget.onConfirm(rom),
-      isDownloading: download?.status == RommDownloadStatus.downloading,
-      isDownloaded: download?.status == RommDownloadStatus.completed || onDisk,
-      onSyncAll: widget.onSyncAll,
-      isSyncing: _syncing,
-    );
   }
 }

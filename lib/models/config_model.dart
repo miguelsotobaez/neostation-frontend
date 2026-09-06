@@ -94,6 +94,14 @@ class ConfigModel {
   /// The sort direction for the system list ('asc' or 'desc').
   final String systemSortOrder;
 
+  /// How the collections browser orders its cards: `name`, `date_added` or
+  /// `game_count`. Separate from [systemSortBy] on purpose — the two screens
+  /// list different things.
+  final String collectionSortBy;
+
+  /// Direction for [collectionSortBy]: `asc` or `desc`.
+  final String collectionSortOrder;
+
   /// The ISO language code for the application interface (e.g., 'en', 'es').
   final String appLanguage;
 
@@ -103,10 +111,6 @@ class ConfigModel {
   /// Cell span of the "Recently Played" card in the systems grid: `'default'`
   /// (3x2) or `'2x1'`. Ignored by the carousel, where every card is one slot.
   final String recentCardSize;
-
-  /// Whether the vertical action-button legend is hidden across every game view
-  /// (list, grid, carousel). Toggled by the Select + B chord.
-  final bool legendHidden;
 
   /// The game details card tab the user last selected with L1/R1, stored as the
   /// `DetailTab` enum name (e.g. 'wheel', 'box2d', 'screenshotVideo').
@@ -192,6 +196,15 @@ class ConfigModel {
   /// empty one.
   final bool showAchievementsBadge;
 
+  /// Whether the game views draw the cloud-save status mark.
+  ///
+  /// On by default: the mark already hides itself for everyone it has nothing
+  /// to say to — sync off for the system, signed out, no ScreenScraper id — so
+  /// the only people who see it are the ones it reports on, and defaulting it
+  /// off would hide a live readout from exactly them. This is for the user who
+  /// syncs and still wants the row clean.
+  final bool showCloudSyncIcon;
+
   /// Whether the startup folder scan is followed by a RetroAchievements match
   /// pass over whatever it just added.
   ///
@@ -228,10 +241,11 @@ class ConfigModel {
     this.use12HourClock = false,
     this.systemSortBy = 'alphabetical',
     this.systemSortOrder = 'asc',
+    this.collectionSortBy = 'name',
+    this.collectionSortOrder = 'asc',
     this.appLanguage = 'es',
     this.hideRecentCard = false,
     this.recentCardSize = RecentCardSizes.defaultSize,
-    this.legendHidden = false,
     this.gameDetailsTab = 'wheel',
     this.hideTabSync = false,
     this.hideTabAchievements = false,
@@ -252,6 +266,7 @@ class ConfigModel {
     this.dockSlotCount = 3,
     this.esdeFolderPath = '',
     this.showAchievementsBadge = false,
+    this.showCloudSyncIcon = true,
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
   });
@@ -342,6 +357,14 @@ class ConfigModel {
       systemSortOrder:
           (json['systemSortOrder'] ?? json['system_sort_order'] ?? 'asc')
               .toString(),
+      collectionSortBy:
+          (json['collectionSortBy'] ?? json['collection_sort_by'] ?? 'name')
+              .toString(),
+      collectionSortOrder:
+          (json['collectionSortOrder'] ??
+                  json['collection_sort_order'] ??
+                  'asc')
+              .toString(),
       appLanguage: (json['appLanguage'] ?? json['app_language'] ?? 'en')
           .toString(),
       hideRecentCard:
@@ -354,10 +377,6 @@ class ConfigModel {
                   json['recent_card_size'] ??
                   RecentCardSizes.defaultSize)
               .toString(),
-      legendHidden:
-          (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
-              '1' ||
-          (json['legendHidden'] ?? false).toString().toLowerCase() == 'true',
       gameDetailsTab:
           (json['gameDetailsTab'] ?? json['game_details_tab'] ?? 'wheel')
               .toString(),
@@ -453,6 +472,14 @@ class ConfigModel {
               '1' ||
           (json['showAchievementsBadge'] ?? false).toString().toLowerCase() ==
               'true',
+      // Absent key => 1 => on, matching the column default: the mark predates
+      // this setting, so a config written before it must keep showing it.
+      showCloudSyncIcon:
+          (json['showCloudSyncIcon'] ?? json['show_cloud_sync_icon'] ?? 1)
+                  .toString() ==
+              '1' ||
+          (json['showCloudSyncIcon'] ?? false).toString().toLowerCase() ==
+              'true',
       // Same reasoning: absent => 0 => off, matching the column default.
       raMatchOnStartup:
           (json['raMatchOnStartup'] ?? json['ra_match_on_startup'] ?? 0)
@@ -497,10 +524,11 @@ class ConfigModel {
       'use12HourClock': use12HourClock,
       'systemSortBy': systemSortBy,
       'systemSortOrder': systemSortOrder,
+      'collectionSortBy': collectionSortBy,
+      'collectionSortOrder': collectionSortOrder,
       'appLanguage': appLanguage,
       'hideRecentCard': hideRecentCard,
       'recentCardSize': recentCardSize,
-      'legendHidden': legendHidden,
       'gameDetailsTab': gameDetailsTab,
       'hideTabSync': hideTabSync,
       'hideTabAchievements': hideTabAchievements,
@@ -521,6 +549,7 @@ class ConfigModel {
       'dockSlotCount': dockSlotCount,
       'esdeFolderPath': esdeFolderPath,
       'showAchievementsBadge': showAchievementsBadge,
+      'showCloudSyncIcon': showCloudSyncIcon,
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
     };
@@ -547,10 +576,11 @@ class ConfigModel {
     bool? use12HourClock,
     String? systemSortBy,
     String? systemSortOrder,
+    String? collectionSortBy,
+    String? collectionSortOrder,
     String? appLanguage,
     bool? hideRecentCard,
     String? recentCardSize,
-    bool? legendHidden,
     String? gameDetailsTab,
     bool? hideTabSync,
     bool? hideTabAchievements,
@@ -571,6 +601,7 @@ class ConfigModel {
     int? dockSlotCount,
     String? esdeFolderPath,
     bool? showAchievementsBadge,
+    bool? showCloudSyncIcon,
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
   }) {
@@ -594,10 +625,11 @@ class ConfigModel {
       use12HourClock: use12HourClock ?? this.use12HourClock,
       systemSortBy: systemSortBy ?? this.systemSortBy,
       systemSortOrder: systemSortOrder ?? this.systemSortOrder,
+      collectionSortBy: collectionSortBy ?? this.collectionSortBy,
+      collectionSortOrder: collectionSortOrder ?? this.collectionSortOrder,
       appLanguage: appLanguage ?? this.appLanguage,
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
       recentCardSize: recentCardSize ?? this.recentCardSize,
-      legendHidden: legendHidden ?? this.legendHidden,
       gameDetailsTab: gameDetailsTab ?? this.gameDetailsTab,
       hideTabSync: hideTabSync ?? this.hideTabSync,
       hideTabAchievements: hideTabAchievements ?? this.hideTabAchievements,
@@ -620,6 +652,7 @@ class ConfigModel {
       esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
       showAchievementsBadge:
           showAchievementsBadge ?? this.showAchievementsBadge,
+      showCloudSyncIcon: showCloudSyncIcon ?? this.showCloudSyncIcon,
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
     );

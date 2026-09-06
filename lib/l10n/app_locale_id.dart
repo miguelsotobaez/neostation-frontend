@@ -179,6 +179,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.showAchievementsBadge: 'Lencana Prestasi',
   AppLocale.showAchievementsBadgeSubtitle:
       'Tampilkan jumlah prestasi pada gim yang cocok dengan RetroAchievements',
+  AppLocale.showCloudSyncIcon: 'Ikon simpanan awan',
+  AppLocale.showCloudSyncIconSubtitle:
+      'Tampilkan status sinkronisasi awan di samping gim yang dipilih',
   AppLocale.raMatchOnStartup: 'Cocokkan prestasi saat mulai',
   AppLocale.raMatchOnStartupSubtitle:
       'Mencocokkan ROM baru setelah pemindaian awal. Untuk seluruh pustaka, jalankan Cocokkan Game RetroAchievements di Alat terlebih dahulu.',
@@ -246,6 +249,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.organizeMultiDiscNoSetsFound:
       'Tidak ada set multi-disk yang ditemukan untuk diatur{skipped}.',
   AppLocale.organizeMultiDiscFailed: 'Gagal mengatur game multi-disk: {error}',
+  AppLocale.organizeMultiDiscPartialFailure:
+      '{failed} set tidak dapat diatur. {result}',
   AppLocale.organizeMultiDiscWarning:
       'Ini akan memindahkan file ROM yang cocok ke folder game baru dan membuat playlist .m3u di penyimpanan Anda. Tindakan ini tidak dapat dibatalkan secara otomatis.',
   AppLocale.cleanOrphanedMetadata: 'Bersihkan Metadata Yatim',
@@ -326,7 +331,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.cloudSaveSubtitle: 'Dari NeoSync',
   AppLocale.scrapingUnavailableAndroid: 'Scraping tidak tersedia di Android.',
   AppLocale.achievements: 'Pencapaian',
-  AppLocale.loadingAchievements: 'Memuat pencapaian...',
 
   AppLocale.neoSync: 'NeoSync',
   AppLocale.neoSyncLogin: 'Masuk NeoSync',
@@ -445,7 +449,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.storageLabel: 'Penyimpanan',
   AppLocale.lastSyncedSave: 'Simpanan terakhir disinkronkan',
   AppLocale.saveListMenu: 'Daftar Simpanan',
-  AppLocale.customSaveFoldersMenu: 'Folder Simpanan Kustom',
+  AppLocale.customSaveFoldersMenu: 'Folder Simpanan Standalone',
   AppLocale.updateYourPlanMenu: 'Perbarui Paket Anda',
   AppLocale.customFoldersSubtitle:
       'Tambahkan folder kustom dari emulator mandiri agar simpanannya juga disinkronkan.',
@@ -584,6 +588,33 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.hintViewMode: 'Tampilan',
   AppLocale.hintScrape: 'Ambil',
   AppLocale.hintMoreActions: 'Lainnya',
+  AppLocale.hintOptions: 'Opsi',
+  AppLocale.addTo: 'Tambahkan ke…',
+  AppLocale.addedToCollection: 'Ditambahkan ke {name}',
+  AppLocale.newCollection: 'Koleksi baru…',
+  AppLocale.newCollectionDefaultName: 'Koleksi {number}',
+  AppLocale.collections: 'Koleksi',
+  AppLocale.collectionsCount: '{count} Koleksi',
+  AppLocale.collectionCount: '{count} Koleksi',
+
+  // Collections browser screen
+  AppLocale.createCollection: 'Koleksi baru',
+  AppLocale.collectionName: 'Nama koleksi',
+  AppLocale.renameCollection: 'Ganti nama koleksi',
+  AppLocale.changeImage: 'Ubah gambar',
+  AppLocale.removeImage: 'Hapus gambar',
+  AppLocale.deleteCollection: 'Hapus koleksi',
+  AppLocale.deleteCollectionConfirm:
+      'Hapus "{name}"? Game di dalamnya tidak ikut terhapus.',
+  AppLocale.collectionCreated: '{name} dibuat',
+  AppLocale.collectionDeleted: '{name} dihapus',
+  AppLocale.emptyCollection: 'Koleksi ini belum berisi game',
+  AppLocale.noCollections: 'Belum ada koleksi',
+  AppLocale.noCollectionsSubtitle:
+      'Buat satu untuk mengelompokkan game dari sistem mana pun.',
+  AppLocale.errorSavingCollection: 'Koleksi tidak dapat disimpan',
+  AppLocale.errorUpdatingCollection: 'Koleksi tidak dapat diperbarui',
+  AppLocale.inACollection: 'Dalam koleksi',
 
   AppLocale.error: 'Kesalahan',
   AppLocale.loading: 'Memuat...',
@@ -605,6 +636,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.listView: 'Tampilan Daftar',
   AppLocale.carouselView: 'Tampilan Karusel',
   AppLocale.alphabetical: 'Alfabetis',
+  AppLocale.dateAdded: 'Tanggal ditambahkan',
+  AppLocale.sortByGameCount: 'Jumlah gim',
   AppLocale.releaseYear: 'Tahun Rilis',
   AppLocale.manufacturer: 'Pabrikan',
   AppLocale.manufacturerType: 'Pabrikan / Tipe',
@@ -682,10 +715,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.noMottoSet: 'Tidak ada motto ditetapkan',
   AppLocale.contributions: 'Kontribusi',
   AppLocale.aotw: 'Pencapaian Minggu Ini',
-  AppLocale.players: 'pemain',
   AppLocale.achievementLabel: 'Pencapaian: {title}',
   AppLocale.unlocks: 'terbuka',
-  AppLocale.couldNotLoadAOTW: 'Gagal memuat Pencapaian Minggu Ini',
   AppLocale.recentlyPlayed: 'Baru Saja Dimainkan',
   AppLocale.achivs: 'Penc.',
   AppLocale.noRecentGames: 'Tidak ada game yang baru saja dimainkan',
@@ -752,7 +783,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.unknownGame: 'Game Tidak Dikenal',
   AppLocale.unknownSystem: 'Sistem Tidak Dikenal',
   AppLocale.gamesCount: '{count} game',
+  AppLocale.gameCount: '{count} game',
   AppLocale.appsCount: '{count} aplikasi',
+  AppLocale.appCount: '{count} aplikasi',
   AppLocale.errorSystemNotFound:
       'Kesalahan: Sistem tidak ditemukan untuk game ini.',
   AppLocale.errorLaunchingGame: 'Kesalahan saat menjalankan game: {error}',
@@ -788,6 +821,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.second: 'detik',
   AppLocale.unknown: 'tidak diketahui',
   AppLocale.tracksCount: '{count} lagu',
+  AppLocale.trackCount: '{count} lagu',
   AppLocale.hours: 'jam',
   AppLocale.minutes: 'menit',
   AppLocale.seconds: 'detik',
@@ -1022,6 +1056,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommNoCollections: 'Tidak ada koleksi ditemukan',
   AppLocale.rommNoRoms: 'Tidak ada ROM ditemukan',
   AppLocale.rommSearch: 'Cari',
+  AppLocale.rommSearching: 'Mencari di RomM...',
   AppLocale.rommDownloading: 'Mengunduh...',
   AppLocale.rommDownloaded: 'Terunduh',
   AppLocale.rommDownloadComplete: 'Unduhan selesai',
@@ -1103,11 +1138,7 @@ const Map<String, dynamic> appLocaleId = {
 
   AppLocale.raCompletionsLabel: 'Penyelesaian',
   AppLocale.raMasteriesLabel: 'Penguasaan',
-  AppLocale.raEarned: 'Diperoleh',
-  AppLocale.raOwned: 'Dimiliki',
   AppLocale.raPointsAbbrev: 'poin',
-  AppLocale.raAlreadyEarned: 'Anda sudah memperoleh pencapaian ini',
-  AppLocale.raTapToOpenLocalGame: 'Ketuk untuk membuka detail game lokal',
   AppLocale.raRecentUnlocks: 'Terbuka Baru-baru Ini',
   AppLocale.raRecentCompletions: 'Penyelesaian Terbaru',
   AppLocale.raRecentMasteries: 'Penguasaan Terbaru',
@@ -1135,9 +1166,24 @@ const Map<String, dynamic> appLocaleId = {
       'Tidak ada pembukaan baru dalam 30 hari terakhir',
   AppLocale.raRecentlyPlayedTitle: 'Baru Dimainkan',
   AppLocale.raNoRecentlyPlayed: 'Tidak ada game yang baru dimainkan',
+  AppLocale.raAotwNoActive: 'Tidak ada Pencapaian Minggu Ini',
+  AppLocale.raAotwEarnedHardcore: 'Diraih minggu ini · Hardcore',
+  AppLocale.raAotwEarnedCasual: 'Diraih minggu ini · Kasual',
+  AppLocale.raAotwEarnedPreviously: 'Diraih sebelum minggu ini',
+  AppLocale.raAotwNotEarned: 'Belum diraih minggu ini',
+  AppLocale.raAotwStatusUnavailable: 'Status pribadi tidak tersedia',
+  AppLocale.raAotwNotInLibrary: 'Tidak ada di pustaka Anda',
+  AppLocale.raAotwWeekStarted: 'Minggu dimulai {date}',
+  AppLocale.raAotwTrueRatio: 'Rasio Sebenarnya',
+  AppLocale.raAotwParticipation: '{unlocks} dari {players} pemain · {percent}%',
+  AppLocale.raAotwOpenLocalGame: 'Buka game lokal',
+  AppLocale.raAotwDownloadFromRomm: 'Unduh dari RomM',
+  AppLocale.raGamesPlayed: '{count} game dimainkan',
+  AppLocale.raAchievementProgress: '{earned}/{total} pencapaian',
+  AppLocale.raRecent30Days: '30 hari',
 
   // Custom save folders (NeoSync v2)
-  AppLocale.customSaveFoldersTitle: 'Folder penyimpanan khusus',
+  AppLocale.customSaveFoldersTitle: 'Folder penyimpanan standalone',
   AppLocale.customSaveFolderPickSystem: 'Pilih sistem',
   AppLocale.customSaveFolderPickEmulator: 'Pilih emulator',
   AppLocale.customSaveFolderSelect: 'Pilih folder',
@@ -1147,11 +1193,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.customSaveFolderInvalid: 'Folder yang dipilih tidak ada',
   AppLocale.removeCustomFolder: 'Hapus Folder',
   AppLocale.removeCustomFolderConfirm:
-      'Hapus folder simpanan kustom ini? File lokal tidak akan dihapus, hanya dilepas dari sinkronisasi.',
+      'Hapus folder simpanan standalone ini? File lokal tidak akan dihapus, hanya dilepas dari sinkronisasi.',
   AppLocale.uploadingCustomFolder: 'Mengunggah simpanan dari {folder}...',
   AppLocale.customFolderUploadComplete:
-      'Folder kustom disinkronkan: {uploaded} diunggah, {skipped} sudah terbaru',
-  AppLocale.customFolderUploadFailed: 'Gagal menyinkronkan folder kustom',
+      'Folder standalone disinkronkan: {uploaded} diunggah, {skipped} sudah terbaru',
+  AppLocale.customFolderUploadFailed: 'Gagal menyinkronkan folder standalone',
   AppLocale.customSaveFoldersMigrate:
       'Migrasikan penyimpanan cloud ke NeoSync v2',
 

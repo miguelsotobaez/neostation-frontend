@@ -5,12 +5,13 @@ import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 class _Recorder {
   final List<String> events = [];
 
-  void push(String id, {bool modal = false}) {
+  void push(String id, {bool modal = false, bool background = false}) {
     GamepadNavigationManager.pushLayer(
       id,
       onActivate: () => events.add('+$id'),
       onDeactivate: () => events.add('-$id'),
       modal: modal,
+      background: background,
     );
   }
 
@@ -18,6 +19,74 @@ class _Recorder {
 }
 
 void main() {
+  group('GamepadNavigationManager background layers', () {
+    test('a backgrounded push does not take the controller', () {
+      final r = _Recorder();
+      r.push('collections_browser_grid#1');
+      r.events.clear();
+
+      // The systems screen sits behind the pushed collections route. A shared
+      // setting change re-mounts its view, which re-registers its layer.
+      r.push('my_systems_list', background: true);
+
+      expect(r.events, isEmpty);
+
+      r.pop('my_systems_list');
+      r.pop('collections_browser_grid#1');
+    });
+
+    test('the backgrounded layer becomes active once the route above pops', () {
+      final r = _Recorder();
+      r.push('collections_browser_grid#1');
+      r.push('my_systems_list', background: true);
+      r.events.clear();
+
+      r.pop('collections_browser_grid#1');
+
+      expect(r.events, ['-collections_browser_grid#1', '+my_systems_list']);
+
+      r.pop('my_systems_list');
+    });
+
+    test('with an empty stack a background push still activates', () {
+      final r = _Recorder();
+      r.push('my_systems_list', background: true);
+
+      expect(r.events, ['+my_systems_list']);
+
+      r.pop('my_systems_list');
+    });
+
+    test('switching the shared view mode keeps the front route in control', () {
+      // The exact on-device sequence that broke: changing systemViewMode
+      // disposes and re-mounts BOTH the collections browser in front and the
+      // systems screen behind it, and the background screen pushed last.
+      final r = _Recorder();
+      r.push('my_systems_list', background: true);
+      r.push('collections_browser_grid#1');
+      r.events.clear();
+
+      r.pop('my_systems_list');
+      r.pop('collections_browser_grid#1');
+      r.push('collections_browser_carousel#1');
+      r.push('my_systems_carousel', background: true);
+
+      // The collections carousel — the visible route — holds the controller.
+      // Before the fix the systems carousel landed on top, so the D-pad drove
+      // the invisible screen behind it.
+      expect(r.events.last, '+collections_browser_carousel#1');
+
+      r.events.clear();
+      r.pop('collections_browser_carousel#1');
+      expect(r.events, [
+        '-collections_browser_carousel#1',
+        '+my_systems_carousel',
+      ]);
+
+      r.pop('my_systems_carousel');
+    });
+  });
+
   group('GamepadNavigationManager modal layers', () {
     test('a non-modal push does not steal focus from an open modal', () {
       final r = _Recorder();

@@ -11,13 +11,21 @@ import 'footer_label_pill.dart';
 class SystemsGridFooter extends CoreFooter {
   final SystemInfo system;
   final VoidCallback onEnter;
-  final VoidCallback onSettings;
+
+  /// Y: opens the card's context menu.
+  ///
+  /// This slot used to be Start/Settings, which named one of the things that
+  /// menu now holds rather than the menu itself — and it was hidden on a
+  /// recent-game card, which the menu no longer is. Start still opens the
+  /// settings dialog directly; the hint points at the menu because that is
+  /// what the button beside it does.
+  final VoidCallback onOptions;
 
   const SystemsGridFooter({
     super.key,
     required this.system,
     required this.onEnter,
-    required this.onSettings,
+    required this.onOptions,
   });
 
   @override
@@ -48,16 +56,16 @@ class SystemsGridFooter extends CoreFooter {
     final theme = Theme.of(context);
 
     return [
-      // Settings button (only for real systems, not for the 'All Games' shortcut if desired)
-      if (!system.isGame)
-        GamepadControl(
-          label: AppLocale.settings.getString(context),
-          iconPath: 'assets/images/gamepad/Xbox_Menu_button.png',
-          onTap: onSettings,
-          textColor: theme.colorScheme.onTertiaryFixed,
-          backgroundColor: theme.colorScheme.tertiaryFixed,
-        ),
-      if (!system.isGame) SizedBox(width: 8.r),
+      // Options, on every card: the menu behind it has a row for a
+      // recent-game card too.
+      GamepadControl(
+        label: AppLocale.hintOptions.getString(context),
+        iconPath: 'assets/images/gamepad/Xbox_Y_button.png',
+        onTap: onOptions,
+        textColor: theme.colorScheme.onTertiaryFixed,
+        backgroundColor: theme.colorScheme.tertiaryFixed,
+      ),
+      SizedBox(width: 8.r),
       // Enter/Play button
       GamepadControl(
         label: system.isGame

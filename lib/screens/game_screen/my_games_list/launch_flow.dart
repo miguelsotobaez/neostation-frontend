@@ -48,10 +48,10 @@ extension _LaunchFlow on _SystemGamesListState {
 
   /// Restores UI state and input focus after an external emulator process terminates.
   /// Resolves the effective system folder name for a game, accounting for the
-  /// aggregate "all"/favorites views where each game carries its own system.
+  /// aggregate views (all / favorites / collections) where each game carries
+  /// its own system.
   String _resolveSystemFolderName(GameModel game) {
-    return (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
+    return SystemFolderNames.isAggregate(widget.system.folderName) &&
             game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;
@@ -173,8 +173,7 @@ extension _LaunchFlow on _SystemGamesListState {
     // Resolve targeted hardware system for the launch.
     SystemModel systemToLaunch = widget.system;
 
-    if ((widget.system.folderName == 'all' ||
-            widget.system.folderName == SystemFolderNames.favorites) &&
+    if (SystemFolderNames.isAggregate(widget.system.folderName) &&
         _selectedGame!.systemFolderName != null) {
       final availableSystems = context
           .read<SqliteConfigProvider>()

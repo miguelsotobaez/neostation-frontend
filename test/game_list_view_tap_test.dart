@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
+import 'package:neostation/providers/collections_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/screens/game_screen/game_list_view.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -68,6 +69,7 @@ void main() {
     required int selectedIndex,
     required List<String> selected,
     required List<int> confirmed,
+    List<String>? options,
   }) async {
     await tester.pumpWidget(
       MediaQuery(
@@ -79,10 +81,18 @@ void main() {
                 FlutterLocalization.instance.localizationsDelegates,
             supportedLocales: FlutterLocalization.instance.supportedLocales,
             // The row builder reads the achievements-badge setting off the
-            // config provider, as it does in the app; a default provider leaves
-            // it off, which is also the shipped default.
-            home: ChangeNotifierProvider<SqliteConfigProvider>(
-              create: (_) => SqliteConfigProvider(),
+            // config provider and collection membership off the collections
+            // provider, as it does in the app; defaults leave the badge off and
+            // the membership set empty, which is also the shipped default.
+            home: MultiProvider(
+              providers: [
+                ChangeNotifierProvider<SqliteConfigProvider>(
+                  create: (_) => SqliteConfigProvider(),
+                ),
+                ChangeNotifierProvider<CollectionsProvider>(
+                  create: (_) => CollectionsProvider(),
+                ),
+              ],
               child: Scaffold(
                 body: GameListView(
                   system: _system,
@@ -91,6 +101,9 @@ void main() {
                   systemColor: Colors.pink,
                   onGameSelected: (g) => selected.add(g.romname),
                   onGameConfirmed: () => confirmed.add(selectedIndex),
+                  onGameOptions: options == null
+                      ? null
+                      : (g) => options.add(g.romname),
                 ),
               ),
             ),
@@ -128,6 +141,32 @@ void main() {
 
     expect(selected, ['zelda.sfc']);
     expect(confirmed, isEmpty, reason: 'an unselected row must not launch');
+
+    await drain(tester);
+  });
+
+  testWidgets('long-pressing a row asks for its context menu, not a launch', (
+    tester,
+  ) async {
+    final selected = <String>[];
+    final confirmed = <int>[];
+    final options = <String>[];
+    await pumpList(
+      tester,
+      selectedIndex: 0,
+      selected: selected,
+      confirmed: confirmed,
+      options: options,
+    );
+
+    // The touch route to the menu the gamepad opens with Y: it must reach the
+    // row that was pressed, not the one that happened to be selected.
+    await tester.longPress(rowFor('Super Metroid'));
+    await tester.pump();
+
+    expect(options, ['metroid.sfc']);
+    expect(confirmed, isEmpty, reason: 'a long-press must never launch');
+    expect(selected, isEmpty, reason: 'the host selects, from onGameOptions');
 
     await drain(tester);
   });

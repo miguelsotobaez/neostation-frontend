@@ -14,8 +14,15 @@ import '../../providers/sqlite_config_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../utils/rom_tree.dart';
+import '../../constants/system_folder_names.dart';
+import '../../providers/collections_provider.dart';
+import '../../sync/i_sync_provider.dart';
+import '../../sync/sync_manager.dart';
+import '../../utils/effective_system.dart';
 import '../../widgets/achievements_badge.dart';
+import '../../widgets/collection_badge.dart';
 import '../../widgets/marquee_text.dart';
+import '../../widgets/neo_sync_status_icon.dart';
 import '../../widgets/system_logo_fallback.dart';
 
 /// A high-performance list view specialized for game browsing with gamepad support.
@@ -32,6 +39,11 @@ class GameListView extends StatefulWidget {
   /// Confirms the row that is already selected (same action as the A button).
   /// Tapping a row selects it; tapping the selected row again fires this.
   final VoidCallback onGameConfirmed;
+
+  /// Long-press on a row — the touch equivalent of the Y button, opening the
+  /// game context menu. The row is selected first, so the menu anchors to it
+  /// exactly as the gamepad route does.
+  final void Function(GameModel game)? onGameOptions;
   final bool isAllMode;
   final bool isNavigatingFast;
   final VoidCallback? onGamepadReactivated;
@@ -43,6 +55,10 @@ class GameListView extends StatefulWidget {
   final List<RomFolderEntry> folderEntries;
   final void Function(int folderIndex)? onFolderActivated;
 
+  /// Attached to the currently selected row so the host can anchor an overlay
+  /// (the Y context menu) to it. Null when no anchor is needed.
+  final GlobalKey? selectedItemKey;
+
   const GameListView({
     super.key,
     required this.system,
@@ -51,12 +67,14 @@ class GameListView extends StatefulWidget {
     required this.systemColor,
     required this.onGameSelected,
     required this.onGameConfirmed,
+    this.onGameOptions,
     this.isAllMode = false,
     this.isNavigatingFast = false,
     this.onGamepadReactivated,
     this.folderCount = 0,
     this.folderEntries = const [],
     this.onFolderActivated,
+    this.selectedItemKey,
   });
 
   @override
@@ -73,9 +91,33 @@ class GameListViewState extends State<GameListView>
   // Constants for pixel-perfect highlight positioning.
   static const double _itemHeightBase = 26.0;
 
+  /// Slack under the last row, so the list does not sit on the panel's edge.
+  /// Mirrors the value the details footer keeps under its RA pill.
+  static const double _bottomSlack = 11.0;
+
   // Read once per build rather than per row: the row builder runs for every
   // visible entry, and a provider lookup there would subscribe each one.
   bool _showAchievementsBadge = false;
+
+  /// Whether the user wants the cloud mark at all, read once per build.
+  ///
+  /// A settings toggle, so it moves rarely; kept beside the provider lookup it
+  /// gates rather than checked per row.
+  bool _showCloudSyncIcon = true;
+
+  /// The active cloud-sync provider, read once per build.
+  ///
+  /// Null when nothing is signed in, which is the common case and costs the
+  /// rows nothing. Only the selected row draws a cloud mark, so one lookup
+  /// answers the whole list.
+  ISyncProvider? _syncProvider;
+
+  /// ROM paths filed in at least one collection, read once per build.
+  ///
+  /// Null inside a collection's own view: every row there is a member, so the
+  /// mark would say nothing. The system a list is built for never changes for a
+  /// given instance, so the subscription is stable.
+  CollectionsProvider? _collections;
 
   /// Public API to trigger list scrolling from the parent widget.
   void scrollToIndex(
@@ -144,12 +186,18 @@ class GameListViewState extends State<GameListView>
     }
 
     if (oldWidget.selectedIndex != widget.selectedIndex) {
-      // Dynamic duration adjustment based on navigation speed (isNavigatingFast).
-      final animationDuration = widget.isNavigatingFast
-          ? const Duration(milliseconds: 120)
-          : const Duration(milliseconds: 250);
-
-      final scrollDuration = widget.isNavigatingFast
+      // The highlight and the scroll must share one clock. The bar is
+      // positioned in viewport space as (selection * itemHeight) - scrollOffset,
+      // so mid-list -- where centering scrolls the selected row back to the
+      // middle -- the two terms cancel and a synchronised bar does not move at
+      // all. Give them different durations and they stop cancelling: the bar
+      // detaches from its row, slides towards the next one and is dragged back
+      // as the scroll catches up. Measured on the Thor at 250/360, that was
+      // 22 px of a 78 px row for ~100 ms per move, and 40-76 px sustained for
+      // over a second while the D-pad was held. Both values are one duration
+      // now, the shorter of the two while isNavigatingFast; if the feel needs
+      // changing, change it for both.
+      final moveDuration = widget.isNavigatingFast
           ? const Duration(milliseconds: 180)
           : const Duration(milliseconds: 360);
 
@@ -158,18 +206,35 @@ class GameListViewState extends State<GameListView>
       final double begin = _selectionAnimation.value;
       final double end = widget.selectedIndex.toDouble();
 
-      _selectionController.duration = animationDuration;
+      _selectionController.duration = moveDuration;
       _selectionAnimation = Tween<double>(
         begin: begin,
         end: end,
       ).animate(CurvedAnimation(parent: _selectionController, curve: curve));
 
-      _selectionController.forward(from: 0);
+      // Rewound now but started a frame later, because the scroll cannot start
+      // any earlier than that: scrollToIndex defers its animateTo so the target
+      // offset is computed against a laid-out viewport. Running forward() here
+      // in the build phase would give the highlight a one-frame head start, and
+      // a head start is exactly what this pair must not have.
+      //
+      // The rewind cannot wait for the callback with it. The controller is
+      // still sitting at 1.0 from the move before, so a tween built here and
+      // left unrewound reads as its own end value: the bar would teleport a
+      // full row onto the new index for the one frame before the callback runs,
+      // while the rows had not moved at all. That was measured on the Thor --
+      // one frame at exactly +78px on an otherwise perfectly still bar.
+      _selectionController.value = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _selectionController.forward();
+        }
+      });
 
       _centeredScrollController.updateSelectedIndex(widget.selectedIndex);
       _centeredScrollController.scrollToIndex(
         widget.selectedIndex,
-        duration: scrollDuration,
+        duration: moveDuration,
         curve: curve,
       );
     }
@@ -223,6 +288,22 @@ class GameListViewState extends State<GameListView>
     _showAchievementsBadge = context.select<SqliteConfigProvider, bool>(
       (p) => p.config.showAchievementsBadge,
     );
+    _collections = SystemFolderNames.isCollection(widget.system.folderName)
+        ? null
+        : context.watch<CollectionsProvider>();
+    // Watched, not read: the mark is a live readout — it spins while a save is
+    // uploading and settles when it lands — so the row has to rebuild when the
+    // provider's state moves. Sync events are rare compared to cursor moves, so
+    // this adds no work to navigation.
+    //
+    // Nullable lookup: a host that has no SyncManager above it gets no mark
+    // rather than an exception, which is what keeps this view pumpable on its
+    // own — the collections and config providers it already reads are declared
+    // the same way.
+    _showCloudSyncIcon = context.select<SqliteConfigProvider, bool>(
+      (p) => p.config.showCloudSyncIcon,
+    );
+    _syncProvider = context.watch<SyncManager?>()?.active;
 
     final theme = Theme.of(context);
     final itemHeight = _itemHeightBase.r;
@@ -315,7 +396,12 @@ class GameListViewState extends State<GameListView>
                         );
                       }
 
-                      return GestureDetector(
+                      final row = GestureDetector(
+                        // Touch route to the game context menu; the gamepad
+                        // reaches the same menu with Y.
+                        onLongPress: widget.onGameOptions == null
+                            ? null
+                            : () => widget.onGameOptions!(game),
                         onTap: () {
                           // Touch users have no A button: the first tap selects
                           // the row (populating the details panel), a second tap
@@ -381,6 +467,78 @@ class GameListViewState extends State<GameListView>
                                     ),
                                   ),
                                 ),
+                                // Cloud-sync state, first of the marks at the
+                                // end of the title.
+                                //
+                                // Ahead of the other two because it is the one
+                                // that changes while you look at it: it spins
+                                // as a save uploads and settles when it lands,
+                                // where the collection diamond and the trophy
+                                // are facts about the game that were already
+                                // true. It also comes and goes with the cursor,
+                                // and a mark that appears *between* two settled
+                                // ones pushes them sideways as the selection
+                                // moves.
+                                //
+                                // The selected row only. This reports what the
+                                // provider is doing with *the game the cursor
+                                // is on* — it is the same one-game readout the
+                                // details card carried, moved to where the
+                                // selection actually is — and a library's worth
+                                // of identical cloud glyphs would say nothing
+                                // the one under the cursor does not.
+                                //
+                                // The widget collapses to nothing on its own
+                                // when there is nothing to report (sync off for
+                                // the system, signed out, no ScreenScraper id),
+                                // so the row is unchanged for everyone who does
+                                // not use cloud saves.
+                                if (isSelected &&
+                                    _showCloudSyncIcon &&
+                                    _syncProvider != null)
+                                  NeoSyncStatusIcon(
+                                    // The game's own system: in an aggregate
+                                    // view the list's system is a placeholder,
+                                    // and NeoSync's per-system settings hang
+                                    // off the real one.
+                                    system: _effectiveSystemFor(game),
+                                    game: game,
+                                    syncProvider: _syncProvider!,
+                                    // A mark among the row's other marks: the
+                                    // badges' own size, no chip, and no shadow
+                                    // — this row is flat surface, not artwork.
+                                    size: 11,
+                                    showBackground: false,
+                                    showGlyphShadow: false,
+                                    // The selected row's foreground, for the
+                                    // states that have no colour of their own.
+                                    mutedColor: theme.colorScheme.onPrimary,
+                                    margin: EdgeInsets.only(left: 4.r),
+                                  ),
+                                // Collection mark, between the cloud glyph and
+                                // the achievements trophy. The favourite heart
+                                // stays on the left of the name: it is the one
+                                // mark the user sets on the game itself, while
+                                // these three report what the game belongs to,
+                                // what it is matched against and what the cloud
+                                // has of it, so they cluster together at the
+                                // end of the row.
+                                if (_collections?.isInAnyCollection(
+                                      game.romPath,
+                                    ) ==
+                                    true)
+                                  Padding(
+                                    padding: EdgeInsets.only(left: 4.r),
+                                    child: CollectionBadge.inline(
+                                      // The row's own foreground, so the mark
+                                      // stays legible on the selected row's
+                                      // inverted background — same rule as the
+                                      // achievements trophy.
+                                      color: isSelected
+                                          ? theme.colorScheme.onPrimary
+                                          : theme.colorScheme.primary,
+                                    ),
+                                  ),
                                 if (_showAchievementsBadge &&
                                     AchievementsBadge.showsFor(game))
                                   Padding(
@@ -400,6 +558,25 @@ class GameListViewState extends State<GameListView>
                           ),
                         ),
                       );
+
+                      // Anchor for the Y context menu: an invisible box that
+                      // carries the host's key while this row is selected.
+                      // Wrapped unconditionally (only the key moves) so the
+                      // tree keeps its shape as the selection travels, and with
+                      // StackFit.passthrough so the row's layout is unchanged.
+                      return Stack(
+                        fit: StackFit.passthrough,
+                        children: [
+                          row,
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: SizedBox.expand(
+                                key: isSelected ? widget.selectedItemKey : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
                     },
                   );
                 },
@@ -407,8 +584,31 @@ class GameListViewState extends State<GameListView>
             ],
           ),
         ),
+        SizedBox(height: _bottomSlack.r),
       ],
     );
+  }
+
+  /// The hardware system [game] belongs to.
+  ///
+  /// In an aggregate view ('all', 'favorites', a collection) the list's own
+  /// system is a synthesized placeholder, and NeoSync's per-system settings and
+  /// ScreenScraper id hang off the real one — so the cloud mark has to resolve
+  /// the game's system rather than the view's. Single-system lists take the
+  /// list's system without touching the provider, exactly as before.
+  SystemModel _effectiveSystemFor(GameModel game) {
+    if (!widget.isAllMode) return widget.system;
+    try {
+      return resolveEffectiveSystem(
+        listSystem: widget.system,
+        game: game,
+        detectedSystems: context.read<SqliteConfigProvider>().detectedSystems,
+      );
+    } catch (e) {
+      // No provider in scope (or nothing detected yet): the placeholder is the
+      // only answer available.
+      return widget.system;
+    }
   }
 
   /// Renders a navigable subfolder row (icon + name + recursive game count).

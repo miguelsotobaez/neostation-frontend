@@ -39,6 +39,23 @@ class NeoSyncService extends ChangeNotifier {
     return _calculateFileHash(bytes);
   }
 
+  /// Strips the cloud envelope from a path so it holds the real on-disk path
+  /// relative to the emulator's save/state directory, which is what the backend
+  /// stores in `file_path`. Handles the legacy `saves/`/`states/` roots and the
+  /// structured `v2/saves|states/<system>/<emulator>/<scope>[/<game>/]` layout.
+  static String _stripCloudEnvelope(String raw) {
+    var p = raw.replaceAll('\\', '/');
+    if (p.startsWith('saves/')) return p.substring('saves/'.length);
+    if (p.startsWith('states/')) return p.substring('states/'.length);
+    if (p.startsWith('v2/')) {
+      final m = RegExp(
+        r'^v2/(saves|states)/[^/]+/[^/]+/(shared|game)(/[^/]+)?/(.+)$',
+      ).firstMatch(p);
+      if (m != null) return m.group(4)!;
+    }
+    return p;
+  }
+
   /// Queries the API to check if a specific file exists on the server and
   /// determines if a synchronization is required.
   ///
@@ -107,6 +124,7 @@ class NeoSyncService extends ChangeNotifier {
     String? gameHash,
     bool? isState,
     String? scope,
+    String? type,
   }) async {
     _isLoading = true;
     _lastError = null;
@@ -115,13 +133,20 @@ class NeoSyncService extends ChangeNotifier {
     try {
       final fileBytes = await file.readAsBytes();
       final fileHash = _calculateFileHash(fileBytes);
-      final filename = customFilename ?? file.path;
+      // The backend stores the real on-disk path (relative to the emulator's
+      // save/state dir) as file_path, so strip the cloud envelope (saves/,
+      // states/, v2/...). The file kind is carried by the `type` column.
+      final rawPath = customFilename ?? file.path;
+      final filePath = _stripCloudEnvelope(rawPath);
+      final fileType =
+          type ??
+          (isState == true ? 'state' : (scope == 'shared' ? 'shared' : 'save'));
 
       final fileStat = await file.stat();
       final localModifiedAt = fileStat.modified;
 
       final checkResult = await checkFileExists(
-        filename,
+        filePath,
         fileHash,
         fileBytes.length,
         localModifiedAt: localModifiedAt,
@@ -169,12 +194,13 @@ class NeoSyncService extends ChangeNotifier {
       request.headers['Authorization'] = 'Bearer $token';
 
       request.files.add(
-        http.MultipartFile.fromBytes('file', fileBytes, filename: filename),
+        http.MultipartFile.fromBytes('file', fileBytes, filename: filePath),
       );
 
       final fileModifiedAtTimestamp = localModifiedAt.millisecondsSinceEpoch;
 
-      request.fields['file_name'] = filename;
+      request.fields['file_path'] = filePath;
+      request.fields['type'] = fileType;
       request.fields['game_name'] = gameName;
       request.fields['file_hash'] = fileHash;
       request.fields['file_size'] = fileBytes.length.toString();

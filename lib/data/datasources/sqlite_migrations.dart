@@ -127,6 +127,59 @@ class SqliteMigrations {
     ON app_neo_sync_state(provider, file_path);
   ''';
 
+  // ── Collections schema — single source of truth ───────────────────────────
+  // Referenced by migration v139 and by the fresh-install table list, so a
+  // future column change is made in exactly one place.
+
+  /// CREATE for the user-defined collections table (v139).
+  ///
+  /// `id` is a bare uuid v4 — it is what the `collection:<uuid>` synthesized
+  /// system folder name carries, and what the collection's image file is named
+  /// after, so a rename never orphans the artwork. Deliberately **no** UNIQUE
+  /// on `name`: duplicate collection names are the user's business and must
+  /// never make a write fail.
+  static const String createUserCollectionsTableSql = '''
+    CREATE TABLE IF NOT EXISTS user_collections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      image_path TEXT,
+      color1 TEXT,
+      color2 TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  ''';
+
+  /// CREATE for collection membership (v139).
+  ///
+  /// `rom_path` is the natural key of `user_roms` and is what the favourite
+  /// toggle already keys on; `COLLATE NOCASE` mirrors that column. The cascade
+  /// on `rom_path` gives a ROM that genuinely disappears from disk the same
+  /// semantics it has for favourites today — and because orphan cleanup detects
+  /// renames before deleting, a moved file keeps its membership.
+  static const String createUserCollectionItemsTableSql = '''
+    CREATE TABLE IF NOT EXISTS user_collection_items (
+      collection_id TEXT NOT NULL,
+      rom_path TEXT NOT NULL COLLATE NOCASE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (collection_id, rom_path),
+      FOREIGN KEY (collection_id) REFERENCES user_collections(id) ON DELETE CASCADE,
+      FOREIGN KEY (rom_path) REFERENCES user_roms(rom_path) ON DELETE CASCADE
+    );
+  ''';
+
+  /// Lookup index for [createUserCollectionItemsTableSql] (v139).
+  ///
+  /// The primary key already covers `(collection_id, rom_path)`; this covers
+  /// the other direction — "which collections is this ROM in?", asked once per
+  /// context-menu open.
+  static const String createUserCollectionItemsIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_collection_items_rom
+    ON user_collection_items(rom_path);
+  ''';
+
   /// Routes a specific version upgrade request to its corresponding migration logic.
   ///
   /// [db] is the active SQLite database connection.
@@ -507,10 +560,16 @@ class SqliteMigrations {
       case 138:
         await _migrateToVersion138(db);
         break;
-      // 139 and 140 are claimed by another branch that is not merged yet.
-      // Taking the next free number instead of the next sequential one is
-      // deliberate: a shared slot with different contents is skipped silently
-      // on any device that already migrated past it.
+      // 139 and 140 are this branch's slots, which main deliberately reserved
+      // by taking the next free number instead of the next sequential one: a
+      // shared slot with different contents is skipped silently on any device
+      // that already migrated past it.
+      case 139:
+        await _migrateToVersion139(db);
+        break;
+      case 140:
+        await _migrateToVersion140(db);
+        break;
       case 141:
         await _migrateToVersion141(db);
         break;
@@ -518,14 +577,20 @@ class SqliteMigrations {
       case 144:
         await _migrateToVersion144(db);
         break;
-      // 145 is claimed by another branch that is not merged yet.
+      // 145 was reserved for the collections backfill, but main shipped 146
+      // and 147 above it before the branch merged, so that backfill would have
+      // been unreachable on any device at v147. It lives at 150 instead; 145
+      // stays empty.
       case 146:
         await _migrateToVersion146(db);
         break;
       case 147:
         await _migrateToVersion147(db);
         break;
-      // 148 is claimed by another branch that is not merged yet.
+      // 148 was this branch's slot for the collections backfill, but main
+      // shipped 149 above it before the branch merged, then 150 until main
+      // shipped 150-153, then 154 until #469 took that one too. The backfill
+      // lives at 155 now; 148, 150 and 154 stay this branch's empty slots.
       case 149:
         await _migrateToVersion149(db);
         break;
@@ -534,6 +599,12 @@ class SqliteMigrations {
         break;
       case 154:
         await _migrateToVersion154(db);
+        break;
+      case 155:
+        await _migrateToVersion155(db);
+        break;
+      case 156:
+        await _migrateToVersion156(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -6272,6 +6343,93 @@ class SqliteMigrations {
     }
   }
 
+  /// Migration v136: creates the user collections tables.
+  ///
+  /// Collections are user-defined groups of ROMs, stored as their own `user_*`
+  /// tables rather than as `app_systems` rows: `syncSystems` deletes every
+  /// `app_systems` row missing from the systems JSON, and the cascade from
+  /// `user_system_settings` would take a collection's name and artwork with it
+  /// on the next systems update.
+  ///
+  /// **Renumbered 136 → 139** when this branch was rebased onto a main that had
+  /// reached v138 (`ra_seed_stamp`, #399). The numbers never collided — main
+  /// deliberately took 138 because this branch held 136 and 137 — but the gap
+  /// did: a device that upgraded on main is already past 136, so its `case`
+  /// would never have run and it would have had no collections tables at all.
+  /// Moving both of this branch's slots above the highest in use is the fix
+  /// CLAUDE.md prescribes, and it works in every direction because this step is
+  /// idempotent: a device that ran the old 136 re-runs this as a no-op.
+  ///
+  /// Whoever renumbers next: scan on-disk working trees, not just refs, and
+  /// re-scan immediately before opening the PR — being *below* the current
+  /// version silently skips the step, which is not the same as colliding
+  /// with it.
+  ///
+  /// Idempotent by construction (`CREATE TABLE/INDEX IF NOT EXISTS`), so a
+  /// device that skipped the case entirely can be repaired by re-running it
+  /// from a later numbered migration.
+  static Future<void> _migrateToVersion139(Database db) async {
+    _log.i('Migration v139: Creating collections tables');
+    try {
+      db.execute(createUserCollectionsTableSql);
+      db.execute(createUserCollectionItemsTableSql);
+      db.execute(createUserCollectionItemsIndexSql);
+
+      _log.i('Migration v139 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v139: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Adds the collections browser's own sort preference to `user_config`.
+  ///
+  /// Separate columns rather than reuse of `system_sort_by`: the browser and
+  /// the systems screen are different lists of different things, and a user
+  /// who sorts their systems by manufacturer has said nothing about how they
+  /// want their collections ordered.
+  ///
+  /// The default is `name`/`asc`, which is also a behaviour change: collections
+  /// were previously returned in `sort_order` — creation order — with a name
+  /// tiebreak that could never fire, because `sort_order` is unique per row.
+  ///
+  /// **Renumbered 137 → 140** with its sibling, for the reason recorded on
+  /// [_migrateToVersion139]: main reached 138 first, so a device upgraded on
+  /// main would have skipped the old slot and lost these columns — and every
+  /// whole-config save would then fail with `no such column`.
+  ///
+  /// Guarded per column, so a device that already ran the old 137 re-runs this
+  /// as a no-op and one that skipped it is repaired rather than bricked.
+  static Future<void> _migrateToVersion140(Database db) async {
+    _log.i('Migration v140: Adding collection sorting preferences');
+
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+
+      if (!columns.contains('collection_sort_by')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN collection_sort_by TEXT DEFAULT \'name\'',
+        );
+        _log.i('Column collection_sort_by added to user_config');
+      }
+
+      if (!columns.contains('collection_sort_order')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN collection_sort_order TEXT DEFAULT \'asc\'',
+        );
+        _log.i('Column collection_sort_order added to user_config');
+      }
+
+      _log.i('Migration v140 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v140: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
   /// Drops the RetroAchievements hash for ROMs in the hack folders whose
   /// algorithm v130 corrects, so the match pass hashes them again.
   ///
@@ -6724,6 +6882,77 @@ class SqliteMigrations {
       _log.i('Migration v154 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v154: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Re-runs the collections migrations for devices that went past their slots
+  /// on main.
+  ///
+  /// Main reserved 139 and 140 for this branch but kept moving: by the time the
+  /// branch rebased, main shipped 141 and 144 (0.11.0 devices sit at v144),
+  /// then 146 and 147 (dev builds after #418). The upgrade loop only walks
+  /// `oldVersion + 1 ..= newVersion`, so on those devices cases 139 and 140 are
+  /// already behind the floor and never fire — no `user_collections` tables,
+  /// no `collection_sort_*` columns, and every whole-config save failing with
+  /// `no such column`.
+  ///
+  /// Reserving a slot stops two branches writing *different* things to the same
+  /// number; it does nothing about a device that is simply past the number. Only
+  /// a migration above the current floor reaches those devices, which is what
+  /// this is. It was first written as v145 (which main had reserved for it),
+  /// moved to 148 when main's 146/147 put the floor above 145, then to 150 when
+  /// main's 149 put the floor above 148, then to 154 -- main shipped 150, 151,
+  /// 152 and 153 while the branch was out -- and now to 155, because #469 landed
+  /// on main and took 154 itself. Each rebase has to re-check this: a reserved
+  /// slot below the current floor is still unreachable.
+  /// Delegates to [_migrateToVersion139] and [_migrateToVersion140] rather than
+  /// copying their statements, so the repair cannot drift from what it repairs.
+  /// Both are idempotent by construction (`CREATE TABLE/INDEX IF NOT EXISTS`,
+  /// per-column `PRAGMA table_info` guards), so a device that already ran them
+  /// (or ran the v145, v148 or v150 form of this on a dev build) re-runs this
+  /// as a no-op and keeps its rows.
+  static Future<void> _migrateToVersion155(Database db) async {
+    _log.i('Migration v155: Backfilling collections for post-v140 databases');
+    try {
+      await _migrateToVersion139(db);
+      await _migrateToVersion140(db);
+
+      _log.i('Migration v155 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v155: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v156: Adds `user_config.show_cloud_sync_icon`, the switch for
+  /// the cloud-save mark the game views draw beside the selected game.
+  ///
+  /// Defaults to 1 — on. The mark predates this setting and already collapses
+  /// to nothing for anyone it has nothing to report on (sync off for the
+  /// system, signed out, no ScreenScraper id), so defaulting it off would take
+  /// a live readout away from the users who do sync without them asking.
+  ///
+  /// Idempotent — the column is added only when absent.
+  static Future<void> _migrateToVersion156(Database db) async {
+    _log.i('Migration v156: Adding show_cloud_sync_icon to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('show_cloud_sync_icon')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN show_cloud_sync_icon '
+          'INTEGER DEFAULT 1',
+        );
+        _log.i('Column show_cloud_sync_icon added via v156');
+      } else {
+        _log.i('Column show_cloud_sync_icon already exists');
+      }
+      _log.i('Migration v156 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v156: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

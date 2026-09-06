@@ -41,13 +41,52 @@ class GamepadNavigationManager {
   /// CAVEAT: anything a modal opens *on top of itself* (a dropdown, an option
   /// picker) must be pushed with [modal] too, or it lands underneath its own
   /// parent and never receives input. Only mark self-contained dialogs modal.
+  /// Set [background] when the pushing widget lives on a route that is not the
+  /// current one. Such a layer registers *beneath* the active top layer instead
+  /// of taking the controller, so it is ready when its route comes back but
+  /// cannot steal input from the route in front of it.
+  ///
+  /// This matters because a backgrounded screen can re-mount a navigator
+  /// without the user touching it: any provider change it listens to will
+  /// rebuild it while it sits behind a pushed route. The systems screen doing
+  /// exactly that — swapping its grid for its carousel when the shared
+  /// `systemViewMode` changed — pushed its layer last and took the controller
+  /// out from under the collections browser in front of it, so the D-pad drove
+  /// the invisible screen behind (visible only as the second display's logos
+  /// changing). [popLayersAbove] exists to repair the same situation after the
+  /// fact for dialogs; this prevents it instead.
   static void pushLayer(
     String id, {
     required void Function() onActivate,
     required void Function() onDeactivate,
     bool modal = false,
+    bool background = false,
   }) {
-    _log.i('[GamepadNavigationManager] Pushing layer: $id (modal: $modal)');
+    _log.i(
+      '[GamepadNavigationManager] Pushing layer: $id '
+      '(modal: $modal, background: $background)',
+    );
+
+    // A background layer never takes focus from the route in front of it. With
+    // an empty stack there is nothing in front, so it is the active layer by
+    // default and falls through to the normal path — otherwise no layer would
+    // hold the controller at all.
+    if (background && !modal && _stack.isNotEmpty) {
+      _log.i(
+        '[GamepadNavigationManager] ${_stack.last.id} is in front; '
+        'inserting $id beneath it',
+      );
+      _stack.insert(
+        _stack.length - 1,
+        NavLayer(
+          id: id,
+          onActivate: onActivate,
+          onDeactivate: onDeactivate,
+          modal: modal,
+        ),
+      );
+      return;
+    }
 
     // A non-modal layer never displaces an open modal. Slot it below the
     // lowest modal so the dialogs above it stay ordered, and so it becomes the

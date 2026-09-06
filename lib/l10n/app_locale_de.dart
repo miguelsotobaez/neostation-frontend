@@ -182,6 +182,9 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.showAchievementsBadge: 'Erfolgs-Abzeichen',
   AppLocale.showAchievementsBadgeSubtitle:
       'Die Anzahl der Erfolge auf Spielen anzeigen, die RetroAchievements zugeordnet sind',
+  AppLocale.showCloudSyncIcon: 'Cloud-Speicher-Symbol',
+  AppLocale.showCloudSyncIconSubtitle:
+      'Den Cloud-Sync-Status neben dem ausgewählten Spiel anzeigen',
   AppLocale.raMatchOnStartup: 'Erfolge beim Start zuordnen',
   AppLocale.raMatchOnStartupSubtitle:
       'Ordnet neue ROMs nach dem Start-Scan zu. Für eine ganze Bibliothek zuerst RetroAchievements-Spiele zuordnen unter Werkzeuge ausführen.',
@@ -257,6 +260,8 @@ const Map<String, dynamic> appLocaleDe = {
       'Keine Multi-Disc-Sets zum Organisieren gefunden{skipped}.',
   AppLocale.organizeMultiDiscFailed:
       'Multi-Disc-Spiele konnten nicht organisiert werden: {error}',
+  AppLocale.organizeMultiDiscPartialFailure:
+      '{failed} Set(s) konnten nicht organisiert werden. {result}',
   AppLocale.organizeMultiDiscWarning:
       'Dadurch werden passende ROM-Dateien in neue Spielordner verschoben und .m3u-Wiedergabelisten auf dem Speicher erstellt. Dies kann nicht automatisch rückgängig gemacht werden.',
   AppLocale.cleanOrphanedMetadata: 'Verwaiste Metadaten bereinigen',
@@ -339,7 +344,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.cloudSaveSubtitle: 'Von NeoSync',
   AppLocale.scrapingUnavailableAndroid: 'Scraping auf Android nicht verfügbar.',
   AppLocale.achievements: 'Erfolge',
-  AppLocale.loadingAchievements: 'Erfolge werden geladen...',
 
   AppLocale.neoSync: 'NeoSync',
   AppLocale.neoSyncLogin: 'NeoSync-Anmeldung',
@@ -466,7 +470,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.storageLabel: 'Speicher',
   AppLocale.lastSyncedSave: 'Zuletzt synchronisierter Spielstand',
   AppLocale.saveListMenu: 'Speicherliste',
-  AppLocale.customSaveFoldersMenu: 'Benutzerdefinierte Speicherordner',
+  AppLocale.customSaveFoldersMenu: 'Standalone-Speicherordner',
   AppLocale.updateYourPlanMenu: 'Plan aktualisieren',
   AppLocale.customFoldersSubtitle:
       'Füge einen benutzerdefinierten Ordner von einem eigenständigen Emulator hinzu, damit auch seine Spielstände synchronisiert werden.',
@@ -606,6 +610,35 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.hintViewMode: 'Ansicht',
   AppLocale.hintScrape: 'Scrapen',
   AppLocale.hintMoreActions: 'Mehr',
+  AppLocale.hintOptions: 'Optionen',
+  AppLocale.addTo: 'Hinzufügen zu…',
+  AppLocale.addedToCollection: 'Zu {name} hinzugefügt',
+  AppLocale.newCollection: 'Neue Sammlung…',
+  AppLocale.newCollectionDefaultName: 'Sammlung {number}',
+  AppLocale.collections: 'Sammlungen',
+  AppLocale.collectionsCount: '{count} Sammlungen',
+  AppLocale.collectionCount: '{count} Sammlung',
+
+  // Collections browser screen
+  AppLocale.createCollection: 'Neue Sammlung',
+  AppLocale.collectionName: 'Name der Sammlung',
+  AppLocale.renameCollection: 'Sammlung umbenennen',
+  AppLocale.changeImage: 'Bild ändern',
+  AppLocale.removeImage: 'Bild entfernen',
+  AppLocale.deleteCollection: 'Sammlung löschen',
+  AppLocale.deleteCollectionConfirm:
+      '„{name}“ löschen? Die enthaltenen Spiele werden nicht gelöscht.',
+  AppLocale.collectionCreated: '{name} erstellt',
+  AppLocale.collectionDeleted: '{name} gelöscht',
+  AppLocale.emptyCollection: 'Diese Sammlung enthält noch keine Spiele',
+  AppLocale.noCollections: 'Noch keine Sammlungen',
+  AppLocale.noCollectionsSubtitle:
+      'Erstelle eine, um Spiele aus allen Systemen zu gruppieren.',
+  AppLocale.errorSavingCollection:
+      'Die Sammlung konnte nicht gespeichert werden',
+  AppLocale.errorUpdatingCollection:
+      'Die Sammlung konnte nicht aktualisiert werden',
+  AppLocale.inACollection: 'In einer Sammlung',
 
   AppLocale.error: 'Fehler',
   AppLocale.loading: 'Wird geladen...',
@@ -627,6 +660,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.listView: 'Listenansicht',
   AppLocale.carouselView: 'Karussellansicht',
   AppLocale.alphabetical: 'Alphabetisch',
+  AppLocale.dateAdded: 'Hinzugefügt am',
+  AppLocale.sortByGameCount: 'Anzahl der Spiele',
   AppLocale.releaseYear: 'Erscheinungsjahr',
   AppLocale.manufacturer: 'Hersteller',
   AppLocale.manufacturerType: 'Hersteller / Typ',
@@ -702,10 +737,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.noMottoSet: 'Kein Motto festgelegt',
   AppLocale.contributions: 'Beiträge',
   AppLocale.aotw: 'Erfolg der Woche',
-  AppLocale.players: 'Spieler',
   AppLocale.achievementLabel: 'Erfolg: {title}',
   AppLocale.unlocks: 'Freischaltungen',
-  AppLocale.couldNotLoadAOTW: 'Erfolg der Woche konnte nicht geladen werden',
   AppLocale.recentlyPlayed: 'Zuletzt gespielt',
   AppLocale.achivs: 'Erf.',
   AppLocale.noRecentGames: 'Keine zuletzt gespielten Spiele',
@@ -774,7 +807,9 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.unknownGame: 'Unbekanntes Spiel',
   AppLocale.unknownSystem: 'Unbekanntes System',
   AppLocale.gamesCount: '{count} Spiele',
+  AppLocale.gameCount: '{count} Spiel',
   AppLocale.appsCount: '{count} Apps',
+  AppLocale.appCount: '{count} App',
   AppLocale.errorSystemNotFound:
       'Fehler: System für dieses Spiel nicht gefunden.',
   AppLocale.errorLaunchingGame: 'Fehler beim Starten des Spiels: {error}',
@@ -810,6 +845,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.second: 'Sekunde',
   AppLocale.unknown: 'unbekannt',
   AppLocale.tracksCount: '{count} Titel',
+  AppLocale.trackCount: '{count} Titel',
   AppLocale.hours: 'Stunden',
   AppLocale.minutes: 'Minuten',
   AppLocale.seconds: 'Sekunden',
@@ -1052,6 +1088,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommNoCollections: 'Keine Sammlungen gefunden',
   AppLocale.rommNoRoms: 'Keine ROMs gefunden',
   AppLocale.rommSearch: 'Suchen',
+  AppLocale.rommSearching: 'RomM wird durchsucht...',
   AppLocale.rommDownloading: 'Wird heruntergeladen...',
   AppLocale.rommDownloaded: 'Heruntergeladen',
   AppLocale.rommDownloadComplete: 'Download abgeschlossen',
@@ -1134,11 +1171,7 @@ const Map<String, dynamic> appLocaleDe = {
 
   AppLocale.raCompletionsLabel: 'Abschlüsse',
   AppLocale.raMasteriesLabel: 'Meisterungen',
-  AppLocale.raEarned: 'Verdient',
-  AppLocale.raOwned: 'Im Besitz',
   AppLocale.raPointsAbbrev: 'Pkt.',
-  AppLocale.raAlreadyEarned: 'Du hast diesen Erfolg bereits verdient',
-  AppLocale.raTapToOpenLocalGame: 'Tippe, um lokale Spieldetails zu öffnen',
   AppLocale.raRecentUnlocks: 'Neueste Freischaltungen',
   AppLocale.raRecentCompletions: 'Neueste Abschlüsse',
   AppLocale.raRecentMasteries: 'Neueste Meisterungen',
@@ -1166,9 +1199,25 @@ const Map<String, dynamic> appLocaleDe = {
       'Keine kürzlichen Freischaltungen in den letzten 30 Tagen',
   AppLocale.raRecentlyPlayedTitle: 'Kürzlich Gespielt',
   AppLocale.raNoRecentlyPlayed: 'Keine kürzlich gespielten Spiele',
+  AppLocale.raAotwNoActive: 'Derzeit kein Erfolg der Woche',
+  AppLocale.raAotwEarnedHardcore: 'Diese Woche verdient · Hardcore',
+  AppLocale.raAotwEarnedCasual: 'Diese Woche verdient · Locker',
+  AppLocale.raAotwEarnedPreviously: 'Vor dieser Woche verdient',
+  AppLocale.raAotwNotEarned: 'Diese Woche nicht verdient',
+  AppLocale.raAotwStatusUnavailable: 'Persönlicher Status nicht verfügbar',
+  AppLocale.raAotwNotInLibrary: 'Nicht in deiner Bibliothek',
+  AppLocale.raAotwWeekStarted: 'Woche begann am {date}',
+  AppLocale.raAotwTrueRatio: 'True Ratio',
+  AppLocale.raAotwParticipation:
+      '{unlocks} von {players} Spielern · {percent} %',
+  AppLocale.raAotwOpenLocalGame: 'Lokales Spiel öffnen',
+  AppLocale.raAotwDownloadFromRomm: 'Von RomM herunterladen',
+  AppLocale.raGamesPlayed: '{count} Spiele gespielt',
+  AppLocale.raAchievementProgress: '{earned}/{total} Erfolge',
+  AppLocale.raRecent30Days: '30 Tage',
 
   // Custom save folders (NeoSync v2)
-  AppLocale.customSaveFoldersTitle: 'Benutzerdefinierte Spielstandordner',
+  AppLocale.customSaveFoldersTitle: 'Standalone-Spielstandordner',
   AppLocale.customSaveFolderPickSystem: 'System auswählen',
   AppLocale.customSaveFolderPickEmulator: 'Emulator auswählen',
   AppLocale.customSaveFolderSelect: 'Ordner auswählen',
@@ -1178,11 +1227,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.customSaveFolderInvalid: 'Der ausgewählte Ordner existiert nicht',
   AppLocale.removeCustomFolder: 'Ordner Entfernen',
   AppLocale.removeCustomFolderConfirm:
-      'Diesen benutzerdefinierten Speicherordner entfernen? Lokale Dateien werden nicht gelöscht, nur von der Synchronisierung entkoppelt.',
+      'Diesen Standalone Speicherordner entfernen? Lokale Dateien werden nicht gelöscht, nur von der Synchronisierung entkoppelt.',
   AppLocale.uploadingCustomFolder:
       'Spielstände aus {folder} werden hochgeladen...',
   AppLocale.customFolderUploadComplete:
-      'Benutzerdefinierter Ordner synchronisiert: {uploaded} hochgeladen, {skipped} bereits aktuell',
+      'Standaloner Ordner synchronisiert: {uploaded} hochgeladen, {skipped} bereits aktuell',
   AppLocale.customFolderUploadFailed:
       'Synchronisierung des benutzerdefinierten Ordners fehlgeschlagen',
   AppLocale.customSaveFoldersMigrate:

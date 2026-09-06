@@ -16,7 +16,7 @@ extension _PullToRefresh on _SystemCardGridViewState {
 
   void _handlePointerMove(PointerMoveEvent event) {
     _activePointers[event.pointer] = event.position;
-    if (_activePointers.length < 2) return;
+    if (_activePointers.length < 2 || !widget.enablePinchResize) return;
 
     final now = DateTime.now();
     if (_lastPinchTime != null &&
@@ -69,6 +69,7 @@ extension _PullToRefresh on _SystemCardGridViewState {
 
   /// Triggers ROM directory rescan when pull-to-refresh reaches 100%.
   void _triggerRefresh() {
+    if (!widget.enablePullToRescan) return;
     try {
       final configProvider = context.read<SqliteConfigProvider>();
       if (!configProvider.isScanning) {

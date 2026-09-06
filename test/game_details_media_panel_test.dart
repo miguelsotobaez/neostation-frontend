@@ -1,0 +1,111 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/screens/game_screen/game_details_card/tabs/game_details_screenshot_video_tab.dart';
+import 'package:neostation/screens/game_screen/game_details_card/widgets/game_details_footer.dart';
+
+/// The media panel's geometry.
+///
+/// It is the one tab whose content is almost always height-bound: a 4:3
+/// screenshot in a panel closer to 2:1 grows until it hits the top and bottom
+/// insets and then stops, with slack to spare on both sides. So every unit
+/// reserved at the bottom comes off the image's *width*, and a reservation
+/// that no longer matches the footer is a visibly smaller screenshot.
+///
+/// That is what went wrong: the other three panels were switched to the card's
+/// [gameDetailsPanelBottomOffset] when the footer's height stopped being a
+/// constant, and this one kept a hardcoded 110 against a footer that had come
+/// down to 90.
+void main() {
+  const double panelWidth = 640;
+  const double panelHeight = 480;
+
+  /// The laid-out media box — the `AspectRatio` the screenshot or video fills.
+  Rect mediaRect(WidgetTester tester) =>
+      tester.getRect(find.byType(AspectRatio).first);
+
+  Future<void> pumpPanel(WidgetTester tester, {required double offset}) async {
+    tester.view.physicalSize = const Size(panelWidth, panelHeight);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ScreenUtilInit(
+        // Matches main.dart, so `.r` is 1.0 at this viewport and the numbers
+        // below are the ones the widget actually lays out with.
+        designSize: const Size(panelWidth, panelHeight),
+        builder: (context, _) => MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: panelWidth,
+              height: panelHeight,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  GameDetailsScreenshotVideoTab(
+                    // No file on disk and no controller: the panel falls back
+                    // to 16:9 and draws its placeholder, which is enough to
+                    // measure the box the media would fill.
+                    screenshotPath: '',
+                    isVideoDelayActive: false,
+                    imageVersion: 0,
+                    onToggleVideoMute: () {},
+                    bottomOffset: offset,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+  }
+
+  testWidgets('the media stops where the card says the footer starts', (
+    tester,
+  ) async {
+    await pumpPanel(tester, offset: gameDetailsPanelBottomOffset());
+
+    expect(
+      mediaRect(tester).bottom,
+      moreOrLessEquals(
+        panelHeight - gameDetailsPanelBottomOffset(),
+        epsilon: 0.5,
+      ),
+      reason:
+          'the panel reserves the footer it actually has, not a constant '
+          'of its own that the footer has since shrunk away from',
+    );
+  });
+
+  testWidgets('a smaller footer is a wider screenshot', (tester) async {
+    // The bug, stated as a measurement: the panel was reserving 110 for a
+    // footer that comes to 90, and because the media is height-bound the 20
+    // it gave away came off the width, not just the height.
+    await pumpPanel(tester, offset: 110);
+    final stale = mediaRect(tester);
+
+    await pumpPanel(tester, offset: gameDetailsPanelBottomOffset());
+    final fixed = mediaRect(tester);
+
+    expect(fixed.height, greaterThan(stale.height));
+    expect(
+      fixed.width,
+      greaterThan(stale.width),
+      reason: 'height-bound media trades reserved height for width',
+    );
+  });
+
+  testWidgets('the media is centred in what is left', (tester) async {
+    await pumpPanel(tester, offset: gameDetailsPanelBottomOffset());
+
+    final r = mediaRect(tester);
+    expect(
+      r.left - 12,
+      moreOrLessEquals(panelWidth - 12 - r.right, epsilon: 0.5),
+      reason: 'equal slack either side of the box, inside the 12 insets',
+    );
+  });
+}

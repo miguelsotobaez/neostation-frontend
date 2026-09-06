@@ -87,8 +87,13 @@ class NeoSyncFile {
   /// The physical filename of the save file.
   final String fileName;
 
-  /// Relative path within the synchronization tree.
+  /// The real on-disk path of the file (relative to the emulator's save/state
+  /// directory), e.g. `FinalBurn Neo/fbneo/sfiii.fs`. The backend stores this
+  /// as `file_path`.
   final String filePath;
+
+  /// NeoSync v2: the kind of file — `save`, `state`, `custom` or `shared`.
+  final String type;
 
   /// Size of the file in bytes.
   final int fileSize;
@@ -134,6 +139,7 @@ class NeoSyncFile {
     this.systemName,
     this.emulator,
     this.gameHash,
+    this.type = 'save',
   });
 
   /// Creates a [NeoSyncFile] from a JSON-compatible map.
@@ -154,7 +160,7 @@ class NeoSyncFile {
 
     return NeoSyncFile(
       id: (json['id'] ?? '').toString(),
-      fileName: (json['file_name'] ?? '').toString(),
+      fileName: (json['file_name'] ?? json['file_path'] ?? '').toString(),
       filePath: (json['file_path'] ?? '').toString(),
       fileSize: int.tryParse((json['file_size'] ?? '0').toString()) ?? 0,
       gameName: (json['game_name'] ?? '').toString(),
@@ -174,6 +180,7 @@ class NeoSyncFile {
       gameHash: (json['game_hash'] ?? '').toString().isEmpty
           ? null
           : (json['game_hash'] ?? '').toString(),
+      type: (json['type'] ?? 'save').toString(),
     );
   }
 

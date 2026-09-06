@@ -24,13 +24,15 @@ import '../../repositories/system_repository.dart';
 import '../../repositories/game_repository.dart';
 import '../../services/screenscraper_service.dart';
 import '../../services/secondary_achievements_controller.dart';
-import '../../services/game_legend_visibility.dart';
 import '../../utils/gamepad_nav.dart';
 import '../../utils/letter_jump.dart';
 import '../../providers/file_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
+import '../../providers/collections_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
 import '../../providers/scraping_provider.dart';
+import '../../providers/neo_sync_provider.dart';
+import '../../repositories/neosync_save_folder_repository.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../utils/rom_tree.dart';
@@ -45,9 +47,8 @@ import 'music/music_player.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../providers/system_background_provider.dart';
 import '../../models/secondary_display_state.dart';
+import '../../widgets/context_menu/game_context_menu.dart';
 import '../../widgets/game_view_mode_dropdown.dart';
-import '../../widgets/game_action_buttons.dart';
-import '../../widgets/legend_edge_reshow_zone.dart';
 import '../../widgets/letter_indicator.dart';
 import '../../constants/system_folder_names.dart';
 import '../../utils/artwork_cache.dart';
@@ -56,6 +57,7 @@ import 'package:neostation/themes/chrome_surface.dart';
 import '../../themes/corner_radii.dart';
 
 part 'my_games_list/gamepad_nav.dart';
+part 'my_games_list/context_menu.dart';
 part 'my_games_list/favorites_reorder.dart';
 part 'my_games_list/data_loading.dart';
 part 'my_games_list/secondary_display.dart';
@@ -235,17 +237,18 @@ class _SystemGamesListState extends State<SystemGamesList> {
   VoidCallback? _refreshAchievementsCallback;
 
   // Overlay interaction delegates.
-  bool Function()? _isAchievementsOpen;
-  VoidCallback? _moveAchievementUp;
-  VoidCallback? _moveAchievementDown;
-  VoidCallback? _moveAchievementLeft;
-  VoidCallback? _moveAchievementRight;
+  bool Function()? _isDetailsPanelActive;
+  VoidCallback? _movePanelUp;
+  VoidCallback? _movePanelDown;
+  VoidCallback? _movePanelLeft;
+  VoidCallback? _movePanelRight;
   VoidCallback? _triggerOverlayAction;
-  VoidCallback? _secondaryOverlayAction; // Maps to RB (Scrape/Refresh).
   VoidCallback? _selectButtonAction; // Maps to Select (View) for mute/refresh.
   VoidCallback? _scrapeAction; // Maps to Select + A (scrape highlighted game).
   bool Function(bool isRight)?
-  _tabNavigationAction; // Facilitates tab switching via bumpers.
+  _tabNavigationAction; // Facilitates tab switching via D-pad left/right.
+  bool Function()? _activateDetailsPanel; // A - step into the details panel.
+  bool Function()? _dismissDetailsPanel; // B - step back out of it.
   bool Function()? _isPlayingGameBlocked; // Validation for launch readiness.
 
   // Secondary display hardware management (OEM support).
@@ -263,6 +266,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
   final GlobalKey<GameListViewState> _gameListKey =
       GlobalKey<GameListViewState>();
 
+  // Anchor for the Y context menu. Handed to whichever of the three views is
+  // active; each attaches it to the widget at [_selectedGameIndex], so the menu
+  // opens next to the row/card the user is on. Only one view is built at a
+  // time, so the key is never attached twice.
+  final GlobalKey _selectedItemKey = GlobalKey(
+    debugLabel: 'selectedGameItemAnchor',
+  );
+
   // Multimedia preview orchestration.
   Timer? _videoTimer;
   bool _showVideo = false;
@@ -274,6 +285,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   String? _lastGameViewMode; // Memoizes 'gameViewMode' config state.
   bool _isGameLaunching =
       false; // Critical flag to suppress media tasks during transitions.
+  bool _standaloneSyncTriggered = false;
 
   // Task orchestration timers.
   Timer? _saveDetectionTimer;
@@ -300,6 +312,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   // Media controllers.
   VideoPlayerController? _videoController;
+
+  // A game leaving the favourites block is re-seated into its alphabetical
+  // place, but not while the context menu is standing on top of it: the panel
+  // is anchored to the selected row, so moving that row mid-checklist would
+  // shift the menu or leave it describing a different game. The romnames pile
+  // up here instead and are flushed when the menu closes.
+  bool _deferFavoriteReseat = false;
+  final Set<String> _pendingFavoriteReseats = {};
 
   // Scraping state.
   final Set<String> _scrapingGameRomnames = {};
@@ -341,6 +361,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _loadGames();
     _initializeGamepad();
 
+    // When a real system is opened, auto-sync any configured standalone save
+    // folder for it (ARMSX2, DuckStation, ...) so its saves stay current.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeSyncStandaloneFolders(),
+    );
+
     // Attach persistent listeners to global providers.
     _databaseProvider = context.read<SqliteDatabaseProvider>();
     _databaseProvider.addListener(_onDatabaseUpdated);
@@ -354,8 +380,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _artworkVersion = _lastArtworkRevision;
     _invalidateArtworkCaches();
 
-    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
-
     _lastShowInfo = _configProvider.config.showGameInfo;
 
     MusicPlayerService().addListener(_onMusicPlayerStateChanged);
@@ -365,6 +389,39 @@ class _SystemGamesListState extends State<SystemGamesList> {
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryDisplayChanged);
+    }
+  }
+
+  /// Auto-syncs any configured standalone save folder for the opened system.
+  ///
+  /// Runs once per screen instance, only for a real system (not the "All",
+  /// "Favourites" or collection views) and only when NeoSync is authenticated.
+  /// Each configured folder for the system is synced so its standalone
+  /// emulator's saves stay current when the user enters the system.
+  Future<void> _maybeSyncStandaloneFolders() async {
+    if (_standaloneSyncTriggered) return;
+    _standaloneSyncTriggered = true;
+
+    final folderName = widget.system.folderName;
+    if (folderName.isEmpty) {
+      return;
+    }
+
+    try {
+      final folders = await NeoSyncSaveFolderRepository.getFoldersForSystem(
+        folderName,
+      );
+      if (folders.isEmpty) return;
+      if (!mounted) return;
+
+      final provider = context.read<NeoSyncProvider>();
+      if (!provider.isNeoSyncAuthenticated) return;
+
+      for (final entry in folders.entries) {
+        await provider.syncCustomSaveFolder(folderName, entry.key);
+      }
+    } catch (e) {
+      // Non-fatal: a failed auto-sync must never block the games list.
     }
   }
 
@@ -411,7 +468,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _databaseProvider.removeListener(_onDatabaseUpdated);
     _scrapingProvider.removeListener(_onScrapingUpdated);
     MusicPlayerService().removeListener(_onMusicPlayerStateChanged);
-    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
     GameService.deviceScreenOn.removeListener(_onDeviceScreenPowerChanged);
 
     // Shared singleton — detach our listener, never dispose the instance.
@@ -453,10 +509,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Hand input to whichever layer owns the new view mode — but ONLY on an
     // actual mode change. Re-asserting this on every config write is not free:
     // deactivate() resets the shared Select chord-modifier state, so any
-    // setting written while Select is held (the legend toggle persists
-    // `legend_hidden`, for one) would drop the legend back to its default layer
-    // mid-hold, and `SelectTap.reset()` means it can't recover until Select is
-    // released and pressed again.
+    // setting written while Select is held would drop this screen back to its
+    // default layer mid-hold, and `SelectTap.reset()` means it can't recover
+    // until Select is released and pressed again.
     if (gameViewMode != _lastGameViewMode) {
       _lastGameViewMode = gameViewMode;
       try {
@@ -505,8 +560,21 @@ class _SystemGamesListState extends State<SystemGamesList> {
   }
 
   /// Responds to SQLite database updates by reloading the game list.
+  ///
+  /// Not while this route is leaving. The systems carousel and grid `await` the
+  /// push of this screen and call `SqliteDatabaseProvider.refresh()` in the
+  /// `finally` that runs when it pops; `loadDatabase` notifies on the way in
+  /// *and* on the way out, so a screen that is still mounted through the pop
+  /// transition answered by reloading its whole library twice.
+  ///
+  /// That is wasted work on a list nobody will see again, and it is visible
+  /// while it happens: the reload comes back sorted favourites-first, so a game
+  /// marked during the visit — which [_applyFavoriteToLoadedList] deliberately
+  /// left where it stood — jumps to the front. In the carousel the alphabet
+  /// bar's highlight is an `AnimatedPositioned`, so it slides across to the
+  /// favourites chip mid-transition.
   void _onDatabaseUpdated() {
-    if (mounted && !_isLoadingGames) {
+    if (mounted && !_isLoadingGames && !_isNavigatingBack) {
       _loadGames();
     }
   }
@@ -529,9 +597,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         system: widget.system,
         fileProvider: _fileProvider,
         syncProvider: context.read<SyncManager>().active,
-        isAllMode:
-            widget.system.folderName == SystemFolderNames.all ||
-            widget.system.folderName == SystemFolderNames.favorites,
+        isAllMode: SystemFolderNames.isAggregate(widget.system.folderName),
         onGameUpdated: _handleGameUpdated,
         onGameDeleted: _handleGameDeleted,
         onGameHidden: _handleGameHidden,
@@ -567,18 +633,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// rebuild — [State.setState] is `@protected` and cannot be invoked from an
   /// extension. Behaviourally identical to calling `setState` directly.
   void rebuild(VoidCallback fn) => setState(fn);
-
-  /// Select + B — toggles the (session-global) vertical action-button legend.
-  /// When hidden the legend slides off the left edge and the list sidebar +
-  /// details reflow into the reclaimed 60.r gutter.
-  void _toggleLegend() {
-    SfxService().playNavSound();
-    GameLegendVisibility.toggle();
-  }
-
-  void _onLegendVisibilityChanged() {
-    if (mounted) setState(() {});
-  }
 
   /// Core logic for updating selection and managing rapid-scrolling UI state.
   ///
@@ -679,16 +733,34 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // → bundled asset, themed background when present) so themed systems don't
     // flash the default logo here before the grid re-asserts its state on pop.
     final configProvider = context.read<SqliteConfigProvider>();
-    final folder = widget.system.primaryFolderName;
 
-    final String? customLogo = widget.system.customLogoPath?.isNotEmpty == true
-        ? widget.system.customLogoPath
+    // A collection's synthesized system (`collection:<uuid>`) owns no artwork:
+    // there is no `collection:<uuid>.webp` logo and no theme background under
+    // that name, so restoring *it* here left the second screen on the default
+    // NeoStation logo over a bare background after backing out of a collection.
+    // Back from a collection always lands on a view of collections (the
+    // browser, or the systems grid's Collections card), so restore the parent
+    // `collections` system's branding — exactly what the second screen showed
+    // before the collection was opened. The browser itself pushes nothing
+    // (`enableSecondaryDisplay: false`), so nothing re-asserts it after us.
+    final bool isCollection = SystemFolderNames.isCollection(
+      widget.system.folderName,
+    );
+    final SystemModel? branding = isCollection
+        ? _detectedSystem(configProvider, SystemFolderNames.collections)
+        : widget.system;
+    final folder = isCollection
+        ? SystemFolderNames.collections
+        : widget.system.primaryFolderName;
+
+    final String? customLogo = branding?.customLogoPath?.isNotEmpty == true
+        ? branding!.customLogoPath
         : null;
     final systemLogo = customLogo ?? 'assets/images/logos/$folder.webp';
     final bool isLogoAsset = customLogo == null;
 
     final neoAssets = context.read<NeoAssetsProvider>();
-    final String? customBg = widget.system.customBackgroundPath;
+    final String? customBg = branding?.customBackgroundPath;
     final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
     final String? themeBg = hasCustomBg
         ? null
@@ -700,7 +772,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
     // ignore: unawaited_futures
     _secondaryDisplayState?.updateState(
-      systemName: widget.system.realName,
+      systemName:
+          branding?.realName ?? AppLocale.collections.getString(context),
       isGameSelected: false,
       isVideoMuted: !configProvider.config.videoSound,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor.toARGB32(),
@@ -710,8 +783,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       clearSystemBackground: systemBackground == null,
       isBackgroundAsset: false,
       useShader: systemBackground == null,
-      shaderColor1: widget.system.color1AsColor?.toARGB32(),
-      shaderColor2: widget.system.color2AsColor?.toARGB32(),
+      shaderColor1: branding?.color1AsColor?.toARGB32(),
+      shaderColor2: branding?.color2AsColor?.toARGB32(),
       useFluidShader: false,
       isOled: isOled,
       clearFanart: true,
@@ -745,6 +818,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
         });
       }
     });
+  }
+
+  /// The detected system whose folder is [folderName], or null when this
+  /// install has no row for it (a systems bundle that predates the virtual
+  /// system, before the next sync).
+  SystemModel? _detectedSystem(
+    SqliteConfigProvider configProvider,
+    String folderName,
+  ) {
+    for (final system in configProvider.detectedSystems) {
+      if (system.folderName == folderName) return system;
+    }
+    return null;
   }
 
   /// Selects a game via interaction (touch or click) and triggers resource resolution.
@@ -866,8 +952,18 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// specialized view for systems with zero detected media files.
   /// includes controls for recursive scanning and directory management.
+  ///
+  /// Aggregate views ('all', 'favorites', a collection) get the message and the
+  /// Back button only: they scan no directory of their own, and a collection's
+  /// id has no `app_systems` row, so the recursive-scan switch below would
+  /// write per-system settings against an id that does not exist. An empty
+  /// collection is reachable in normal use (a fresh one, or after removing the
+  /// last game), unlike an empty Favourites, whose card hides at zero.
   Widget _buildEmptyState() {
     bool currentScanValue = widget.system.recursiveScan;
+    final isAggregateView = SystemFolderNames.isAggregate(
+      widget.system.folderName,
+    );
 
     return Center(
       child: Container(
@@ -927,7 +1023,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 4.r),
             Text(
-              AppLocale.checkRomFiles.getString(context),
+              (SystemFolderNames.isCollection(widget.system.folderName)
+                      ? AppLocale.emptyCollection
+                      : AppLocale.checkRomFiles)
+                  .getString(context),
               style: TextStyle(
                 fontSize: 11.r,
                 fontWeight: FontWeight.w400,
@@ -940,208 +1039,217 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 16.r),
 
-            // Configuration Component: Recursive Library Scanning. Hidden for
-            // the systems that own no ROM folder to walk — there the switch
-            // would kick off a scan for a folder of that name and file
-            // whatever it found under a system meant to hold nothing.
-            StatefulBuilder(
-              builder: (context, setStateBuilder) {
-                return Column(
-                  children: [
-                    if (!SystemFolderNames.recursiveScanExcluded.contains(
-                      widget.system.folderName,
-                    ))
-                      Container(
-                        margin: EdgeInsets.only(bottom: 12.r),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12.r,
-                          vertical: 8.r,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12.r),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.05),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Symbols.folder_shared_rounded,
-                              color: Colors.white.withValues(alpha: 0.7),
-                              size: 16.r,
-                            ),
-                            SizedBox(width: 8.r),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  AppLocale.recursiveScan.getString(context),
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.r,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Text(
-                                  AppLocale.recursiveScanSubtitle.getString(
-                                    context,
-                                  ),
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 10.r,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(width: 16.r),
-                            Switch(
-                              value: currentScanValue,
-                              activeThumbColor: Theme.of(
-                                context,
-                              ).colorScheme.primary,
-                              onChanged: (value) async {
-                                final oldSystem = widget.system;
-                                setStateBuilder(() {
-                                  currentScanValue = value;
-                                });
-
-                                try {
-                                  await SystemRepository.setRecursiveScan(
-                                    oldSystem.id!,
-                                    value,
-                                  );
-
-                                  if (!context.mounted) return;
-                                  final configProvider = context
-                                      .read<SqliteConfigProvider>();
-
-                                  await configProvider.scanSystems();
-                                  if (!context.mounted) return;
-
-                                  await Provider.of<SqliteDatabaseProvider>(
-                                    context,
-                                    listen: false,
-                                  ).loadDatabase();
-                                  if (!context.mounted) return;
-
-                                  await _loadGames();
-                                } catch (e) {
-                                  _log.e('Error toggling recursive scan: $e');
-                                  if (!context.mounted) return;
-                                  AppNotification.showNotification(
-                                    context,
-                                    AppLocale.failedToSaveSetting.getString(
-                                      context,
-                                    ),
-                                    type: NotificationType.error,
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Real-time Scan Progress Feedback.
-                    Consumer<SqliteConfigProvider>(
-                      builder: (context, provider, child) {
-                        if (!provider.isScanning ||
-                            provider.totalSystemsToScan <= 0) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Container(
-                          width: 320.r,
+            // Configuration Component: Recursive Library Scanning. Hidden
+            // for the systems that own no ROM folder to walk — there the
+            // switch would kick off a scan for a folder of that name and
+            // file whatever it found under a system meant to hold nothing.
+            if (!isAggregateView)
+              StatefulBuilder(
+                builder: (context, setStateBuilder) {
+                  return Column(
+                    children: [
+                      if (!SystemFolderNames.recursiveScanExcluded.contains(
+                            widget.system.folderName,
+                          ) &&
+                          !SystemFolderNames.isCollection(
+                            widget.system.folderName,
+                          ))
+                        Container(
                           margin: EdgeInsets.only(bottom: 12.r),
-                          padding: EdgeInsets.all(12.r),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12.r,
+                            vertical: 8.r,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12.r),
                             border: Border.all(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.2),
-                              width: 1.r,
+                              color: Colors.white.withValues(alpha: 0.05),
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                              Icon(
+                                Symbols.folder_shared_rounded,
+                                color: Colors.white.withValues(alpha: 0.7),
+                                size: 16.r,
+                              ),
+                              SizedBox(width: 8.r),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    provider.scanStatus,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10.r,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
+                                    AppLocale.recursiveScan.getString(context),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.r,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                   Text(
-                                    '${(provider.scanProgress * 100).toInt()}%',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10.r,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
+                                    AppLocale.recursiveScanSubtitle.getString(
+                                      context,
+                                    ),
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      fontSize: 10.r,
+                                    ),
                                   ),
                                 ],
                               ),
-                              SizedBox(height: 8.r),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4.r),
-                                child: LinearProgressIndicator(
-                                  value: provider.scanProgress,
-                                  minHeight: 6.r,
-                                  backgroundColor: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.1),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 4.r),
-                              Text(
-                                AppLocale.scanningSystemOf
-                                    .getString(context)
-                                    .replaceFirst(
-                                      '{current}',
-                                      provider.scannedSystemsCount.toString(),
-                                    )
-                                    .replaceFirst(
-                                      '{total}',
-                                      provider.totalSystemsToScan.toString(),
-                                    ),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      fontSize: 9.r,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.6,
+                              SizedBox(width: 16.r),
+                              Switch(
+                                value: currentScanValue,
+                                activeThumbColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary,
+                                onChanged: (value) async {
+                                  final oldSystem = widget.system;
+                                  setStateBuilder(() {
+                                    currentScanValue = value;
+                                  });
+
+                                  try {
+                                    await SystemRepository.setRecursiveScan(
+                                      oldSystem.id!,
+                                      value,
+                                    );
+
+                                    if (!context.mounted) return;
+                                    final configProvider = context
+                                        .read<SqliteConfigProvider>();
+
+                                    await configProvider.scanSystems();
+                                    if (!context.mounted) return;
+
+                                    await Provider.of<SqliteDatabaseProvider>(
+                                      context,
+                                      listen: false,
+                                    ).loadDatabase();
+                                    if (!context.mounted) return;
+
+                                    await _loadGames();
+                                  } catch (e) {
+                                    _log.e('Error toggling recursive scan: $e');
+                                    if (!context.mounted) return;
+                                    AppNotification.showNotification(
+                                      context,
+                                      AppLocale.failedToSaveSetting.getString(
+                                        context,
                                       ),
-                                    ),
+                                      type: NotificationType.error,
+                                    );
+                                  }
+                                },
                               ),
                             ],
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
+                        ),
+
+                      // Real-time Scan Progress Feedback.
+                      Consumer<SqliteConfigProvider>(
+                        builder: (context, provider, child) {
+                          if (!provider.isScanning ||
+                              provider.totalSystemsToScan <= 0) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Container(
+                            width: 320.r,
+                            margin: EdgeInsets.only(bottom: 12.r),
+                            padding: EdgeInsets.all(12.r),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12.r),
+                              border: Border.all(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.2),
+                                width: 1.r,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      provider.scanStatus,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10.r,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          ),
+                                    ),
+                                    Text(
+                                      '${(provider.scanProgress * 100).toInt()}%',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10.r,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 8.r),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4.r),
+                                  child: LinearProgressIndicator(
+                                    value: provider.scanProgress,
+                                    minHeight: 6.r,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.1),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: 4.r),
+                                Text(
+                                  AppLocale.scanningSystemOf
+                                      .getString(context)
+                                      .replaceFirst(
+                                        '{current}',
+                                        provider.scannedSystemsCount.toString(),
+                                      )
+                                      .replaceFirst(
+                                        '{total}',
+                                        provider.totalSystemsToScan.toString(),
+                                      ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontSize: 9.r,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
 
             // Navigation Component: Exit Action.
             Material(
@@ -1229,6 +1337,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onBack: _goBack,
       onPlay: _selectCurrentGame,
       onFavorite: _toggleFavorite,
+      onYButton: _openGameContextMenu,
+      selectedItemKey: _selectedItemKey,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
       onScrape: _scrapeSelectedGame,
@@ -1240,6 +1350,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onFolderActivated: _descendToFolderIndex,
       folderCoverResolver: (relPath, {required max, required imageType}) =>
           _folderCoverFiles(relPath, max: max, imageType: imageType),
+      // Hides the footer's mute pill: with a second screen attached the
+      // preview is over there and so is its own mute control.
+      isSecondaryScreenActive:
+          _secondaryDisplayState?.value?.isSecondaryActive ?? false,
     );
   }
 
@@ -1261,6 +1375,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onBack: _goBack,
       onPlay: _selectCurrentGame,
       onFavorite: _toggleFavorite,
+      onYButton: _openGameContextMenu,
+      selectedItemKey: _selectedItemKey,
       onRandom: _showRandomGameDialog,
       onSettings: _openGameSettingsDialog,
       onScrape: _scrapeSelectedGame,
@@ -1272,6 +1388,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onFolderActivated: _descendToFolderIndex,
       folderCoverResolver: (relPath, {required max, required imageType}) =>
           _folderCoverFiles(relPath, max: max, imageType: imageType),
+      // Hides the footer's mute pill: with a second screen attached the
+      // preview is over there and so is its own mute control.
+      isSecondaryScreenActive:
+          _secondaryDisplayState?.value?.isSecondaryActive ?? false,
     );
   }
 
@@ -1280,10 +1400,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// info/preview panel (right). The selected game's fanart is rendered behind
   /// the entire viewport so it peeks through both panels.
   Widget _buildGamesList() {
-    final availableHeight =
-        MediaQuery.of(context).size.height -
-        MediaQuery.of(context).padding.top -
-        MediaQuery.of(context).padding.bottom;
     final isMusic = widget.system.folderName == 'music';
 
     return Stack(
@@ -1310,21 +1426,20 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
           ),
 
-        // Main content row: list panel + details panel.
+        // Main content row: list panel + details panel. Both stretch to the
+        // row's own height rather than measuring the screen: the sidebar adds
+        // 12.r of margin above and below, so a screen-derived height made the
+        // block 24.r taller than its box and it overflowed on any device whose
+        // system insets were smaller than that.
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Sidebar: Interactive list of games or music tracks.
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOutCubic,
               width: 200.r,
-              height: availableHeight,
-              margin: EdgeInsets.only(
-                left: GameLegendVisibility.hidden.value ? 12.r : 60.r,
-                top: 12.r,
-                bottom: 12.r,
-              ),
+              margin: EdgeInsets.only(left: 12.r, top: 12.r, bottom: 12.r),
               decoration: BoxDecoration(
                 // A horizontal wash rather than a flat fill: the panel stays
                 // opaque where the row text sits and thins out towards its
@@ -1356,58 +1471,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       context,
                     ).extension<CornerRadii>()?.radiusInternal ??
                     BorderRadius.circular(9.r),
-                child: SizedBox(
-                  width: 200.r,
-                  height: availableHeight,
-                  child: _buildGamesListPanel(),
-                ),
+                child: _buildGamesListPanel(),
               ),
             ),
             // Main Viewport: Rich metadata, video previews, and launch controls.
-            Expanded(
-              child: SizedBox(
-                height: availableHeight,
-                child: _buildGameDetailsPanel(),
-              ),
-            ),
+            Expanded(child: _buildGameDetailsPanel()),
           ],
         ),
-
-        // Floating action buttons on the left side of the game list. Select + B
-        // slides this legend off the left edge (in sync with the sidebar
-        // margin). The column is 40.r wide, so a 10.r inset centres it in the
-        // 60.r gutter — equal air either side of it.
-        if (!isMusic)
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            top: 12.r,
-            left: GameLegendVisibility.hidden.value ? -60.r : 10.r,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 250),
-              opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-              child: Consumer<SyncManager>(
-                builder: (context, syncManager, child) {
-                  return GameActionButtons(
-                    system: widget.system,
-                    selectedGame: _selectedGame,
-                    syncProvider: syncManager.active,
-                    onBack: _goBack,
-                    onFavorite: _toggleFavorite,
-                    onViewMode: () => GameViewModeDropdown
-                        .globalKey
-                        .currentState
-                        ?.showDropdown(),
-                    onSettings: _openGameSettingsDialog,
-                    onRandom: _showRandomGameDialog,
-                    onScrape: () => _scrapeAction?.call(),
-                  );
-                },
-              ),
-            ),
-          ),
-        // Touch: swipe-right from the left edge reveals a hidden legend.
-        const LegendEdgeReshowZone(),
       ],
     );
   }
@@ -1499,14 +1569,16 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   systemColor: widget.system.colorAsColor,
                   onGameSelected: _selectGame,
                   onGameConfirmed: _selectCurrentGame,
-                  isAllMode:
-                      widget.system.folderName == 'all' ||
-                      widget.system.folderName == SystemFolderNames.favorites,
+                  onGameOptions: _openGameContextMenuFor,
+                  isAllMode: SystemFolderNames.isAggregate(
+                    widget.system.folderName,
+                  ),
                   isNavigatingFast: _isNavigatingFast,
                   onGamepadReactivated: _reactivateGamepadNavigation,
                   folderCount: _folderCount,
                   folderEntries: _currentFolderEntries,
                   onFolderActivated: _descendToFolderIndex,
+                  selectedItemKey: _selectedItemKey,
                 ),
         ),
       ],
@@ -1731,8 +1803,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
         child: MusicPlayer(
           systemColor: widget.system.colorAsColor,
           onFavoriteToggled: () {
-            // Re-sort the collection when favorite status is toggled via touch in MusicPlayer.
-            _reorderGamesListKeepingVisualPosition();
+            // Touch toggle inside MusicPlayer: the service already wrote the
+            // DB, so only the loaded list needs the new flag. The track keeps
+            // its place until the library is reloaded.
+            _applyFavoriteToLoadedList();
           },
           onBack: _goBack,
         ),
@@ -1747,9 +1821,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         showVideo: _showVideo,
         videoController: _videoController,
         isVideoLoading: _isVideoLoading,
-        isAllMode:
-            widget.system.folderName == 'all' ||
-            widget.system.folderName == SystemFolderNames.favorites,
+        isAllMode: SystemFolderNames.isAggregate(widget.system.folderName),
         retroAchievementsProvider: _retroAchievementsProvider,
         syncProvider: syncManager.active!,
         localizedDescription: _localizedDescription,
@@ -1764,8 +1836,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
             _secondaryDisplayState?.value?.isSecondaryActive ?? false,
         onDeactivateNavigation: () => _gamepadNav.deactivate(),
         onReactivateNavigation: () => _gamepadNav.activate(),
-        onRegisterOverlayState: (isOverlayOpen, isAchievementsOpen) {
-          _isAchievementsOpen = isAchievementsOpen;
+        onRegisterOverlayState: (isOverlayOpen, isPanelActive) {
+          _isDetailsPanelActive = isPanelActive;
         },
         onRegisterNavigation:
             ({
@@ -1774,20 +1846,21 @@ class _SystemGamesListState extends State<SystemGamesList> {
               required moveLeft,
               required moveRight,
             }) {
-              _moveAchievementUp = moveUp;
-              _moveAchievementDown = moveDown;
-              _moveAchievementLeft = moveLeft;
-              _moveAchievementRight = moveRight;
+              _movePanelUp = moveUp;
+              _movePanelDown = moveDown;
+              _movePanelLeft = moveLeft;
+              _movePanelRight = moveRight;
             },
         onRegisterCloseOverlays: null,
         onRegisterTriggerAction: (triggerAction) {
           _triggerOverlayAction = triggerAction;
         },
-        onRegisterSecondaryAction: (secondaryAction) {
-          _secondaryOverlayAction = secondaryAction;
-        },
         onRegisterTabNavigation: (tabNav) {
           _tabNavigationAction = tabNav;
+        },
+        onRegisterPanelFocus: (enter, exit) {
+          _activateDetailsPanel = enter;
+          _dismissDetailsPanel = exit;
         },
         onRegisterSelectButton: (action) {
           _selectButtonAction = action;
@@ -1798,8 +1871,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
         onRegisterIsPlayingGameBlocked: (isBlocked) {
           _isPlayingGameBlocked = isBlocked;
         },
-        onPlayGame: _selectCurrentGame,
         onShowRandomGame: _showRandomGameDialog,
+        onPlayGame: _selectCurrentGame,
+        onToggleFavorite: _toggleFavorite,
+        onOpenGameSettings: _openGameSettingsDialog,
         onBack: _goBack,
         onGameUpdated: _handleGameUpdated, // Sync UI after metadata edits.
         onFavoriteToggled: _handleFavoriteToggledFromCard,
@@ -1809,22 +1884,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
   }
 
   /// Called when the card's touch favorite button is pressed.
-  /// The DB toggle already happened in the card; mirror it into _games then resort.
+  /// The DB toggle already happened in the card; mirror it into _games. The
+  /// game keeps its position until the list is reloaded.
   void _handleFavoriteToggledFromCard() {
-    if (_selectedGame == null) return;
-    setState(() {
-      final gameIndex = _games.indexWhere(
-        (g) => g.romname == _selectedGame!.romname,
-      );
-      if (gameIndex != -1) {
-        final currentFavorite = _games[gameIndex].isFavorite ?? false;
-        _games[gameIndex] = _games[gameIndex].copyWith(
-          isFavorite: !currentFavorite,
-        );
-        _selectedGame = _games[gameIndex];
-      }
-    });
-    _reorderGamesListKeepingVisualPosition();
+    _applyFavoriteToLoadedList();
   }
 
   /// Called after a game is hidden. Hiding only takes the game out of the
@@ -1932,7 +1995,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
     if (game == null || _isScrapingSelectedGame) return;
     if (_isFolderEntry(game)) return;
 
-    final scrapeSystemId = widget.system.id;
+    // The ScreenScraper platform id is looked up from the app system id, so
+    // this has to be the game's *own* system. An aggregate view's id either has
+    // no ScreenScraper mapping ('all' / 'favorites') or no `app_systems` row at
+    // all ('collection:<uuid>'), and the scrape would fail with "system not
+    // mapped". The details card already resolves it this way.
+    final scrapeSystemId = game.systemId ?? widget.system.id;
     if (scrapeSystemId == null) return;
 
     if (!await ScreenScraperService.hasSavedCredentials()) {
@@ -1951,9 +2019,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Pause any preview playback to avoid resource contention during scraping.
     _resetVideoState();
 
-    final isAllMode =
-        widget.system.folderName == SystemFolderNames.all ||
-        widget.system.folderName == SystemFolderNames.favorites;
+    final isAllMode = SystemFolderNames.isAggregate(widget.system.folderName);
     final targetSystemFolder = isAllMode && game.systemFolderName != null
         ? game.systemFolderName!
         : widget.system.primaryFolderName;

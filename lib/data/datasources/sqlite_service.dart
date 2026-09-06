@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 154;
+  static const int _databaseVersion = 156;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1918,11 +1918,15 @@ class SqliteService {
         sfx_enabled INTEGER DEFAULT 1,
         sfx_volume REAL DEFAULT 0.75,
         system_sort_by TEXT DEFAULT 'alphabetical',
+        collection_sort_by TEXT DEFAULT 'name',
+        collection_sort_order TEXT DEFAULT 'asc',
         system_sort_order TEXT DEFAULT 'asc',
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
         recent_card_size TEXT DEFAULT 'default',
+        -- Unused since the vertical action rail was removed. Kept so a fresh
+        -- install matches the schema migration v103 left on upgraded devices.
         legend_hidden INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
         hide_tab_sync INTEGER DEFAULT 0,
@@ -1951,6 +1955,7 @@ class SqliteService {
         fanart_dim_level INTEGER DEFAULT 25,
         esde_folder_path TEXT DEFAULT '',
         show_achievements_badge INTEGER DEFAULT 0,
+        show_cloud_sync_icon INTEGER DEFAULT 1,
         ra_match_on_startup INTEGER DEFAULT 0,
         subfolder_view_all INTEGER DEFAULT 0
       );
@@ -2125,6 +2130,8 @@ class SqliteService {
       SqliteMigrations.createAppRommRomMapTableSql,
       SqliteMigrations.createAppRommPlaySessionsTableSql,
       SqliteMigrations.createAppRommPlaytimeStateTableSql,
+      SqliteMigrations.createUserCollectionsTableSql,
+      SqliteMigrations.createUserCollectionItemsTableSql,
     ];
 
     for (final sql in tables) {
@@ -2200,6 +2207,8 @@ class SqliteService {
       SqliteMigrations.createAppRommRomMapIndexSql,
       // 8. Index for app_romm_play_sessions (RomM playtime outbox)
       SqliteMigrations.createAppRommPlaySessionsIndexSql,
+      // 9. Index for user_collection_items ("which collections is this ROM in?")
+      SqliteMigrations.createUserCollectionItemsIndexSql,
     ];
 
     for (final sql in indexes) {
@@ -2741,11 +2750,12 @@ class SqliteService {
     int? use12HourClock,
     String? systemSortBy,
     String? systemSortOrder,
+    String? collectionSortBy,
+    String? collectionSortOrder,
     String? appLanguage,
     String? activeTheme,
     int? hideRecentCard,
     String? recentCardSize,
-    int? legendHidden,
     String? gameDetailsTab,
     int? hideTabSync,
     int? hideTabAchievements,
@@ -2769,6 +2779,7 @@ class SqliteService {
     int? fanartDimLevel,
     String? esdeFolderPath,
     int? showAchievementsBadge,
+    int? showCloudSyncIcon,
     int? raMatchOnStartup,
     int? subfolderViewAll,
   }) async {
@@ -2824,6 +2835,12 @@ class SqliteService {
     if (systemSortOrder != null) {
       updates['system_sort_order'] = systemSortOrder;
     }
+    if (collectionSortBy != null) {
+      updates['collection_sort_by'] = collectionSortBy;
+    }
+    if (collectionSortOrder != null) {
+      updates['collection_sort_order'] = collectionSortOrder;
+    }
     if (appLanguage != null) {
       updates['app_language'] = appLanguage;
     }
@@ -2835,9 +2852,6 @@ class SqliteService {
     }
     if (recentCardSize != null) {
       updates['recent_card_size'] = recentCardSize;
-    }
-    if (legendHidden != null) {
-      updates['legend_hidden'] = legendHidden;
     }
     if (gameDetailsTab != null) {
       updates['game_details_tab'] = gameDetailsTab;
@@ -2914,6 +2928,10 @@ class SqliteService {
 
     if (showAchievementsBadge != null) {
       updates['show_achievements_badge'] = showAchievementsBadge;
+    }
+
+    if (showCloudSyncIcon != null) {
+      updates['show_cloud_sync_icon'] = showCloudSyncIcon;
     }
 
     // Both statements run in one transaction. Apart alone they can straddle a
@@ -4537,6 +4555,258 @@ class SqliteService {
         AND s.folder_name NOT IN ('android', 'music')
       ORDER BY ur.is_favorite DESC, LOWER(game_display_name) ASC
     ''');
+    return results.map((row) => DatabaseGameModel.fromJson(row)).toList();
+  }
+
+  // ── Collections ────────────────────────────────────────────────────────────
+  // User-defined groups of ROMs (`user_collections` / `user_collection_items`).
+  // Only CollectionRepository may call these.
+
+  /// Returns every collection with its membership count, cheapest ordering
+  /// first.
+  ///
+  /// The count comes from a single grouped subquery rather than one query per
+  /// collection, so listing N collections stays one round trip.
+  static Future<List<Map<String, Object?>>> getCollections() async {
+    final db = await instance.database;
+    return db.rawQuery('''
+      SELECT
+        c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
+        c.created_at, c.updated_at,
+        COALESCE(counts.game_count, 0) as game_count
+      FROM user_collections c
+      LEFT JOIN (
+        SELECT collection_id, COUNT(*) as game_count
+        FROM user_collection_items
+        GROUP BY collection_id
+      ) counts ON counts.collection_id = c.id
+      ORDER BY c.sort_order ASC, LOWER(c.name) ASC
+    ''');
+  }
+
+  /// Returns one collection row (with its game count), or null.
+  static Future<Map<String, Object?>?> getCollectionById(String id) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
+        c.created_at, c.updated_at,
+        (SELECT COUNT(*) FROM user_collection_items ci
+          WHERE ci.collection_id = c.id) as game_count
+      FROM user_collections c
+      WHERE c.id = ?
+      LIMIT 1
+      ''',
+      [id],
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Inserts a collection. [id] is generated by the caller (service layer).
+  ///
+  /// [sortOrder] defaults to the end of the list when omitted.
+  static Future<void> insertCollection({
+    required String id,
+    required String name,
+    String? imagePath,
+    String? color1,
+    String? color2,
+    int? sortOrder,
+  }) async {
+    final db = await instance.database;
+
+    var position = sortOrder;
+    if (position == null) {
+      final rows = await db.rawQuery(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM user_collections',
+      );
+      position = (rows.first['next'] as num?)?.toInt() ?? 0;
+    }
+
+    await db.insert('user_collections', {
+      'id': id,
+      'name': name,
+      'image_path': imagePath,
+      'color1': color1,
+      'color2': color2,
+      'sort_order': position,
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Updates the mutable fields of a collection.
+  ///
+  /// Each nullable column has a matching `clear*` flag because passing null
+  /// alone cannot distinguish "leave it alone" from "unset it".
+  static Future<void> updateCollection(
+    String id, {
+    String? name,
+    String? imagePath,
+    bool clearImagePath = false,
+    String? color1,
+    bool clearColor1 = false,
+    String? color2,
+    bool clearColor2 = false,
+    int? sortOrder,
+  }) async {
+    final db = await instance.database;
+
+    final values = <String, Object?>{
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (name != null) values['name'] = name;
+    if (clearImagePath) {
+      values['image_path'] = null;
+    } else if (imagePath != null) {
+      values['image_path'] = imagePath;
+    }
+    if (clearColor1) {
+      values['color1'] = null;
+    } else if (color1 != null) {
+      values['color1'] = color1;
+    }
+    if (clearColor2) {
+      values['color2'] = null;
+    } else if (color2 != null) {
+      values['color2'] = color2;
+    }
+    if (sortOrder != null) values['sort_order'] = sortOrder;
+
+    await db.update(
+      'user_collections',
+      values,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Deletes a collection and its membership rows.
+  ///
+  /// The membership delete is explicit rather than left to `ON DELETE CASCADE`:
+  /// the cascade only fires while `PRAGMA foreign_keys` is ON, and a stray
+  /// OFF (migrations toggle it) would otherwise leave orphan rows behind.
+  static Future<void> deleteCollection(String id) async {
+    final db = await instance.database;
+    await db.delete(
+      'user_collection_items',
+      where: 'collection_id = ?',
+      whereArgs: [id],
+    );
+    await db.delete('user_collections', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Adds a ROM to a collection, appended at the end. Re-adding is a no-op.
+  ///
+  /// [romPath] is stored exactly as `user_roms` holds it — on Android that is a
+  /// URL-encoded SAF `content://` URI, and "tidying" it here would make
+  /// collections and favourites disagree about the same game.
+  static Future<void> addRomToCollection(
+    String collectionId,
+    String romPath,
+  ) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 as next '
+      'FROM user_collection_items WHERE collection_id = ?',
+      [collectionId],
+    );
+    final position = (rows.first['next'] as num?)?.toInt() ?? 0;
+
+    await db.rawInsert(
+      'INSERT OR IGNORE INTO user_collection_items '
+      '(collection_id, rom_path, sort_order, created_at) VALUES (?, ?, ?, ?)',
+      [collectionId, romPath, position, DateTime.now().toIso8601String()],
+    );
+  }
+
+  /// Removes a ROM from a collection. Removing a non-member is a no-op.
+  static Future<void> removeRomFromCollection(
+    String collectionId,
+    String romPath,
+  ) async {
+    final db = await instance.database;
+    await db.delete(
+      'user_collection_items',
+      where: 'collection_id = ? AND rom_path = ?',
+      whereArgs: [collectionId, romPath],
+    );
+  }
+
+  /// Returns the ids of every collection containing [romPath].
+  ///
+  /// One query, used to pre-tick the context menu's collection list.
+  static Future<List<String>> getCollectionIdsForRom(String romPath) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT collection_id FROM user_collection_items WHERE rom_path = ?',
+      [romPath],
+    );
+    return rows.map((r) => r['collection_id'].toString()).toList();
+  }
+
+  /// Returns every `rom_path` that belongs to at least one collection.
+  ///
+  /// One query for the whole library, so the games views can badge their rows
+  /// without asking per game: `user_collection_items` holds only what the user
+  /// actually filed, so the set is bounded by their collections, not by the
+  /// ROM count.
+  static Future<Set<String>> getCollectionMemberRomPaths() async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT rom_path FROM user_collection_items',
+    );
+    return {for (final row in rows) row['rom_path'].toString()};
+  }
+
+  /// Retrieves the games in a collection, in the same shape as
+  /// [getFavoriteGames].
+  ///
+  /// The `app_systems` join is what populates `systemFolderName` /
+  /// `systemRealName` / `appSystemId`; the whole aggregate-view code path
+  /// (launch, details card, secondary display) branches on those being present.
+  /// Hidden ROMs are filtered at the service layer, exactly as the favourites
+  /// loader does.
+  static Future<List<DatabaseGameModel>> getGamesInCollection(
+    String collectionId,
+  ) async {
+    final db = await instance.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden, ur.play_time, ur.last_played,
+        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.app_emulator_unique_id as emulator_name,
+        s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
+        s.short_name as system_short_name,
+        COALESCE(usm.real_name, CASE WHEN s.folder_name IN ('android') THEN ur.title_name END, ur.filename) as game_display_name,
+        usm.real_name as ss_real_name,
+        COALESCE(usm.description_en, CASE WHEN s.folder_name IN ('android') THEN ur.description END) as description,
+        usm.description_en, usm.description_es, usm.description_fr, usm.description_de, usm.description_it, usm.description_pt,
+        usm.rating,
+        COALESCE(usm.release_date, CASE WHEN s.folder_name IN ('android') THEN ur.year END) as year,
+        COALESCE(usm.developer, CASE WHEN s.folder_name IN ('android') THEN ur.developer END) as developer,
+        COALESCE(usm.publisher, CASE WHEN s.folder_name IN ('android') THEN ur.publisher END) as publisher,
+        COALESCE(usm.genre, CASE WHEN s.folder_name IN ('android') THEN ur.genre END) as genre,
+        COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END        ) as players,
+        ur.box2d_aspect_ratio,
+        ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        -- app_ra_game_list holds one row per registered hash, so a game id can
+        -- appear several times with the same counts; take the first.
+        (SELECT ral.num_achievements FROM app_ra_game_list ral
+          WHERE ral.game_id = ur.id_ra LIMIT 1) as ra_num_achievements,
+        usm.is_fully_scraped
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      LEFT JOIN user_screenscraper_metadata usm ON ur.app_system_id = usm.app_system_id AND ur.filename = usm.filename
+      JOIN user_collection_items ci ON ci.rom_path = ur.rom_path
+      WHERE ci.collection_id = ?
+        AND s.folder_name NOT IN ('android', 'music')
+      ORDER BY ur.is_favorite DESC, LOWER(game_display_name) ASC
+    ''',
+      [collectionId],
+    );
     return results.map((row) => DatabaseGameModel.fromJson(row)).toList();
   }
 

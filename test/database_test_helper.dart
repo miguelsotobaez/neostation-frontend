@@ -124,6 +124,8 @@ class DatabaseTestHelper {
         sfx_volume REAL DEFAULT 0.75,
         system_sort_by TEXT DEFAULT 'alphabetical',
         system_sort_order TEXT DEFAULT 'asc',
+        collection_sort_by TEXT DEFAULT 'name',
+        collection_sort_order TEXT DEFAULT 'asc',
         app_language TEXT DEFAULT 'en',
         active_theme TEXT DEFAULT '',
         hide_recent_card INTEGER DEFAULT 0,
@@ -156,6 +158,7 @@ class DatabaseTestHelper {
         now_playing_dim_level INTEGER DEFAULT 100,
         fanart_dim_level INTEGER DEFAULT 25,
         show_achievements_badge INTEGER DEFAULT 0,
+        show_cloud_sync_icon INTEGER DEFAULT 1,
         ra_match_on_startup INTEGER DEFAULT 0,
         subfolder_view_all INTEGER DEFAULT 0
       )

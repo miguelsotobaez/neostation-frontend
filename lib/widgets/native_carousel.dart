@@ -125,6 +125,15 @@ class NativeCarousel extends StatefulWidget {
   /// Shrink/fade envelope applied to off-centre pages.
   final CarouselDepth depth;
 
+  /// Whether stepping past either end continues from the other.
+  ///
+  /// Off by default, which is what the systems carousel wants: it is a short
+  /// row the user reads as a row, and running off the end of it is information.
+  /// The games carousel is the opposite — thousands of pages with no readable
+  /// end — so reaching the last card and having the D-pad do nothing is just a
+  /// dead press.
+  final bool wrap;
+
   const NativeCarousel({
     super.key,
     required this.itemCount,
@@ -134,6 +143,7 @@ class NativeCarousel extends StatefulWidget {
     this.initialIndex = 0,
     this.footerHeight,
     this.depth = const CarouselDepth(),
+    this.wrap = false,
   });
 
   @override
@@ -223,13 +233,32 @@ class NativeCarouselState extends State<NativeCarousel> {
   void nextPage() {
     if (_currentIndex < widget.itemCount - 1) {
       _animateToPage(_currentIndex + 1);
+    } else if (_canWrap) {
+      _wrapToPage(0);
     }
   }
 
   void previousPage() {
     if (_currentIndex > 0) {
       _animateToPage(_currentIndex - 1);
+    } else if (_canWrap) {
+      _wrapToPage(widget.itemCount - 1);
     }
+  }
+
+  /// A single-page carousel has no other end to arrive at, and wrapping it
+  /// would fire a page change that does not move.
+  bool get _canWrap => widget.wrap && widget.itemCount > 1;
+
+  /// The wrap itself, and it is deliberately a jump.
+  ///
+  /// [_animateToPage] walks the scroll position through every page between here
+  /// and the target, so wrapping the far end of a 9,000-game library would
+  /// scroll the entire library past the viewport at animation speed. The letter
+  /// jump has the same problem and solves it the same way.
+  void _wrapToPage(int index) {
+    _pageChangeReason = CarouselPageChangeReason.controller;
+    _pageController?.jumpToPage(index);
   }
 
   void _animateToPage(int index, {bool gateInput = true}) {
@@ -310,6 +339,14 @@ class NativeCarouselState extends State<NativeCarousel> {
               onPointerUp: (_) => _pointerDown = false,
               onPointerCancel: (_) => _pointerDown = false,
               child: PageView.builder(
+                // A new page pitch is a new scroll geometry. Swapping the
+                // controller alone reuses the scroll position, which goes on
+                // mapping pages to pixels at the old pitch: the centred card
+                // sits off-centre, and every later jump lands on the stale
+                // mapping, so the error rides along with the selection instead
+                // of washing out. Keying on the fraction retires the position
+                // with it, and the replacement is seeded at the current page.
+                key: ValueKey<double>(vpFraction),
                 controller: _pageController,
                 clipBehavior: Clip.none,
                 padEnds: true,

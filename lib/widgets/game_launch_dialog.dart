@@ -184,8 +184,7 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
   @override
   Widget build(BuildContext context) {
     final systemFolderName =
-        (widget.system.folderName == 'all' ||
-                widget.system.folderName == SystemFolderNames.favorites) &&
+        SystemFolderNames.isAggregate(widget.system.folderName) &&
             widget.game.systemFolderName != null
         ? widget.game.systemFolderName!
         : widget.system.primaryFolderName;

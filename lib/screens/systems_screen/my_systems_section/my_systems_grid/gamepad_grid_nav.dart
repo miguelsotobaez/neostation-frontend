@@ -38,27 +38,44 @@ extension _GamepadGridNav on _SystemCardGridViewState {
       },
       onSelectItem: () => widget.onEnterPressed?.call(),
       onSettings: () => widget.onEscapePressed?.call(),
-      onXButton: () {
-        HeaderSortDropdown.globalKey.currentState?.showDropdown();
-      },
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-      onLeftBumper: AppNavigation.previousTab,
-      onRightBumper: AppNavigation.nextTab,
+      // Y is unbound on the systems screen (the host passes nothing), so a null
+      // callback keeps the button silent exactly as before.
+      onFavorite: widget.onYPressed,
+      // Likewise B: the systems screen is a root tab with nothing to pop, and a
+      // null onBack also leaves the keyboard's Backspace unhandled, as it was.
+      onBack: widget.onBackPressed,
+      onXButton:
+          widget.onXPressed ??
+          () {
+            HeaderSortDropdown.globalKey.currentState?.showDropdown();
+          },
+      // A pushed host is not part of the tab strip, so its shoulder buttons
+      // must not cycle tabs out from under it.
+      onPreviousTab: widget.enableTabBumpers ? AppNavigation.previousTab : null,
+      onNextTab: widget.enableTabBumpers ? AppNavigation.nextTab : null,
+      onLeftBumper: widget.enableTabBumpers ? AppNavigation.previousTab : null,
+      onRightBumper: widget.enableTabBumpers ? AppNavigation.nextTab : null,
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _gamepadNav.initialize();
+      // A rebuild can re-mount this view while the screen sits behind a pushed
+      // route (the shared view-mode setting changing is the case that bites).
+      // Registering on top there would steal the controller from the route in
+      // front, so a backgrounded push slots in beneath it instead.
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
       GamepadNavigationManager.pushLayer(
-        'my_systems_list',
+        widget.navLayerId,
         onActivate: () => _gamepadNav.activate(),
         onDeactivate: () => _gamepadNav.deactivate(),
+        background: !isCurrentRoute,
       );
     });
   }
 
   void _cleanupGamepad() {
-    GamepadNavigationManager.popLayer('my_systems_list');
+    GamepadNavigationManager.popLayer(widget.navLayerId);
     _gamepadNav.dispose();
   }
 

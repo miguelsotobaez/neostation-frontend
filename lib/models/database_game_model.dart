@@ -179,7 +179,18 @@ class DatabaseGameModel {
   /// Creates a [DatabaseGameModel] from a JSON-compatible map (database row).
   factory DatabaseGameModel.fromJson(Map<String, dynamic> json) {
     return DatabaseGameModel(
-      appSystemId: (json['app_system_id'] ?? json['appSystemId'])?.toString(),
+      // `system_id` is the alias every aggregate query gives `app_systems.id`
+      // (the 'all', favourites and collection loaders all join rather than
+      // select `ur.app_system_id`). Without it those rows arrive with a null
+      // app system id, so the per-system naming settings are never prefetched
+      // and `GameModel.systemId` is null — which makes every
+      // `game.systemId ?? system.id` fall back to the *list's* id. Harmless
+      // looking, but that id is 'favorites' / 'all' / 'collection:<uuid>', so a
+      // delete or an emulator assignment made from an aggregate view targets a
+      // system row that owns no games (and, for a collection, does not exist).
+      appSystemId:
+          (json['app_system_id'] ?? json['appSystemId'] ?? json['system_id'])
+              ?.toString(),
       filename: (json['filename'] ?? '').toString(),
       romPath: (json['rom_path'] ?? json['romPath'] ?? '').toString(),
       isFavorite:

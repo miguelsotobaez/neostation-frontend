@@ -76,7 +76,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
     // Pre-allocate keys for maximum theoretical setting items (the fixed rows
     // plus one per navigation tab that can be toggled).
-    for (int i = 0; i < 16 + NavTab.values.length; i++) {
+    for (int i = 0; i < 17 + NavTab.values.length; i++) {
       _itemKeys.add(GlobalKey());
     }
   }
@@ -206,6 +206,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // SFX volume (dimmed, but still navigable, while SFX are off)
     count++; // 12-Hour Clock
     count++; // Show subfolders (every system)
+    count++; // Cloud-save mark in the game views
     count++; // Achievement badges on game tiles
     count++; // Match RetroAchievements on startup
     count += hidableNavTabs().length; // Navigation tab visibility
@@ -369,6 +370,15 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     // Protocol: Show subfolders, applied to every system.
     if (index == currentItemIndex) {
       _setSubfolderViewAll(!configProvider.config.subfolderViewAll);
+      return;
+    }
+    currentItemIndex++;
+
+    // Protocol: Cloud-save mark in the game views.
+    if (index == currentItemIndex) {
+      configProvider.updateShowCloudSyncIcon(
+        !configProvider.config.showCloudSyncIcon,
+      );
       return;
     }
     currentItemIndex++;
@@ -734,6 +744,32 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                     trailing: CustomToggleSwitch(
                       value: config.subfolderViewAll,
                       onChanged: _setSubfolderViewAll,
+                      activeColor: theme.colorScheme.primary,
+                    ),
+                  );
+                }(),
+
+                // Setting: Cloud-save mark in the game views.
+                SizedBox(height: 12.r),
+                () {
+                  final index = currentItemIdx++;
+                  return SettingRow(
+                    key: _itemKeys[index],
+                    onTap: () => selectItem(index),
+                    focused:
+                        widget.isContentFocused &&
+                        widget.selectedContentIndex == index,
+                    title: AppLocale.showCloudSyncIcon.getString(context),
+                    subtitle: AppLocale.showCloudSyncIconSubtitle.getString(
+                      context,
+                    ),
+                    trailing: CustomToggleSwitch(
+                      value: config.showCloudSyncIcon,
+                      onChanged: (value) {
+                        context
+                            .read<SqliteConfigProvider>()
+                            .updateShowCloudSyncIcon(value);
+                      },
                       activeColor: theme.colorScheme.primary,
                     ),
                   );

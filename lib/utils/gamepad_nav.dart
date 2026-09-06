@@ -465,6 +465,24 @@ class GamepadNavigation {
     }
   }
 
+  /// Fires the active layer's back action, exactly as a B press would.
+  ///
+  /// The one seam a touch gesture needs: "back" means something different on
+  /// every screen, but every screen already tells its navigator what — so the
+  /// app-wide back swipe ([BackSwipeZone]) dispatches here instead of each
+  /// screen growing its own gesture handler. Returns false when the top layer
+  /// has no back action (or none is active), so the caller can stay silent
+  /// rather than pretend something happened.
+  static bool triggerBack() {
+    final navigator = _activeNavigator;
+    if (navigator == null || !navigator._isActive) return false;
+    final onBack = navigator.onBack;
+    if (onBack == null) return false;
+    SfxService().playBackSound();
+    onBack();
+    return true;
+  }
+
   /// Manually triggers a refresh of the connected gamepads list.
   Future<void> refreshGamepadInfo() async {
     await _initializeGamepadInfo();
