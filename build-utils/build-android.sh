@@ -50,6 +50,11 @@ fi
 # --target-platform only drops the engine and AOT libs, while --split-per-abi
 # sets abiFilters, which is what drops the plugin natives Gradle packages for
 # every ABI.
+#
+# Removing --split-per-abi later is not free: Flutter rewrites versionCode to
+# abi*1000+build (127 ships as 1127/2127), so a universal build after this one
+# must jump the pubspec build number above the highest shipped code, or Android
+# refuses the install as a downgrade.
 flutter build apk --release --split-per-abi \
     --target-platform android-arm64,android-arm $ENV_ARG
 
