@@ -796,8 +796,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.appCount: 'Приложение: {count}',
   AppLocale.errorSystemNotFound: 'Ошибка: Система для этой игры не найдена.',
   AppLocale.errorLaunchingGame: 'Ошибка запуска игры: {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Настройки недоступны для недавних игр.',
   AppLocale.allSystems: 'Все системы',
   AppLocale.noSystemsFound: 'Системы не найдены',
   AppLocale.setupLibrary: 'Настройка библиотеки',

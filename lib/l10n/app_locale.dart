@@ -763,8 +763,6 @@ mixin AppLocale {
   static const String appCount = 'app_count';
   static const String errorSystemNotFound = 'error_system_not_found';
   static const String errorLaunchingGame = 'error_launching_game';
-  static const String settingsNotAvailableRecent =
-      'settings_not_available_recent';
   static const String allSystems = 'all_systems';
   static const String noSystemsFound = 'no_systems_found';
   static const String setupLibrary = 'setup_library';

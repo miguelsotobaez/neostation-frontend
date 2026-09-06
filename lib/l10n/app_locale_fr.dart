@@ -819,8 +819,6 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.appCount: '{count} app',
   AppLocale.errorSystemNotFound: 'Erreur : Système non trouvé pour ce jeu.',
   AppLocale.errorLaunchingGame: 'Erreur lors du lancement du jeu : {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Paramètres non disponibles pour les jeux récents ici.',
   AppLocale.allSystems: 'Tous les Systèmes',
   AppLocale.noSystemsFound: 'Aucun système trouvé',
   AppLocale.setupLibrary: 'Configurez votre Bibliothèque',

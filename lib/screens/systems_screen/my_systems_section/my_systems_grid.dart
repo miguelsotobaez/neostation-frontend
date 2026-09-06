@@ -347,10 +347,10 @@ class MySystems extends StatelessWidget {
   /// Opens the emulator configuration dialog for a specific system.
   ///
   /// A recent-game card carries a game rather than a system, so it resolves
-  /// through the game's own `systemFolderName` — the same hop
-  /// [_navigateToSystem] makes to launch it. Without that the card's folder
-  /// name matches nothing in `detectedSystems`, the lookup throws, and the
-  /// catch below turns a real action into a "not available" notice.
+  /// through [SystemInfo.settingsFolderName] — the same hop [_navigateToSystem]
+  /// makes to launch it. Without that the card's folder name matches nothing in
+  /// `detectedSystems`, the lookup throws, and the catch below turns a real
+  /// action into a "not available" notice.
   void _openSystemSettings(
     BuildContext context,
     SystemInfo system,
@@ -360,9 +360,7 @@ class MySystems extends StatelessWidget {
     MySystems.isNavigating = true;
 
     try {
-      final String? folderName =
-          (system.isGame ? system.gameModel?.systemFolderName : null) ??
-          system.folderName;
+      final String? folderName = system.settingsFolderName;
 
       final selectedSystem = folderName == 'all'
           ? _createAllGamesSystem(context, configProvider.detectedSystems)
