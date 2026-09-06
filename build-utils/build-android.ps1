@@ -7,7 +7,7 @@ param(
 
 Write-Host "Building Flutter Android APK..." -ForegroundColor Green
 
-# Verificar que estamos en el directorio correcto
+# Verify we are in the correct directory
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
 # Build release APK
@@ -33,14 +33,14 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Obtener versión del pubspec.yaml
+# Get version from pubspec.yaml
 $version = (Select-String -Path "$projectRoot\pubspec.yaml" -Pattern "^version:\s*(.+)" | ForEach-Object { $_.Matches.Groups[1].Value }).Trim()
 
-# Crear directorio de salida
+# Create output directory
 Write-Host "Creating output directory..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Path "$projectRoot\release" -Force | Out-Null
 
-# Copiar y renombrar APKs
+# Copy and rename the APKs
 Write-Host "Copying APKs to release..." -ForegroundColor Cyan
 # Both must publish: UpdateService picks the one matching the ABI the running
 # app was installed for.
