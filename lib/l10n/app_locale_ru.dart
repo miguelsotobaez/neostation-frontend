@@ -1148,6 +1148,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.raCouldNotResolveLocalSystem:
       'Не удалось определить локальную систему для этой игры',
   AppLocale.raMissable: 'МОЖНО ПРОПУСТИТЬ',
+  AppLocale.raFilterLocked: 'Заблокированные',
+  AppLocale.raFilterMissables: 'Пропускаемые',
+  AppLocale.raNoAchievementsForFilter:
+      'Нет достижений, соответствующих этому фильтру.',
   AppLocale.raComments: 'КОММЕНТАРИИ',
   AppLocale.raCommentsCouldNotLoad: 'Не удалось загрузить комментарии.',
   AppLocale.raNoCommentsYet: 'Пока нет комментариев.',

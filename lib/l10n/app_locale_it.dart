@@ -1177,6 +1177,10 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.raCouldNotResolveLocalSystem:
       'Impossibile determinare il sistema locale per questo gioco',
   AppLocale.raMissable: 'PERDIBILE',
+  AppLocale.raFilterLocked: 'Bloccati',
+  AppLocale.raFilterMissables: 'Perdibili',
+  AppLocale.raNoAchievementsForFilter:
+      'Nessun obiettivo corrisponde a questo filtro.',
   AppLocale.raComments: 'COMMENTI',
   AppLocale.raCommentsCouldNotLoad: 'Impossibile caricare i commenti.',
   AppLocale.raNoCommentsYet: 'Nessun commento ancora.',

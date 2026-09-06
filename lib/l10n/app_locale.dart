@@ -1233,6 +1233,10 @@ mixin AppLocale {
   static const String raCouldNotResolveLocalSystem =
       'ra_could_not_resolve_local_system';
   static const String raMissable = 'ra_missable';
+  static const String raFilterLocked = 'ra_filter_locked';
+  static const String raFilterMissables = 'ra_filter_missables';
+  static const String raNoAchievementsForFilter =
+      'ra_no_achievements_for_filter';
   static const String raComments = 'ra_comments';
   static const String raCommentsCouldNotLoad = 'ra_comments_could_not_load';
   static const String raNoCommentsYet = 'ra_no_comments_yet';

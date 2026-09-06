@@ -1138,6 +1138,9 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raCouldNotResolveLocalSystem:
       'Could not resolve the local system for this game',
   AppLocale.raMissable: 'MISSABLE',
+  AppLocale.raFilterLocked: 'Locked',
+  AppLocale.raFilterMissables: 'Missables',
+  AppLocale.raNoAchievementsForFilter: 'No achievements match this filter.',
   AppLocale.raComments: 'COMMENTS',
   AppLocale.raCommentsCouldNotLoad: 'Comments could not be loaded.',
   AppLocale.raNoCommentsYet: 'No comments yet.',
